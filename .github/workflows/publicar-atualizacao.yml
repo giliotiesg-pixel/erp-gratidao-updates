@@ -1,0 +1,96 @@
+name: Publicar atualizacao ARMAZEM GRATIDAO PRO
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/ARMAZEM_GRATIDAO_PRO.go'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-atualizacao
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Instalar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Ler versao do codigo
+        id: versao
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^const currentVersion = "\([^"]*\)"/\1/p' src/ARMAZEM_GRATIDAO_PRO.go | head -n1)
+          if [ -z "$VERSION" ]; then
+            echo 'Nao foi possivel localizar currentVersion no codigo.' >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Compilar EXE Windows nativo
+        shell: bash
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "${{ steps.versao.outputs.exe }}" src/ARMAZEM_GRATIDAO_PRO.go
+
+      - name: Calcular SHA256
+        id: hash
+        shell: bash
+        run: |
+          HASH=$(sha256sum "${{ steps.versao.outputs.exe }}" | awk '{print $1}')
+          echo "sha256=$HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Criar ou atualizar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ steps.versao.outputs.tag }}"
+          EXE="${{ steps.versao.outputs.exe }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$EXE" --clobber
+          else
+            gh release create "$TAG" "$EXE" --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica do ARMAZEM GRATIDAO PRO $TAG."
+          fi
+
+      - name: Atualizar canal manifest.json
+        shell: bash
+        run: |
+          VERSION="${{ steps.versao.outputs.version }}"
+          TAG="${{ steps.versao.outputs.tag }}"
+          EXE="${{ steps.versao.outputs.exe }}"
+          HASH="${{ steps.hash.outputs.sha256 }}"
+          cat > manifest.json <<EOF
+          {
+            "version": "$VERSION",
+            "package_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$EXE",
+            "sha256": "$HASH",
+            "notes": "Atualizacao automatica ARMAZEM GRATIDAO PRO v$VERSION."
+          }
+          EOF
+
+      - name: Gravar manifest no repositorio
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo 'Manifest ja esta atualizado.'
+          else
+            git commit -m "Atualiza canal para v${{ steps.versao.outputs.version }}"
+            git push
+          fi
