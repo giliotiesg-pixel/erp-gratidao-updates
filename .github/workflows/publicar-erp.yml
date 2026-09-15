@@ -1,0 +1,62 @@
+name: Publicar ARMAZEM GRATIDAO PRO
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/ARMAZEM_GRATIDAO_PRO.go'
+      - 'VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Ler versão
+        id: ver
+        shell: bash
+        run: echo "version=$(cat VERSION | tr -d '\r\n ')" >> "$GITHUB_OUTPUT"
+      - name: Compilar Windows nativo
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags='-H windowsgui -s -w' -o "ARMAZEM_GRATIDAO_PRO_v${VERSION}.exe" src/ARMAZEM_GRATIDAO_PRO.go
+          sha256sum "ARMAZEM_GRATIDAO_PRO_v${VERSION}.exe" | awk '{print $1}' > SHA256_RELEASE.txt
+      - name: Publicar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          FILE="ARMAZEM_GRATIDAO_PRO_v${VERSION}.exe"
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" --clobber
+          else
+            gh release create "$TAG" "$FILE" --title "ARMAZEM GRATIDAO PRO v${VERSION}" --notes "Atualização automática do ARMAZEM GRATIDAO PRO."
+          fi
+      - name: Atualizar manifesto
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          SHA=$(cat SHA256_RELEASE.txt)
+          cat > manifest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "package_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/ARMAZEM_GRATIDAO_PRO_v${VERSION}.exe",
+            "sha256": "${SHA}",
+            "notes": "Atualização automática v${VERSION}: correção do instalador e melhorias do ARMAZEM GRATIDAO PRO."
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --cached --quiet || git commit -m "Atualiza manifesto para v${VERSION}"
+          git push
