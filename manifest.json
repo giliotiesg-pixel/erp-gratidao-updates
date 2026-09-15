@@ -1,6 +1,6 @@
 {
-  "version": "1.2.9",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/latest/download/ERP_Gratidao_Update.exe",
-  "sha256": "",
-  "notes": "Servidor de atualizações do ERP Gratidão configurado. A versão 1.2.9 é a versão-base; nenhuma atualização será instalada até existir um pacote publicado com SHA-256 válido."
+  "version": "1.2.11",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ERP_Gratidao_Nativo_v1.2.11.exe",
+  "sha256": "0c11aa09a92b4d8cd2e79dca816605915020af81b2731b65c9899e0556e52337",
+  "notes": "Atualização do módulo Vendas com botão Limpar vendas excluídas."
 }
