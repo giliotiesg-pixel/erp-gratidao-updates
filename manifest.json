@@ -1,6 +1,6 @@
 {
-  "version": "1.2.11",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ERP_Gratidao_Nativo_v1.2.11.exe",
-  "sha256": "0c11aa09a92b4d8cd2e79dca816605915020af81b2731b65c9899e0556e52337",
-  "notes": "Atualização do módulo Vendas com botão Limpar vendas excluídas."
+  "version": "1.2.14",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ARMAZEM_GRATIDAO_PRO_v1.2.14.exe",
+  "sha256": "e72b44926a924d7caca170e8199661a91865ae27b0498a9664b41a6aa48740df",
+  "notes": "ARMAZEM GRATIDÃO PRO v1.2.14: melhorias no layout, correção das cores dos botões, botões menores e tipografia mais legível."
 }
