@@ -1,0 +1,6 @@
+{
+  "version": "1.2.9",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/latest/download/ERP_Gratidao_Update.exe",
+  "sha256": "",
+  "notes": "Servidor de atualizações do ERP Gratidão configurado. A versão 1.2.9 é a versão-base; nenhuma atualização será instalada até existir um pacote publicado com SHA-256 válido."
+}
