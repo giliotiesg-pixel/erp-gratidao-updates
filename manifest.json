@@ -1,6 +1,6 @@
 {
-  "version": "1.2.14",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ARMAZEM_GRATIDAO_PRO_v1.2.14.exe",
-  "sha256": "e72b44926a924d7caca170e8199661a91865ae27b0498a9664b41a6aa48740df",
-  "notes": "ARMAZEM GRATIDÃO PRO v1.2.14: melhorias no layout, correção das cores dos botões, botões menores e tipografia mais legível."
+  "version": "1.2.15",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ARMAZEM_GRATIDAO_PRO_v1.2.15.exe",
+  "sha256": "2851943bd4cdc3a92528d0b2599eec00db1bfd868d079e1e42b3c7829af39d47",
+  "notes": "ARMAZEM GRATIDÃO PRO v1.2.15: correção da rotina de atualização/instalação para evitar o erro invalid argument, mantendo as melhorias visuais da v1.2.14."
 }
