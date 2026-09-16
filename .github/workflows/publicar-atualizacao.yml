@@ -21,7 +21,7 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Aplicar versao e botao Excluir Venda
+      - name: Aplicar versao e corrigir instalador
         id: versao
         shell: bash
         run: |
@@ -29,8 +29,20 @@ jobs:
           test -n "$VERSION"
           sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$VERSION\"/" src/ARMAZEM_GRATIDAO_PRO.go
           sed -i 's/Excluir venda selecionada/EXCLUIR VENDA/g' src/ARMAZEM_GRATIDAO_PRO.go
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/ARMAZEM_GRATIDAO_PRO.go')
+          s=p.read_text()
+          old='_, _, e := syscall.StartProcess(comspec, []string{comspec, "/c", bat}, attr)'
+          new='cmdLine := `"` + comspec + `" /d /s /c ""` + bat + `""`\n\tvar si syscall.StartupInfo\n\tvar pi syscall.ProcessInformation\n\tsi.Cb = uint32(unsafe.Sizeof(si))\n\tcmdBuf, _ := syscall.UTF16PtrFromString(cmdLine)\n\te := syscall.CreateProcess(nil, cmdBuf, nil, nil, false, syscall.CREATE_NEW_PROCESS_GROUP, nil, syscall.StringToUTF16Ptr(root), &si, &pi)\n\tif e == nil {\n\t\tsyscall.CloseHandle(pi.Thread)\n\t\tsyscall.CloseHandle(pi.Process)\n\t}'
+          if old not in s:
+              raise SystemExit('trecho antigo do instalador nao encontrado')
+          s=s.replace(old,new,1)
+          s=s.replace('\tattr := &syscall.ProcAttr{Dir: root, Env: os.Environ(), Sys: &syscall.SysProcAttr{HideWindow: false}}\n','',1)
+          p.write_text(s)
+          PY
           grep -q 'EXCLUIR VENDA' src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'func deleteSelectedSale()' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'syscall.CreateProcess' src/ARMAZEM_GRATIDAO_PRO.go
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
@@ -53,7 +65,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$EXE" SHA256.txt --clobber
           else
-            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica: botao EXCLUIR VENDA no modulo Vendas."
+            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Correcao do instalador automatico e botao EXCLUIR VENDA."
           fi
       - name: Atualizar manifest e fonte
         shell: bash
@@ -62,7 +74,7 @@ jobs:
           TAG="${{ steps.versao.outputs.tag }}"
           EXE="${{ steps.versao.outputs.exe }}"
           HASH="${{ steps.hash.outputs.sha256 }}"
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - botão EXCLUIR VENDA em Vendas."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - correção do instalador automático e botão EXCLUIR VENDA."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
