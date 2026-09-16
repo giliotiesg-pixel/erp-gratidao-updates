@@ -39,6 +39,13 @@ func addVendaItemUI12115(){if vendasSelected12115==0{msg("Carregue uma venda.");
 func refreshVendaItemsUI12115(){listReset(vendasItems12115);listAdd(vendasItems12115,"PRODUTO                                      QTD        PREÇO       TOTAL");for _,it:=range vendasEditItems12115{d:=scalar(fmt.Sprintf("SELECT description FROM products WHERE id=%d",it.ProductID));listAdd(vendasItems12115,fmt.Sprintf("%-44s %8.3f   R$ %8.2f  R$ %9.2f",clip(d,44),it.Qty,it.UnitPrice,it.Qty*it.UnitPrice))}}
 func removeVendaItemUI12115(){idx,_,_:=pSendMessageW.Call(vendasItems12115,LB_GETCURSEL,0,0);i:=int(idx)-1;if i<0||i>=len(vendasEditItems12115){msg("Selecione um item.");return};vendasEditItems12115=append(vendasEditItems12115[:i],vendasEditItems12115[i+1:]...);refreshVendaItemsUI12115()}
 func saveVendaItemsUI12115(){if vendasSelected12115==0{msg("Carregue uma venda.");return};if len(vendasEditItems12115)==0{msgErr("A venda precisa ter pelo menos um item.");return};if e:=replaceSaleItems12115(vendasSelected12115,vendasEditItems12115);e!=nil{msgErr(e.Error());return};msg("Itens alterados e total recalculado automaticamente.");loadVendasUI12115();loadSelectedVendaUI12115()}
-func deleteVendaUI12115(){sid:=selectedVendaUI12115();if sid==0{sid=vendasSelected12115};if sid==0{msg("Selecione uma venda.");return};if e:=deleteSale12115(sid,"Exclusão solicitada no módulo Vendas");e!=nil{msgErr(e.Error());return};msg("Venda excluída. Estoque devolvido.");vendasSelected12115=0;showVendasUI12115()}
+func deleteVendaUI12115(){
+ sid:=selectedVendaUI12115();if sid==0{sid=vendasSelected12115};if sid==0{msg("Selecione uma venda.");return}
+ if e:=deleteSale12115(sid,"Exclusão solicitada no módulo Vendas");e!=nil{msgErr(e.Error());return}
+ // Requisito 12.1.15: excluir de verdade, devolver o estoque e sair da tela de Vendas após a exclusão.
+ vendasSelected12115=0;vendasEditIDs12115=nil;vendasEditItems12115=nil
+ msg("Venda excluída. Estoque devolvido.")
+ showInicio()
+}
 func handleVendasUI12115(id int) bool{switch id{case 4202:loadSelectedVendaUI12115();case 4203:loadVendasUI12115();case 4204:deleteVendaUI12115();case 4205:showInicio();case 4213:saveVendaInfoUI12115();case 4224:addVendaItemUI12115();case 4225:removeVendaItemUI12115();case 4226:saveVendaItemsUI12115();default:return false};return true}
 var _=unsafe.Pointer(nil)
