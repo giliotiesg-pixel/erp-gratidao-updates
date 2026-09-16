@@ -25,8 +25,20 @@ jobs:
           V=$(head -n 1 release-version.txt | tr -d '\r\n ')
           sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$V\"/" src/ARMAZEM_GRATIDAO_PRO.go
           python3 tools/integrar_atualizador.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/ARMAZEM_GRATIDAO_PRO.go')
+          s=p.read_text()
+          old='''func header(title, sub string) {\n\th := add("STATIC", title, 0, 18, 67, 650, 35, 0)\n\tpSendMessageW.Call(h, WM_SETFONT, fontBig, 1)\n\tadd("STATIC", sub, 0, 18, 99, 1215, 22, 0)\n}'''
+          new='''func header(title, sub string) {\n\t// Cabeçalho limpo: somente o nome do módulo, centralizado na caixa principal.\n\th := add("STATIC", title, 0x00000001, 18, 67, 1215, 42, 0)\n\tpSendMessageW.Call(h, WM_SETFONT, fontBig, 1)\n}'''
+          if old not in s:
+              raise SystemExit('ERRO: funcao header esperada nao encontrada')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
           grep -q 'UpdaterURL' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'ATUALIZADOR_GRATIDAO.exe' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'Cabeçalho limpo' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'contentCmd = 0' src/ARMAZEM_GRATIDAO_PRO.go
           if grep -q 'instalar-.*\.bat' src/ARMAZEM_GRATIDAO_PRO.go; then echo 'ERRO: fluxo BAT antigo ainda presente'; exit 1; fi
           echo "V=$V" >> "$GITHUB_ENV"
@@ -48,8 +60,8 @@ jobs:
           echo "$UPDHASH  $UPD" >> SHA256.txt
           gh release delete "v${V}" --yes >/dev/null 2>&1 || true
           git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
-          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Atualizador nativo integrado ao ERP: SHA-256, backup, rollback e reinicio automatico. Banco e Fiado preservados."
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - atualizador nativo integrado; SHA-256; backup; rollback; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
+          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Cabecalhos dos modulos centralizados e sem subtitulos. Atualizador nativo integrado. Banco e Fiado preservados."
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - cabecalhos centralizados; somente nome do modulo; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
