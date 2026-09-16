@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.22"
+const currentVersion = "1.2.24"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -2227,12 +2227,17 @@ func wndProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 
 func setMenuVisible(show bool) {
 	menuVisible = show
-	cmd := uintptr(0)
+	navCmd := uintptr(0)
+	contentCmd := uintptr(SW_SHOW)
 	if show {
-		cmd = SW_SHOW
+		navCmd = SW_SHOW
+		contentCmd = 0
+	}
+	for _, h := range content {
+		pShowWindow.Call(h, contentCmd)
 	}
 	for _, h := range navControls {
-		pShowWindow.Call(h, cmd)
+		pShowWindow.Call(h, navCmd)
 	}
 }
 func toggleMenu() { setMenuVisible(!menuVisible) }
