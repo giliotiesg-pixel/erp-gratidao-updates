@@ -21,7 +21,7 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Aplicar versao e migrar interface 12.1.5
+      - name: Aplicar versao, migrar interface e organizar menu
         id: versao
         shell: bash
         run: |
@@ -37,7 +37,6 @@ jobs:
           s=s.replace('Excluir venda selecionada','EXCLUIR VENDA')
           s=s.replace('comspec = `C:\\\\Windows\\\\System32\\\\cmd.exe`','comspec = `C:\\Windows\\System32\\cmd.exe`')
 
-          # Modulos presentes no Armazem Gratidao 12.1.5 que ainda nao estavam expostos no PRO.
           marker='func showSimple(title, sub string) {'
           if 'func showFiscal()' not in s:
               block=r'''func showFiscal() { showSimple("Fiscal", "Central fiscal e dados tributários dos produtos") }
@@ -52,38 +51,57 @@ func showCofre() { showSimple("Cofre Digital", "Cadastros protegidos de bancos, 
 '''
               s=s.replace(marker,block+marker,1)
 
-          # Pesquisa global dos novos modulos.
           old='''\tcase strings.Contains(q, "compra"):\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase strings.Contains(q, "cliente") || strings.Contains(q, "fornecedor"):\n\t\tshowSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")\n\tcase strings.Contains(q, "lucro"):\n\t\tshowSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")\n\tcase strings.Contains(q, "relat"):\n\t\tshowSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")'''
           new='''\tcase strings.Contains(q, "compra"):\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase strings.Contains(q, "fiscal"):\n\t\tshowFiscal()\n\tcase strings.Contains(q, "cliente") || strings.Contains(q, "fornecedor"):\n\t\tshowParceiros()\n\tcase strings.Contains(q, "empresa"):\n\t\tshowEmpresa()\n\tcase strings.Contains(q, "conta"):\n\t\tshowContas()\n\tcase strings.Contains(q, "lucro"):\n\t\tshowLucro()\n\tcase strings.Contains(q, "relat"):\n\t\tshowRelatorios()\n\tcase strings.Contains(q, "oferta") || strings.Contains(q, "marketing") || strings.Contains(q, "encarte"):\n\t\tshowOfertas()\n\tcase strings.Contains(q, "cofre"):\n\t\tshowCofre()'''
           if old in s:
               s=s.replace(old,new,1)
 
-          # Comandos dos novos botoes, sem alterar o Fiado.
           oldcases='''\tcase 110:\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase 111:\n\t\tshowSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")\n\tcase 112:\n\t\tshowSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")\n\tcase 113:\n\t\tshowSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")'''
           newcases='''\tcase 110:\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase 111:\n\t\tshowParceiros()\n\tcase 112:\n\t\tshowLucro()\n\tcase 113:\n\t\tshowRelatorios()\n\tcase 115:\n\t\tshowFiscal()\n\tcase 116:\n\t\tshowEmpresa()\n\tcase 117:\n\t\tshowContas()\n\tcase 118:\n\t\tshowOfertas()\n\tcase 119:\n\t\tshowCofre()'''
           if oldcases in s:
               s=s.replace(oldcases,newcases,1)
           s=s.replace('if id >= 101 && id <= 114 {','if id >= 101 && id <= 119 {')
 
-          # Menu completo inspirado na organizacao 12.1.5, compactado para caber na janela nativa.
           a=s.find('\t// Menu deslizante oculto, igual ao comportamento da referência.')
+          if a < 0:
+              a=s.find('\t// Menu completo migrado da referência 12.1.5.')
           b=s.find('\tsetMenuVisible(false)',a)
           if a!=-1 and b!=-1:
               b2=b+len('\tsetMenuVisible(false)')
               menu='''\t// Menu completo migrado da referência 12.1.5.\n\taddNavLabel("OPERAÇÃO", 58)\n\taddNav("Início", 101, 78)\n\taddNav("PDV", 102, 112)\n\taddNav("Vendas", 105, 146)\n\taddNav("Caixa", 108, 180)\n\taddNavLabel("CADASTROS / ESTOQUE", 218)\n\taddNav("Produtos", 103, 238)\n\taddNav("Estoque", 104, 272)\n\taddNav("Validade", 109, 306)\n\taddNav("Compras", 110, 340)\n\taddNav("Fiscal", 115, 374)\n\taddNav("Clientes / Fornecedores", 111, 408)\n\taddNav("Empresa", 116, 442)\n\taddNavLabel("FINANCEIRO", 480)\n\taddNav("Fiado", 106, 500)\n\taddNav("Contas", 117, 534)\n\taddNav("Lucro", 112, 568)\n\taddNavLabel("FERRAMENTAS", 606)\n\taddNav("Relatórios", 113, 626)\n\taddNav("Ofertas", 118, 660)\n\taddNav("Cofre Digital", 119, 694)\n\taddNav("Configurações", 114, 728)\n\tsetMenuVisible(false)'''
               s=s[:a]+menu+s[b2:]
 
-          # Altura compacta dos botoes do menu para reproduzir todos os modulos sem esconder itens.
           s=s.replace('205, 36, mainWnd, uintptr(id)', '205, 30, mainWnd, uintptr(id)')
 
-          # Titulo da janela acompanha a versao publicada.
+          # Ao abrir o menu, oculta a area de trabalho para impedir textos/controles por cima do menu.
+          # Ao fechar, restaura todos os controles da tela atual. O topbar permanece visivel.
+          pat=r'''func setMenuVisible\(show bool\) \{.*?\n\}\nfunc toggleMenu\(\) \{ setMenuVisible\(!menuVisible\) \}'''
+          repl='''func setMenuVisible(show bool) {
+\tmenuVisible = show
+\tnavCmd := uintptr(0)
+\tcontentCmd := uintptr(SW_SHOW)
+\tif show {
+\t\tnavCmd = SW_SHOW
+\t\tcontentCmd = 0
+\t}
+\tfor _, h := range content {
+\t\tpShowWindow.Call(h, contentCmd)
+\t}
+\tfor _, h := range navControls {
+\t\tpShowWindow.Call(h, navCmd)
+\t}
+}
+func toggleMenu() { setMenuVisible(!menuVisible) }'''
+          s,n=re.subn(pat,repl,s,count=1,flags=re.S)
+          if n != 1:
+              raise SystemExit('funcao setMenuVisible nao encontrada')
+
           s=re.sub(r'ws\("ARMAZEM GRATIDÃO PRO v[^"]+"\)', f'ws("ARMAZEM GRATIDÃO PRO v{version}")', s, count=1)
           p.write_text(s)
           PY
           grep -q 'func showFiscal()' src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'Cofre Digital' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'addNav("Ofertas", 118' src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'addNav("Empresa", 116' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'contentCmd = 0' src/ARMAZEM_GRATIDAO_PRO.go
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
@@ -106,7 +124,7 @@ func showCofre() { showSimple("Cofre Digital", "Cadastros protegidos de bancos, 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$EXE" SHA256.txt --clobber
           else
-            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Migração de módulos e botões da referência Armazém Gratidão 12.1.5 para a interface Windows nativa do PRO. Fiado preservado."
+            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Menu lateral organizado sem sobreposição de textos; módulos 12.1.5 mantidos e Fiado preservado."
           fi
       - name: Atualizar manifest e fonte
         shell: bash
@@ -115,7 +133,7 @@ func showCofre() { showSimple("Cofre Digital", "Cadastros protegidos de bancos, 
           TAG="${{ steps.versao.outputs.tag }}"
           EXE="${{ steps.versao.outputs.exe }}"
           HASH="${{ steps.hash.outputs.sha256 }}"
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - módulos e botões migrados da referência 12.1.5; Fiado preservado."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - menu lateral organizado sem sobreposição; módulos 12.1.5 mantidos; Fiado preservado."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
