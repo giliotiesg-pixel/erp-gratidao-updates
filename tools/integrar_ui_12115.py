@@ -3,6 +3,7 @@ from pathlib import Path
 p=Path('src/ARMAZEM_GRATIDAO_PRO.go')
 s=p.read_text(encoding='utf-8')
 repls={
+'''\tcase 103:\n\t\tshowProdutos()''':'''\tcase 103:\n\t\tshowProdutosUI12115()''',
 '''\tcase 110:\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")''':'''\tcase 110:\n\t\tshowComprasUI12115()''',
 '''\tcase 105:\n\t\tshowVendas()''':'''\tcase 105:\n\t\tshowVendasUI12115()''',
 '''\tcase 104:\n\t\tshowEstoque()''':'''\tcase 104:\n\t\tshowEstoqueUI12115()''',
@@ -20,10 +21,10 @@ if 'case 4113:' not in s:
  if anchor not in s: raise SystemExit('ancora de comandos nao encontrada')
  s=s.replace(anchor,cases+anchor)
 needle='''func handleCommand(id int) {\n'''
-handlers=['handleVendasUI12115','handleConsultaGlobal12115','handleEstoqueUI12115','handleFiadoUI12115','handleFinanceiroUI12115','handleCaixaUI12115']
+handlers=['handleVendasUI12115','handleConsultaGlobal12115','handleEstoqueUI12115','handleFiadoUI12115','handleFinanceiroUI12115','handleCaixaUI12115','handleProdutosUI12115']
 for h in handlers:s=s.replace('\tif '+h+'(id) { return }\n','')
 insert=needle+''.join('\tif '+h+'(id) { return }\n' for h in handlers)
 if needle not in s:raise SystemExit('handleCommand nao encontrado')
 s=s.replace(needle,insert,1)
 p.write_text(s,encoding='utf-8')
-print('UI 12.1.15 integrada: Compras, Vendas, Estoque, Caixa, Consulta, Fiado e Financeiro.')
+print('UI 12.1.15 integrada: Produtos, Compras, Vendas, Estoque, Caixa, Consulta, Fiado e Financeiro.')
