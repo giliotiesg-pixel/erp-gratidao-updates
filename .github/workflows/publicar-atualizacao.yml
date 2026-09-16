@@ -1,110 +1,50 @@
-name: Publicar atualizacao ARMAZEM GRATIDAO PRO
+name: publicar-erp
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - 'release-version.txt'
-  workflow_dispatch:
+      - release-version.txt
 
 permissions:
   contents: write
 
 jobs:
-  build-release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Aplicar versao e correcao do menu
-        id: versao
+      - name: preparar
         shell: bash
         run: |
-          VERSION=$(head -n1 release-version.txt | tr -d '\r\n ')
-          test -n "$VERSION"
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p = Path('src/ARMAZEM_GRATIDAO_PRO.go')
-          s = p.read_text()
-          version = Path('release-version.txt').read_text().splitlines()[0].strip()
-          s = re.sub(r'^const currentVersion = "[^"]+"', f'const currentVersion = "{version}"', s, count=1, flags=re.M)
-          s = re.sub(r'ws\("ARMAZEM GRATIDÃO PRO v[^"]+"\)', f'ws("ARMAZEM GRATIDÃO PRO v{version}")', s, count=1)
-          s = s.replace('comspec = `C:\\\\Windows\\\\System32\\\\cmd.exe`', 'comspec = `C:\\Windows\\System32\\cmd.exe`')
-
-          old = '''func setMenuVisible(show bool) {
-\tmenuVisible = show
-\tcmd := uintptr(0)
-\tif show {
-\t\tcmd = SW_SHOW
-\t}
-\tfor _, h := range navControls {
-\t\tpShowWindow.Call(h, cmd)
-\t}
-}
-func toggleMenu() { setMenuVisible(!menuVisible) }'''
-          new = '''func setMenuVisible(show bool) {
-\tmenuVisible = show
-\tnavCmd := uintptr(0)
-\tcontentCmd := uintptr(SW_SHOW)
-\tif show {
-\t\tnavCmd = SW_SHOW
-\t\tcontentCmd = 0
-\t}
-\tfor _, h := range content {
-\t\tpShowWindow.Call(h, contentCmd)
-\t}
-\tfor _, h := range navControls {
-\t\tpShowWindow.Call(h, navCmd)
-\t}
-}
-func toggleMenu() { setMenuVisible(!menuVisible) }'''
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif 'contentCmd = 0' not in s:
-              raise SystemExit('setMenuVisible inesperado')
-          p.write_text(s)
-          PY
+          V=$(head -n 1 release-version.txt | tr -d '\r\n ')
+          sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$V\"/" src/ARMAZEM_GRATIDAO_PRO.go
+          python3 -c "from pathlib import Path; p=Path('src/ARMAZEM_GRATIDAO_PRO.go'); s=p.read_text(); old='func setMenuVisible(show bool) {\\n\\tmenuVisible = show\\n\\tcmd := uintptr(0)\\n\\tif show {\\n\\t\\tcmd = SW_SHOW\\n\\t}\\n\\tfor _, h := range navControls {\\n\\t\\tpShowWindow.Call(h, cmd)\\n\\t}\\n}'; new='func setMenuVisible(show bool) {\\n\\tmenuVisible = show\\n\\tnavCmd := uintptr(0)\\n\\tcontentCmd := uintptr(SW_SHOW)\\n\\tif show {\\n\\t\\tnavCmd = SW_SHOW\\n\\t\\tcontentCmd = 0\\n\\t}\\n\\tfor _, h := range content {\\n\\t\\tpShowWindow.Call(h, contentCmd)\\n\\t}\\n\\tfor _, h := range navControls {\\n\\t\\tpShowWindow.Call(h, navCmd)\\n\\t}\\n}'; s=s.replace(old,new); p.write_text(s)"
           grep -q 'contentCmd = 0' src/ARMAZEM_GRATIDAO_PRO.go
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
-      - name: Compilar EXE Windows nativo
-        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "${{ steps.versao.outputs.exe }}" src/ARMAZEM_GRATIDAO_PRO.go
-      - name: SHA256
-        id: hash
+          echo "V=$V" >> "$GITHUB_ENV"
+      - name: compilar
         shell: bash
         run: |
-          HASH=$(sha256sum "${{ steps.versao.outputs.exe }}" | awk '{print $1}')
-          echo "sha256=$HASH" >> "$GITHUB_OUTPUT"
-          echo "$HASH  ${{ steps.versao.outputs.exe }}" > SHA256.txt
-      - name: Publicar Release
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go
+      - name: publicar
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          TAG="${{ steps.versao.outputs.tag }}"
-          EXE="${{ steps.versao.outputs.exe }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$EXE" SHA256.txt --clobber
-          else
-            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Menu lateral sem sobreposicao de textos e controles."
-          fi
-      - name: Atualizar manifest e fonte
-        shell: bash
-        run: |
-          VERSION="${{ steps.versao.outputs.version }}"
-          TAG="${{ steps.versao.outputs.tag }}"
-          EXE="${{ steps.versao.outputs.exe }}"
-          HASH="${{ steps.hash.outputs.sha256 }}"
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - menu lateral organizado sem sobreposição; módulos 12.1.5 mantidos; Fiado preservado."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          EXE="ARMAZEM_GRATIDAO_PRO_v${V}.exe"
+          HASH=$(sha256sum "$EXE" | awk '{print $1}')
+          echo "$HASH  $EXE" > SHA256.txt
+          gh release delete "v${V}" --yes >/dev/null 2>&1 || true
+          git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
+          gh release create "v${V}" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Correcao do menu lateral sem sobreposicao. Modulos 12.1.5 mantidos. Fiado preservado."
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - menu lateral sem sobreposicao; modulos 12.1.5 mantidos; Fiado preservado."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$V" > manifest.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
-          git commit -m "Publica ARMAZEM GRATIDAO PRO v${VERSION}" || true
+          git commit -m "Publica v${V}" || true
           git push
