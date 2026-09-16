@@ -9,6 +9,7 @@ repls={
 '''\tcase 107:\n\t\tshowConsulta()''':'''\tcase 107:\n\t\tshowConsultaGlobal12115()''',
 '''\tcase 9002:\n\t\tshowConsulta()''':'''\tcase 9002:\n\t\tshowConsultaGlobal12115()''',
 '''\tcase 2107:\n\t\tshowConsulta()''':'''\tcase 2107:\n\t\tshowConsultaGlobal12115()''',
+'''\tcase 108:\n\t\tshowFiado()''':'''\tcase 108:\n\t\tshowFiadoUI12115()''',
 }
 for old,new in repls.items(): s=s.replace(old,new)
 anchor='''\tcase 2701:\n\t\tloadValidity("all")'''
@@ -17,12 +18,11 @@ if 'case 4113:' not in s:
  if anchor not in s: raise SystemExit('ancora de comandos nao encontrada')
  s=s.replace(anchor,cases+anchor)
 needle='''func handleCommand(id int) {\n'''
-insert='''func handleCommand(id int) {\n\tif handleVendasUI12115(id) { return }\n\tif handleConsultaGlobal12115(id) { return }\n\tif handleEstoqueUI12115(id) { return }\n'''
-# normaliza bloco anterior para permitir reexecucao do integrador
-oldinsert='''func handleCommand(id int) {\n\tif handleVendasUI12115(id) { return }\n\tif handleConsultaGlobal12115(id) { return }\n'''
-if insert not in s:
- if oldinsert in s:s=s.replace(oldinsert,insert,1)
- elif needle in s:s=s.replace(needle,insert,1)
- else:raise SystemExit('handleCommand nao encontrado')
+handlers=['handleVendasUI12115','handleConsultaGlobal12115','handleEstoqueUI12115','handleFiadoUI12115']
+# remove handlers já injetados e recompõe bloco uma única vez
+for h in handlers:s=s.replace('\tif '+h+'(id) { return }\n','')
+insert=needle+''.join('\tif '+h+'(id) { return }\n' for h in handlers)
+if needle not in s:raise SystemExit('handleCommand nao encontrado')
+s=s.replace(needle,insert,1)
 p.write_text(s,encoding='utf-8')
-print('UI Compras, Vendas, Estoque e Consulta 12.1.15 integradas ao roteamento nativo.')
+print('UI Compras, Vendas, Estoque, Consulta e Fiado 12.1.15 integradas ao roteamento nativo.')
