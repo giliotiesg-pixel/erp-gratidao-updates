@@ -4,56 +4,46 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/release.patch'
+      - 'release-version.txt'
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: publicar-atualizacao
-  cancel-in-progress: false
-
 jobs:
   build-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Baixar repositorio
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Aplicar alteracoes da versao
-        shell: bash
-        run: |
-          test -s src/release.patch
-          patch -p1 < src/release.patch
-          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
-      - name: Instalar Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Ler versao
+      - name: Aplicar versao e botao Excluir Venda
         id: versao
         shell: bash
         run: |
-          VERSION=$(sed -n 's/^const currentVersion = "\([^"]*\)"/\1/p' src/ARMAZEM_GRATIDAO_PRO.go | head -n1)
+          VERSION=$(head -n1 release-version.txt | tr -d '\r\n ')
           test -n "$VERSION"
+          sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$VERSION\"/" src/ARMAZEM_GRATIDAO_PRO.go
+          sed -i 's/Excluir venda selecionada/EXCLUIR VENDA/g' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'EXCLUIR VENDA' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'func deleteSelectedSale()' src/ARMAZEM_GRATIDAO_PRO.go
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
       - name: Compilar EXE Windows nativo
-        shell: bash
-        run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "${{ steps.versao.outputs.exe }}" src/ARMAZEM_GRATIDAO_PRO.go
-      - name: Calcular SHA256
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "${{ steps.versao.outputs.exe }}" src/ARMAZEM_GRATIDAO_PRO.go
+      - name: SHA256
         id: hash
         shell: bash
         run: |
           HASH=$(sha256sum "${{ steps.versao.outputs.exe }}" | awk '{print $1}')
           echo "sha256=$HASH" >> "$GITHUB_OUTPUT"
           echo "$HASH  ${{ steps.versao.outputs.exe }}" > SHA256.txt
-      - name: Criar ou atualizar Release
+      - name: Publicar Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -63,27 +53,18 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$EXE" SHA256.txt --clobber
           else
-            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica do ARMAZEM GRATIDAO PRO $TAG."
+            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica: botao EXCLUIR VENDA no modulo Vendas."
           fi
-      - name: Atualizar manifest e preservar fonte
+      - name: Atualizar manifest e fonte
         shell: bash
         run: |
           VERSION="${{ steps.versao.outputs.version }}"
           TAG="${{ steps.versao.outputs.tag }}"
           EXE="${{ steps.versao.outputs.exe }}"
           HASH="${{ steps.hash.outputs.sha256 }}"
-          cat > manifest.json <<EOF
-          {
-            "version": "$VERSION",
-            "package_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$EXE",
-            "sha256": "$HASH",
-            "notes": "ARMAZEM GRATIDÃO PRO v$VERSION publicado automaticamente."
-          }
-          EOF
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - botão EXCLUIR VENDA em Vendas."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Publica fonte e manifesto v${VERSION}"
-            git push
-          fi
+          git commit -m "Publica ARMAZEM GRATIDAO PRO v${VERSION}" || true
+          git push
