@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.26"
+const currentVersion = "1.2.27"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -302,9 +302,9 @@ func listAdd(h uintptr, s string) {
 }
 func listReset(h uintptr) { pSendMessageW.Call(h, LB_RESETCONTENT, 0, 0) }
 func header(title, sub string) {
-	h := add("STATIC", title, 0, 18, 67, 650, 35, 0)
+	// Cabeçalho limpo: somente o nome do módulo, centralizado na caixa principal.
+	h := add("STATIC", title, 0x00000001, 18, 67, 1215, 42, 0)
 	pSendMessageW.Call(h, WM_SETFONT, fontBig, 1)
-	add("STATIC", sub, 0, 18, 99, 1215, 22, 0)
 }
 func section(title string, x, y, w int) {
 	h := add("STATIC", title, 0, x, y, w, 30, 0)
