@@ -31,7 +31,16 @@ func replaceSaleItems12115(saleID int64,items []SaleEditItem12115) error {
  newQty:=map[int64]float64{};for _,it:=range items{if it.ProductID<=0||it.Qty<=0||it.UnitPrice<0{return fmt.Errorf("item invalido")};newQty[it.ProductID]+=it.Qty}
  if e=execSQL("BEGIN IMMEDIATE");e!=nil{return e};ok:=false;defer func(){if !ok{_=execSQL("ROLLBACK")}}()
  all:=map[int64]bool{};for id:=range oldQty{all[id]=true};for id:=range newQty{all[id]=true}
- for pid:=range all{delta:=oldQty[pid]-newQty[pid];if delta==0{continue};before:=parseF(scalar(fmt.Sprintf("SELECT stock FROM products WHERE id=%d",pid)));after:=before+delta;if after<0{return fmt.Errorf("estoque insuficiente para concluir a alteracao")};active:=0;if after>0{active=1};if e=execSQL(fmt.Sprintf("UPDATE products SET stock=%.4f,active=%d,updated_at=CURRENT_TIMESTAMP WHERE id=%d",after,active,pid));e!=nil{return e};mov:="SAIDA";if delta>0{mov="ENTRADA"};_=execSQL(fmt.Sprintf("INSERT INTO inventory_movements(product_id,movement_type,origin_type,origin_id,qty,stock_before,stock_after,user_id,reason) VALUES(%d,'%s','EDICAO_VENDA',%d,%.4f,%.4f,%.4f,1,'Ajuste por edição direta da venda')",pid,mov,saleID,delta,before,after))}
+ for pid:=range all{
+  delta:=oldQty[pid]-newQty[pid]
+  if abs(delta)<=0.0001{continue}
+  before:=parseF(scalar(fmt.Sprintf("SELECT stock FROM products WHERE id=%d",pid)));after:=before+delta
+  if after < -0.0001{return fmt.Errorf("estoque insuficiente para concluir a alteracao")};if after<0{after=0}
+  active:=0;if after>0.0001{active=1}
+  if e=execSQL(fmt.Sprintf("UPDATE products SET stock=%.4f,active=%d,updated_at=CURRENT_TIMESTAMP WHERE id=%d",after,active,pid));e!=nil{return e}
+  mov:="SAIDA";qtyMovement:=abs(delta);if delta>0{mov="ENTRADA"}
+  if e=execSQL(fmt.Sprintf("INSERT INTO inventory_movements(product_id,movement_type,origin_type,origin_id,qty,stock_before,stock_after,user_id,reason) VALUES(%d,'%s','EDICAO_VENDA',%d,%.4f,%.4f,%.4f,1,'Ajuste por edição direta da venda')",pid,mov,saleID,qtyMovement,before,after));e!=nil{return e}
+ }
  if e=execSQL(fmt.Sprintf("DELETE FROM sale_items WHERE sale_id=%d",saleID));e!=nil{return e}
  for _,it:=range items{rows,er:=queryRows(fmt.Sprintf("SELECT description,cost FROM products WHERE id=%d",it.ProductID),2);if er!=nil||len(rows)==0{return fmt.Errorf("produto nao encontrado")};cost:=parseF(rows[0][1]);lt:=it.Qty*it.UnitPrice;lc:=it.Qty*cost;if er=execSQL(fmt.Sprintf("INSERT INTO sale_items(sale_id,product_id,product_description_snapshot,qty,unit_price,unit_cost,line_total,line_cost,line_profit) VALUES(%d,%d,'%s',%.4f,%.4f,%.4f,%.4f,%.4f,%.4f)",saleID,it.ProductID,esc(rows[0][0]),it.Qty,it.UnitPrice,cost,lt,lc,lt-lc));er!=nil{return er}}
  if e=recalcSale12115(saleID);e!=nil{return e};_=execSQL(fmt.Sprintf("INSERT INTO sale_changes_12115(sale_id,change_type,details) VALUES(%d,'ITENS','Itens/produtos/quantidades/valores alterados com ajuste de estoque')",saleID));if e=execSQL("COMMIT");e!=nil{return e};ok=true;return nil
@@ -46,6 +55,6 @@ func updateSaleInfo12115(saleID int64,customer,payment,date string) error {
 func deleteSale12115(saleID int64,reason string) error {
  if saleID<=0{return fmt.Errorf("venda invalida")};status:=scalar(fmt.Sprintf("SELECT status FROM sales WHERE id=%d",saleID));if status==""||strings.HasPrefix(status,"EXCLUIDA"){return fmt.Errorf("venda nao encontrada ou ja excluida")}
  rows,e:=queryRows(fmt.Sprintf("SELECT product_id,qty FROM sale_items WHERE sale_id=%d",saleID),2);if e!=nil{return e};if e=execSQL("BEGIN IMMEDIATE");e!=nil{return e};ok:=false;defer func(){if !ok{_=execSQL("ROLLBACK")}}()
- for _,r:=range rows{pid,_:=strconv.ParseInt(r[0],10,64);qty:=parseF(r[1]);before:=parseF(scalar(fmt.Sprintf("SELECT stock FROM products WHERE id=%d",pid)));after:=before+qty;if e=execSQL(fmt.Sprintf("UPDATE products SET stock=%.4f,active=1,updated_at=CURRENT_TIMESTAMP WHERE id=%d",after,pid));e!=nil{return e};_=execSQL(fmt.Sprintf("INSERT INTO inventory_movements(product_id,movement_type,origin_type,origin_id,qty,stock_before,stock_after,user_id,reason) VALUES(%d,'ENTRADA','EXCLUSAO_VENDA',%d,%.4f,%.4f,%.4f,1,'%s')",pid,saleID,qty,before,after,esc(reason)))}
+ for _,r:=range rows{pid,_:=strconv.ParseInt(r[0],10,64);qty:=parseF(r[1]);before:=parseF(scalar(fmt.Sprintf("SELECT stock FROM products WHERE id=%d",pid)));after:=before+qty;if e=execSQL(fmt.Sprintf("UPDATE products SET stock=%.4f,active=1,updated_at=CURRENT_TIMESTAMP WHERE id=%d",after,pid));e!=nil{return e};if e=execSQL(fmt.Sprintf("INSERT INTO inventory_movements(product_id,movement_type,origin_type,origin_id,qty,stock_before,stock_after,user_id,reason) VALUES(%d,'ENTRADA','EXCLUSAO_VENDA',%d,%.4f,%.4f,%.4f,1,'%s')",pid,saleID,qty,before,after,esc(reason)));e!=nil{return e}}
  if e=execSQL(fmt.Sprintf("UPDATE sales SET status='EXCLUIDA',deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=%d",saleID));e!=nil{return e};_=ensureVendas12115Schema();_=execSQL(fmt.Sprintf("INSERT INTO sale_changes_12115(sale_id,change_type,details) VALUES(%d,'EXCLUSAO','%s')",saleID,esc(reason)));if e=execSQL("COMMIT");e!=nil{return e};ok=true;return nil
 }
