@@ -36,10 +36,12 @@ jobs:
           unzip -j /tmp/base.zip 'CODIGO_FONTE_native_v1.2.11.go' -d /tmp
           cp /tmp/CODIGO_FONTE_native_v1.2.11.go /tmp/oldfmt.go
           gofmt -w /tmp/oldfmt.go
+          patch --dry-run /tmp/oldfmt.go < src/v1.2.17.patch
           patch /tmp/oldfmt.go < src/v1.2.17.patch
           cp /tmp/oldfmt.go src/ARMAZEM_GRATIDAO_PRO.go
           gofmt -w src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'const currentVersion = "1.2.17"' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
 
       - name: Ler versao do codigo
         id: versao
