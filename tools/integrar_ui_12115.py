@@ -25,7 +25,8 @@ repls={
 '''\tcase strings.Contains(q, "lucro"):\n\t\tshowSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")''':'''\tcase strings.Contains(q, "lucro"):\n\t\tshowRelatoriosUI12115()''',
 '''\tcase strings.Contains(q, "relat"):\n\t\tshowSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")''':'''\tcase strings.Contains(q, "relat"):\n\t\tshowRelatoriosUI12115()''',
 }
-for old,new in repls.items():s=s.replace(old,new)
+for old,new in repls.items():
+ if old in s:s=s.replace(old,new)
 needle='''\tcase strings.Contains(q, "config"):\n\t\thandleCommand(114)'''
 if 'strings.Contains(q, "oferta")' not in s and needle in s:s=s.replace(needle,'''\tcase strings.Contains(q, "oferta") || strings.Contains(q, "promo"):\n\t\tshowOfertasUI12115()\n'''+needle)
 pdv_anchor='''\tadd("BUTTON", "Remover item selecionado", 0, 250, 585, 210, 40, 2109)'''
@@ -45,9 +46,15 @@ for h in handlers:s=s.replace('\tif '+h+'(id) { return }\n','')
 insert=needle+''.join('\tif '+h+'(id) { return }\n' for h in handlers)
 if needle not in s:raise SystemExit('handleCommand nao encontrado')
 s=s.replace(needle,insert,1)
+# Valida as rotas pelo case do menu, e não por simples presença do nome da função.
+routes={103:'showProdutosUI12115()',104:'showEstoqueUI12115()',105:'showVendasUI12115()',106:'showCaixaUI12115()',107:'showConsultaGlobal12115()',108:'showFiadoUI12115()',109:'showFinanceiroUI12115()',110:'showComprasUI12115()',111:'showFiscalUI12115()',112:'showRelatoriosUI12115()',115:'showOfertasUI12115()'}
+for cid,fn in routes.items():
+ marker=f'case {cid}:'
+ pos=s.find(marker)
+ if pos<0 or fn not in s[pos:pos+180]:raise SystemExit(f'rota {cid} nao integrada: {fn}')
 for old in ['showProdutos()','showEstoque()','showVendas()','showCaixa()','showFiado()','showConsulta()']:
  block=s[s.find('func openModuleSearch()'):s.find('func editProc(')]
  if old in block:raise SystemExit('busca global ainda usa tela antiga: '+old)
 for required in ['handlePDV12115','CORRIGIR ESTOQUE REAL','DEIXAR VENDA EM ABERTO']:
  if required not in s:raise SystemExit('PDV 12.1.15 nao integrado: '+required)
-p.write_text(s,encoding='utf-8');print('UI 12.1.15 integrada com PDV, estoque real e Venda em Aberto.')
+p.write_text(s,encoding='utf-8');print('UI 12.1.15 integrada e rotas principais validadas.')
