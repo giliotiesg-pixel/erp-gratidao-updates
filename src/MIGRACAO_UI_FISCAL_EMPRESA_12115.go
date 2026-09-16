@@ -1,0 +1,15 @@
+package main
+
+import (
+ "fmt"
+ "strconv"
+)
+var fiscalSearch12115,fiscalList12115,fNCM12115,fCEST12115,fCFOP12115,fCST12115,fOrigin12115,fGTIN12115,fUnit12115,fICMS12115,fPIS12115,fCOFINS12115 uintptr
+var fiscalIDs12115 []int64
+func showFiscalUI12115(){if !ensureDB(){return};currentModule="fiscal";clearContent();if e:=ensureFiscalEmpresa12115Schema();e!=nil{msgErr(e.Error());return};header("Fiscal","");fiscalSearch12115=add("EDIT","",WS_BORDER|ES_AUTOHSCROLL,250,125,330,30,5001);add("BUTTON","Buscar",0,595,122,100,36,5002);fiscalList12115=add("LISTBOX","",WS_BORDER|WS_VSCROLL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT,250,175,1000,245,5010);add("BUTTON","Carregar produto",0,250,430,150,36,5011);y:=485;labels:=[]string{"NCM","CEST","CFOP","CST/CSOSN","Origem","GTIN tributável","Unid. trib.","ICMS %","PIS %","COFINS %"};hs:=[]*uintptr{&fNCM12115,&fCEST12115,&fCFOP12115,&fCST12115,&fOrigin12115,&fGTIN12115,&fUnit12115,&fICMS12115,&fPIS12115,&fCOFINS12115};x:=250;for i,l:=range labels{add("STATIC",l,0,x,y,105,20,0);*hs[i]=add("EDIT","",WS_BORDER|ES_AUTOHSCROLL,x,y+22,105,30,5020+i);x+=115;if i==4{x=250;y+=65}};add("BUTTON","SALVAR FISCAL",0,825,572,160,40,5040);loadFiscalUI12115()}
+func loadFiscalUI12115(){rows,e:=fiscalProducts12115(getText(fiscalSearch12115));if e!=nil{msgErr(e.Error());return};listReset(fiscalList12115);fiscalIDs12115=nil;listAdd(fiscalList12115,"CÓDIGO           PRODUTO                                      NCM        CEST       CFOP       CST");for _,r:=range rows{id,_:=strconv.ParseInt(r[0],10,64);fiscalIDs12115=append(fiscalIDs12115,id);listAdd(fiscalList12115,fmt.Sprintf("%-16s %-44s %-10s %-10s %-10s %s",r[1],clip(r[2],44),r[3],r[4],r[5],r[6]))}}
+func selectedFiscal12115()int64{idx,_,_:=pSendMessageW.Call(fiscalList12115,LB_GETCURSEL,0,0);i:=int(idx)-1;if i<0||i>=len(fiscalIDs12115){return 0};return fiscalIDs12115[i]}
+var fiscalSelected12115 int64
+func loadFiscalSelected12115(){id:=selectedFiscal12115();if id==0{msg("Selecione um produto.");return};rows,e:=queryRows(fmt.Sprintf("SELECT COALESCE(ncm,''),COALESCE(cest,''),COALESCE(cfop,''),COALESCE(cst_csosn,''),COALESCE(origin,''),COALESCE(gtin_tributable,''),COALESCE(tributary_unit,''),COALESCE(tax_icms,0),COALESCE(tax_pis,0),COALESCE(tax_cofins,0) FROM products WHERE id=%d",id),10);if e!=nil||len(rows)==0{msgErr("Produto não encontrado.");return};fiscalSelected12115=id;hs:=[]uintptr{fNCM12115,fCEST12115,fCFOP12115,fCST12115,fOrigin12115,fGTIN12115,fUnit12115,fICMS12115,fPIS12115,fCOFINS12115};for i,h:=range hs{setText(h,rows[0][i])}}
+func saveFiscalUI12115(){if fiscalSelected12115==0{msg("Carregue um produto.");return};e:=saveProductFiscal12115(fiscalSelected12115,getText(fNCM12115),getText(fCEST12115),getText(fCFOP12115),getText(fCST12115),getText(fOrigin12115),getText(fGTIN12115),getText(fUnit12115),parseF(getText(fICMS12115)),parseF(getText(fPIS12115)),parseF(getText(fCOFINS12115)));if e!=nil{msgErr(e.Error());return};msg("Dados fiscais salvos.");loadFiscalUI12115()}
+func handleFiscalUI12115(id int)bool{switch id{case 5002:loadFiscalUI12115();case 5011:loadFiscalSelected12115();case 5040:saveFiscalUI12115();default:return false};return true}
