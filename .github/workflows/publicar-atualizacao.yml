@@ -14,11 +14,14 @@ jobs:
       - name: preparar
         shell: bash
         run: |
+          set -euo pipefail
           V=$(head -n 1 release-version.txt | tr -d '\r\n ')
           sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$V\"/" src/ARMAZEM_GRATIDAO_PRO.go
           python3 tools/integrar_atualizador.py
           python3 tools/integrar_ui_12115.py
           python3 tools/auditar_migracao_12115.py
+          grep -q 'handlePDV12115(id)' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'CORRIGIR ESTOQUE REAL' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q showProdutosUI12115 src/ARMAZEM_GRATIDAO_PRO.go
           grep -q showComprasUI12115 src/ARMAZEM_GRATIDAO_PRO.go
           grep -q showVendasUI12115 src/ARMAZEM_GRATIDAO_PRO.go
@@ -34,12 +37,29 @@ jobs:
       - name: compilar
         shell: bash
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_UI_COMPRAS_12115.go src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_UI_ESTOQUE_12115.go src/MIGRACAO_VENDAS_12115.go src/MIGRACAO_UI_VENDAS_12115.go src/MIGRACAO_FIADO_12115.go src/MIGRACAO_UI_FIADO_12115.go src/MIGRACAO_PARCEIROS_FINANCEIRO_12115.go src/MIGRACAO_UI_FINANCEIRO_12115.go src/MIGRACAO_RELATORIOS_12115.go src/MIGRACAO_UI_RELATORIOS_12115.go src/MIGRACAO_CAIXA_PDV_12115.go src/MIGRACAO_UI_CAIXA_12115.go src/MIGRACAO_FISCAL_EMPRESA_12115.go src/MIGRACAO_UI_FISCAL_EMPRESA_12115.go src/MIGRACAO_OFERTAS_CONFIG_12115.go src/MIGRACAO_UI_OFERTAS_12115.go src/MIGRACAO_DASHBOARD_12115.go src/MIGRACAO_CONSULTA_PRODUTO_12115.go src/MIGRACAO_UI_CONSULTA_12115.go src/MIGRACAO_COFRE_12115.go src/MIGRACAO_PRODUTOS_12115.go src/MIGRACAO_UI_PRODUTOS_12115.go src/MIGRACAO_RECIBOS_12115.go src/MIGRACAO_AUDITORIA_12115.go
+          set -euo pipefail
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" \
+            src/ARMAZEM_GRATIDAO_PRO.go \
+            src/MIGRACAO_PDV_INTERACAO_12115.go \
+            src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_UI_COMPRAS_12115.go \
+            src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_UI_ESTOQUE_12115.go \
+            src/MIGRACAO_VENDAS_12115.go src/MIGRACAO_UI_VENDAS_12115.go \
+            src/MIGRACAO_FIADO_12115.go src/MIGRACAO_UI_FIADO_12115.go \
+            src/MIGRACAO_PARCEIROS_FINANCEIRO_12115.go src/MIGRACAO_UI_FINANCEIRO_12115.go \
+            src/MIGRACAO_RELATORIOS_12115.go src/MIGRACAO_UI_RELATORIOS_12115.go \
+            src/MIGRACAO_CAIXA_PDV_12115.go src/MIGRACAO_UI_CAIXA_12115.go \
+            src/MIGRACAO_FISCAL_EMPRESA_12115.go src/MIGRACAO_UI_FISCAL_EMPRESA_12115.go \
+            src/MIGRACAO_OFERTAS_CONFIG_12115.go src/MIGRACAO_UI_OFERTAS_12115.go \
+            src/MIGRACAO_DASHBOARD_12115.go \
+            src/MIGRACAO_CONSULTA_PRODUTO_12115.go src/MIGRACAO_UI_CONSULTA_12115.go \
+            src/MIGRACAO_COFRE_12115.go src/MIGRACAO_PRODUTOS_12115.go src/MIGRACAO_UI_PRODUTOS_12115.go \
+            src/MIGRACAO_RECIBOS_12115.go src/MIGRACAO_AUDITORIA_12115.go
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o ATUALIZADOR_GRATIDAO.exe src/ATUALIZADOR_GRATIDAO.go
       - name: publicar
         shell: bash
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
+          set -euo pipefail
           EXE="ARMAZEM_GRATIDAO_PRO_v${V}.exe"; UPD=ATUALIZADOR_GRATIDAO.exe
           HASH=$(sha256sum "$EXE"|awk '{print $1}'); UPDHASH=$(sha256sum "$UPD"|awk '{print $1}')
           echo "$HASH  $EXE" > SHA256.txt; echo "$UPDHASH  $UPD" >> SHA256.txt
