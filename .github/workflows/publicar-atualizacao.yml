@@ -31,11 +31,13 @@ jobs:
           s=p.read_text()
           old='''func header(title, sub string) {\n\th := add("STATIC", title, 0, 18, 67, 650, 35, 0)\n\tpSendMessageW.Call(h, WM_SETFONT, fontBig, 1)\n\tadd("STATIC", sub, 0, 18, 99, 1215, 22, 0)\n}'''
           new='''func header(title, sub string) {\n\t// Cabeçalho limpo: somente o nome do módulo, centralizado na caixa principal.\n\th := add("STATIC", title, 0x00000001, 18, 67, 1215, 42, 0)\n\tpSendMessageW.Call(h, WM_SETFONT, fontBig, 1)\n}'''
-          if old not in s:
+          if old in s:
+              s=s.replace(old,new,1)
+              p.write_text(s)
+          elif 'Cabeçalho limpo' not in s:
               raise SystemExit('ERRO: funcao header esperada nao encontrada')
-          s=s.replace(old,new,1)
-          p.write_text(s)
           PY
+          python3 tools/auditar_migracao_12115.py
           grep -q 'UpdaterURL' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'ATUALIZADOR_GRATIDAO.exe' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'Cabeçalho limpo' src/ARMAZEM_GRATIDAO_PRO.go
@@ -60,8 +62,8 @@ jobs:
           echo "$UPDHASH  $UPD" >> SHA256.txt
           gh release delete "v${V}" --yes >/dev/null 2>&1 || true
           git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
-          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Cabecalhos dos modulos centralizados e sem subtitulos. Atualizador nativo integrado. Banco e Fiado preservados."
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - cabecalhos centralizados; somente nome do modulo; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
+          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao funcional da referencia 12.1.15 em andamento; auditoria automatica de modulos; banco e dados preservados."
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - migracao funcional 12.1.15; auditoria de modulos; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
