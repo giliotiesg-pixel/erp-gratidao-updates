@@ -1,6 +1,8 @@
 {
-  "version": "1.2.24",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.24/ARMAZEM_GRATIDAO_PRO_v1.2.24.exe",
-  "sha256": "15483a9217a0a3ab99f6c2604e66524e0c1ab3be853aeb0c23367b0052f2122f",
-  "notes": "ARMAZEM GRATIDAO PRO v1.2.24 - menu lateral sem sobreposicao; modulos 12.1.5 mantidos; Fiado preservado."
+  "version": "1.2.25",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.25/ARMAZEM_GRATIDAO_PRO_v1.2.25.exe",
+  "sha256": "ad27f7dde8bf2ef4c2023ba201063a74eb4c994a7f4dd3bc324968dd64d675f0",
+  "updater_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.25/ATUALIZADOR_GRATIDAO.exe",
+  "updater_sha256": "b09cfd0e940f6868ba58baf7bd9febcbcf085a5e9292eedf8c9fc216f101d582",
+  "notes": "ARMAZEM GRATIDAO PRO v1.2.25 - atualizador nativo moderno; backup e rollback; dados preservados."
 }
