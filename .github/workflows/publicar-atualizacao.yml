@@ -41,13 +41,16 @@ jobs:
           grep -q 'ATUALIZADOR_GRATIDAO.exe' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'contentCmd = 0' src/ARMAZEM_GRATIDAO_PRO.go
           grep -q 'savePurchase12115' src/MIGRACAO_COMPRAS_12115.go
-          grep -q 'deletePurchase12115' src/MIGRACAO_COMPRAS_12115.go
+          grep -q 'setRealStock12115' src/MIGRACAO_ESTOQUE_12115.go
+          grep -q 'productByBarcode12115' src/MIGRACAO_ESTOQUE_12115.go
+          grep -q 'inventoryLedger12115' src/MIGRACAO_ESTOQUE_12115.go
+          if grep -qi 'CREATE TABLE.*lote\|CREATE TABLE.*batch' src/MIGRACAO_ESTOQUE_12115.go; then echo 'ERRO: logica de lote nao permitida'; exit 1; fi
           if grep -q 'instalar-.*\.bat' src/ARMAZEM_GRATIDAO_PRO.go; then echo 'ERRO: fluxo BAT antigo ainda presente'; exit 1; fi
           echo "V=$V" >> "$GITHUB_ENV"
       - name: compilar
         shell: bash
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go src/MIGRACAO_COMPRAS_12115.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_ESTOQUE_12115.go
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ATUALIZADOR_GRATIDAO.exe" src/ATUALIZADOR_GRATIDAO.go
       - name: publicar
         shell: bash
@@ -62,8 +65,8 @@ jobs:
           echo "$UPDHASH  $UPD" >> SHA256.txt
           gh release delete "v${V}" --yes >/dev/null 2>&1 || true
           git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
-          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao 12.1.15: nucleo nativo de Compras com itens, custo, total, entrada de estoque, historico e estorno."
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - migracao Compras 12.1.15; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
+          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao 12.1.15: Compras e Estoque nativos; ajuste de estoque real; validade sem lotes; livro de movimentacao."
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/v%s/%s",\n  "sha256": "%s",\n  "updater_url": "https://github.com/%s/releases/download/v%s/%s",\n  "updater_sha256": "%s",\n  "notes": "ARMAZEM GRATIDAO PRO v%s - migracao Compras e Estoque 12.1.15; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" "$V" > manifest.json
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
