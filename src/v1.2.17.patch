@@ -1,5 +1,5 @@
---- oldfmt.go
-+++ ARMAZEM_GRATIDAO_PRO.go
+--- /tmp/base.go	2026-09-16 00:59:58.306401733 +0000
++++ /tmp/new.go	2026-09-16 00:59:58.311243360 +0000
 @@ -23,6 +23,8 @@
  	"unsafe"
  )
@@ -7,13 +7,29 @@
 +const currentVersion = "1.2.17"
 +
  var (
+ 	user32                = syscall.NewLazyDLL("user32.dll")
+ 	gdi32                 = syscall.NewLazyDLL("gdi32.dll")
 @@ -749,7 +751,7 @@
+ 			setUpdateError(e)
+ 			return
+ 		}
 -		if versionGreater(m.Version, "1.2.11") {
 +		if versionGreater(m.Version, currentVersion) {
+ 			updateMu.Lock()
+ 			updateFound = &m
+ 			updateMu.Unlock()
 @@ -770,7 +772,7 @@
+ 		return
+ 	}
+ 	clearContent()
 -	header("Atualizações", "Atualizador automático do ERP Gratidão — verifica, valida, faz backup, instala e reinicia.")
 +	header("Atualizações", "Atualizador automático do ARMAZEM GRATIDÃO PRO — verifica, valida, faz backup, instala e reinicia.")
+ 	section("Atualizador de versões", 250, 135, 900)
+ 	add("STATIC", "Manifesto HTTPS permanente:", 0, 255, 190, 220, 28, 0)
+ 	u := scalar("SELECT setting_value FROM app_settings WHERE setting_key='update_manifest_url'")
 @@ -795,6 +797,12 @@
+ 		return
+ 	}
  	go func() {
 +		if !versionGreater(m.Version, currentVersion) {
 +			if !strings.EqualFold(m.Version, currentVersion) {
@@ -22,7 +38,11 @@
 +			return
 +		}
  		if !strings.HasPrefix(strings.ToLower(m.PackageURL), "https://") {
+ 			setUpdateError(fmt.Errorf("package_url deve usar HTTPS"))
+ 			return
 @@ -804,11 +812,9 @@
+ 			return
+ 		}
  		upd := filepath.Join(root, "Updates")
 -		stage := filepath.Join(upd, "stage-"+m.Version)
  		os.MkdirAll(upd, 0755)
@@ -31,10 +51,21 @@
 -		zipPath := filepath.Join(upd, "ERP_Gratidao_"+m.Version+".zip")
 +		exeNew := filepath.Join(upd, "ARMAZEM_GRATIDAO_PRO_v"+m.Version+".new.exe")
 +		os.Remove(exeNew)
+ 		c := http.Client{Timeout: 5 * time.Minute}
+ 		r, e := c.Get(m.PackageURL)
+ 		if e != nil {
 @@ -820,7 +826,7 @@
+ 			setUpdateError(fmt.Errorf("download HTTP %d", r.StatusCode))
+ 			return
+ 		}
 -		f, e := os.Create(zipPath)
 +		f, e := os.Create(exeNew)
+ 		if e != nil {
+ 			setUpdateError(e)
+ 			return
 @@ -834,64 +840,15 @@
+ 		}
+ 		got := hex.EncodeToString(h.Sum(nil))
  		if !strings.EqualFold(got, strings.TrimSpace(m.SHA256)) {
 +			os.Remove(exeNew)
  			setUpdateError(fmt.Errorf("SHA-256 não confere. Atualização cancelada"))
@@ -97,7 +128,12 @@
 -		txt := fmt.Sprintf("@echo off\r\nsetlocal\r\ntitle ERP Gratidao - Atualizacao %s\r\n:wait\r\ntasklist /FI \"PID eq %d\" 2>NUL | find \"%d\" >NUL\r\nif not errorlevel 1 (timeout /t 1 /nobreak >NUL & goto wait)\r\nif not exist \"%s\" mkdir \"%s\"\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\ncopy /Y \"%s\" \"%s\" >NUL\r\nif errorlevel 1 goto rollback\r\nstart \"\" \"%s\"\r\nexit /b 0\r\n:rollback\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nstart \"\" \"%s\"\r\n", m.Version, os.Getpid(), os.Getpid(), backup, backup, filepath.Join(root, "data", "erp.sqlite"), filepath.Join(root, "data", "erp.sqlite"), filepath.Join(backup, "erp_pre_"+m.Version+".sqlite"), filepath.Join(root, "ERP Gratidao.exe"), filepath.Join(root, "ERP Gratidao.exe"), filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), exeNew, filepath.Join(root, "ERP Gratidao.exe"), filepath.Join(root, "ERP Gratidao.exe"), filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), filepath.Join(root, "ERP Gratidao.exe"), filepath.Join(root, "ERP Gratidao.exe"))
 +		target := filepath.Join(root, "ERP Gratidao.exe")
 +		txt := fmt.Sprintf("@echo off\r\nsetlocal\r\ntitle ARMAZEM GRATIDAO PRO - Atualizacao %s\r\n:wait\r\ntasklist /FI \"PID eq %d\" 2>NUL | find \"%d\" >NUL\r\nif not errorlevel 1 (timeout /t 1 /nobreak >NUL & goto wait)\r\nif not exist \"%s\" mkdir \"%s\"\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\ncopy /Y \"%s\" \"%s\" >NUL\r\nif errorlevel 1 goto rollback\r\nstart \"\" \"%s\"\r\ndel \"%%~f0\"\r\nexit /b 0\r\n:rollback\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nstart \"\" \"%s\"\r\n", m.Version, os.Getpid(), os.Getpid(), backup, backup, filepath.Join(root, "data", "erp.sqlite"), filepath.Join(root, "data", "erp.sqlite"), filepath.Join(backup, "erp_pre_"+m.Version+".sqlite"), target, target, filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), exeNew, target, target, filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), target, target)
+ 		if e = os.WriteFile(bat, []byte(txt), 0644); e != nil {
+ 			setUpdateError(e)
+ 			return
 @@ -910,8 +867,12 @@
+ 		return
+ 	}
  	execSQL("PRAGMA wal_checkpoint(FULL)")
 +	comspec := os.Getenv("COMSPEC")
 +	if comspec == "" {
@@ -106,18 +142,45 @@
  	attr := &syscall.ProcAttr{Dir: root, Env: os.Environ(), Sys: &syscall.SysProcAttr{HideWindow: false}}
 -	_, _, e := syscall.StartProcess(os.Getenv("COMSPEC"), []string{"cmd.exe", "/c", bat}, attr)
 +	_, _, e := syscall.StartProcess(comspec, []string{comspec, "/c", bat}, attr)
+ 	if e != nil {
+ 		msgErr("Não foi possível iniciar o instalador: " + e.Error())
+ 		return
 @@ -1757,9 +1718,9 @@
+ func loadSales(today bool) {
+ 	listReset(salesList)
+ 	salesIDs = nil
 -	q := "SELECT id,sale_number,datetime(created_at,'localtime'),customer_name,payment_method,printf('%.2f',total),status FROM sales"
 +	q := "SELECT id,sale_number,datetime(created_at,'localtime'),customer_name,payment_method,printf('%.2f',total),status FROM sales WHERE status<>'EXCLUIDA_LIMPA'"
  	if today {
 -		q += " WHERE date(created_at,'localtime')=date('now','localtime')"
 +		q += " AND date(created_at,'localtime')=date('now','localtime')"
+ 	}
+ 	q += " ORDER BY id DESC LIMIT 1000"
+ 	rows, e := queryRows(q, 7)
 @@ -2280,7 +2241,7 @@
+ 	btn, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("☰"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 10, 9, 36, 34, mainWnd, 99, 0, 0)
+ 	pSendMessageW.Call(btn, WM_SETFONT, fontBig, 1)
+ 
 -	brand, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("ERP GRATIDÃO"))), WS_CHILD|WS_VISIBLE, 56, 14, 205, 27, mainWnd, 0, 0, 0)
 +	brand, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("ARMAZEM GRATIDÃO PRO"))), WS_CHILD|WS_VISIBLE, 56, 14, 205, 27, mainWnd, 0, 0, 0)
+ 	pSendMessageW.Call(brand, WM_SETFONT, fontBig, 1)
+ 	topbarLabels[brand] = true
+ 
 @@ -2288,7 +2249,7 @@
+ 	pSendMessageW.Call(moduleSearch, WM_SETFONT, font, 1)
+ 	subclassEdit(moduleSearch)
+ 
 -	ver, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("v1.2.11"))), WS_CHILD|WS_VISIBLE, 820, 18, 48, 20, mainWnd, 0, 0, 0)
 +	ver, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("v"+currentVersion))), WS_CHILD|WS_VISIBLE, 820, 18, 48, 20, mainWnd, 0, 0, 0)
+ 	stat, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("Sistema local"))), WS_CHILD|WS_VISIBLE, 870, 18, 75, 20, mainWnd, 0, 0, 0)
+ 	pSendMessageW.Call(ver, WM_SETFONT, fontSmall, 1)
+ 	pSendMessageW.Call(stat, WM_SETFONT, fontSmall, 1)
 @@ -2336,7 +2297,7 @@
+ 	cls := ws("ERPGratidaoNative1211")
+ 	wc := WNDCLASSEX{cbSize: uint32(unsafe.Sizeof(WNDCLASSEX{})), lpfnWndProc: syscall.NewCallback(wndProc), hInstance: hinst, lpszClassName: cls, hbrBackground: 6}
+ 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 -	mainWnd, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(ws("ERP Gratidão - Nativo v1.2.11 • Cabeçalho 12.1.5 + Atualizador Automático"))), WS_OVERLAPPEDWINDOW|WS_VISIBLE, 20, 15, 1320, 790, 0, 0, hinst, 0)
 +	mainWnd, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(ws("ARMAZEM GRATIDÃO PRO v1.2.17"))), WS_OVERLAPPEDWINDOW|WS_VISIBLE, 20, 15, 1320, 790, 0, 0, hinst, 0)
+ 	buildNavigation()
+ 	showBoot()
+ 	pShowWindow.Call(mainWnd, SW_SHOW)
