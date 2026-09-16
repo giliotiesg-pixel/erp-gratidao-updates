@@ -10,7 +10,8 @@ func ensureParceirosFinanceiro12115() error {
 CREATE TABLE IF NOT EXISTS partners_12115(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,name TEXT NOT NULL,document TEXT,phone TEXT,email TEXT,address TEXT,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payable_accounts_12115(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,partner_name TEXT NOT NULL,description TEXT,value REAL NOT NULL DEFAULT 0,paid_value REAL NOT NULL DEFAULT 0,due_date TEXT,status TEXT NOT NULL DEFAULT 'ABERTA',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payable_payments_12115(id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,value REAL NOT NULL,source TEXT NOT NULL DEFAULT 'CAIXA',reference TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE INDEX IF NOT EXISTS idx_partners_12115_name ON partners_12115(name); CREATE INDEX IF NOT EXISTS idx_payable_12115_status ON payable_accounts_12115(status,due_date);`)
+CREATE TABLE IF NOT EXISTS fiado_offsets_12115(id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,sale_id INTEGER NOT NULL,customer_name TEXT NOT NULL,value REAL NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_partners_12115_name ON partners_12115(name); CREATE INDEX IF NOT EXISTS idx_payable_12115_status ON payable_accounts_12115(status,due_date); CREATE INDEX IF NOT EXISTS idx_fiado_offsets_account ON fiado_offsets_12115(account_id);`)
 }
 
 func savePartner12115(id int64, kind,name,document,phone,email,address string)(int64,error){
@@ -25,7 +26,30 @@ func savePayable12115(kind,partner,description string,value float64,due string)(
  if e:=ensureParceirosFinanceiro12115();e!=nil{return 0,e};partner=strings.TrimSpace(partner);if partner==""||value<=0{return 0,fmt.Errorf("informe fornecedor/cliente e valor")};if strings.TrimSpace(kind)==""{kind="FORNECEDOR"}
  e:=execSQL(fmt.Sprintf("INSERT INTO payable_accounts_12115(type,partner_name,description,value,due_date) VALUES('%s','%s','%s',%.4f,'%s')",esc(kind),esc(partner),esc(description),value,esc(due)));if e!=nil{return 0,e};return int64(parseF(scalar("SELECT last_insert_rowid()"))),nil
 }
+
+// payPayableWithFiado12115 compensa uma conta com créditos Fiado do mesmo cliente.
+// O valor é aplicado nas vendas Fiado mais antigas ainda em aberto e registrado nos dois históricos.
+func payPayableWithFiado12115(id int64,value float64) error {
+ if id<=0||value<=0{return fmt.Errorf("pagamento invalido")};if e:=ensureParceirosFinanceiro12115();e!=nil{return e}
+ acc,e:=queryRows(fmt.Sprintf("SELECT partner_name,value,paid_value FROM payable_accounts_12115 WHERE id=%d",id),3);if e!=nil||len(acc)==0{return fmt.Errorf("conta nao encontrada")}
+ customer:=strings.TrimSpace(acc[0][0]);balance:=parseF(acc[0][1])-parseF(acc[0][2]);if value>balance+0.0001{return fmt.Errorf("valor maior que o saldo da conta")}
+ sales,e:=fiadoOpenSales12115(customer);if e!=nil{return e};available:=0.0;for _,r:=range sales{if strings.EqualFold(strings.TrimSpace(r[2]),customer){available+=parseF(r[6])}}
+ if value>available+0.0001{return fmt.Errorf("saldo Fiado insuficiente para %s: disponível R$ %.2f",customer,available)}
+ if e=execSQL("BEGIN IMMEDIATE");e!=nil{return e};ok:=false;defer func(){if !ok{_=execSQL("ROLLBACK")}}()
+ remaining:=value
+ // fiadoOpenSales vem do mais novo; percorre ao contrário para consumir primeiro as vendas mais antigas.
+ for i:=len(sales)-1;i>=0 && remaining>0.0001;i--{r:=sales[i];if !strings.EqualFold(strings.TrimSpace(r[2]),customer){continue};sid:=int64(parseF(r[0]));saleBalance:=parseF(r[6]);if saleBalance<=0{continue};use:=saleBalance;if use>remaining{use=remaining}
+  if e=execSQL(fmt.Sprintf("INSERT INTO credit_payments(sale_id,amount,payment_method,customer_name) VALUES(%d,%.4f,'COMPENSACAO SALDO DEVEDOR','%s')",sid,use,esc(customer)));e!=nil{return e}
+  if e=execSQL(fmt.Sprintf("INSERT INTO fiado_offsets_12115(account_id,sale_id,customer_name,value) VALUES(%d,%d,'%s',%.4f)",id,sid,esc(customer),use));e!=nil{return e};remaining-=use
+ }
+ if remaining>0.0001{return fmt.Errorf("não foi possível completar a compensação")}
+ if e=execSQL(fmt.Sprintf("INSERT INTO payable_payments_12115(account_id,value,source,reference) VALUES(%d,%.4f,'FIADO','Compensação automática de Fiado - %s')",id,value,esc(customer)));e!=nil{return e}
+ newPaid:=parseF(acc[0][2])+value;status:="PARCIAL";if newPaid>=parseF(acc[0][1])-0.0001{status="PAGA"};if e=execSQL(fmt.Sprintf("UPDATE payable_accounts_12115 SET paid_value=%.4f,status='%s',updated_at=CURRENT_TIMESTAMP WHERE id=%d",newPaid,status,id));e!=nil{return e}
+ if e=execSQL("COMMIT");e!=nil{return e};ok=true;return nil
+}
+
 func payPayable12115(id int64,value float64,source,reference string)error{
+ if strings.EqualFold(strings.TrimSpace(source),"FIADO"){return payPayableWithFiado12115(id,value)}
  if id<=0||value<=0{return fmt.Errorf("pagamento invalido")};_=ensureParceirosFinanceiro12115();rows,e:=queryRows(fmt.Sprintf("SELECT value,paid_value,status FROM payable_accounts_12115 WHERE id=%d",id),3);if e!=nil||len(rows)==0{return fmt.Errorf("conta nao encontrada")};balance:=parseF(rows[0][0])-parseF(rows[0][1]);if value>balance+0.0001{return fmt.Errorf("valor maior que o saldo")};if source==""{source="CAIXA"};if e=execSQL("BEGIN IMMEDIATE");e!=nil{return e};ok:=false;defer func(){if !ok{_=execSQL("ROLLBACK")}}();if e=execSQL(fmt.Sprintf("INSERT INTO payable_payments_12115(account_id,value,source,reference) VALUES(%d,%.4f,'%s','%s')",id,value,esc(source),esc(reference)));e!=nil{return e};newPaid:=parseF(rows[0][1])+value;status:="PARCIAL";if newPaid>=parseF(rows[0][0])-0.0001{status="PAGA"};if e=execSQL(fmt.Sprintf("UPDATE payable_accounts_12115 SET paid_value=%.4f,status='%s',updated_at=CURRENT_TIMESTAMP WHERE id=%d",newPaid,status,id));e!=nil{return e};if e=execSQL("COMMIT");e!=nil{return e};ok=true;return nil
 }
 func payableStatement12115()([][]string,error){_=ensureParceirosFinanceiro12115();return queryRows("SELECT id,type,partner_name,COALESCE(description,''),printf('%.2f',value),printf('%.2f',paid_value),printf('%.2f',value-paid_value),COALESCE(due_date,''),status FROM payable_accounts_12115 ORDER BY id DESC",9)}
