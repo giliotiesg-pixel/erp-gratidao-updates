@@ -1,5 +1,4 @@
 name: publicar-erp
-
 on:
   push:
     branches: [main]
@@ -12,9 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
-          cache: false
+        with: {go-version: '1.25.x', cache: false}
       - name: preparar
         shell: bash
         run: |
@@ -22,30 +19,29 @@ jobs:
           sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$V\"/" src/ARMAZEM_GRATIDAO_PRO.go
           python3 tools/integrar_atualizador.py
           python3 tools/auditar_migracao_12115.py
-          grep -q 'savePurchase12115' src/MIGRACAO_COMPRAS_12115.go
-          grep -q 'setRealStock12115' src/MIGRACAO_ESTOQUE_12115.go
-          grep -q 'deleteSale12115' src/MIGRACAO_VENDAS_12115.go
-          grep -q 'replaceSaleItems12115' src/MIGRACAO_VENDAS_12115.go
-          grep -q 'recalcSale12115' src/MIGRACAO_VENDAS_12115.go
+          grep -q savePurchase12115 src/MIGRACAO_COMPRAS_12115.go
+          grep -q setRealStock12115 src/MIGRACAO_ESTOQUE_12115.go
+          grep -q deleteSale12115 src/MIGRACAO_VENDAS_12115.go
+          grep -q assignFiadoCustomer12115 src/MIGRACAO_FIADO_12115.go
+          grep -q payFiado12115 src/MIGRACAO_FIADO_12115.go
+          grep -q paidFiadoStatement12115 src/MIGRACAO_FIADO_12115.go
           if grep -qi 'CREATE TABLE.*lote\|CREATE TABLE.*batch' src/MIGRACAO_ESTOQUE_12115.go; then exit 1; fi
           if grep -q 'instalar-.*\.bat' src/ARMAZEM_GRATIDAO_PRO.go; then exit 1; fi
           echo "V=$V" >> "$GITHUB_ENV"
       - name: compilar
         shell: bash
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_VENDAS_12115.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "ARMAZEM_GRATIDAO_PRO_v${V}.exe" src/ARMAZEM_GRATIDAO_PRO.go src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_VENDAS_12115.go src/MIGRACAO_FIADO_12115.go
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o ATUALIZADOR_GRATIDAO.exe src/ATUALIZADOR_GRATIDAO.go
       - name: publicar
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
+        env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           EXE="ARMAZEM_GRATIDAO_PRO_v${V}.exe"; UPD=ATUALIZADOR_GRATIDAO.exe
           HASH=$(sha256sum "$EXE"|awk '{print $1}'); UPDHASH=$(sha256sum "$UPD"|awk '{print $1}')
           echo "$HASH  $EXE" > SHA256.txt; echo "$UPDHASH  $UPD" >> SHA256.txt
-          gh release delete "v${V}" --yes >/dev/null 2>&1 || true
-          git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
-          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao 12.1.15: Compras, Estoque/Validade e Vendas nativos."
+          gh release delete "v${V}" --yes >/dev/null 2>&1 || true; git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
+          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao 12.1.15: Compras, Estoque, Validade, Vendas e Fiado nativos."
           printf '{\n "version":"%s",\n "package_url":"https://github.com/%s/releases/download/v%s/%s",\n "sha256":"%s",\n "updater_url":"https://github.com/%s/releases/download/v%s/%s",\n "updater_sha256":"%s",\n "notes":"Migracao funcional 12.1.15 em andamento; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" > manifest.json
           git config user.name github-actions; git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json; git commit -m "Publica v${V}" || true; git push
