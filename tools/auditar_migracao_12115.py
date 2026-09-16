@@ -10,7 +10,9 @@ required = {
  'PDV':['pdv'], 'Vendas':['vendas'], 'Caixa':['caixa'], 'Produtos':['produtos'],
  'Estoque':['estoque'], 'Validade':['validade'], 'Compras':['compras'],
  'Clientes':['clientes'], 'Fornecedores':['fornecedores'], 'Fiado':['fiado'],
- 'Contas':['contas'], 'Lucro':['lucro'], 'Relatorios':['relat'], 'Fiscal':['fiscal'],
+ # Contas a pagar no PRO usa payable_accounts/payableStatement; nao depende da palavra de interface "contas" no fonte.
+ 'Contas':['payable_accounts_12115','payablestatement12115'],
+ 'Lucro':['lucro'], 'Relatorios':['relat'], 'Fiscal':['fiscal'],
  'Ofertas':['ofertas'], 'Cofre Digital':['cofre'], 'Empresa':['empresa'],
  'Configuracoes':['configura'], 'Consulta de Produto':['consulta','produto'],
  'Recibos':['receipt'], 'Auditoria':['migrationaudit12115'],
