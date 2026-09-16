@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/ARMAZEM_GRATIDAO_PRO.go'
+      - 'src/release.patch'
   workflow_dispatch:
 
 permissions:
@@ -22,30 +22,30 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+      - name: Aplicar alteracoes da versao
+        shell: bash
+        run: |
+          test -s src/release.patch
+          patch -p1 < src/release.patch
+          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
       - name: Instalar Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache: false
-
-      - name: Validar fonte e ler versao
+      - name: Ler versao
         id: versao
         shell: bash
         run: |
-          test -s src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
           VERSION=$(sed -n 's/^const currentVersion = "\([^"]*\)"/\1/p' src/ARMAZEM_GRATIDAO_PRO.go | head -n1)
           test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
-
       - name: Compilar EXE Windows nativo
         shell: bash
         run: |
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "${{ steps.versao.outputs.exe }}" src/ARMAZEM_GRATIDAO_PRO.go
-
       - name: Calcular SHA256
         id: hash
         shell: bash
@@ -53,7 +53,6 @@ jobs:
           HASH=$(sha256sum "${{ steps.versao.outputs.exe }}" | awk '{print $1}')
           echo "sha256=$HASH" >> "$GITHUB_OUTPUT"
           echo "$HASH  ${{ steps.versao.outputs.exe }}" > SHA256.txt
-
       - name: Criar ou atualizar Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,8 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica do ARMAZEM GRATIDAO PRO $TAG."
           fi
-
-      - name: Atualizar manifest
+      - name: Atualizar manifest e preservar fonte
         shell: bash
         run: |
           VERSION="${{ steps.versao.outputs.version }}"
@@ -84,10 +82,8 @@ jobs:
           EOF
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add manifest.json
-          if git diff --cached --quiet; then
-            echo 'Manifest ja esta atualizado.'
-          else
-            git commit -m "Atualiza manifesto para v${VERSION}"
+          git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Publica fonte e manifesto v${VERSION}"
             git push
           fi
