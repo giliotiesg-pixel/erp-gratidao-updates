@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/v1.2.17.patch'
-      - '.github/workflows/publicar-atualizacao.yml'
+      - 'src/ARMAZEM_GRATIDAO_PRO.go'
   workflow_dispatch:
 
 permissions:
@@ -28,25 +27,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+          cache: false
 
-      - name: Reconstruir fonte nativo v1.2.17
-        shell: bash
-        run: |
-          curl -fL --retry 3 -o /tmp/base.zip 'https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ERP_Gratidao_v1.2.11_Limpar_Vendas_Excluidas.zip'
-          unzip -j /tmp/base.zip 'CODIGO_FONTE_native_v1.2.11.go' -d /tmp
-          cp /tmp/CODIGO_FONTE_native_v1.2.11.go /tmp/oldfmt.go
-          gofmt -w /tmp/oldfmt.go
-          patch --dry-run /tmp/oldfmt.go < src/v1.2.17.patch
-          patch /tmp/oldfmt.go < src/v1.2.17.patch
-          cp /tmp/oldfmt.go src/ARMAZEM_GRATIDAO_PRO.go
-          gofmt -w src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'const currentVersion = "1.2.17"' src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
-
-      - name: Ler versao do codigo
+      - name: Validar fonte e ler versao
         id: versao
         shell: bash
         run: |
+          test -s src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'func main()' src/ARMAZEM_GRATIDAO_PRO.go
           VERSION=$(sed -n 's/^const currentVersion = "\([^"]*\)"/\1/p' src/ARMAZEM_GRATIDAO_PRO.go | head -n1)
           test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -94,16 +82,12 @@ jobs:
             "notes": "ARMAZEM GRATIDÃO PRO v$VERSION publicado automaticamente."
           }
           EOF
-
-      - name: Preservar fonte e manifest no repositorio
-        shell: bash
-        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
+          git add manifest.json
           if git diff --cached --quiet; then
-            echo 'Fonte e manifest ja estao atualizados.'
+            echo 'Manifest ja esta atualizado.'
           else
-            git commit -m "Publica fonte e canal v${{ steps.versao.outputs.version }}"
+            git commit -m "Atualiza manifesto para v${VERSION}"
             git push
           fi
