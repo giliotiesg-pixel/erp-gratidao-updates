@@ -1,0 +1,60 @@
+name: validar-migracao-12115
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/MIGRACAO_*_12115.go'
+      - 'tools/integrar_ui_12115.py'
+      - '.github/workflows/validar-migracao.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Integrar e auditar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrar_atualizador.py
+          python3 tools/integrar_ui_12115.py
+          python3 tools/auditar_migracao_12115.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('src/ARMAZEM_GRATIDAO_PRO.go').read_text(encoding='utf-8')
+          required=['showProdutosUI12115()','showComprasUI12115()','showVendasUI12115()','showEstoqueUI12115()','showCaixaUI12115()','showConsultaGlobal12115()','showFiadoUI12115()','showFinanceiroUI12115()','showFiscalUI12115()','showRelatoriosUI12115()','showOfertasUI12115()']
+          missing=[x for x in required if x not in s]
+          if missing: raise SystemExit('Rotas ausentes: '+', '.join(missing))
+          a=s.index('func openModuleSearch()'); b=s.index('func editProc(',a); block=s[a:b]
+          old=['showProdutos()','showEstoque()','showVendas()','showCaixa()','showFiado()','showConsulta()']
+          bad=[x for x in old if x in block]
+          if bad: raise SystemExit('Busca global ainda aponta para UI antiga: '+', '.join(bad))
+          print('Rotas 12.1.15 verificadas.')
+          PY
+      - name: Compilar ERP Windows sem publicar
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o /tmp/ARMAZEM_GRATIDAO_PRO_TESTE.exe \
+            src/ARMAZEM_GRATIDAO_PRO.go \
+            src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_UI_COMPRAS_12115.go \
+            src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_UI_ESTOQUE_12115.go \
+            src/MIGRACAO_VENDAS_12115.go src/MIGRACAO_UI_VENDAS_12115.go \
+            src/MIGRACAO_FIADO_12115.go src/MIGRACAO_UI_FIADO_12115.go \
+            src/MIGRACAO_PARCEIROS_FINANCEIRO_12115.go src/MIGRACAO_UI_FINANCEIRO_12115.go \
+            src/MIGRACAO_RELATORIOS_12115.go src/MIGRACAO_UI_RELATORIOS_12115.go \
+            src/MIGRACAO_CAIXA_PDV_12115.go src/MIGRACAO_UI_CAIXA_12115.go \
+            src/MIGRACAO_FISCAL_EMPRESA_12115.go src/MIGRACAO_UI_FISCAL_EMPRESA_12115.go \
+            src/MIGRACAO_OFERTAS_CONFIG_12115.go src/MIGRACAO_UI_OFERTAS_12115.go \
+            src/MIGRACAO_DASHBOARD_12115.go \
+            src/MIGRACAO_CONSULTA_PRODUTO_12115.go src/MIGRACAO_UI_CONSULTA_12115.go \
+            src/MIGRACAO_COFRE_12115.go src/MIGRACAO_PRODUTOS_12115.go src/MIGRACAO_UI_PRODUTOS_12115.go \
+            src/MIGRACAO_RECIBOS_12115.go src/MIGRACAO_AUDITORIA_12115.go
+          test -s /tmp/ARMAZEM_GRATIDAO_PRO_TESTE.exe
+          echo 'Compilacao Windows concluida sem publicar.'
