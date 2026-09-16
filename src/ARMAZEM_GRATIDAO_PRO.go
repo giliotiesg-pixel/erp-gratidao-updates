@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.21"
+const currentVersion = "1.2.22"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -871,8 +871,16 @@ func launchPreparedUpdate() {
 	if comspec == "" {
 		comspec = `C:\\Windows\\System32\\cmd.exe`
 	}
-	attr := &syscall.ProcAttr{Dir: root, Env: os.Environ(), Sys: &syscall.SysProcAttr{HideWindow: false}}
-	_, _, e := syscall.StartProcess(comspec, []string{comspec, "/c", bat}, attr)
+	cmdLine := `"` + comspec + `" /d /s /c ""` + bat + `""`
+	var si syscall.StartupInfo
+	var pi syscall.ProcessInformation
+	si.Cb = uint32(unsafe.Sizeof(si))
+	cmdBuf, _ := syscall.UTF16PtrFromString(cmdLine)
+	e := syscall.CreateProcess(nil, cmdBuf, nil, nil, false, syscall.CREATE_NEW_PROCESS_GROUP, nil, syscall.StringToUTF16Ptr(root), &si, &pi)
+	if e == nil {
+		syscall.CloseHandle(pi.Thread)
+		syscall.CloseHandle(pi.Process)
+	}
 	if e != nil {
 		msgErr("Não foi possível iniciar o instalador: " + e.Error())
 		return

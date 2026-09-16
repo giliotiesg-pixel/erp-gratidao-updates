@@ -1,6 +1,6 @@
 {
-  "version": "1.2.21",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.21/ARMAZEM_GRATIDAO_PRO_v1.2.21.exe",
-  "sha256": "097321f6b5013578e0960e0568a8052374507163be6914e8fe38011da05189f3",
-  "notes": "ARMAZEM GRATIDÃO PRO v1.2.21 - botão EXCLUIR VENDA em Vendas."
+  "version": "1.2.22",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.22/ARMAZEM_GRATIDAO_PRO_v1.2.22.exe",
+  "sha256": "690d659b524d9086cc172df832a4b6e870e2bf5505ea7126d2784075f478f0f0",
+  "notes": "ARMAZEM GRATIDÃO PRO v1.2.22 - correção do instalador automático e botão EXCLUIR VENDA."
 }
