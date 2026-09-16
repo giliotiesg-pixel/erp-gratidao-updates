@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.25"
+const currentVersion = "1.2.26"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -694,10 +694,12 @@ func savePaymentFee(id int) {
 }
 
 type UpdateManifest struct {
-	Version    string `json:"version"`
-	PackageURL string `json:"package_url"`
-	SHA256     string `json:"sha256"`
-	Notes      string `json:"notes"`
+	Version       string `json:"version"`
+	PackageURL    string `json:"package_url"`
+	SHA256        string `json:"sha256"`
+	UpdaterURL    string `json:"updater_url"`
+	UpdaterSHA256 string `json:"updater_sha256"`
+	Notes         string `json:"notes"`
 }
 
 var updateMu sync.Mutex
@@ -772,14 +774,14 @@ func showUpdater() {
 		return
 	}
 	clearContent()
-	header("Atualizações", "Atualizador automático do ARMAZEM GRATIDÃO PRO — verifica, valida, faz backup, instala e reinicia.")
+	header("Atualizações", "Atualizador nativo do ARMAZEM GRATIDÃO PRO — seguro, automático e sem arquivos .bat.")
 	section("Atualizador de versões", 250, 135, 900)
 	add("STATIC", "Manifesto HTTPS permanente:", 0, 255, 190, 220, 28, 0)
 	u := scalar("SELECT setting_value FROM app_settings WHERE setting_key='update_manifest_url'")
 	add("EDIT", u, WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, 475, 185, 610, 34, 3201)
 	add("BUTTON", "Salvar", 0, 1095, 182, 100, 40, 3202)
 	add("BUTTON", "Verificar agora", 0, 255, 245, 150, 42, 3203)
-	add("STATIC", "Fluxo automático: nova versão → download → SHA-256 → preparação → backup → troca do executável → reinício. Em falha, o executável anterior permanece em backups.", 0, 255, 315, 940, 70, 0)
+	add("STATIC", "Fluxo nativo: verifica → baixa o atualizador assinado por SHA-256 → baixa o ERP → cria backup → instala → valida → reinicia. Se houver falha, restaura a versão anterior.", 0, 255, 315, 940, 70, 0)
 }
 func saveUpdateURL() {
 	gd := user32.NewProc("GetDlgItem")
@@ -793,99 +795,59 @@ func saveUpdateURL() {
 	msg("Endereço salvo. O ERP verificará novas versões automaticamente ao iniciar.")
 }
 func installUpdateAsync(m *UpdateManifest) {
-	if m == nil {
-		return
-	}
+	if m == nil { return }
 	go func() {
-		if !versionGreater(m.Version, currentVersion) {
-			if !strings.EqualFold(m.Version, currentVersion) {
-				pPostMessageW.Call(mainWnd, WM_APP_UPDATENONE, 0, 0)
-			}
-			return
+		if !versionGreater(m.Version, currentVersion) { return }
+		if !strings.HasPrefix(strings.ToLower(m.PackageURL), "https://") || !strings.HasPrefix(strings.ToLower(m.UpdaterURL), "https://") {
+			setUpdateError(fmt.Errorf("URLs da atualização devem usar HTTPS")); return
 		}
-		if !strings.HasPrefix(strings.ToLower(m.PackageURL), "https://") {
-			setUpdateError(fmt.Errorf("package_url deve usar HTTPS"))
-			return
-		}
-		if len(strings.TrimSpace(m.SHA256)) != 64 {
-			setUpdateError(fmt.Errorf("SHA-256 ausente ou inválido no manifesto"))
-			return
+		if len(strings.TrimSpace(m.SHA256)) != 64 || len(strings.TrimSpace(m.UpdaterSHA256)) != 64 {
+			setUpdateError(fmt.Errorf("SHA-256 ausente ou inválido no manifesto")); return
 		}
 		upd := filepath.Join(root, "Updates")
-		os.MkdirAll(upd, 0755)
-		exeNew := filepath.Join(upd, "ARMAZEM_GRATIDAO_PRO_v"+m.Version+".new.exe")
-		os.Remove(exeNew)
+		if e := os.MkdirAll(upd, 0755); e != nil { setUpdateError(e); return }
+		updater := filepath.Join(upd, "ATUALIZADOR_GRATIDAO.exe")
+		tmp := updater + ".download"
+		os.Remove(tmp)
 		c := http.Client{Timeout: 5 * time.Minute}
-		r, e := c.Get(m.PackageURL)
-		if e != nil {
-			setUpdateError(e)
-			return
-		}
+		r, e := c.Get(m.UpdaterURL)
+		if e != nil { setUpdateError(e); return }
 		defer r.Body.Close()
-		if r.StatusCode != 200 {
-			setUpdateError(fmt.Errorf("download HTTP %d", r.StatusCode))
-			return
-		}
-		f, e := os.Create(exeNew)
-		if e != nil {
-			setUpdateError(e)
-			return
-		}
+		if r.StatusCode != 200 { setUpdateError(fmt.Errorf("download do atualizador HTTP %d", r.StatusCode)); return }
+		f, e := os.Create(tmp)
+		if e != nil { setUpdateError(e); return }
 		h := sha256.New()
-		_, e = io.Copy(io.MultiWriter(f, h), io.LimitReader(r.Body, 512*1024*1024))
+		_, e = io.Copy(io.MultiWriter(f, h), io.LimitReader(r.Body, 64*1024*1024))
 		f.Close()
-		if e != nil {
-			setUpdateError(e)
-			return
-		}
+		if e != nil { os.Remove(tmp); setUpdateError(e); return }
 		got := hex.EncodeToString(h.Sum(nil))
-		if !strings.EqualFold(got, strings.TrimSpace(m.SHA256)) {
-			os.Remove(exeNew)
-			setUpdateError(fmt.Errorf("SHA-256 não confere. Atualização cancelada"))
-			return
+		if !strings.EqualFold(got, strings.TrimSpace(m.UpdaterSHA256)) {
+			os.Remove(tmp); setUpdateError(fmt.Errorf("SHA-256 do atualizador não confere")); return
 		}
-		bat := filepath.Join(upd, "instalar-"+m.Version+".bat")
-		backup := filepath.Join(root, "backups")
-		os.MkdirAll(backup, 0755)
-		target := filepath.Join(root, "ERP Gratidao.exe")
-		txt := fmt.Sprintf("@echo off\r\nsetlocal\r\ntitle ARMAZEM GRATIDAO PRO - Atualizacao %s\r\n:wait\r\ntasklist /FI \"PID eq %d\" 2>NUL | find \"%d\" >NUL\r\nif not errorlevel 1 (timeout /t 1 /nobreak >NUL & goto wait)\r\nif not exist \"%s\" mkdir \"%s\"\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\ncopy /Y \"%s\" \"%s\" >NUL\r\nif errorlevel 1 goto rollback\r\nstart \"\" \"%s\"\r\ndel \"%%~f0\"\r\nexit /b 0\r\n:rollback\r\nif exist \"%s\" copy /Y \"%s\" \"%s\" >NUL\r\nstart \"\" \"%s\"\r\n", m.Version, os.Getpid(), os.Getpid(), backup, backup, filepath.Join(root, "data", "erp.sqlite"), filepath.Join(root, "data", "erp.sqlite"), filepath.Join(backup, "erp_pre_"+m.Version+".sqlite"), target, target, filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), exeNew, target, target, filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), filepath.Join(backup, "ERP_Gratidao_pre_"+m.Version+".exe"), target, target)
-		if e = os.WriteFile(bat, []byte(txt), 0644); e != nil {
-			setUpdateError(e)
-			return
-		}
+		os.Remove(updater)
+		if e = os.Rename(tmp, updater); e != nil { setUpdateError(e); return }
 		updateMu.Lock()
-		updateErr = bat
+		updateErr = updater + "\n" + m.Version + "\n" + m.PackageURL + "\n" + strings.TrimSpace(m.SHA256)
 		updateMu.Unlock()
 		pPostMessageW.Call(mainWnd, WM_APP_UPDATEINSTALL, 0, 0)
 	}()
 }
 func launchPreparedUpdate() {
 	updateMu.Lock()
-	bat := updateErr
+	parts := strings.Split(updateErr, "\n")
 	updateMu.Unlock()
-	if bat == "" {
-		return
-	}
+	if len(parts) != 4 { msgErr("Atualização preparada inválida."); return }
 	execSQL("PRAGMA wal_checkpoint(FULL)")
-	comspec := os.Getenv("COMSPEC")
-	if comspec == "" {
-		comspec = `C:\\Windows\\System32\\cmd.exe`
-	}
-	cmdLine := `"` + comspec + `" /d /s /c ""` + bat + `""`
+	updater, version, packageURL, sha := parts[0], parts[1], parts[2], parts[3]
+	cmdLine := `"` + updater + `" "` + version + `" "` + packageURL + `" "` + sha + `"`
 	var si syscall.StartupInfo
 	var pi syscall.ProcessInformation
 	si.Cb = uint32(unsafe.Sizeof(si))
 	cmdBuf, _ := syscall.UTF16PtrFromString(cmdLine)
 	e := syscall.CreateProcess(nil, cmdBuf, nil, nil, false, syscall.CREATE_NEW_PROCESS_GROUP, nil, syscall.StringToUTF16Ptr(root), &si, &pi)
-	if e == nil {
-		syscall.CloseHandle(pi.Thread)
-		syscall.CloseHandle(pi.Process)
-	}
-	if e != nil {
-		msgErr("Não foi possível iniciar o instalador: " + e.Error())
-		return
-	}
-	pSqlClose.Call(db)
+	if e != nil { msgErr("Não foi possível iniciar o atualizador nativo: " + e.Error()); return }
+	syscall.CloseHandle(pi.Thread); syscall.CloseHandle(pi.Process)
+	if db != 0 { pSqlClose.Call(db); db = 0 }
 	pPostQuitMessage.Call(0)
 }
 
@@ -2181,12 +2143,12 @@ func wndProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 		um := updateFound
 		updateMu.Unlock()
 		if um != nil {
-			msg("Nova versão " + um.Version + " encontrada.\n\n" + um.Notes + "\n\nO ERP fará o download, validará o SHA-256 e instalará automaticamente.")
+			msg("Nova versão " + um.Version + " encontrada.\n\n" + um.Notes + "\n\nO atualizador nativo fará o download, validará SHA-256, criará backup e instalará automaticamente.")
 			installUpdateAsync(um)
 		}
 		return 0
 	case WM_APP_UPDATEINSTALL:
-		msg("Atualização validada e preparada. O ERP será fechado, fará backup, instalará a nova versão e abrirá novamente.")
+		msg("Atualizador nativo validado. O ERP será fechado com segurança, atualizado e aberto novamente.")
 		launchPreparedUpdate()
 		return 0
 	case WM_APP_UPDATENONE:
