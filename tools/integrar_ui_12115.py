@@ -28,11 +28,14 @@ repls={
 for old,new in repls.items():s=s.replace(old,new)
 needle='''\tcase strings.Contains(q, "config"):\n\t\thandleCommand(114)'''
 if 'strings.Contains(q, "oferta")' not in s and needle in s:s=s.replace(needle,'''\tcase strings.Contains(q, "oferta") || strings.Contains(q, "promo"):\n\t\tshowOfertasUI12115()\n'''+needle)
-# PDV 12.1.15: botão visível para informar a quantidade física real após estoque insuficiente.
 pdv_anchor='''\tadd("BUTTON", "Remover item selecionado", 0, 250, 585, 210, 40, 2109)'''
 if '"CORRIGIR ESTOQUE REAL"' not in s:
  if pdv_anchor not in s:raise SystemExit('ancora do PDV nao encontrada')
  s=s.replace(pdv_anchor,pdv_anchor+'\n\tadd("BUTTON", "CORRIGIR ESTOQUE REAL", 0, 250, 630, 210, 38, 2111)')
+final_anchor='''\tadd("BUTTON", "FINALIZAR VENDA", 0, 955, 645, 295, 58, 2106)'''
+if '"DEIXAR VENDA EM ABERTO"' not in s:
+ if final_anchor not in s:raise SystemExit('botao finalizar do PDV nao encontrado')
+ s=s.replace(final_anchor,'''\tadd("BUTTON", "DEIXAR VENDA EM ABERTO", 0, 735, 645, 205, 58, 2112)\n'''+final_anchor)
 anchor='''\tcase 2701:\n\t\tloadValidity("all")''';cases='''\tcase 4113:\n\t\taddCompraItemUI12115()\n\tcase 4114:\n\t\tremoveCompraItemUI12115()\n\tcase 4121:\n\t\tsaveCompraUI12115()\n\tcase 4122:\n\t\tclearCompraUI12115()\n\tcase 4123:\n\t\tloadCompraHistoryUI12115()\n\tcase 4124:\n\t\tdeleteCompraUI12115()\n'''
 if 'case 4113:' not in s:
  if anchor not in s:raise SystemExit('ancora de comandos nao encontrada')
@@ -45,5 +48,6 @@ s=s.replace(needle,insert,1)
 for old in ['showProdutos()','showEstoque()','showVendas()','showCaixa()','showFiado()','showConsulta()']:
  block=s[s.find('func openModuleSearch()'):s.find('func editProc(')]
  if old in block:raise SystemExit('busca global ainda usa tela antiga: '+old)
-if 'handlePDV12115' not in s or 'CORRIGIR ESTOQUE REAL' not in s:raise SystemExit('PDV 12.1.15 nao foi integrado')
-p.write_text(s,encoding='utf-8');print('UI 12.1.15 integrada com PDV/estoque real, Produtos, Compras, Vendas, Estoque, Caixa, Consulta, Fiado, Financeiro, Fiscal, Relatorios e Ofertas.')
+for required in ['handlePDV12115','CORRIGIR ESTOQUE REAL','DEIXAR VENDA EM ABERTO']:
+ if required not in s:raise SystemExit('PDV 12.1.15 nao integrado: '+required)
+p.write_text(s,encoding='utf-8');print('UI 12.1.15 integrada com PDV, estoque real e Venda em Aberto.')
