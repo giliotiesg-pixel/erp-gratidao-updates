@@ -21,28 +21,69 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Aplicar versao e corrigir instalador
+      - name: Aplicar versao e migrar interface 12.1.5
         id: versao
         shell: bash
         run: |
           VERSION=$(head -n1 release-version.txt | tr -d '\r\n ')
           test -n "$VERSION"
-          sed -i -E "s/^const currentVersion = \"[^\"]+\"/const currentVersion = \"$VERSION\"/" src/ARMAZEM_GRATIDAO_PRO.go
-          sed -i 's/Excluir venda selecionada/EXCLUIR VENDA/g' src/ARMAZEM_GRATIDAO_PRO.go
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p=Path('src/ARMAZEM_GRATIDAO_PRO.go')
           s=p.read_text()
-          old='_, _, e := syscall.StartProcess(comspec, []string{comspec, "/c", bat}, attr)'
-          new='cmdLine := `"` + comspec + `" /d /s /c ""` + bat + `""`\n\tvar si syscall.StartupInfo\n\tvar pi syscall.ProcessInformation\n\tsi.Cb = uint32(unsafe.Sizeof(si))\n\tcmdBuf, _ := syscall.UTF16PtrFromString(cmdLine)\n\te := syscall.CreateProcess(nil, cmdBuf, nil, nil, false, syscall.CREATE_NEW_PROCESS_GROUP, nil, syscall.StringToUTF16Ptr(root), &si, &pi)\n\tif e == nil {\n\t\tsyscall.CloseHandle(pi.Thread)\n\t\tsyscall.CloseHandle(pi.Process)\n\t}'
-          if old not in s:
-              raise SystemExit('trecho antigo do instalador nao encontrado')
-          s=s.replace(old,new,1)
-          s=s.replace('\tattr := &syscall.ProcAttr{Dir: root, Env: os.Environ(), Sys: &syscall.SysProcAttr{HideWindow: false}}\n','',1)
+          version=Path('release-version.txt').read_text().splitlines()[0].strip()
+          s=re.sub(r'^const currentVersion = "[^"]+"', f'const currentVersion = "{version}"', s, count=1, flags=re.M)
+          s=s.replace('Excluir venda selecionada','EXCLUIR VENDA')
+          s=s.replace('comspec = `C:\\\\Windows\\\\System32\\\\cmd.exe`','comspec = `C:\\Windows\\System32\\cmd.exe`')
+
+          # Modulos presentes no Armazem Gratidao 12.1.5 que ainda nao estavam expostos no PRO.
+          marker='func showSimple(title, sub string) {'
+          if 'func showFiscal()' not in s:
+              block=r'''func showFiscal() { showSimple("Fiscal", "Central fiscal e dados tributários dos produtos") }
+func showParceiros() { showSimple("Clientes / Fornecedores", "Cadastro e consulta de clientes e fornecedores") }
+func showEmpresa() { showSimple("Empresa", "Dados da empresa e identificação do estabelecimento") }
+func showContas() { showSimple("Contas", "Contas a pagar, saldos e movimentações financeiras") }
+func showLucro() { showSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro") }
+func showRelatorios() { showSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado") }
+func showOfertas() { showSimple("Ofertas", "Encarte, promoções e materiais de divulgação") }
+func showCofre() { showSimple("Cofre Digital", "Cadastros protegidos de bancos, e-mails e acessos") }
+
+'''
+              s=s.replace(marker,block+marker,1)
+
+          # Pesquisa global dos novos modulos.
+          old='''\tcase strings.Contains(q, "compra"):\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase strings.Contains(q, "cliente") || strings.Contains(q, "fornecedor"):\n\t\tshowSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")\n\tcase strings.Contains(q, "lucro"):\n\t\tshowSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")\n\tcase strings.Contains(q, "relat"):\n\t\tshowSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")'''
+          new='''\tcase strings.Contains(q, "compra"):\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase strings.Contains(q, "fiscal"):\n\t\tshowFiscal()\n\tcase strings.Contains(q, "cliente") || strings.Contains(q, "fornecedor"):\n\t\tshowParceiros()\n\tcase strings.Contains(q, "empresa"):\n\t\tshowEmpresa()\n\tcase strings.Contains(q, "conta"):\n\t\tshowContas()\n\tcase strings.Contains(q, "lucro"):\n\t\tshowLucro()\n\tcase strings.Contains(q, "relat"):\n\t\tshowRelatorios()\n\tcase strings.Contains(q, "oferta") || strings.Contains(q, "marketing") || strings.Contains(q, "encarte"):\n\t\tshowOfertas()\n\tcase strings.Contains(q, "cofre"):\n\t\tshowCofre()'''
+          if old in s:
+              s=s.replace(old,new,1)
+
+          # Comandos dos novos botoes, sem alterar o Fiado.
+          oldcases='''\tcase 110:\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase 111:\n\t\tshowSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")\n\tcase 112:\n\t\tshowSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")\n\tcase 113:\n\t\tshowSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")'''
+          newcases='''\tcase 110:\n\t\tshowSimple("Compras", "Entrada de compras, itens, fornecedor e valores")\n\tcase 111:\n\t\tshowParceiros()\n\tcase 112:\n\t\tshowLucro()\n\tcase 113:\n\t\tshowRelatorios()\n\tcase 115:\n\t\tshowFiscal()\n\tcase 116:\n\t\tshowEmpresa()\n\tcase 117:\n\t\tshowContas()\n\tcase 118:\n\t\tshowOfertas()\n\tcase 119:\n\t\tshowCofre()'''
+          if oldcases in s:
+              s=s.replace(oldcases,newcases,1)
+          s=s.replace('if id >= 101 && id <= 114 {','if id >= 101 && id <= 119 {')
+
+          # Menu completo inspirado na organizacao 12.1.5, compactado para caber na janela nativa.
+          a=s.find('\t// Menu deslizante oculto, igual ao comportamento da referência.')
+          b=s.find('\tsetMenuVisible(false)',a)
+          if a!=-1 and b!=-1:
+              b2=b+len('\tsetMenuVisible(false)')
+              menu='''\t// Menu completo migrado da referência 12.1.5.\n\taddNavLabel("OPERAÇÃO", 58)\n\taddNav("Início", 101, 78)\n\taddNav("PDV", 102, 112)\n\taddNav("Vendas", 105, 146)\n\taddNav("Caixa", 108, 180)\n\taddNavLabel("CADASTROS / ESTOQUE", 218)\n\taddNav("Produtos", 103, 238)\n\taddNav("Estoque", 104, 272)\n\taddNav("Validade", 109, 306)\n\taddNav("Compras", 110, 340)\n\taddNav("Fiscal", 115, 374)\n\taddNav("Clientes / Fornecedores", 111, 408)\n\taddNav("Empresa", 116, 442)\n\taddNavLabel("FINANCEIRO", 480)\n\taddNav("Fiado", 106, 500)\n\taddNav("Contas", 117, 534)\n\taddNav("Lucro", 112, 568)\n\taddNavLabel("FERRAMENTAS", 606)\n\taddNav("Relatórios", 113, 626)\n\taddNav("Ofertas", 118, 660)\n\taddNav("Cofre Digital", 119, 694)\n\taddNav("Configurações", 114, 728)\n\tsetMenuVisible(false)'''
+              s=s[:a]+menu+s[b2:]
+
+          # Altura compacta dos botoes do menu para reproduzir todos os modulos sem esconder itens.
+          s=s.replace('205, 36, mainWnd, uintptr(id)', '205, 30, mainWnd, uintptr(id)')
+
+          # Titulo da janela acompanha a versao publicada.
+          s=re.sub(r'ws\("ARMAZEM GRATIDÃO PRO v[^"]+"\)', f'ws("ARMAZEM GRATIDÃO PRO v{version}")', s, count=1)
           p.write_text(s)
           PY
-          grep -q 'EXCLUIR VENDA' src/ARMAZEM_GRATIDAO_PRO.go
-          grep -q 'syscall.CreateProcess' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'func showFiscal()' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'Cofre Digital' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'addNav("Ofertas", 118' src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'addNav("Empresa", 116' src/ARMAZEM_GRATIDAO_PRO.go
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
@@ -65,7 +106,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$EXE" SHA256.txt --clobber
           else
-            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Correcao do instalador automatico e botao EXCLUIR VENDA."
+            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Migração de módulos e botões da referência Armazém Gratidão 12.1.5 para a interface Windows nativa do PRO. Fiado preservado."
           fi
       - name: Atualizar manifest e fonte
         shell: bash
@@ -74,7 +115,7 @@ jobs:
           TAG="${{ steps.versao.outputs.tag }}"
           EXE="${{ steps.versao.outputs.exe }}"
           HASH="${{ steps.hash.outputs.sha256 }}"
-          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - correção do instalador automático e botão EXCLUIR VENDA."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
+          printf '{\n  "version": "%s",\n  "package_url": "https://github.com/%s/releases/download/%s/%s",\n  "sha256": "%s",\n  "notes": "ARMAZEM GRATIDÃO PRO v%s - módulos e botões migrados da referência 12.1.5; Fiado preservado."\n}\n' "$VERSION" "$GITHUB_REPOSITORY" "$TAG" "$EXE" "$HASH" "$VERSION" > manifest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
