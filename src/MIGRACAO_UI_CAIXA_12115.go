@@ -3,6 +3,7 @@ package main
 import (
  "fmt"
  "strconv"
+ "unsafe"
 )
 
 var caixaOpenList12115, caixaPay12115, caixaSummary12115 uintptr
