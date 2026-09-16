@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.28"
+const currentVersion = "1.2.29"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -443,27 +443,31 @@ func openModuleSearch() {
 	case strings.Contains(q, "pdv") || strings.Contains(q, "venda rapida"):
 		showPDV()
 	case strings.Contains(q, "produto") && !strings.Contains(q, "consulta"):
-		showProdutos()
+		showProdutosUI12115()
 	case strings.Contains(q, "estoque"):
-		showEstoque()
+		showEstoqueUI12115()
 	case strings.Contains(q, "validade"):
-		showValidade()
+		showEstoqueUI12115()
 	case strings.Contains(q, "venda"):
-		showVendas()
+		showVendasUI12115()
 	case strings.Contains(q, "caixa"):
-		showCaixa()
+		showCaixaUI12115()
 	case strings.Contains(q, "fiado"):
-		showFiado()
+		showFiadoUI12115()
 	case strings.Contains(q, "consulta"):
-		showConsulta()
+		showConsultaGlobal12115()
 	case strings.Contains(q, "compra"):
-		showSimple("Compras", "Entrada de compras, itens, fornecedor e valores")
+		showComprasUI12115()
 	case strings.Contains(q, "cliente") || strings.Contains(q, "fornecedor"):
-		showSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")
+		showFinanceiroUI12115()
 	case strings.Contains(q, "lucro"):
-		showSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")
+		showRelatoriosUI12115()
 	case strings.Contains(q, "relat"):
-		showSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")
+		showRelatoriosUI12115()
+	case strings.Contains(q, "fiscal"):
+		showFiscalUI12115()
+	case strings.Contains(q, "oferta") || strings.Contains(q, "promo"):
+		showOfertasUI12115()
 	case strings.Contains(q, "config"):
 		handleCommand(114)
 	case strings.Contains(q, "atualiza"):
@@ -526,6 +530,7 @@ func showPDV() {
 	pdvCustomer = add("EDIT", "Consumidor", WS_BORDER|ES_AUTOHSCROLL, 990, 150, 260, 34, 2108)
 	pdvList = add("LISTBOX", "", WS_BORDER|WS_VSCROLL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT, 250, 215, 1000, 355, 2104)
 	add("BUTTON", "Remover item selecionado", 0, 250, 585, 210, 40, 2109)
+	add("BUTTON", "CORRIGIR ESTOQUE REAL", 0, 250, 630, 210, 38, 2111)
 	add("BUTTON", "Limpar venda", 0, 475, 585, 150, 40, 2110)
 	add("STATIC", "Pagamento", 0, 650, 585, 100, 24, 0)
 	pdvPayment = add("COMBOBOX", "", CBS_DROPDOWNLIST|WS_VSCROLL, 745, 580, 190, 240, 2105)
@@ -535,6 +540,7 @@ func showPDV() {
 	pSendMessageW.Call(pdvPayment, CB_SETCURSEL, 0, 0)
 	pdvTotal = add("STATIC", "TOTAL: R$ 0,00", 0, 250, 650, 460, 58, 0)
 	pSendMessageW.Call(pdvTotal, WM_SETFONT, fontTitle, 1)
+	add("BUTTON", "DEIXAR VENDA EM ABERTO", 0, 735, 645, 205, 58, 2112)
 	add("BUTTON", "FINALIZAR VENDA", 0, 955, 645, 295, 58, 2106)
 	refreshCart()
 	pSetFocus.Call(pdvBarcode)
@@ -1970,6 +1976,17 @@ func showConsulta() {
 }
 
 func handleCommand(id int) {
+	if handlePDV12115(id) { return }
+	if handleVendasUI12115(id) { return }
+	if handleConsultaGlobal12115(id) { return }
+	if handleEstoqueUI12115(id) { return }
+	if handleFiadoUI12115(id) { return }
+	if handleFinanceiroUI12115(id) { return }
+	if handleCaixaUI12115(id) { return }
+	if handleProdutosUI12115(id) { return }
+	if handleRelatoriosUI12115(id) { return }
+	if handleFiscalUI12115(id) { return }
+	if handleOfertasUI12115(id) { return }
 	if id >= 3102 && id <= 3123 && (id-3102)%3 == 0 {
 		savePaymentFee(id)
 		return
@@ -1985,7 +2002,7 @@ func handleCommand(id int) {
 	case 9001:
 		showUpdater()
 	case 9002:
-		showConsulta()
+		showConsultaGlobal12115()
 	case 9003:
 		clearContent()
 		header("Configurações", "Empresa, usuários, permissões, backup e manutenção")
@@ -1997,27 +2014,31 @@ func handleCommand(id int) {
 	case 102:
 		showPDV()
 	case 103:
-		showProdutos()
+		showProdutosUI12115()
 	case 104:
-		showEstoque()
+		showEstoqueUI12115()
 	case 105:
-		showVendas()
+		showVendasUI12115()
 	case 106:
-		showFiado()
+		showFiadoUI12115()
 	case 107:
-		showConsulta()
+		showConsultaGlobal12115()
 	case 108:
-		showCaixa()
+		showCaixaUI12115()
 	case 109:
-		showValidade()
+		showEstoqueUI12115()
 	case 110:
-		showSimple("Compras", "Entrada de compras, itens, fornecedor e valores")
+		showComprasUI12115()
 	case 111:
-		showSimple("Clientes / Fornecedores", "Cadastros e consulta de parceiros")
+		showFinanceiroUI12115()
 	case 112:
-		showSimple("Lucro", "Margem, lucro bruto e dízimo sobre o lucro")
+		showRelatoriosUI12115()
 	case 113:
-		showSimple("Relatórios", "Vendas, estoque, caixa, lucro e fiado")
+		showRelatoriosUI12115()
+	case 115:
+		showFiscalUI12115()
+	case 116:
+		showOfertasUI12115()
 	case 114:
 		clearContent()
 		header("Configurações", "Empresa, usuários, permissões, backup e manutenção")
@@ -2037,7 +2058,7 @@ func handleCommand(id int) {
 	case 2106:
 		finalizeSale()
 	case 2107:
-		showConsulta()
+		showConsultaGlobal12115()
 	case 2109:
 		removeCartSelected()
 	case 2110:
@@ -2061,6 +2082,18 @@ func handleCommand(id int) {
 		pSetFocus.Call(prodBarcodeReg)
 	case 2221:
 		migrateArmazem1215Stock()
+	case 4113:
+		addCompraItemUI12115()
+	case 4114:
+		removeCompraItemUI12115()
+	case 4121:
+		saveCompraUI12115()
+	case 4122:
+		clearCompraUI12115()
+	case 4123:
+		loadCompraHistoryUI12115()
+	case 4124:
+		deleteCompraUI12115()
 	case 2701:
 		loadValidity("all")
 	case 2702:
@@ -2256,6 +2289,8 @@ func buildNavigation() {
 	addNav("Relatórios", 113, 592)
 	addNavLabel("FERRAMENTAS", 639)
 	addNav("Consulta de Produto", 107, 662)
+	addNav("Fiscal", 115, 621)
+	addNav("Ofertas", 116, 662)
 	addNav("Configurações", 114, 703)
 	setMenuVisible(false)
 }
