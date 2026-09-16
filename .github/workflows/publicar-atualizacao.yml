@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/ARMAZEM_GRATIDAO_PRO.go'
+      - 'src/v1.2.17.patch'
+      - '.github/workflows/publicar-atualizacao.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,15 +29,24 @@ jobs:
         with:
           go-version: '1.25.x'
 
+      - name: Reconstruir fonte nativo v1.2.17
+        shell: bash
+        run: |
+          curl -fL --retry 3 -o /tmp/base.zip 'https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.11/ERP_Gratidao_v1.2.11_Limpar_Vendas_Excluidas.zip'
+          unzip -j /tmp/base.zip 'CODIGO_FONTE_native_v1.2.11.go' -d /tmp
+          cp /tmp/CODIGO_FONTE_native_v1.2.11.go /tmp/oldfmt.go
+          gofmt -w /tmp/oldfmt.go
+          patch /tmp/oldfmt.go < src/v1.2.17.patch
+          cp /tmp/oldfmt.go src/ARMAZEM_GRATIDAO_PRO.go
+          gofmt -w src/ARMAZEM_GRATIDAO_PRO.go
+          grep -q 'const currentVersion = "1.2.17"' src/ARMAZEM_GRATIDAO_PRO.go
+
       - name: Ler versao do codigo
         id: versao
         shell: bash
         run: |
           VERSION=$(sed -n 's/^const currentVersion = "\([^"]*\)"/\1/p' src/ARMAZEM_GRATIDAO_PRO.go | head -n1)
-          if [ -z "$VERSION" ]; then
-            echo 'Nao foi possivel localizar currentVersion no codigo.' >&2
-            exit 1
-          fi
+          test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "exe=ARMAZEM_GRATIDAO_PRO_v$VERSION.exe" >> "$GITHUB_OUTPUT"
@@ -52,6 +62,7 @@ jobs:
         run: |
           HASH=$(sha256sum "${{ steps.versao.outputs.exe }}" | awk '{print $1}')
           echo "sha256=$HASH" >> "$GITHUB_OUTPUT"
+          echo "$HASH  ${{ steps.versao.outputs.exe }}" > SHA256.txt
 
       - name: Criar ou atualizar Release
         env:
@@ -61,12 +72,12 @@ jobs:
           TAG="${{ steps.versao.outputs.tag }}"
           EXE="${{ steps.versao.outputs.exe }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$EXE" --clobber
+            gh release upload "$TAG" "$EXE" SHA256.txt --clobber
           else
-            gh release create "$TAG" "$EXE" --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica do ARMAZEM GRATIDAO PRO $TAG."
+            gh release create "$TAG" "$EXE" SHA256.txt --title "ARMAZEM GRATIDAO PRO $TAG" --notes "Atualizacao automatica do ARMAZEM GRATIDAO PRO $TAG."
           fi
 
-      - name: Atualizar canal manifest.json
+      - name: Atualizar manifest
         shell: bash
         run: |
           VERSION="${{ steps.versao.outputs.version }}"
@@ -78,19 +89,19 @@ jobs:
             "version": "$VERSION",
             "package_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$EXE",
             "sha256": "$HASH",
-            "notes": "Atualizacao automatica ARMAZEM GRATIDAO PRO v$VERSION."
+            "notes": "ARMAZEM GRATIDÃO PRO v$VERSION publicado automaticamente."
           }
           EOF
 
-      - name: Gravar manifest no repositorio
+      - name: Preservar fonte e manifest no repositorio
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add manifest.json
+          git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json
           if git diff --cached --quiet; then
-            echo 'Manifest ja esta atualizado.'
+            echo 'Fonte e manifest ja estao atualizados.'
           else
-            git commit -m "Atualiza canal para v${{ steps.versao.outputs.version }}"
+            git commit -m "Publica fonte e canal v${{ steps.versao.outputs.version }}"
             git push
           fi
