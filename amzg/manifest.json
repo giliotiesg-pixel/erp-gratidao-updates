@@ -1,0 +1,8 @@
+{
+  "product": "AMZ.G",
+  "channel": "stable",
+  "version": "12.1.5",
+  "url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.5/AMZG-v12.1.5.zip",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "notes": "Canal oficial de atualizacao automatica do AMZ.G. A versao 12.1.5 e a versao base; nenhuma atualizacao sera instalada enquanto nao houver uma versao superior publicada e validada por SHA-256."
+}
