@@ -18,7 +18,7 @@ func migrationAudit12115() []MigrationAudit12115 {
   {"Ofertas","SELECT COUNT(*) FROM offers_12115"},
   {"Cofre Digital","SELECT COUNT(*) FROM vault_12115"},
  }
- _=ensurePurchase12115Schema();_=ensureEstoque12115Schema();_=ensureFiado12115Schema();_=ensurePartnersFinance12115Schema();_=ensureOfertasConfig12115Schema();_=ensureCofre12115Schema()
+ _=ensureCompras12115Schema();_=ensureEstoque12115Schema();_=ensureFiado12115Schema();_=ensureParceirosFinanceiro12115();_=ensureOfertasConfig12115Schema();_=ensureCofre12115Schema()
  out:=make([]MigrationAudit12115,0,len(checks));for _,c:=range checks{v:=scalar(c.sql);ok:=v!="";detail:="estrutura disponivel";if !ok{detail="estrutura ausente ou consulta falhou"};out=append(out,MigrationAudit12115{Name:c.name,OK:ok,Detail:detail})};return out
 }
 
