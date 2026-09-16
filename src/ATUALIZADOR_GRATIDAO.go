@@ -13,6 +13,7 @@ import (
     "path/filepath"
     "syscall"
     "time"
+    "unsafe"
 )
 
 const (
@@ -26,8 +27,7 @@ var (
 )
 
 func ws(s string) *uint16 { p, _ := syscall.UTF16PtrFromString(s); return p }
-func msg(title, text string) { messageBoxW.Call(0, uintptr(unsafePtr(ws(text))), uintptr(unsafePtr(ws(title))), 0x40) }
-func unsafePtr(p *uint16) unsafe.Pointer { return unsafe.Pointer(p) }
+func msg(title, text string) { messageBoxW.Call(0, uintptr(unsafe.Pointer(ws(text))), uintptr(unsafe.Pointer(ws(title))), 0x40) }
 
 func fileSHA(path string) (string, error) {
     f, err := os.Open(path); if err != nil { return "", err }; defer f.Close()
@@ -63,6 +63,6 @@ func main() {
     if err := os.Rename(targetExe, backup); err != nil { msg("Falha ao criar backup", err.Error()); return }
     if err := os.Rename(tmp, targetExe); err != nil { _ = os.Rename(backup, targetExe); msg("Falha ao instalar", err.Error()); return }
     got, err = fileSHA(targetExe); if err != nil || got != expected { _ = os.Remove(targetExe); _ = os.Rename(backup, targetExe); msg("Falha na verificação", "O executável anterior foi restaurado."); return }
-    _ = exec.Command(targetExe).Start()
+    if err := exec.Command(targetExe).Start(); err != nil { msg("Atualização concluída", "Versão "+version+" instalada, mas o ERP não abriu automaticamente."); return }
     msg("Atualização concluída", "ARMAZEM GRATIDÃO PRO "+version+" instalado com sucesso.\n\nBanco de dados e Fiado preservados.")
 }
