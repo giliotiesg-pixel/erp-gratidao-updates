@@ -28,14 +28,14 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('src/ARMAZEM_GRATIDAO_PRO.go').read_text(encoding='utf-8')
-          required=['showProdutosUI12115()','showComprasUI12115()','showVendasUI12115()','showEstoqueUI12115()','showCaixaUI12115()','showConsultaGlobal12115()','showFiadoUI12115()','showFinanceiroUI12115()','showFiscalUI12115()','showRelatoriosUI12115()','showOfertasUI12115()']
+          required=['handlePDV12115(id)','CORRIGIR ESTOQUE REAL','showProdutosUI12115()','showComprasUI12115()','showVendasUI12115()','showEstoqueUI12115()','showCaixaUI12115()','showConsultaGlobal12115()','showFiadoUI12115()','showFinanceiroUI12115()','showFiscalUI12115()','showRelatoriosUI12115()','showOfertasUI12115()']
           missing=[x for x in required if x not in s]
-          if missing: raise SystemExit('Rotas ausentes: '+', '.join(missing))
+          if missing: raise SystemExit('Rotas/PDV ausentes: '+', '.join(missing))
           a=s.index('func openModuleSearch()'); b=s.index('func editProc(',a); block=s[a:b]
           old=['showProdutos()','showEstoque()','showVendas()','showCaixa()','showFiado()','showConsulta()']
           bad=[x for x in old if x in block]
           if bad: raise SystemExit('Busca global ainda aponta para UI antiga: '+', '.join(bad))
-          print('Rotas 12.1.15 verificadas.')
+          print('Rotas e PDV 12.1.15 verificados.')
           PY
       - name: Compilar ERP Windows sem publicar
         shell: bash
@@ -43,6 +43,7 @@ jobs:
           set -euo pipefail
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o /tmp/ARMAZEM_GRATIDAO_PRO_TESTE.exe \
             src/ARMAZEM_GRATIDAO_PRO.go \
+            src/MIGRACAO_PDV_INTERACAO_12115.go \
             src/MIGRACAO_COMPRAS_12115.go src/MIGRACAO_UI_COMPRAS_12115.go \
             src/MIGRACAO_ESTOQUE_12115.go src/MIGRACAO_UI_ESTOQUE_12115.go \
             src/MIGRACAO_VENDAS_12115.go src/MIGRACAO_UI_VENDAS_12115.go \
