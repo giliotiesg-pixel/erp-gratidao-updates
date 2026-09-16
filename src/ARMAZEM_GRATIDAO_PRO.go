@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.17"
+const currentVersion = "1.2.21"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
@@ -1708,7 +1708,7 @@ func showVendas() {
 	clearContent()
 	header("Vendas", "Vendas do dia e anteriores em uma área de trabalho única")
 	add("BUTTON", "Atualizar", 0, 18, 130, 110, 40, 2402)
-	add("BUTTON", "Excluir venda selecionada", 0, 140, 130, 205, 40, 2403)
+	add("BUTTON", "EXCLUIR VENDA", 0, 140, 130, 205, 40, 2403)
 	add("BUTTON", "Limpar vendas excluídas", 0, 357, 130, 190, 40, 2406)
 	add("BUTTON", "Somente hoje", 0, 559, 130, 140, 40, 2404)
 	add("BUTTON", "Todas as vendas", 0, 711, 130, 150, 40, 2405)
