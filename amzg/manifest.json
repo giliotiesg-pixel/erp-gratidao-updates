@@ -2,7 +2,7 @@
   "product": "AMZ.G",
   "channel": "stable",
   "version": "12.1.6",
-  "url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.6/AMZG_v12.1.6_Estoque_Excluir_Vendas_CORRIGIDO.zip",
-  "sha256": "a17ecd9e6c5609d974da1bb5ef4b0d71f6262e09edbf64ae29acf8acd01f1101",
-  "notes": "AMZ.G 12.1.6: correcoes de estoque e reformulacao da exclusao de vendas. Pacote corrigido com versao interna 12.1.6 e validado por SHA-256."
+  "url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.6/Armazem-Gratidao-PDV-Setup-12.1.6-x64.exe",
+  "sha256": "4137a5c27dbf15f92a8c5bdd4d93decb575f735d01fb2ef48fc9b7a0e0502ada",
+  "notes": "AMZ.G 12.1.6: correcoes de estoque e exclusao de vendas. Instalador Windows EXE NSIS x64."
 }
