@@ -1,0 +1,95 @@
+name: Gerar instalador AMZ.G 12.1.6
+
+on:
+  push:
+    paths:
+      - '.github/workflows/gerar-instalador-amzg-12.1.6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar fonte 12.1.6 corrigido
+        shell: powershell
+        run: |
+          $url = 'https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.6/AMZG_v12.1.6_Estoque_Excluir_Vendas_CORRIGIDO.zip'
+          Invoke-WebRequest -Uri $url -OutFile amzg-source.zip
+          Expand-Archive -Path amzg-source.zip -DestinationPath app -Force
+
+      - name: Validar versao do pacote
+        shell: powershell
+        run: |
+          $pkg = Get-Content app/package.json -Raw | ConvertFrom-Json
+          if ($pkg.version -ne '12.1.6') { throw "Versao interna incorreta: $($pkg.version)" }
+          if ($pkg.build.productName -ne 'AMZ.G') { throw "Produto incorreto: $($pkg.build.productName)" }
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: app
+        shell: powershell
+        run: npm ci
+
+      - name: Gerar instalador NSIS x64
+        working-directory: app
+        shell: powershell
+        run: npm run build:nsis
+
+      - name: Localizar e validar EXE
+        id: exe
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem -Path app/dist -Filter '*Setup-12.1.6-x64.exe' -File | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador EXE 12.1.6 nao foi gerado.' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Host "EXE: $($exe.Name)"
+          Write-Host "SHA256: $hash"
+
+      - name: Publicar EXE na Release 12.1.6
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload amzg-v12.1.6 "${{ steps.exe.outputs.path }}" --clobber --repo "${{ github.repository }}"
+
+      - name: Atualizar manifest para instalador EXE
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $name = '${{ steps.exe.outputs.name }}'
+          $sha = '${{ steps.exe.outputs.sha256 }}'
+          $download = "https://github.com/${{ github.repository }}/releases/download/amzg-v12.1.6/$name"
+          $manifest = [ordered]@{
+            product = 'AMZ.G'
+            channel = 'stable'
+            version = '12.1.6'
+            url = $download
+            sha256 = $sha
+            notes = 'AMZ.G 12.1.6: correcoes de estoque e exclusao de vendas. Instalador Windows EXE NSIS x64.'
+          } | ConvertTo-Json
+          $manifest | Set-Content -Path manifest.json -Encoding utf8
+          $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content manifest.json -Raw)))
+          $current = gh api repos/${{ github.repository }}/contents/amzg/manifest.json | ConvertFrom-Json
+          $body = @{ message='Publicar instalador EXE AMZ.G 12.1.6'; content=$encoded; sha=$current.sha; branch='main' } | ConvertTo-Json -Compress
+          $body | gh api --method PUT repos/${{ github.repository }}/contents/amzg/manifest.json --input -
+
+      - name: Resumo
+        shell: powershell
+        run: |
+          Add-Content $env:GITHUB_STEP_SUMMARY '## AMZ.G 12.1.6'
+          Add-Content $env:GITHUB_STEP_SUMMARY "Instalador: ${{ steps.exe.outputs.name }}"
+          Add-Content $env:GITHUB_STEP_SUMMARY "SHA-256: ${{ steps.exe.outputs.sha256 }}"
+          Add-Content $env:GITHUB_STEP_SUMMARY 'Release: amzg-v12.1.6'
