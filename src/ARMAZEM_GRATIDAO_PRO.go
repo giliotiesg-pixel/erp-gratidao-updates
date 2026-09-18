@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-const currentVersion = "1.2.31"
+const currentVersion = "1.2.32"
 
 var (
 	user32                = syscall.NewLazyDLL("user32.dll")
