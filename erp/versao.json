@@ -1,6 +1,8 @@
 {
-"version":"1.2.32",
-"package_url":"https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.32/ERP_Gratidao_Update_v1.2.32.zip",
-"sha256":"a624d540674208b68be7dd09efd59fc35325dfdc74e0e2272b57902994e54ffb",
-"notes":"ERP Gratidao v1.2.32 - pacote ZIP validado."
+  "version": "1.2.32",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.32/ERP_Gratidao_Update_v1.2.32.zip",
+  "sha256": "a624d540674208b68be7dd09efd59fc35325dfdc74e0e2272b57902994e54ffb",
+  "updater_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.32/ATUALIZADOR_GRATIDAO.exe",
+  "updater_sha256": "86e0f4e6bb77d542716a00c4ddff40311176309fa66b84712138bb015ba76b96",
+  "notes": "ERP Gratidao v1.2.32 - ZIP, atualizador e SHA-256 validados."
 }
