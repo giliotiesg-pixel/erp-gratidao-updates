@@ -13,6 +13,7 @@ import (
     "os/exec"
     "path/filepath"
     "syscall"
+    "strings"
     "time"
     "unsafe"
 )
@@ -59,7 +60,7 @@ func main() {
     if err := download(url, tmp); err != nil { msg("Falha no download", err.Error()); return }
     got, err := fileSHA(tmp); if err != nil || got != expected { _ = os.Remove(tmp); msg("Falha de segurança", "SHA-256 da atualização não confere."); return }
     installFile := tmp
-    if filepath.Ext(url) == ".zip" || filepath.Ext(tmp) == ".zip" {
+    if strings.HasSuffix(strings.ToLower(url), ".zip") {
         zr, ze := zip.OpenReader(tmp)
         if ze != nil { _ = os.Remove(tmp); msg("Falha no pacote", "ZIP não é válido: "+ze.Error()); return }
         var exe *zip.File
