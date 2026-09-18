@@ -735,72 +735,41 @@ func versionGreater(a, b string) bool {
 	return false
 }
 func checkUpdatesAsync(silent bool) {
-	url := strings.TrimSpace(scalar("SELECT setting_value FROM app_settings WHERE setting_key='update_manifest_url'"))
-	if url == "" {
-		if !silent {
-			msg("Atualizador instalado. Configure uma única vez o endereço HTTPS permanente do manifesto.")
-		}
-		return
-	}
+	const url = "https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/erp/versao.json"
 	go func() {
 		c := http.Client{Timeout: 20 * time.Second}
 		r, e := c.Get(url)
-		if e != nil {
-			setUpdateError(e)
-			return
-		}
+		if e != nil { if !silent { setUpdateError(e) }; return }
 		defer r.Body.Close()
-		if r.StatusCode != 200 {
-			setUpdateError(fmt.Errorf("HTTP %d", r.StatusCode))
-			return
-		}
+		if r.StatusCode != 200 { if !silent { setUpdateError(fmt.Errorf("GitHub HTTP %d", r.StatusCode)) }; return }
 		var m UpdateManifest
-		e = json.NewDecoder(io.LimitReader(r.Body, 1048576)).Decode(&m)
-		if e != nil {
-			setUpdateError(e)
+		if e = json.NewDecoder(io.LimitReader(r.Body, 1048576)).Decode(&m); e != nil { if !silent { setUpdateError(e) }; return }
+		if !versionGreater(m.Version, currentVersion) { if !silent { pPostMessageW.Call(mainWnd, WM_APP_UPDATENONE, 0, 0) }; return }
+		if !strings.HasPrefix(strings.ToLower(m.PackageURL), "https://") ||
+			!strings.HasPrefix(strings.ToLower(m.UpdaterURL), "https://") ||
+			len(strings.TrimSpace(m.SHA256)) != 64 ||
+			len(strings.TrimSpace(m.UpdaterSHA256)) != 64 {
+			if !silent { setUpdateError(fmt.Errorf("atualização ainda não está completamente publicada no GitHub")) }
 			return
 		}
-		if versionGreater(m.Version, currentVersion) {
-			updateMu.Lock()
-			updateFound = &m
-			updateMu.Unlock()
-			pPostMessageW.Call(mainWnd, WM_APP_UPDATEFOUND, 0, 0)
-		} else if !silent {
-			pPostMessageW.Call(mainWnd, WM_APP_UPDATENONE, 0, 0)
-		}
+		updateMu.Lock(); updateFound = &m; updateMu.Unlock()
+		pPostMessageW.Call(mainWnd, WM_APP_UPDATEFOUND, 0, 0)
 	}()
 }
 func setUpdateError(e error) {
-	updateMu.Lock()
-	updateErr = e.Error()
-	updateMu.Unlock()
+	updateMu.Lock(); updateErr = e.Error(); updateMu.Unlock()
 	pPostMessageW.Call(mainWnd, WM_APP_UPDATEFAIL, 0, 0)
 }
 func showUpdater() {
-	if !ensureDB() {
-		return
-	}
+	if !ensureDB() { return }
 	clearContent()
-	header("Atualizações", "Atualizador nativo do ARMAZEM GRATIDÃO PRO — seguro, automático e sem arquivos .bat.")
-	section("Atualizador de versões", 250, 135, 900)
-	add("STATIC", "Manifesto HTTPS permanente:", 0, 255, 190, 220, 28, 0)
-	u := scalar("SELECT setting_value FROM app_settings WHERE setting_key='update_manifest_url'")
-	add("EDIT", u, WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, 475, 185, 610, 34, 3201)
-	add("BUTTON", "Salvar", 0, 1095, 182, 100, 40, 3202)
-	add("BUTTON", "Verificar agora", 0, 255, 245, 150, 42, 3203)
-	add("STATIC", "Fluxo nativo: verifica → baixa o atualizador assinado por SHA-256 → baixa o ERP → cria backup → instala → valida → reinicia. Se houver falha, restaura a versão anterior.", 0, 255, 315, 940, 70, 0)
+	header("Atualizações", "Atualização automática do ERP Gratidão.")
+	section("Atualizador", 250, 135, 900)
+	add("BUTTON", "Verificar atualização", 0, 255, 190, 210, 44, 3203)
+	add("STATIC", "O ERP usa automaticamente o canal oficial do GitHub. Nenhum endereço precisa ser configurado.", 0, 255, 255, 900, 55, 0)
 }
-func saveUpdateURL() {
-	gd := user32.NewProc("GetDlgItem")
-	h, _, _ := gd.Call(mainWnd, 3201)
-	u := strings.TrimSpace(getText(h))
-	if u != "" && !strings.HasPrefix(strings.ToLower(u), "https://") {
-		msgErr("Use somente HTTPS.")
-		return
-	}
-	execSQL(fmt.Sprintf("INSERT INTO app_settings(setting_key,setting_value,updated_at) VALUES('update_manifest_url','%s',CURRENT_TIMESTAMP) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=CURRENT_TIMESTAMP", esc(u)))
-	msg("Endereço salvo. O ERP verificará novas versões automaticamente ao iniciar.")
-}
+func saveUpdateURL() {}
+
 func installUpdateAsync(m *UpdateManifest) {
 	if m == nil { return }
 	go func() {
