@@ -60,11 +60,11 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           set -euo pipefail
-          EXE="ARMAZEM_GRATIDAO_PRO_v${V}.exe"; UPD=ATUALIZADOR_GRATIDAO.exe
+          EXE="ARMAZEM_GRATIDAO_PRO_v${V}.exe"; UPD=ATUALIZADOR_GRATIDAO.exe; PKG="ERP_Gratidao_Update_v${V}.zip"; cp "$EXE" "ERP Gratidao.exe"; zip -9 "$PKG" "ERP Gratidao.exe"; unzip -t "$PKG"; PKGHASH=$(sha256sum "$PKG"|awk '{print $1}')
           HASH=$(sha256sum "$EXE"|awk '{print $1}'); UPDHASH=$(sha256sum "$UPD"|awk '{print $1}')
           echo "$HASH  $EXE" > SHA256.txt; echo "$UPDHASH  $UPD" >> SHA256.txt
           gh release delete "v${V}" --yes >/dev/null 2>&1 || true; git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
-          gh release create "v${V}" "$EXE" "$UPD" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao funcional nativa da referencia 12.1.15."
+          gh release create "v${V}" "$EXE" "$UPD" "$PKG" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao funcional nativa da referencia 12.1.15."
           printf '{\n"version":"%s",\n"package_url":"https://github.com/%s/releases/download/v%s/%s",\n"sha256":"%s",\n"updater_url":"https://github.com/%s/releases/download/v%s/%s",\n"updater_sha256":"%s",\n"notes":"Migracao 12.1.15; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" > manifest.json
-          git config user.name github-actions; git config user.email github-actions@github.com
-          git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json; git commit -m "Publica v${V}" || true; git push
+          mkdir -p erp; printf '{\n"version":"%s",\n"package_url":"https://github.com/%s/releases/download/v%s/%s",\n"sha256":"%s",\n"notes":"ERP Gratidao v%s - pacote ZIP validado."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$PKG" "$PKGHASH" "$V" > erp/versao.json; python3 -m json.tool erp/versao.json >/dev/null; git config user.name github-actions; git config user.email github-actions@github.com
+          git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json erp/versao.json; git commit -m "Publica v${V}" || true; git push
