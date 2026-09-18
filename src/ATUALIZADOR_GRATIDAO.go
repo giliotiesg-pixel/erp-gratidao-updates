@@ -3,6 +3,7 @@
 package main
 
 import (
+    "archive/zip"
     "crypto/sha256"
     "encoding/hex"
     "fmt"
@@ -57,12 +58,29 @@ func main() {
     msg("ARMAZEM GRATIDÃO PRO", "Nova versão "+version+" encontrada.\n\nBaixando e verificando a atualização...")
     if err := download(url, tmp); err != nil { msg("Falha no download", err.Error()); return }
     got, err := fileSHA(tmp); if err != nil || got != expected { _ = os.Remove(tmp); msg("Falha de segurança", "SHA-256 da atualização não confere."); return }
+    installFile := tmp
+    if filepath.Ext(url) == ".zip" || filepath.Ext(tmp) == ".zip" {
+        zr, ze := zip.OpenReader(tmp)
+        if ze != nil { _ = os.Remove(tmp); msg("Falha no pacote", "ZIP não é válido: "+ze.Error()); return }
+        var exe *zip.File
+        for _, zf := range zr.File { if filepath.Ext(zf.Name) == ".exe" { exe = zf; break } }
+        if exe == nil { zr.Close(); _ = os.Remove(tmp); msg("Falha no pacote", "ZIP não contém o ERP executável."); return }
+        rc, ze := exe.Open(); if ze != nil { zr.Close(); _ = os.Remove(tmp); msg("Falha no pacote", ze.Error()); return }
+        extracted := filepath.Join(root, "ERP-Gratidao-"+version+".exe.download")
+        out, ze := os.Create(extracted); if ze == nil { _, ze = io.Copy(out, rc); _ = out.Close() }
+        _ = rc.Close(); _ = zr.Close()
+        if ze != nil { _ = os.Remove(tmp); _ = os.Remove(extracted); msg("Falha no pacote", ze.Error()); return }
+        installFile = extracted
+    }
     _ = exec.Command("taskkill", "/F", "/IM", "ERP Gratidao.exe").Run()
     time.Sleep(1200 * time.Millisecond)
     backup := filepath.Join(backupDir, "ERP Gratidao.antes-"+version+"."+time.Now().Format("20060102-150405")+".exe")
     if err := os.Rename(targetExe, backup); err != nil { msg("Falha ao criar backup", err.Error()); return }
-    if err := os.Rename(tmp, targetExe); err != nil { _ = os.Rename(backup, targetExe); msg("Falha ao instalar", err.Error()); return }
-    got, err = fileSHA(targetExe); if err != nil || got != expected { _ = os.Remove(targetExe); _ = os.Rename(backup, targetExe); msg("Falha na verificação", "O executável anterior foi restaurado."); return }
+    if err := os.Rename(installFile, targetExe); err != nil { _ = os.Rename(backup, targetExe); msg("Falha ao instalar", err.Error()); return }
+    if installFile == tmp {
+        got, err = fileSHA(targetExe); if err != nil || got != expected { _ = os.Remove(targetExe); _ = os.Rename(backup, targetExe); msg("Falha na verificação", "O executável anterior foi restaurado."); return }
+    }
+    _ = os.Remove(tmp)
     if err := exec.Command(targetExe).Start(); err != nil { msg("Atualização concluída", "Versão "+version+" instalada, mas o ERP não abriu automaticamente."); return }
     msg("Atualização concluída", "ARMAZEM GRATIDÃO PRO "+version+" instalado com sucesso.\n\nBanco de dados e Fiado preservados.")
 }
