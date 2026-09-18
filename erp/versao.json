@@ -1,8 +1,8 @@
 {
   "version": "1.2.31",
-  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.31/ARMAZEM_GRATIDAO_PRO_v1.2.31.exe",
-  "sha256": "f6b577615f5da32ce792ed2aea1021fb1d8e9d53ca9d75fc60afcc4b5533a653",
+  "package_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.31/ERP_Gratidao_Update_v1.2.31.zip",
+  "sha256": "39190373595060d24baf7a14416899929210a328e132e42671fbfcc3cfefd098",
   "updater_url": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.31/ATUALIZADOR_GRATIDAO.exe",
   "updater_sha256": "048d0f949e4a38fbb250fc64e43e4d6252eb01ddf493b0386663803d46de9bbd",
-  "notes": "ERP Gratidao v1.2.31 - release validada. Atualizacao liberada somente apos publicacao completa."
+  "notes": "ERP Gratidao v1.2.31 - pacote ZIP e atualizador nativo validados."
 }
