@@ -66,5 +66,5 @@ jobs:
           gh release delete "v${V}" --yes >/dev/null 2>&1 || true; git push origin ":refs/tags/v${V}" >/dev/null 2>&1 || true
           gh release create "v${V}" "$EXE" "$UPD" "$PKG" SHA256.txt --title "ARMAZEM GRATIDAO PRO v${V}" --notes "Migracao funcional nativa da referencia 12.1.15."
           printf '{\n"version":"%s",\n"package_url":"https://github.com/%s/releases/download/v%s/%s",\n"sha256":"%s",\n"updater_url":"https://github.com/%s/releases/download/v%s/%s",\n"updater_sha256":"%s",\n"notes":"Migracao 12.1.15; dados preservados."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$EXE" "$HASH" "$GITHUB_REPOSITORY" "$V" "$UPD" "$UPDHASH" > manifest.json
-          mkdir -p erp; printf '{\n"version":"%s",\n"package_url":"https://github.com/%s/releases/download/v%s/%s",\n"sha256":"%s",\n"notes":"ERP Gratidao v%s - pacote ZIP validado."\n}\n' "$V" "$GITHUB_REPOSITORY" "$V" "$PKG" "$PKGHASH" "$V" > erp/versao.json; python3 -m json.tool erp/versao.json >/dev/null; git config user.name github-actions; git config user.email github-actions@github.com
+          mkdir -p erp; cp manifest.json erp/versao.json; python3 -m json.tool erp/versao.json >/dev/null; git config user.name github-actions; git config user.email github-actions@github.com
           git add src/ARMAZEM_GRATIDAO_PRO.go manifest.json erp/versao.json; git commit -m "Publica v${V}" || true; git push
