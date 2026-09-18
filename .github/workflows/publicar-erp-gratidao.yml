@@ -1,0 +1,72 @@
+name: Publicar ERP Gratidao automaticamente
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'erp/CODIGO_FONTE.go'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-erp-gratidao
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Ler versao do programa
+        shell: bash
+        run: |
+          set -euo pipefail
+          V=$(sed -n 's/^const APP_VERSION = "\([^"]*\)"/\1/p' erp/CODIGO_FONTE.go | head -n1)
+          test -n "$V"
+          echo "V=$V" >> "$GITHUB_ENV"
+
+      - name: Compilar e empacotar
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/pacote
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "dist/pacote/ERP Gratidao.exe" erp/CODIGO_FONTE.go
+          cp erp/ERP_Gratidao.ico dist/pacote/ERP_Gratidao.ico 2>/dev/null || true
+          cd dist/pacote
+          zip -9 "../ERP_Gratidao_Update_v${V}.zip" "ERP Gratidao.exe" ERP_Gratidao.ico 2>/dev/null || zip -9 "../ERP_Gratidao_Update_v${V}.zip" "ERP Gratidao.exe"
+          cd ../..
+          SHA=$(sha256sum "dist/ERP_Gratidao_Update_v${V}.zip" | awk '{print $1}')
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Publicar Release e manifesto
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="erp-v${V}"
+          ARQ="ERP_Gratidao_Update_v${V}.zip"
+          gh release delete "$TAG" --yes >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$TAG" >/dev/null 2>&1 || true
+          gh release create "$TAG" "dist/$ARQ" --title "ERP Gratidao v${V}" --notes "Atualizacao automatica do ERP Gratidao v${V}."
+          mkdir -p erp
+          cat > erp/versao.json <<EOF
+          {
+            "version": "${V}",
+            "package_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ARQ}",
+            "sha256": "${SHA}",
+            "notes": "ERP Gratidao v${V} - atualizacao publicada automaticamente."
+          }
+          EOF
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add erp/versao.json
+          git commit -m "Atualiza manifesto ERP v${V}" || true
+          git push
