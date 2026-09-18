@@ -67,6 +67,19 @@ jobs:
           EOF
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add erp/versao.json
-          git commit -m "Atualiza manifesto ERP v${V}" || true
+          cat > STATUS_ATUALIZACAO.md <<EOF
+          # Status de Atualização — ERP Gratidão
+
+          > **GITHUB ATUALIZADO — ERP v${V} PUBLICADO**
+
+          - Versão publicada: **${V}**
+          - Pacote: **${ARQ}**
+          - SHA-256: \`${SHA}\`
+          - Release: \`${TAG}\`
+          - Manifesto: \`erp/versao.json\`
+          - Publicação: **CONCLUÍDA**
+          - Gerado automaticamente pelo GitHub Actions.
+          EOF
+          git add erp/versao.json STATUS_ATUALIZACAO.md
+          git commit -m "GITHUB ATUALIZADO - ERP v${V} publicado" || true
           git push
