@@ -285,12 +285,9 @@ func roundControl(hw uintptr, w, h, radius int) {
 	}
 }
 func add(class, text string, style uint32, x, y, w, h, id int) uintptr {
-	if strings.EqualFold(class, "BUTTON") { style |= BS_OWNERDRAW }
 	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws(class))), uintptr(unsafe.Pointer(ws(text))), uintptr(style|WS_CHILD|WS_VISIBLE), uintptr(x), uintptr(y), uintptr(w), uintptr(h), mainWnd, uintptr(id), 0, 0)
 	if font != 0 { pSendMessageW.Call(hw, WM_SETFONT, font, 1) }
 	switch strings.ToUpper(class) {
-	case "BUTTON":
-		roundControl(hw, w, h, 18)
 	case "EDIT", "COMBOBOX":
 		roundControl(hw, w, h, 14)
 	case "LISTBOX":
@@ -300,9 +297,8 @@ func add(class, text string, style uint32, x, y, w, h, id int) uintptr {
 	return hw
 }
 func addNav(text string, id, y int) uintptr {
-	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws(text))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 15, uintptr(y), 205, 36, mainWnd, uintptr(id), 0, 0)
+	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws(text))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 15, uintptr(y), 205, 36, mainWnd, uintptr(id), 0, 0)
 	pSendMessageW.Call(hw, WM_SETFONT, font, 1)
-	roundControl(hw, 205, 36, 16)
 	navControls = append(navControls, hw)
 	return hw
 }
@@ -2137,26 +2133,8 @@ func handleCommand(id int) {
 	}
 }
 
-func drawModernButton(dis *DRAWITEMSTRUCT) {
-	if dis == nil || dis.HDC == 0 { return }
-	r := dis.RcItem
-	brush := brushButton
-	if (dis.ItemState & 0x0001) != 0 { brush = brushButtonPressed }
-	rgn, _, _ := pCreateRoundRectRgn.Call(uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom), 18, 18)
-	if rgn != 0 { pFillRgn.Call(dis.HDC, rgn, brush); pDeleteObject.Call(rgn) }
-	pSetBkMode.Call(dis.HDC, 1)
-	pSetTextColor.Call(dis.HDC, 0x00FFFFFF)
-	pSelectObject.Call(dis.HDC, font)
-	text := getText(dis.HwndItem)
-	if text == "☰" || text == "⚙" { pSelectObject.Call(dis.HDC, fontBig) }
-	pDrawTextW.Call(dis.HDC, uintptr(unsafe.Pointer(ws(text))), uintptr(len([]rune(text))), uintptr(unsafe.Pointer(&r)), 0x00000001|0x00000004|0x00000020)
-}
-
 func wndProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 	switch m {
-	case WM_DRAWITEM:
-		drawModernButton((*DRAWITEMSTRUCT)(unsafe.Pointer(l)))
-		return 1
 	case WM_CTLCOLORSTATIC:
 		h := l
 		if h == topbarBg || topbarLabels[h] {
@@ -2262,7 +2240,7 @@ func buildNavigation() {
 	topbarBg, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), 0, WS_CHILD|WS_VISIBLE, 0, 0, 1305, 54, mainWnd, 0, 0, 0)
 	topbarBorder, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), 0, WS_CHILD|WS_VISIBLE, 0, 51, 1305, 3, mainWnd, 0, 0, 0)
 
-	btn, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("☰"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 10, 9, 36, 34, mainWnd, 99, 0, 0)
+	btn, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("☰"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 10, 9, 36, 34, mainWnd, 99, 0, 0)
 	pSendMessageW.Call(btn, WM_SETFONT, fontBig, 1)
 
 	brand, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("ERP GRATIDÃO"))), WS_CHILD|WS_VISIBLE, 56, 14, 205, 27, mainWnd, 0, 0, 0)
@@ -2280,9 +2258,9 @@ func buildNavigation() {
 	topbarLabels[ver] = true
 	topbarLabels[stat] = true
 
-	u, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Atualizações"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 950, 10, 92, 34, mainWnd, 9001, 0, 0)
-	c, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Consulta de produto"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 1047, 10, 160, 34, mainWnd, 9002, 0, 0)
-	g, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("⚙"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 1212, 10, 38, 34, mainWnd, 9003, 0, 0)
+	u, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Atualizações"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 950, 10, 92, 34, mainWnd, 9001, 0, 0)
+	c, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Consulta de produto"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1047, 10, 160, 34, mainWnd, 9002, 0, 0)
+	g, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("⚙"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1212, 10, 38, 34, mainWnd, 9003, 0, 0)
 	pSendMessageW.Call(u, WM_SETFONT, fontSmall, 1)
 	pSendMessageW.Call(c, WM_SETFONT, fontSmall, 1)
 	pSendMessageW.Call(g, WM_SETFONT, fontBig, 1)
