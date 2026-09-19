@@ -173,6 +173,7 @@ var fontMono uintptr
 var mainWnd uintptr
 var font, fontSmall, fontBig, fontTitle uintptr
 var content []uintptr
+var modernBoxes []uintptr
 var navControls []uintptr
 var menuVisible bool
 var moduleSearch uintptr
@@ -289,9 +290,18 @@ func add(class, text string, style uint32, x, y, w, h, id int) uintptr {
 	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws(class))), uintptr(unsafe.Pointer(ws(text))), uintptr(style|WS_CHILD|WS_VISIBLE), uintptr(x), uintptr(y), uintptr(w), uintptr(h), mainWnd, uintptr(id), 0, 0)
 	if font != 0 { pSendMessageW.Call(hw, WM_SETFONT, font, 1) }
 	switch strings.ToUpper(class) {
-	case "BUTTON": roundControl(hw, w, h, 16)
-	case "EDIT", "COMBOBOX": roundControl(hw, w, h, 12)
-	case "LISTBOX": roundControl(hw, w, h, 14)
+	case "BUTTON":
+		roundControl(hw, w, h, 18)
+	case "EDIT", "COMBOBOX":
+		roundControl(hw, w, h, 14)
+	case "LISTBOX":
+		roundControl(hw, w, h, 18)
+	case "STATIC":
+		// Caixas e painéis internos maiores recebem o mesmo acabamento moderno.
+		if w >= 180 && h >= 38 {
+			roundControl(hw, w, h, 18)
+			modernBoxes = append(modernBoxes, hw)
+		}
 	}
 	content = append(content, hw)
 	return hw
@@ -322,10 +332,9 @@ func msgErr(s string) {
 	pMessageBoxW.Call(mainWnd, uintptr(unsafe.Pointer(ws(s))), uintptr(unsafe.Pointer(ws("ERP Gratidão"))), 0x10)
 }
 func clearContent() {
-	for _, h := range content {
-		pDestroyWindow.Call(h)
-	}
+	for _, h := range content { pDestroyWindow.Call(h) }
 	content = nil
+	modernBoxes = nil
 }
 func listAdd(h uintptr, s string) {
 	pSendMessageW.Call(h, LB_ADDSTRING, 0, uintptr(unsafe.Pointer(ws(s))))
