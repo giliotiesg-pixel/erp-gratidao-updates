@@ -173,7 +173,6 @@ var fontMono uintptr
 var mainWnd uintptr
 var font, fontSmall, fontBig, fontTitle uintptr
 var content []uintptr
-var modernBoxes []uintptr
 var navControls []uintptr
 var menuVisible bool
 var moduleSearch uintptr
@@ -296,12 +295,6 @@ func add(class, text string, style uint32, x, y, w, h, id int) uintptr {
 		roundControl(hw, w, h, 14)
 	case "LISTBOX":
 		roundControl(hw, w, h, 18)
-	case "STATIC":
-		// Caixas e painéis internos maiores recebem o mesmo acabamento moderno.
-		if w >= 180 && h >= 38 {
-			roundControl(hw, w, h, 18)
-			modernBoxes = append(modernBoxes, hw)
-		}
 	}
 	content = append(content, hw)
 	return hw
@@ -334,7 +327,6 @@ func msgErr(s string) {
 func clearContent() {
 	for _, h := range content { pDestroyWindow.Call(h) }
 	content = nil
-	modernBoxes = nil
 }
 func listAdd(h uintptr, s string) {
 	pSendMessageW.Call(h, LB_ADDSTRING, 0, uintptr(unsafe.Pointer(ws(s))))
