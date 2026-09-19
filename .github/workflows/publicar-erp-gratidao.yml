@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'erp/CODIGO_FONTE.go'
-  workflow_dispatch:
+      - 'erp/CODIGO_FONTE.go.disabled'
 
 permissions:
   contents: write
