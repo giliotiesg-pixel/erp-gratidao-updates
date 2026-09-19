@@ -33,8 +33,19 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: go build -trimpath -ldflags="-s -w -H windowsgui" -o ERP_Gratidao_Interface_Teste.exe .
+      - name: Instalar Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+      - name: Criar instalador e desinstalador
+        shell: powershell
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - uses: actions/upload-artifact@v4
         with:
-          name: ERP-Gratidao-Interface-Teste
+          name: ERP-Gratidao-Instalador-Teste
+          path: ui_fyne/dist/ERP_Gratidao_Setup.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERP-Gratidao-Executavel-Teste
           path: ui_fyne/ERP_Gratidao_Interface_Teste.exe
           if-no-files-found: error
