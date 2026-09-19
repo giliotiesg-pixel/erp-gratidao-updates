@@ -60,7 +60,9 @@ func launchPreparedUpdate() {
 	if len(parts) != 4 { msgErr("Atualização preparada inválida."); return }
 	execSQL("PRAGMA wal_checkpoint(FULL)")
 	updater, version, packageURL, sha := parts[0], parts[1], parts[2], parts[3]
-	cmdLine := `"` + updater + `" "` + version + `" "` + packageURL + `" "` + sha + `"`
+	cmd := exec.Command(updater, version, packageURL, sha)
+	cmd.Dir = root
+	e := cmd.Start()
 	if e != nil { msgErr("Não foi possível iniciar o atualizador nativo: " + e.Error()); return }
 	if db != 0 { pSqlClose.Call(db); db = 0 }
 	pPostQuitMessage.Call(0)
