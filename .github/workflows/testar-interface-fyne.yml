@@ -27,6 +27,8 @@ jobs:
           }
       - name: Baixar dependencias
         run: go mod tidy
+      - name: Verificar codigo
+        run: go test ./...
       - name: Compilar interface Windows
         env:
           CGO_ENABLED: 1
