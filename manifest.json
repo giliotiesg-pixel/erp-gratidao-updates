@@ -1,8 +1,8 @@
 {
-"version":"1.2.36",
-"package_url":"https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.36/ARMAZEM_GRATIDAO_PRO_v1.2.36.exe",
-"sha256":"59bfaa5571c6bd8a5f4e2470e80d0ca321c5f576201480f38110a79063da6f9c",
-"updater_url":"https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.36/ATUALIZADOR_GRATIDAO.exe",
+"version":"1.2.37",
+"package_url":"https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.37/ARMAZEM_GRATIDAO_PRO_v1.2.37.exe",
+"sha256":"9881d9342fe3533ed373661df96ee9ddb5f4d72b3027d3994f56a411a158283a",
+"updater_url":"https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/v1.2.37/ATUALIZADOR_GRATIDAO.exe",
 "updater_sha256":"86e0f4e6bb77d542716a00c4ddff40311176309fa66b84712138bb015ba76b96",
 "notes":"Migracao 12.1.15; dados preservados."
 }
