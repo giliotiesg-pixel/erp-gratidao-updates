@@ -1,4 +1,5 @@
 name: Testar Interface Moderna Fyne
+# Build atual: valida sempre o codigo mais recente do branch main
 
 on:
   workflow_dispatch:
