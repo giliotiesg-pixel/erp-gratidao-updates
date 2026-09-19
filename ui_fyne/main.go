@@ -1,7 +1,6 @@
 package main
 
 import (
- "fmt"
  "time"
  "fyne.io/fyne/v2"
  "fyne.io/fyne/v2/app"
@@ -25,6 +24,8 @@ func main() {
  w.Resize(fyne.NewSize(1400,850))
  w.SetMaster()
 
+ store,storeErr:=OpenStore()
+ defer func(){if store!=nil&&store.DB!=nil{store.DB.Close()}}()
  content:=container.NewStack()
  current:=widget.NewLabel("Início")
  clock:=widget.NewLabel("")
@@ -34,7 +35,26 @@ func main() {
   current.SetText(name)
   title:=widget.NewLabelWithStyle(name,fyne.TextAlignLeading,fyne.TextStyle{Bold:true})
   desc:=widget.NewLabel(sub)
-  content.Objects=[]fyne.CanvasObject{container.NewPadded(container.NewVBox(title,desc,widget.NewSeparator(),widget.NewCard("Módulo","Estrutura visual pronta para receber a função existente do ERP.",widget.NewLabel("Nenhuma regra operacional foi alterada."))))}
+  box:=container.NewVBox(title,desc,widget.NewSeparator())
+  if storeErr!=nil { box.Add(widget.NewCard("Banco de dados","Não foi possível abrir erp.sqlite",widget.NewLabel(storeErr.Error()))) }
+  var rows [][]string
+  switch name {
+  case "Produtos","Consulta de Produto": rows=store.SearchProducts("")
+  case "Vendas": rows=store.Sales()
+  case "Estoque": rows=store.Stock()
+  case "Validade": rows=store.Validity()
+  case "Fiado": rows=store.Fiado()
+  case "Caixa": rows=store.Cash()
+  }
+  if rows!=nil {
+   search:=widget.NewEntry(); search.SetPlaceHolder("Pesquisar...")
+   data:=widget.NewList(func()int{return len(rows)},func()fyne.CanvasObject{return widget.NewLabel("")},func(id widget.ListItemID,o fyne.CanvasObject){o.(*widget.Label).SetText(strings.Join(rows[id],"   •   "))})
+   search.OnChanged=func(q string){if name=="Produtos"||name=="Consulta de Produto"{rows=store.SearchProducts(q);data.Refresh()}}
+   box.Add(search); box.Add(container.NewPadded(data))
+  } else {
+   box.Add(widget.NewCard("Módulo conectado","A navegação já está ligada à nova camada de dados.",widget.NewLabel("A tela operacional específica será refinada sem alterar o ERP oficial.")))
+  }
+  content.Objects=[]fyne.CanvasObject{container.NewPadded(box)}
   content.Refresh()
  }
 
@@ -43,11 +63,13 @@ func main() {
   current.SetText("Início")
   greeting:=widget.NewLabelWithStyle("Visão geral",fyne.TextAlignLeading,fyne.TextStyle{Bold:true})
   subtitle:=widget.NewLabel("Acompanhamento rápido do Armazém Gratidão")
+  vendas,fat,prods,baixo:="—","R$ —","—","—"
+  if store!=nil { vendas,fat,prods,baixo=store.Dashboard() }
   cards:=container.NewGridWithColumns(4,
-   metricCard("Vendas de hoje","—","carrega do ERP"),
-   metricCard("Faturamento","R$ —","carrega do ERP"),
-   metricCard("Produtos ativos","—","carrega do ERP"),
-   metricCard("Estoque baixo","—","carrega do ERP"),
+   metricCard("Vendas de hoje",vendas,"concluídas hoje"),
+   metricCard("Faturamento",fat,"vendas concluídas"),
+   metricCard("Produtos ativos",prods,"cadastro ativo"),
+   metricCard("Estoque baixo",baixo,"abaixo do mínimo"),
   )
   quick:=widget.NewCard("Acesso rápido","Operações mais usadas",container.NewGridWithColumns(4,
    actionButton("Nova venda • PDV",func(){showPlaceholder("PDV","Venda rápida")}),
