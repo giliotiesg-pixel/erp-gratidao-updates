@@ -1,0 +1,38 @@
+name: Testar Interface Moderna Fyne
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ui_fyne/**'
+      - '.github/workflows/testar-interface-fyne.yml'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ui_fyne
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: ui_fyne/go.sum
+      - name: Preparar compilador C
+        shell: powershell
+        run: |
+          if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
+            choco install mingw -y --no-progress
+          }
+      - name: Baixar dependencias
+        run: go mod tidy
+      - name: Compilar interface Windows
+        env:
+          CGO_ENABLED: 1
+        run: go build -trimpath -ldflags="-s -w -H windowsgui" -o ERP_Gratidao_Interface_Teste.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERP-Gratidao-Interface-Teste
+          path: ui_fyne/ERP_Gratidao_Interface_Teste.exe
+          if-no-files-found: error
