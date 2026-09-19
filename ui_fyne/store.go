@@ -19,8 +19,9 @@ func OpenStore() (*Store,error) {
  for _,p:=range candidates { if _,e:=os.Stat(p); e==nil {dbPath=p;break} }
  if dbPath=="" { dbPath=candidates[0]; _=os.MkdirAll(filepath.Dir(dbPath),0755) }
  db,err:=sql.Open("sqlite",dbPath); if err!=nil{return nil,err}
- db.SetMaxOpenConns(1)
- if _,err=db.Exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");err!=nil{db.Close();return nil,err}
+ db.SetMaxOpenConns(4)
+ db.SetMaxIdleConns(2)
+ if _,err=db.Exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-20000; PRAGMA busy_timeout=3000;");err!=nil{db.Close();return nil,err}
  return &Store{DB:db},nil
 }
 func (s *Store) scalar(q string,args ...any) string { var v any; if s==nil||s.DB==nil{return "—"}; if err:=s.DB.QueryRow(q,args...).Scan(&v);err!=nil{return "—"}; return fmt.Sprint(v) }
@@ -33,11 +34,11 @@ func (s *Store) rows(q string,args ...any) [][]string {
 }
 func (s *Store) SearchProducts(term string) [][]string {
  like:="%"+strings.TrimSpace(term)+"%"
- return s.rows("SELECT COALESCE(barcode,''),description,printf('%.2f',price),printf('%.3f',stock),COALESCE(unit,'UN') FROM products WHERE active=1 AND (description LIKE ? OR barcode LIKE ?) ORDER BY description LIMIT 500",like,like)
+ return s.rows("SELECT COALESCE(barcode,''),description,printf('%.2f',price),printf('%.3f',stock),COALESCE(unit,'UN') FROM products WHERE active=1 AND (description LIKE ? OR barcode LIKE ?) ORDER BY description LIMIT 200",like,like)
 }
 func (s *Store) Sales() [][]string { return s.rows("SELECT sale_number,datetime(created_at,'localtime'),customer_name,payment_method,printf('%.2f',total),status FROM sales WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 500") }
 func (s *Store) Stock() [][]string { return s.StockSearch("") }
-func (s *Store) StockSearch(term string) [][]string { like:="%"+strings.TrimSpace(term)+"%"; return s.rows("SELECT COALESCE(barcode,''),description,printf('%.3f',stock),printf('%.3f',min_stock) FROM products WHERE active=1 AND (description LIKE ? OR COALESCE(barcode,'') LIKE ?) ORDER BY description LIMIT 1000",like,like) }
+func (s *Store) StockSearch(term string) [][]string { like:="%"+strings.TrimSpace(term)+"%"; return s.rows("SELECT COALESCE(barcode,''),description,printf('%.3f',stock),printf('%.3f',min_stock) FROM products WHERE active=1 AND (description LIKE ? OR COALESCE(barcode,'') LIKE ?) ORDER BY description LIMIT 300",like,like) }
 func (s *Store) AdjustStock(barcode,description string,qty,min float64) error {
  if s==nil||s.DB==nil{return fmt.Errorf("banco de dados indisponível")}; if qty<0||min<0{return fmt.Errorf("quantidades não podem ser negativas")}
  tx,err:=s.DB.Begin(); if err!=nil{return err}; defer tx.Rollback()
