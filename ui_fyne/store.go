@@ -36,7 +36,15 @@ func (s *Store) SearchProducts(term string) [][]string {
  return s.rows("SELECT COALESCE(barcode,''),description,printf('%.2f',price),printf('%.3f',stock),COALESCE(unit,'UN') FROM products WHERE active=1 AND (description LIKE ? OR barcode LIKE ?) ORDER BY description LIMIT 500",like,like)
 }
 func (s *Store) Sales() [][]string { return s.rows("SELECT sale_number,datetime(created_at,'localtime'),customer_name,payment_method,printf('%.2f',total),status FROM sales WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 500") }
-func (s *Store) Stock() [][]string { return s.rows("SELECT COALESCE(barcode,''),description,printf('%.3f',stock),printf('%.3f',min_stock) FROM products WHERE active=1 ORDER BY description LIMIT 1000") }
+func (s *Store) Stock() [][]string { return s.StockSearch("") }
+func (s *Store) StockSearch(term string) [][]string { like:="%"+strings.TrimSpace(term)+"%"; return s.rows("SELECT COALESCE(barcode,''),description,printf('%.3f',stock),printf('%.3f',min_stock) FROM products WHERE active=1 AND (description LIKE ? OR COALESCE(barcode,'') LIKE ?) ORDER BY description LIMIT 1000",like,like) }
+func (s *Store) AdjustStock(barcode,description string,qty,min float64) error {
+ if s==nil||s.DB==nil{return fmt.Errorf("banco de dados indisponível")}; if qty<0||min<0{return fmt.Errorf("quantidades não podem ser negativas")}
+ tx,err:=s.DB.Begin(); if err!=nil{return err}; defer tx.Rollback()
+ var res sql.Result
+ if strings.TrimSpace(barcode)!="" {res,err=tx.Exec("UPDATE products SET stock=?,min_stock=?,active=CASE WHEN ?>0 THEN 1 ELSE active END WHERE barcode=?",qty,min,qty,barcode)} else {res,err=tx.Exec("UPDATE products SET stock=?,min_stock=?,active=CASE WHEN ?>0 THEN 1 ELSE active END WHERE description=?",qty,min,qty,description)}
+ if err!=nil{return err}; n,err:=res.RowsAffected();if err!=nil{return err};if n!=1{return fmt.Errorf("produto não encontrado ou seleção ambígua")};return tx.Commit()
+}
 func (s *Store) Fiado() [][]string { return s.rows("SELECT sale_number,customer_name,printf('%.2f',total),printf('%.2f',MAX(0,total-COALESCE((SELECT SUM(amount) FROM credit_payments cp WHERE cp.sale_id=sales.id),0))) FROM sales WHERE payment_method='FIADO' AND deleted_at IS NULL ORDER BY customer_name,id DESC LIMIT 500") }
 func (s *Store) Validity() [][]string { return s.rows("SELECT description,COALESCE(expiration_date,''),printf('%.3f',stock) FROM products WHERE active=1 ORDER BY CASE WHEN expiration_date IS NULL OR expiration_date='' THEN 1 ELSE 0 END,expiration_date LIMIT 1000") }
 func (s *Store) Cash() [][]string { return s.rows("SELECT id,datetime(opened_at,'localtime'),printf('%.2f',opening_amount),COALESCE(datetime(closed_at,'localtime'),''),COALESCE(printf('%.2f',closing_amount),''),status FROM cash_sessions ORDER BY id DESC LIMIT 200") }
