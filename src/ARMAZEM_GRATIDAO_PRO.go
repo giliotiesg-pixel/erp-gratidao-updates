@@ -48,6 +48,13 @@ var (
 	pPostMessageW         = user32.NewProc("PostMessageW")
 	pMessageBoxW          = user32.NewProc("MessageBoxW")
 	pCreateFontW          = gdi32.NewProc("CreateFontW")
+	pCreateRoundRectRgn   = gdi32.NewProc("CreateRoundRectRgn")
+	pDeleteObject         = gdi32.NewProc("DeleteObject")
+	pSetWindowRgn         = user32.NewProc("SetWindowRgn")
+	pFillRgn              = gdi32.NewProc("FillRgn")
+	pSetBkMode            = gdi32.NewProc("SetBkMode")
+	pSelectObject         = gdi32.NewProc("SelectObject")
+	pDrawTextW            = user32.NewProc("DrawTextW")
 	pSetFocus             = user32.NewProc("SetFocus")
 	pSetWindowLongPtrW    = user32.NewProc("SetWindowLongPtrW")
 	pCallWindowProcW      = user32.NewProc("CallWindowProcW")
@@ -80,6 +87,7 @@ const (
 	WM_APP_UPDATEFAIL    = 0x8008
 	WM_APP_UPDATEINSTALL = 0x8009
 	WM_CTLCOLORSTATIC    = 0x0138
+	WM_DRAWITEM          = 0x002B
 	WS_OVERLAPPEDWINDOW  = 0x00CF0000
 	WS_VISIBLE           = 0x10000000
 	WS_CHILD             = 0x40000000
@@ -88,6 +96,7 @@ const (
 	WS_TABSTOP           = 0x00010000
 	ES_AUTOHSCROLL       = 0x0080
 	BS_PUSHBUTTON        = 0
+	BS_OWNERDRAW         = 0x0000000B
 	LBS_NOTIFY           = 0x0001
 	LBS_NOINTEGRALHEIGHT = 0x0100
 	CBS_DROPDOWNLIST     = 0x0003
@@ -109,6 +118,13 @@ type WNDCLASSEX struct {
 	hInstance, hIcon, hCursor, hbrBackground uintptr
 	lpszMenuName, lpszClassName              *uint16
 	hIconSm                                  uintptr
+}
+type RECT struct{ Left, Top, Right, Bottom int32 }
+type DRAWITEMSTRUCT struct {
+	CtlType, CtlID, ItemID, ItemAction, ItemState uint32
+	HwndItem, HDC uintptr
+	RcItem RECT
+	ItemData uintptr
 }
 type MSG struct {
 	hwnd           uintptr
@@ -162,7 +178,7 @@ var menuVisible bool
 var moduleSearch uintptr
 var topbarBg, topbarBorder uintptr
 var topbarLabels = map[uintptr]bool{}
-var brushTop, brushRed uintptr
+var brushTop, brushRed, brushButton, brushButtonPressed uintptr
 var pCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
 var pSetTextColor = gdi32.NewProc("SetTextColor")
 var pSetBkColor = gdi32.NewProc("SetBkColor")
@@ -260,17 +276,30 @@ func clip(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
+func roundControl(hw uintptr, w, h, radius int) {
+	if hw == 0 || w <= 0 || h <= 0 { return }
+	rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(w+1), uintptr(h+1), uintptr(radius), uintptr(radius))
+	if rgn != 0 {
+		ok, _, _ := pSetWindowRgn.Call(hw, rgn, 1)
+		if ok == 0 { pDeleteObject.Call(rgn) }
+	}
+}
 func add(class, text string, style uint32, x, y, w, h, id int) uintptr {
+	if strings.EqualFold(class, "BUTTON") { style |= BS_OWNERDRAW }
 	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws(class))), uintptr(unsafe.Pointer(ws(text))), uintptr(style|WS_CHILD|WS_VISIBLE), uintptr(x), uintptr(y), uintptr(w), uintptr(h), mainWnd, uintptr(id), 0, 0)
-	if font != 0 {
-		pSendMessageW.Call(hw, WM_SETFONT, font, 1)
+	if font != 0 { pSendMessageW.Call(hw, WM_SETFONT, font, 1) }
+	switch strings.ToUpper(class) {
+	case "BUTTON": roundControl(hw, w, h, 16)
+	case "EDIT", "COMBOBOX": roundControl(hw, w, h, 12)
+	case "LISTBOX": roundControl(hw, w, h, 14)
 	}
 	content = append(content, hw)
 	return hw
 }
 func addNav(text string, id, y int) uintptr {
-	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws(text))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 15, uintptr(y), 205, 36, mainWnd, uintptr(id), 0, 0)
+	hw, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws(text))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 15, uintptr(y), 205, 36, mainWnd, uintptr(id), 0, 0)
 	pSendMessageW.Call(hw, WM_SETFONT, font, 1)
+	roundControl(hw, 205, 36, 16)
 	navControls = append(navControls, hw)
 	return hw
 }
@@ -2107,8 +2136,26 @@ func handleCommand(id int) {
 	}
 }
 
+func drawModernButton(dis *DRAWITEMSTRUCT) {
+	if dis == nil || dis.HDC == 0 { return }
+	r := dis.RcItem
+	brush := brushButton
+	if (dis.ItemState & 0x0001) != 0 { brush = brushButtonPressed }
+	rgn, _, _ := pCreateRoundRectRgn.Call(uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom), 18, 18)
+	if rgn != 0 { pFillRgn.Call(dis.HDC, rgn, brush); pDeleteObject.Call(rgn) }
+	pSetBkMode.Call(dis.HDC, 1)
+	pSetTextColor.Call(dis.HDC, 0x00FFFFFF)
+	pSelectObject.Call(dis.HDC, font)
+	text := getText(dis.HwndItem)
+	if text == "☰" || text == "⚙" { pSelectObject.Call(dis.HDC, fontBig) }
+	pDrawTextW.Call(dis.HDC, uintptr(unsafe.Pointer(ws(text))), uintptr(len([]rune(text))), uintptr(unsafe.Pointer(&r)), 0x00000001|0x00000004|0x00000020)
+}
+
 func wndProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 	switch m {
+	case WM_DRAWITEM:
+		drawModernButton((*DRAWITEMSTRUCT)(unsafe.Pointer(l)))
+		return 1
 	case WM_CTLCOLORSTATIC:
 		h := l
 		if h == topbarBg || topbarLabels[h] {
@@ -2208,14 +2255,16 @@ func buildNavigation() {
 	// [☰][ERP GRATIDÃO] | [⌕ Ir para...] | [versão][Sistema local][Atualizações][Consulta de produto][⚙]
 	brushTop, _, _ = pCreateSolidBrush.Call(0x0058310B) // RGB aproximado #0b3158 em COLORREF BGR
 	brushRed, _, _ = pCreateSolidBrush.Call(0x00251DC8) // #c81d25
+	brushButton, _, _ = pCreateSolidBrush.Call(0x00B85B13)
+	brushButtonPressed, _, _ = pCreateSolidBrush.Call(0x008C430D)
 
 	topbarBg, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), 0, WS_CHILD|WS_VISIBLE, 0, 0, 1305, 54, mainWnd, 0, 0, 0)
 	topbarBorder, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), 0, WS_CHILD|WS_VISIBLE, 0, 51, 1305, 3, mainWnd, 0, 0, 0)
 
-	btn, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("☰"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 10, 9, 36, 34, mainWnd, 99, 0, 0)
+	btn, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("☰"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 10, 9, 36, 34, mainWnd, 99, 0, 0)
 	pSendMessageW.Call(btn, WM_SETFONT, fontBig, 1)
 
-	brand, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("ARMAZEM GRATIDÃO PRO"))), WS_CHILD|WS_VISIBLE, 56, 14, 205, 27, mainWnd, 0, 0, 0)
+	brand, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("STATIC"))), uintptr(unsafe.Pointer(ws("ERP GRATIDÃO"))), WS_CHILD|WS_VISIBLE, 56, 14, 205, 27, mainWnd, 0, 0, 0)
 	pSendMessageW.Call(brand, WM_SETFONT, fontBig, 1)
 	topbarLabels[brand] = true
 
@@ -2230,9 +2279,9 @@ func buildNavigation() {
 	topbarLabels[ver] = true
 	topbarLabels[stat] = true
 
-	u, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Atualizações"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 950, 10, 92, 34, mainWnd, 9001, 0, 0)
-	c, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Consulta de produto"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1047, 10, 160, 34, mainWnd, 9002, 0, 0)
-	g, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("⚙"))), WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1212, 10, 38, 34, mainWnd, 9003, 0, 0)
+	u, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Atualizações"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 950, 10, 92, 34, mainWnd, 9001, 0, 0)
+	c, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("Consulta de produto"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 1047, 10, 160, 34, mainWnd, 9002, 0, 0)
+	g, _, _ := pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(ws("BUTTON"))), uintptr(unsafe.Pointer(ws("⚙"))), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 1212, 10, 38, 34, mainWnd, 9003, 0, 0)
 	pSendMessageW.Call(u, WM_SETFONT, fontSmall, 1)
 	pSendMessageW.Call(c, WM_SETFONT, fontSmall, 1)
 	pSendMessageW.Call(g, WM_SETFONT, fontBig, 1)
@@ -2273,7 +2322,7 @@ func main() {
 	cls := ws("ERPGratidaoNative1211")
 	wc := WNDCLASSEX{cbSize: uint32(unsafe.Sizeof(WNDCLASSEX{})), lpfnWndProc: syscall.NewCallback(wndProc), hInstance: hinst, lpszClassName: cls, hbrBackground: 6}
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
-	mainWnd, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(ws("ARMAZEM GRATIDÃO PRO v1.2.17"))), WS_OVERLAPPEDWINDOW|WS_VISIBLE, 20, 15, 1320, 790, 0, 0, hinst, 0)
+	mainWnd, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(ws("ERP Gratidão v"+currentVersion+" • Sistema de Gestão Comercial"))), WS_OVERLAPPEDWINDOW|WS_VISIBLE, 20, 15, 1320, 790, 0, 0, hinst, 0)
 	buildNavigation()
 	showBoot()
 	pShowWindow.Call(mainWnd, SW_SHOW)
