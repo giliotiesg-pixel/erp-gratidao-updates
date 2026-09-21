@@ -16,6 +16,7 @@ func buildPDV(store *Store) fyne.CanvasObject {
  barcode:=widget.NewEntry(); barcode.SetPlaceHolder("Bipe ou digite o código de barras")
  qty:=widget.NewEntry(); qty.SetText("1"); qty.SetPlaceHolder("Qtd")
  status:=widget.NewLabel("Pronto para vender")
+ customer:=widget.NewEntry(); customer.SetPlaceHolder("Cliente (obrigatório no FIADO)")
  total:=widget.NewLabelWithStyle("TOTAL  R$ 0,00",fyne.TextAlignTrailing,fyne.TextStyle{Bold:true})
  cart:=[]CartItem{}
  list:=widget.NewList(func()int{return len(cart)},func()fyne.CanvasObject{return widget.NewLabel("")},func(id widget.ListItemID,o fyne.CanvasObject){i:=cart[id];o.(*widget.Label).SetText(fmt.Sprintf("%s   %s   %.3f x R$ %.2f   = R$ %.2f",i.Barcode,i.Description,i.Qty,i.Price,i.Qty*i.Price))})
@@ -27,7 +28,7 @@ func buildPDV(store *Store) fyne.CanvasObject {
   for _,r:=range rows{if len(r)>=4&&r[0]==code{found=r;break}}
   if found==nil{status.SetText("Produto não cadastrado");return}
   price,_:=strconv.ParseFloat(found[2],64);stock,_:=strconv.ParseFloat(found[3],64)
-  if q>stock{status.SetText(fmt.Sprintf("Estoque insuficiente • atual: %.3f",stock));return}
+  if q>stock{status.SetText(fmt.Sprintf("Estoque insuficiente • %s • atual: %.3f • ajuste no módulo Estoque",found[1],stock));return}
   cart=append(cart,CartItem{Barcode:found[0],Description:found[1],Qty:q,Price:price});list.Refresh();recalc();barcode.SetText("");qty.SetText("1");status.SetText(fmt.Sprintf("%s • estoque atual %.3f",found[1],stock));barcode.FocusGained()
  }
  barcode.OnSubmitted=func(string){add()}
@@ -37,10 +38,11 @@ func buildPDV(store *Store) fyne.CanvasObject {
  payment:=widget.NewSelect([]string{"DINHEIRO","PIX","DÉBITO","CRÉDITO","ALELO","PLUXXE","TICKET","VR","FIADO"},nil);payment.SetSelected("DINHEIRO")
  finish:=widget.NewButton("Finalizar pagamento",func(){
   if len(cart)==0{status.SetText("Nenhum item na venda");return}
+  client:=strings.TrimSpace(customer.Text);if payment.Selected=="FIADO"&&client==""{status.SetText("Selecione ou informe o cliente para venda FIADO");customer.FocusGained();return};if client==""{client="Consumidor"}
   tx,e:=store.DB.Begin();if e!=nil{status.SetText("Erro ao abrir venda: "+e.Error());return};defer tx.Rollback()
   var totalValue float64;for _,i:=range cart{totalValue+=i.Qty*i.Price}
   number:=time.Now().Format("20060102150405")
-  res,e:=tx.Exec("INSERT INTO sales(sale_number,created_at,customer_name,payment_method,total,status) VALUES(?,datetime('now','localtime'),'Consumidor',?,?,'CONCLUIDA')",number,payment.Selected,totalValue)
+  res,e:=tx.Exec("INSERT INTO sales(sale_number,created_at,customer_name,payment_method,total,status) VALUES(?,datetime('now','localtime'),?,?,?,'CONCLUIDA')",number,client,payment.Selected,totalValue)
   if e!=nil{status.SetText("Erro ao salvar venda: "+e.Error());return};saleID,e:=res.LastInsertId();if e!=nil{status.SetText(e.Error());return}
   for _,i:=range cart{
    var productID int64;var current float64
@@ -50,9 +52,9 @@ func buildPDV(store *Store) fyne.CanvasObject {
    if _,e=tx.Exec("UPDATE products SET stock=stock-? WHERE id=?",i.Qty,productID);e!=nil{status.SetText("Erro no estoque: "+e.Error());return}
   }
   if e=tx.Commit();e!=nil{status.SetText("Erro ao concluir: "+e.Error());return}
-  cart=nil;list.Refresh();recalc();status.SetText(fmt.Sprintf("Venda %s concluída • %s • R$ %.2f",number,payment.Selected,totalValue))
+  cart=nil;list.Refresh();recalc();customer.SetText("");status.SetText(fmt.Sprintf("Venda %s concluída • %s • %s • R$ %.2f",number,client,payment.Selected,totalValue))
  });finish.Importance=widget.HighImportance
- entry:=container.NewBorder(nil,nil,nil,container.NewGridWithColumns(2,qty,addBtn),barcode)
+ entry:=container.NewVBox(container.NewBorder(nil,nil,nil,container.NewGridWithColumns(2,qty,addBtn),barcode),customer)
  actions:=container.NewGridWithColumns(4,remove,clear,payment,finish)
  right:=container.NewVBox(widget.NewCard("Venda atual","Itens adicionados",container.NewPadded(list)),total,status,actions)
  return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("PDV",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Venda rápida • leitura por código de barras"),entry,widget.NewSeparator()),nil,nil,nil,right)
