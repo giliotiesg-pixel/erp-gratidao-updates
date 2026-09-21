@@ -30,14 +30,14 @@ func buildProductLookup(store *Store) fyne.CanvasObject {
  stock := widget.NewLabelWithStyle("Estoque atual: —", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
  status := widget.NewLabel("")
 
- rows := store.SearchProducts("")
+ rows := store.product211Rows("", "ATIVOS")
  list := widget.NewList(
   func() int { return len(rows) },
   func() fyne.CanvasObject { return widget.NewLabel("") },
   func(id widget.ListItemID, obj fyne.CanvasObject) {
    if id < 0 || id >= len(rows) { return }
    r := rows[id]
-   obj.(*widget.Label).SetText(fmt.Sprintf("%s   •   %s   •   R$ %s   •   estoque %s %s", r[0], r[1], strings.ReplaceAll(r[2], ".", ","), r[3], r[4]))
+   obj.(*widget.Label).SetText(fmt.Sprintf("%s   •   %s   •   %s   •   R$ %s   •   estoque %s", r[1], r[2], r[3], strings.ReplaceAll(r[6], ".", ","), r[7]))
   },
  )
 
@@ -45,9 +45,9 @@ func buildProductLookup(store *Store) fyne.CanvasObject {
   if len(r) < 5 { return }
   description.Text = r[1]
   description.Refresh()
-  price.Text = "R$ " + strings.ReplaceAll(r[2], ".", ",")
+  price.Text = "R$ " + strings.ReplaceAll(r[6], ".", ",")
   price.Refresh()
-  stock.SetText("Estoque atual: " + r[3] + " " + r[4])
+  stock.SetText("Estoque atual: " + r[7] + "   •   Marca: " + r[3] + "   •   Categoria: " + r[4] + "   •   Validade: " + r[9])
   status.SetText("")
  }
  list.OnSelected = func(id widget.ListItemID) {
@@ -55,7 +55,7 @@ func buildProductLookup(store *Store) fyne.CanvasObject {
  }
 
  refresh := func(q string) {
-  rows = store.SearchProducts(q)
+  rows = store.product211Rows(q, "ATIVOS")
   list.UnselectAll()
   list.Refresh()
   if len(rows) == 0 && strings.TrimSpace(q) != "" {
@@ -68,9 +68,9 @@ func buildProductLookup(store *Store) fyne.CanvasObject {
  search.OnSubmitted = func(q string) {
   q = strings.TrimSpace(q)
   if q == "" { return }
-  matches := store.SearchProducts(q)
+  matches := store.product211Rows(q, "ATIVOS")
   for _, r := range matches {
-   if len(r) >= 5 && strings.EqualFold(strings.TrimSpace(r[0]), q) {
+   if len(r) >= 11 && (strings.EqualFold(strings.TrimSpace(r[1]), q) || strings.EqualFold(strings.TrimSpace(r[0]), q)) {
     showRow(r)
     search.SetText("")
     return
