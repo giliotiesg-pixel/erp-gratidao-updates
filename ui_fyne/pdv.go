@@ -36,6 +36,22 @@ func buildPDV(store *Store) fyne.CanvasObject {
  remove:=widget.NewButton("Excluir item",func(){if len(cart)>0{cart=cart[:len(cart)-1];list.Refresh();recalc()}})
  clear:=widget.NewButton("Cancelar venda",func(){cart=nil;list.Refresh();recalc();status.SetText("Venda cancelada")})
  payment:=widget.NewSelect([]string{"DINHEIRO","PIX","DÉBITO","CRÉDITO","ALELO","PLUXXE","TICKET","VR","FIADO"},nil);payment.SetSelected("DINHEIRO")
+ hold:=widget.NewButton("Deixar venda em aberto",func(){
+  if len(cart)==0{status.SetText("Nenhum item na venda");return}
+  client:=strings.TrimSpace(customer.Text);if client==""{client="Consumidor"}
+  tx,e:=store.DB.Begin();if e!=nil{status.SetText("Erro ao abrir venda: "+e.Error());return};defer tx.Rollback()
+  var totalValue float64;for _,i:=range cart{totalValue+=i.Qty*i.Price}
+  number:="A"+time.Now().Format("20060102150405")
+  res,e:=tx.Exec("INSERT INTO sales(sale_number,created_at,customer_name,payment_method,total,status) VALUES(?,datetime('now','localtime'),?,'',?,'ABERTA')",number,client,totalValue)
+  if e!=nil{status.SetText("Erro ao salvar venda aberta: "+e.Error());return};saleID,e:=res.LastInsertId();if e!=nil{status.SetText(e.Error());return}
+  for _,i:=range cart{
+   var productID int64
+   if e=tx.QueryRow("SELECT id FROM products WHERE barcode=? AND active=1",i.Barcode).Scan(&productID);e!=nil{status.SetText("Produto não encontrado: "+i.Description);return}
+   if _,e=tx.Exec("INSERT INTO sale_items(sale_id,product_id,description,quantity,unit_price) VALUES(?,?,?,?,?)",saleID,productID,i.Description,i.Qty,i.Price);e!=nil{status.SetText("Erro nos itens: "+e.Error());return}
+  }
+  if e=tx.Commit();e!=nil{status.SetText("Erro ao guardar venda: "+e.Error());return}
+  cart=nil;list.Refresh();recalc();customer.SetText("");status.SetText(fmt.Sprintf("Venda %s deixada em aberto • estoque ainda não baixado",number))
+ });hold.Importance=widget.MediumImportance
  finish:=widget.NewButton("Finalizar pagamento",func(){
   if len(cart)==0{status.SetText("Nenhum item na venda");return}
   client:=strings.TrimSpace(customer.Text);if payment.Selected=="FIADO"&&client==""{status.SetText("Selecione ou informe o cliente para venda FIADO");customer.FocusGained();return};if client==""{client="Consumidor"}
@@ -55,7 +71,7 @@ func buildPDV(store *Store) fyne.CanvasObject {
   cart=nil;list.Refresh();recalc();customer.SetText("");status.SetText(fmt.Sprintf("Venda %s concluída • %s • %s • R$ %.2f",number,client,payment.Selected,totalValue))
  });finish.Importance=widget.HighImportance
  entry:=container.NewVBox(container.NewBorder(nil,nil,nil,container.NewGridWithColumns(2,qty,addBtn),barcode),customer)
- actions:=container.NewGridWithColumns(4,remove,clear,payment,finish)
+ actions:=container.NewGridWithColumns(5,remove,clear,hold,payment,finish)
  right:=container.NewVBox(widget.NewCard("Venda atual","Itens adicionados",container.NewPadded(list)),total,status,actions)
  return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("PDV",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Venda rápida • leitura por código de barras"),entry,widget.NewSeparator()),nil,nil,nil,right)
 }
