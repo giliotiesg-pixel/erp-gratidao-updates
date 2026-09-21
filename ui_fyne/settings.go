@@ -4,6 +4,7 @@ import (
  "fmt"
  "os"
  "path/filepath"
+ "time"
 
  "fyne.io/fyne/v2"
  "fyne.io/fyne/v2/container"
@@ -13,7 +14,7 @@ import (
 
 func buildSettings(store *Store, w fyne.Window) fyne.CanvasObject {
  title := widget.NewLabelWithStyle("Configurações", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
- subtitle := widget.NewLabel("Sistema, banco de dados e diagnóstico da interface experimental")
+ subtitle := widget.NewLabel("Sistema, banco de dados, diagnóstico e atualizações automáticas")
 
  exePath := "—"
  dbPath := "—"
@@ -75,6 +76,36 @@ func buildSettings(store *Store, w fyne.Window) fyne.CanvasObject {
 
  refreshButton := widget.NewButton("Atualizar informações", refresh)
 
+ updateStatus := widget.NewLabel("Versão instalada: " + appVersion + " • aguardando verificação")
+ updateStatus.Wrapping = fyne.TextWrapWord
+ var available updateManifest
+ checkUpdate := widget.NewButton("Verificar atualização", func() {
+  updateStatus.SetText("Verificando atualização...")
+  m, err := fetchUpdateManifest()
+  if err != nil { updateStatus.SetText("Não foi possível verificar: " + err.Error()); return }
+  available = m
+  if newerVersion(m.Version, appVersion) {
+   updateStatus.SetText("Nova versão disponível: " + m.Version + " • " + m.Notes)
+  } else {
+   updateStatus.SetText("Sistema atualizado • versão " + appVersion)
+  }
+ })
+ installUpdate := widget.NewButton("Baixar e instalar atualização", func() {
+  if available.Version == "" || !newerVersion(available.Version, appVersion) {
+   dialog.ShowInformation("Atualizações", "Primeiro verifique se existe uma nova versão disponível.", w); return
+  }
+  dialog.ShowConfirm("Atualizar ERP Gratidão", "Será feito backup automático do banco antes da atualização. Deseja continuar?", func(ok bool) {
+   if !ok { return }
+   backup, err := backupBeforeUpdate(); if err != nil { dialog.ShowError(fmt.Errorf("backup não concluído; atualização cancelada: %w", err), w); return }
+   updateStatus.SetText("Backup criado em " + backup + " • baixando atualização...")
+   pkg, err := downloadUpdate(available); if err != nil { dialog.ShowError(err, w); return }
+   if err = prepareAndLaunchUpdate(pkg); err != nil { dialog.ShowError(err, w); return }
+   dialog.ShowInformation("Atualização pronta", "Backup concluído e pacote validado por SHA-256. O ERP será fechado para aplicar a atualização.", w)
+   go func(){ time.Sleep(1200*time.Millisecond); fyne.Do(func(){ w.Close() }) }()
+  }, w)
+ })
+ installUpdate.Importance = widget.HighImportance
+
  paths := widget.NewForm(
   widget.NewFormItem("Executável", widget.NewLabel(exePath)),
   widget.NewFormItem("Banco SQLite", widget.NewLabel(dbPath)),
@@ -99,6 +130,7 @@ func buildSettings(store *Store, w fyne.Window) fyne.CanvasObject {
   widget.NewCard("Ambiente local", "Caminhos usados pela interface experimental", paths),
   counts,
   widget.NewCard("Diagnóstico", "Estado atual", container.NewVBox(status, container.NewHBox(verify, refreshButton))),
+  widget.NewCard("Atualizações", "Atualização automática segura", container.NewVBox(updateStatus, container.NewHBox(checkUpdate, installUpdate))),
   warning,
  )
 }
