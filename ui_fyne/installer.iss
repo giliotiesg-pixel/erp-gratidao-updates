@@ -1,5 +1,5 @@
 [Setup]
-AppId={{B6D0B6F2-7A5D-4F77-9B68-ERPGRATIDAO}}
+AppId=ERP-Gratidao-Fyne
 AppName=ERP Gratidão
 AppVersion=0.1.0
 AppPublisher=Armazém Gratidão
@@ -17,27 +17,33 @@ Uninstallable=yes
 SetupLogging=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "ERP_Gratidao_Interface_Teste.exe"; DestDir: "{app}"; DestName: "ERP_Gratidao.exe"; Flags: ignoreversion
-Source: "data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs onlyifdoesntexist; Check: DirExists(ExpandConstant('{src}\data'))
 
 [Dirs]
 Name: "{app}\data"; Permissions: users-modify
+Name: "{app}\backup"; Permissions: users-modify
+Name: "{app}\logs"; Permissions: users-modify
 
 [Icons]
-Name: "{group}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"
-Name: "{autodesktop}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"
+Name: "{group}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\ERP_Gratidao.exe"; Description: "Abrir ERP Gratidão"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ERP_Gratidao.exe"; Description: "Abrir ERP Gratidão"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: files; Name: "{app}\ERP_Gratidao.exe"
+Type: files; Name: "{app}\*.log"
+Type: dirifempty; Name: "{app}\logs"
+Type: dirifempty; Name: "{app}\backup"
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
-    MsgBox('A pasta de dados não é removida automaticamente para proteger o banco erp.sqlite e seus registros.', mbInformation, MB_OK);
+    MsgBox('Os dados do ERP Gratidão foram preservados. A pasta data e o banco erp.sqlite não são apagados pelo desinstalador.', mbInformation, MB_OK);
 end;
