@@ -48,6 +48,21 @@ func buildSales(store *Store,w fyne.Window) fyne.CanvasObject {
  search.OnChanged=refresh
  reload:=widget.NewButton("Atualizar",func(){refresh(search.Text)})
  closeSale:=widget.NewButton("Fechar detalhes",func(){table.UnselectAll();selected=-1;itemRows=nil;items.Refresh();detail.SetText("Selecione uma venda para consultar os itens.")})
+ finalizeOpen:=widget.NewButton("Finalizar venda aberta",func(){
+  if selected<0||selected>=len(rows){dialog.ShowInformation("Vendas","Selecione uma venda aberta primeiro.",w);return}
+  r:=rows[selected];if strings.ToUpper(r.Status)!="ABERTA"{dialog.ShowInformation("Vendas","A venda selecionada não está em aberto.",w);return}
+  pay:=widget.NewSelect([]string{"DINHEIRO","PIX","DÉBITO","CRÉDITO","ALELO","PLUXXE","TICKET","VR","FIADO"},nil);pay.SetSelected("DINHEIRO")
+  form:=dialog.NewForm("Finalizar venda "+r.Number,"Finalizar","Cancelar",[]*widget.FormItem{widget.NewFormItem("Pagamento",pay)},func(ok bool){
+   if !ok{return};if pay.Selected=="FIADO"&&(strings.TrimSpace(r.Customer)==""||r.Customer=="Consumidor"){dialog.ShowInformation("Vendas","Venda FIADO precisa ter um cliente identificado.",w);return}
+   tx,e:=store.DB.Begin();if e!=nil{dialog.ShowError(e,w);return};defer tx.Rollback()
+   q,e:=tx.Query("SELECT si.product_id,si.quantity,COALESCE(p.description,si.description,''),COALESCE(p.stock,0) FROM sale_items si LEFT JOIN products p ON p.id=si.product_id WHERE si.sale_id=?",r.ID);if e!=nil{dialog.ShowError(e,w);return}
+   type stockLine struct{id int64;qty float64;name string;stock float64};lines:=[]stockLine{}
+   for q.Next(){var x stockLine;if e=q.Scan(&x.id,&x.qty,&x.name,&x.stock);e!=nil{q.Close();dialog.ShowError(e,w);return};if x.stock<x.qty{q.Close();dialog.ShowError(fmt.Errorf("estoque insuficiente para %s: atual %.3f, necessário %.3f",x.name,x.stock,x.qty),w);return};lines=append(lines,x)};q.Close()
+   for _,x:=range lines{if _,e=tx.Exec("UPDATE products SET stock=stock-? WHERE id=?",x.qty,x.id);e!=nil{dialog.ShowError(e,w);return}}
+   if _,e=tx.Exec("UPDATE sales SET payment_method=?,status='CONCLUIDA' WHERE id=? AND status='ABERTA' AND deleted_at IS NULL",pay.Selected,r.ID);e!=nil{dialog.ShowError(e,w);return}
+   if e=tx.Commit();e!=nil{dialog.ShowError(e,w);return};refresh(search.Text);dialog.ShowInformation("Vendas","Venda aberta finalizada e estoque atualizado.",w)
+  },w);form.Resize(fyne.NewSize(480,220));form.Show()
+ });finalizeOpen.Importance=widget.HighImportance
  deleteBtn:=widget.NewButton("Excluir venda",func(){
   if selected<0||selected>=len(rows){dialog.ShowInformation("Vendas","Selecione uma venda primeiro.",w);return}
   r:=rows[selected]
@@ -64,7 +79,7 @@ func buildSales(store *Store,w fyne.Window) fyne.CanvasObject {
   },w)
  })
  deleteBtn.Importance=widget.DangerImportance
- header:=container.NewBorder(nil,nil,search,container.NewHBox(reload,closeSale,deleteBtn))
+ header:=container.NewBorder(nil,nil,search,container.NewHBox(reload,closeSale,finalizeOpen,deleteBtn))
  salesPane:=container.NewBorder(header,nil,nil,nil,table)
  detailPane:=container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Itens da venda",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),detail,widget.NewSeparator()),nil,nil,nil,items)
  split:=container.NewVSplit(salesPane,detailPane);split.Offset=.62
