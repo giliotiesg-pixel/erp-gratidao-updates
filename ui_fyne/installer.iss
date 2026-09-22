@@ -1,17 +1,17 @@
 [Setup]
 AppId=ERP-Gratidao-Fyne
-AppName=ERP Gratidão
-AppVersion=0.1.0
+AppName=Armazém Gratidão PRO
+AppVersion=0.1.1
 AppPublisher=Armazém Gratidão
 DefaultDirName={autopf}\ERP Gratidão
-DefaultGroupName=ERP Gratidão
+DefaultGroupName=Armazém Gratidão PRO
 OutputDir=dist
 OutputBaseFilename=ERP_Gratidao_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-UninstallDisplayName=ERP Gratidão
+UninstallDisplayName=Armazém Gratidão PRO
 CreateUninstallRegKey=yes
 Uninstallable=yes
 SetupLogging=yes
@@ -28,12 +28,12 @@ Name: "{app}\data"; Permissions: users-modify
 Name: "{app}\backup"; Permissions: users-modify
 Name: "{app}\logs"; Permissions: users-modify
 
-[Icons]
+[Icons]\n; Os atalhos usam o ícone incorporado no executável Armazém Gratidão PRO.
 Name: "{group}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\ERP_Gratidao.exe"; Description: "Abrir ERP Gratidão"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ERP_Gratidao.exe"; Description: "Abrir Armazém Gratidão PRO"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: files; Name: "{app}\ERP_Gratidao.exe"
