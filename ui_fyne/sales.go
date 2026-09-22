@@ -63,6 +63,24 @@ func buildSales(store *Store,w fyne.Window) fyne.CanvasObject {
    if e=tx.Commit();e!=nil{dialog.ShowError(e,w);return};refresh(search.Text);dialog.ShowInformation("Vendas","Venda aberta finalizada e estoque atualizado.",w)
   },w);form.Resize(fyne.NewSize(480,220));form.Show()
  });finalizeOpen.Importance=widget.HighImportance
+ editBtn:=widget.NewButton("Editar / Auditar venda",func(){
+  if selected<0||selected>=len(rows){dialog.ShowInformation("Vendas","Selecione uma venda primeiro.",w);return}
+  r:=rows[selected]; editable,er:=store.editableSaleItems(r.ID);if er!=nil{dialog.ShowError(er,w);return}
+  customer:=widget.NewEntry();customer.SetText(r.Customer)
+  payment:=widget.NewSelect([]string{"DINHEIRO","PIX","DÉBITO","CRÉDITO","ALELO","PLUXXE","TICKET","VR","FIADO"},nil);payment.SetSelected(r.Payment)
+  dateEntry:=widget.NewEntry();dateEntry.SetText(r.Date)
+  itemBox:=container.NewVBox()
+  qtyEntries:=make([]*widget.Entry,len(editable));priceEntries:=make([]*widget.Entry,len(editable));descEntries:=make([]*widget.Entry,len(editable))
+  totalLabel:=widget.NewLabelWithStyle("Total recalculado: R$ 0,00",fyne.TextAlignLeading,fyne.TextStyle{Bold:true})
+  recalc:=func(){total:=0.0;for i:=range editable{total+=pf(qtyEntries[i].Text)*pf(priceEntries[i].Text)};totalLabel.SetText(fmt.Sprintf("Total recalculado: R$ %.2f",total))}
+  for i,x:=range editable{i:=i;x:=x;descEntries[i]=widget.NewEntry();descEntries[i].SetText(x.Description);qtyEntries[i]=widget.NewEntry();qtyEntries[i].SetText(fmt.Sprintf("%.3f",x.Quantity));priceEntries[i]=widget.NewEntry();priceEntries[i].SetText(fmt.Sprintf("%.2f",x.UnitPrice));qtyEntries[i].OnChanged=func(string){recalc()};priceEntries[i].OnChanged=func(string){recalc()};itemBox.Add(widget.NewCard(fmt.Sprintf("Item %d",i+1),"Descrição, quantidade e valor unitário",widget.NewForm(widget.NewFormItem("Produto",descEntries[i]),widget.NewFormItem("Quantidade",qtyEntries[i]),widget.NewFormItem("Valor unitário",priceEntries[i]))))}
+  recalc()
+  formContent:=container.NewVBox(widget.NewForm(widget.NewFormItem("Cliente",customer),widget.NewFormItem("Pagamento",payment),widget.NewFormItem("Data",dateEntry)),widget.NewSeparator(),widget.NewLabelWithStyle("Itens vendidos",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),container.NewVScroll(itemBox),totalLabel)
+  d:=dialog.NewCustomConfirm("Editar venda "+r.Number,"Salvar alterações","Cancelar",formContent,func(ok bool){if !ok{return};for i:=range editable{editable[i].Description=descEntries[i].Text;editable[i].Quantity=pf(qtyEntries[i].Text);editable[i].UnitPrice=pf(priceEntries[i].Text)};if er:=store.updateSaleAudited(r.ID,customer.Text,payment.Selected,dateEntry.Text,editable);er!=nil{dialog.ShowError(er,w);return};refresh(search.Text);dialog.ShowInformation("Vendas","Venda atualizada. Itens, valores, data e total foram registrados na auditoria.",w)},w);d.Resize(fyne.NewSize(760,700));d.Show()
+ });editBtn.Importance=widget.HighImportance
+ auditBtn:=widget.NewButton("Histórico de auditoria",func(){
+  if selected<0||selected>=len(rows){dialog.ShowInformation("Vendas","Selecione uma venda primeiro.",w);return};r:=rows[selected];a:=store.salesAuditRows(r.ID);text:="Nenhuma alteração auditada.";if len(a)>0{parts:=[]string{};for _,x:=range a{parts=append(parts,strings.Join(x," • "))};text=strings.Join(parts,"\n")};lab:=widget.NewLabel(text);lab.Wrapping=fyne.TextWrapWord;sc:=container.NewVScroll(lab);sc.SetMinSize(fyne.NewSize(800,500));dialog.ShowCustom("Auditoria da venda "+r.Number,"Fechar",sc,w)
+ })
  deleteBtn:=widget.NewButton("Excluir venda",func(){
   if selected<0||selected>=len(rows){dialog.ShowInformation("Vendas","Selecione uma venda primeiro.",w);return}
   r:=rows[selected]
@@ -79,9 +97,9 @@ func buildSales(store *Store,w fyne.Window) fyne.CanvasObject {
   },w)
  })
  deleteBtn.Importance=widget.DangerImportance
- header:=container.NewBorder(nil,nil,search,container.NewHBox(reload,closeSale,finalizeOpen,deleteBtn))
+ header:=container.NewBorder(nil,nil,search,container.NewHBox(reload,closeSale,editBtn,auditBtn,finalizeOpen,deleteBtn))
  salesPane:=container.NewBorder(header,nil,nil,nil,table)
  detailPane:=container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Itens da venda",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),detail,widget.NewSeparator()),nil,nil,nil,items)
  split:=container.NewVSplit(salesPane,detailPane);split.Offset=.62
- return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Vendas",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Histórico, consulta de itens e exclusão lógica segura"),widget.NewSeparator()),nil,nil,nil,split)
+ return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Vendas",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Histórico, edição completa e auditoria de itens, valores, data e totais"),widget.NewSeparator()),nil,nil,nil,split)
 }
