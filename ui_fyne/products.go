@@ -67,7 +67,8 @@ func buildProducts(s *Store,w fyne.Window)fyne.CanvasObject{
   unit:=widget.NewSelect([]string{"UN","KG","G","L","ML","CX","FD","PCT","LT","DZ"},nil);unit.SetSelected("UN")
   origin:=widget.NewSelect([]string{"","0 - Nacional","1 - Estrangeira, importação direta","2 - Estrangeira, adquirida no mercado interno","3 - Nacional, conteúdo de importação superior a 40%","4 - Nacional, processos produtivos básicos","5 - Nacional, conteúdo de importação até 40%","6 - Estrangeira, importação direta sem similar nacional","7 - Estrangeira, mercado interno sem similar nacional","8 - Nacional, conteúdo de importação superior a 70%"},nil)
   statusSel:=widget.NewSelect([]string{"ATIVO","INATIVO"},nil);statusSel.SetSelected("ATIVO")
-  promo:=widget.NewCheck("Produto em promoção",nil)\n  saleMode:=widget.NewRadioGroup([]string{"Por quantidade","Por peso"},nil);saleMode.Horizontal=true;saleMode.SetSelected("Por quantidade")
+  promo:=widget.NewCheck("Produto em promoção",nil)
+  saleMode:=widget.NewRadioGroup([]string{"Por quantidade","Por peso"},nil);saleMode.Horizontal=true;saleMode.SetSelected("Por quantidade")
   margin:=widget.NewLabel("Margem entre custo e venda: 0,00%");promoPrice:=widget.NewLabel("Valor atualizado da promoção: R$ 0,00")
   calc:=func(){c,p,d:=pf(cost.Text),pf(price.Text),pf(promoDiscount.Text);m:=0.0;if c>0{m=(p-c)/c*100};pp:=p;if promo.Checked{pp=p*(1-d/100)};margin.SetText(fmt.Sprintf("Margem entre custo e venda: %.2f%%",m));promoPrice.SetText(fmt.Sprintf("Valor atualizado da promoção: R$ %.2f",pp))}
   cost.OnChanged=func(string){calc()};price.OnChanged=func(string){calc()};promoDiscount.OnChanged=func(string){calc()};promo.OnChanged=func(bool){calc()}
