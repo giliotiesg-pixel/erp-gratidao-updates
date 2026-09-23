@@ -53,7 +53,7 @@ func buildProducts(s *Store,w fyne.Window)fyne.CanvasObject{
  e:=func(ph string)*widget.Entry{x:=widget.NewEntry();x.SetPlaceHolder(ph);return x}
  search:=e("Digite produto, código, marca ou categoria")
  filter:=widget.NewSelect([]string{"TODOS","ATIVOS","INATIVOS","SEM ESTOQUE","ESTOQUE BAIXO"},nil);filter.SetSelected("TODOS")
- rows:=s.product211Rows("","TODOS")
+ rows:=s.product211Rows("","TODOS");selectedRow:=-1
  table:=widget.NewTable(func()(int,int){return len(rows)+1,11},func()fyne.CanvasObject{return widget.NewLabel("")},func(id widget.TableCellID,o fyne.CanvasObject){l:=o.(*widget.Label);heads:=[]string{"Código","Código de barras","Produto","Marca","Categoria","Custo","Venda","Estoque","Estoque mínimo","Validade","Situação"};if id.Row==0{l.SetText(heads[id.Col]);l.TextStyle=fyne.TextStyle{Bold:true};return};l.TextStyle=fyne.TextStyle{};l.SetText(rows[id.Row-1][id.Col])})
  widths:=[]float32{80,135,280,120,120,85,85,85,100,105,90};for i,v:=range widths{table.SetColumnWidth(i,v)}
  refresh:=func(){rows=s.product211Rows(search.Text,filter.Selected);table.Refresh()};search.OnChanged=func(string){refresh()};filter.OnChanged=func(string){refresh()}
