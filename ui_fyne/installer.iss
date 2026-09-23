@@ -28,7 +28,8 @@ Name: "{app}\data"; Permissions: users-modify
 Name: "{app}\backup"; Permissions: users-modify
 Name: "{app}\logs"; Permissions: users-modify
 
-[Icons]\n; Os atalhos usam o ícone incorporado no executável Armazém Gratidão PRO.
+[Icons]
+; Os atalhos usam o ícone incorporado no executável Armazém Gratidão PRO.
 Name: "{group}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\ERP Gratidão"; Filename: "{app}\ERP_Gratidao.exe"; WorkingDir: "{app}"
 
