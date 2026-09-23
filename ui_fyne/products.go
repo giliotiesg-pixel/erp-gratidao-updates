@@ -90,3 +90,5 @@ func buildProducts(s *Store,w fyne.Window)fyne.CanvasObject{
  return container.NewBorder(header,nil,nil,nil,table)
 }
 
+
+// build-trigger: valida correcao quantidade-peso
