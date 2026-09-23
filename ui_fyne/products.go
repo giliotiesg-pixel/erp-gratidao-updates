@@ -83,8 +83,8 @@ func buildProducts(s *Store,w fyne.Window)fyne.CanvasObject{
   d=dialog.NewCustom(title,"Fechar",container.NewBorder(nil,actions,nil,nil,body),w);d.Resize(fyne.NewSize(920,720));d.Show()
  }
  newBtn:=widget.NewButton("Cadastro / Edição",func(){openForm(nil)});newBtn.Importance=widget.HighImportance
- editBtn:=widget.NewButton("Editar produto selecionado",func(){id:=table.Selected();if id.Row<=0||id.Row>len(rows){dialog.ShowInformation("Produtos","Selecione um produto na lista.",w);return};r:=rows[id.Row-1];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er!=nil{dialog.ShowError(er,w);return};openForm(&p)})
- table.OnDoubleTapped=func(id widget.TableCellID){if id.Row<=0||id.Row>len(rows){return};r:=rows[id.Row-1];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er==nil{openForm(&p)}}
+ editBtn:=widget.NewButton("Editar produto selecionado",func(){if selectedRow<0||selectedRow>=len(rows){dialog.ShowInformation("Produtos","Selecione um produto na lista.",w);return};r:=rows[selectedRow];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er!=nil{dialog.ShowError(er,w);return};openForm(&p)})
+ table.OnSelected=func(id widget.TableCellID){if id.Row<=0||id.Row>len(rows){selectedRow=-1;return};selectedRow=id.Row-1}
  clearSearch:=widget.NewButton("Limpar",func(){search.SetText("");filter.SetSelected("TODOS");refresh()})
  header:=container.NewVBox(widget.NewLabelWithStyle("Produtos cadastrados",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Consulta de produtos • cadastro e edição abrem em formulário separado, conforme Armazém Gratidão 2.1.1"),container.NewBorder(nil,nil,search,container.NewHBox(filter,clearSearch,newBtn,editBtn)))
  return container.NewBorder(header,nil,nil,nil,table)
