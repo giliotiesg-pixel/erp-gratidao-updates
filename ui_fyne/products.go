@@ -49,32 +49,44 @@ func (s *Store) saveProduct211(p productFull,icms,pis,cofins float64)error{
 }
 
 func buildProducts(s *Store,w fyne.Window)fyne.CanvasObject{
- _=s.ensureProduct211Fields();var editID int64
+ _=s.ensureProduct211Fields()
  e:=func(ph string)*widget.Entry{x:=widget.NewEntry();x.SetPlaceHolder(ph);return x}
- internal,barcode,name,brand,category:=e("Código interno"),e("Código de barras"),e("Nome / descrição"),e("Marca"),e("Categoria")
- cost,price,stock,minStock,expiration:=e("0,00"),e("0,00"),e("0"),e("0"),e("AAAA-MM-DD")
- promoDiscount,photo,ncm,cest,cfop,cst:=e("0,00"),e("URL da foto"),e("NCM"),e("CEST"),e("CFOP"),e("CST / CSOSN")
- icms,pis,cofins,gtin,tribUnit,cnae:=e("0,00"),e("0,00"),e("0,00"),e("GTIN tributável"),e("Unidade tributável"),e("CNAE")
- unit:=widget.NewSelect([]string{"UN","KG","G","L","ML","CX","FD","PCT","LT","DZ"},nil);unit.SetSelected("UN")
- origin:=widget.NewSelect([]string{"","0 - Nacional","1 - Estrangeira, importação direta","2 - Estrangeira, mercado interno","3 - Nacional, importação > 40%","4 - Nacional, processo básico","5 - Nacional, importação até 40%","6 - Estrangeira sem similar nacional","7 - Estrangeira mercado interno sem similar","8 - Nacional, importação > 70%"},nil)
- statusSel:=widget.NewSelect([]string{"ATIVO","INATIVO"},nil);statusSel.SetSelected("ATIVO")
- promo:=widget.NewCheck("Produto em promoção",nil);weight:=widget.NewCheck("Produto vendido por peso",nil)
- margin:=widget.NewLabel("Margem: 0,00%");promoPrice:=widget.NewLabel("Preço atual: R$ 0,00")
- calc:=func(){c,p,d:=pf(cost.Text),pf(price.Text),pf(promoDiscount.Text);m:=0.0;if c>0{m=(p-c)/c*100};pp:=p;if promo.Checked{pp=p*(1-d/100)};margin.SetText(fmt.Sprintf("Margem entre custo e venda: %.2f%%",m));promoPrice.SetText(fmt.Sprintf("Preço atual: R$ %.2f",pp))}
- cost.OnChanged=func(string){calc()};price.OnChanged=func(string){calc()};promoDiscount.OnChanged=func(string){calc()};promo.OnChanged=func(bool){calc()}
- clear:=func(){editID=0;for _,x:=range []*widget.Entry{internal,barcode,name,brand,category,cost,price,stock,minStock,expiration,promoDiscount,photo,ncm,cest,cfop,cst,icms,pis,cofins,gtin,tribUnit,cnae}{x.SetText("")};unit.SetSelected("UN");origin.SetSelected("");statusSel.SetSelected("ATIVO");promo.SetChecked(false);weight.SetChecked(false);calc()}
- search:=e("Digite produto, código, marca ou categoria");filter:=widget.NewSelect([]string{"TODOS","ATIVOS","INATIVOS","SEM ESTOQUE","ESTOQUE BAIXO"},nil);filter.SetSelected("TODOS")
- rows:=s.product211Rows("","TODOS");table:=widget.NewTable(func()(int,int){return len(rows)+1,11},func()fyne.CanvasObject{return widget.NewLabel("")},func(id widget.TableCellID,o fyne.CanvasObject){l:=o.(*widget.Label);heads:=[]string{"Código","Barras","Produto","Marca","Categoria","Custo","Venda","Estoque","Mínimo","Validade","Situação"};if id.Row==0{l.SetText(heads[id.Col]);l.TextStyle=fyne.TextStyle{Bold:true};return};l.TextStyle=fyne.TextStyle{};l.SetText(rows[id.Row-1][id.Col])})
- widths:=[]float32{80,125,260,120,120,85,85,85,85,105,90};for i,v:=range widths{table.SetColumnWidth(i,v)}
+ search:=e("Digite produto, código, marca ou categoria")
+ filter:=widget.NewSelect([]string{"TODOS","ATIVOS","INATIVOS","SEM ESTOQUE","ESTOQUE BAIXO"},nil);filter.SetSelected("TODOS")
+ rows:=s.product211Rows("","TODOS")
+ table:=widget.NewTable(func()(int,int){return len(rows)+1,11},func()fyne.CanvasObject{return widget.NewLabel("")},func(id widget.TableCellID,o fyne.CanvasObject){l:=o.(*widget.Label);heads:=[]string{"Código","Código de barras","Produto","Marca","Categoria","Custo","Venda","Estoque","Estoque mínimo","Validade","Situação"};if id.Row==0{l.SetText(heads[id.Col]);l.TextStyle=fyne.TextStyle{Bold:true};return};l.TextStyle=fyne.TextStyle{};l.SetText(rows[id.Row-1][id.Col])})
+ widths:=[]float32{80,135,280,120,120,85,85,85,100,105,90};for i,v:=range widths{table.SetColumnWidth(i,v)}
  refresh:=func(){rows=s.product211Rows(search.Text,filter.Selected);table.Refresh()};search.OnChanged=func(string){refresh()};filter.OnChanged=func(string){refresh()}
- table.OnSelected=func(id widget.TableCellID){if id.Row==0{return};r:=rows[id.Row-1];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er!=nil{return};editID=p.ID;internal.SetText(p.InternalCode);barcode.SetText(p.Barcode);name.SetText(p.Description);brand.SetText(p.Brand);category.SetText(p.Category);unit.SetSelected(p.Unit);cost.SetText(fmt.Sprintf("%.2f",p.Cost));price.SetText(fmt.Sprintf("%.2f",p.Price));stock.SetText(fmt.Sprintf("%.3f",p.Stock));minStock.SetText(fmt.Sprintf("%.3f",p.MinStock));expiration.SetText(p.Expiration);statusSel.SetSelected(p.Status);promo.SetChecked(p.Promo);promoDiscount.SetText(fmt.Sprintf("%.2f",p.PromoDiscount));photo.SetText(p.PhotoURL);ncm.SetText(p.NCM);cest.SetText(p.CEST);cfop.SetText(p.CFOP);cst.SetText(p.CST);origin.SetSelected(p.Origin);gtin.SetText(p.GTIN);tribUnit.SetText(p.TribUnit);cnae.SetText(p.CNAE);weight.SetChecked(p.SoldByWeight);calc()}
- save:=widget.NewButton("Salvar / Atualizar",func(){p:=productFull{ID:editID,InternalCode:internal.Text,Barcode:barcode.Text,Description:name.Text,Brand:brand.Text,Category:category.Text,Unit:unit.Selected,Cost:pf(cost.Text),Price:pf(price.Text),Stock:pf(stock.Text),MinStock:pf(minStock.Text),Expiration:expiration.Text,Status:statusSel.Selected,Promo:promo.Checked,PromoDiscount:pf(promoDiscount.Text),PhotoURL:photo.Text,NCM:ncm.Text,CEST:cest.Text,CFOP:cfop.Text,CST:cst.Text,Origin:origin.Selected,GTIN:gtin.Text,TribUnit:tribUnit.Text,CNAE:cnae.Text,SoldByWeight:weight.Checked};if er:=s.saveProduct211(p,pf(icms.Text),pf(pis.Text),pf(cofins.Text));er!=nil{dialog.ShowError(er,w);return};dialog.ShowInformation("Produtos","Produto salvo com todos os campos do cadastro 2.1.1.",w);clear();refresh()});save.Importance=widget.HighImportance
- mainForm:=widget.NewForm(widget.NewFormItem("Código interno",internal),widget.NewFormItem("Código de barras",barcode),widget.NewFormItem("Nome / descrição",name),widget.NewFormItem("Marca",brand),widget.NewFormItem("Categoria",category),widget.NewFormItem("Custo",cost),widget.NewFormItem("Venda normal",price),widget.NewFormItem("Estoque",stock),widget.NewFormItem("Estoque mínimo",minStock),widget.NewFormItem("Validade",expiration),widget.NewFormItem("Unidade",unit),widget.NewFormItem("Status",statusSel))
- fiscal:=widget.NewForm(widget.NewFormItem("Foto (URL)",photo),widget.NewFormItem("NCM",ncm),widget.NewFormItem("CEST",cest),widget.NewFormItem("CFOP",cfop),widget.NewFormItem("CST / CSOSN",cst),widget.NewFormItem("Origem",origin),widget.NewFormItem("ICMS %",icms),widget.NewFormItem("PIS %",pis),widget.NewFormItem("COFINS %",cofins),widget.NewFormItem("GTIN tributável",gtin),widget.NewFormItem("Unidade tributável",tribUnit),widget.NewFormItem("CNAE",cnae))
- promoBox:=container.NewVBox(promo,widget.NewForm(widget.NewFormItem("Desconto promoção %",promoDiscount)),promoPrice,margin,weight)
- tabs:=container.NewAppTabs(container.NewTabItem("Cadastro",container.NewVScroll(container.NewVBox(mainForm,promoBox))),container.NewTabItem("Fiscal / Complementar",container.NewVScroll(fiscal)))
- actions:=container.NewGridWithColumns(3,widget.NewButton("Novo / Limpar",clear),save,widget.NewButton("Atualizar consulta",refresh))
- left:=container.NewBorder(nil,actions,nil,nil,tabs)
- top:=container.NewBorder(nil,nil,search,filter)
- return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Produtos",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Cadastro e consulta baseados no Armazém Gratidão PDV 2.1.1"),top),nil,left,nil,table)
+
+ openForm:=func(existing *productFull){
+  var editID int64
+  internal,barcode,name,brand,category:=e("Código interno"),e("Código de barras"),e("Nome / descrição do produto"),e("Marca"),e("Categoria")
+  cost,price,stock,minStock,expiration:=e("0,00"),e("0,00"),e("0"),e("0"),e("AAAA-MM-DD")
+  promoDiscount,photo,ncm,cest,cfop,cst:=e("0,00"),e("URL da foto"),e("NCM"),e("CEST"),e("CFOP"),e("CST / CSOSN")
+  icms,pis,cofins,gtin,tribUnit,cnae:=e("0,00"),e("0,00"),e("0,00"),e("GTIN tributável"),e("Unidade tributável"),e("CNAE")
+  unit:=widget.NewSelect([]string{"UN","KG","G","L","ML","CX","FD","PCT","LT","DZ"},nil);unit.SetSelected("UN")
+  origin:=widget.NewSelect([]string{"","0 - Nacional","1 - Estrangeira, importação direta","2 - Estrangeira, adquirida no mercado interno","3 - Nacional, conteúdo de importação superior a 40%","4 - Nacional, processos produtivos básicos","5 - Nacional, conteúdo de importação até 40%","6 - Estrangeira, importação direta sem similar nacional","7 - Estrangeira, mercado interno sem similar nacional","8 - Nacional, conteúdo de importação superior a 70%"},nil)
+  statusSel:=widget.NewSelect([]string{"ATIVO","INATIVO"},nil);statusSel.SetSelected("ATIVO")
+  promo:=widget.NewCheck("Produto em promoção",nil);weight:=widget.NewCheck("Produto vendido por peso",nil)
+  margin:=widget.NewLabel("Margem entre custo e venda: 0,00%");promoPrice:=widget.NewLabel("Valor atualizado da promoção: R$ 0,00")
+  calc:=func(){c,p,d:=pf(cost.Text),pf(price.Text),pf(promoDiscount.Text);m:=0.0;if c>0{m=(p-c)/c*100};pp:=p;if promo.Checked{pp=p*(1-d/100)};margin.SetText(fmt.Sprintf("Margem entre custo e venda: %.2f%%",m));promoPrice.SetText(fmt.Sprintf("Valor atualizado da promoção: R$ %.2f",pp))}
+  cost.OnChanged=func(string){calc()};price.OnChanged=func(string){calc()};promoDiscount.OnChanged=func(string){calc()};promo.OnChanged=func(bool){calc()}
+  if existing!=nil{p:=*existing;editID=p.ID;internal.SetText(p.InternalCode);barcode.SetText(p.Barcode);name.SetText(p.Description);brand.SetText(p.Brand);category.SetText(p.Category);unit.SetSelected(p.Unit);cost.SetText(fmt.Sprintf("%.2f",p.Cost));price.SetText(fmt.Sprintf("%.2f",p.Price));stock.SetText(fmt.Sprintf("%.3f",p.Stock));minStock.SetText(fmt.Sprintf("%.3f",p.MinStock));expiration.SetText(p.Expiration);statusSel.SetSelected(p.Status);promo.SetChecked(p.Promo);promoDiscount.SetText(fmt.Sprintf("%.2f",p.PromoDiscount));photo.SetText(p.PhotoURL);ncm.SetText(p.NCM);cest.SetText(p.CEST);cfop.SetText(p.CFOP);cst.SetText(p.CST);origin.SetSelected(p.Origin);gtin.SetText(p.GTIN);tribUnit.SetText(p.TribUnit);cnae.SetText(p.CNAE);weight.SetChecked(p.SoldByWeight)}
+  mainForm:=widget.NewForm(widget.NewFormItem("Versão do layout",widget.NewLabel("AG-PRODUTOS-1.0")),widget.NewFormItem("Código interno",internal),widget.NewFormItem("Código de barras",barcode),widget.NewFormItem("Nome / descrição do produto",name),widget.NewFormItem("Marca",brand),widget.NewFormItem("Categoria",category),widget.NewFormItem("Preço de custo (R$)",cost),widget.NewFormItem("Preço de venda normal (R$)",price),widget.NewFormItem("Quantidade em estoque",stock),widget.NewFormItem("Estoque mínimo",minStock),widget.NewFormItem("Status do produto",statusSel),widget.NewFormItem("Data de validade",expiration),widget.NewFormItem("Unidade de venda",unit))
+  fiscal:=widget.NewForm(widget.NewFormItem("Foto do produto (URL)",photo),widget.NewFormItem("NCM",ncm),widget.NewFormItem("CEST",cest),widget.NewFormItem("CFOP",cfop),widget.NewFormItem("CST / CSOSN",cst),widget.NewFormItem("Origem da mercadoria",origin),widget.NewFormItem("ICMS (%)",icms),widget.NewFormItem("PIS (%)",pis),widget.NewFormItem("COFINS (%)",cofins),widget.NewFormItem("GTIN tributável",gtin),widget.NewFormItem("Unidade tributável",tribUnit),widget.NewFormItem("CNAE",cnae))
+  promoBox:=container.NewVBox(promo,widget.NewForm(widget.NewFormItem("Desconto da promoção (%)",promoDiscount)),promoPrice,margin,weight)
+  body:=container.NewAppTabs(container.NewTabItem("Cadastro",container.NewVScroll(container.NewVBox(mainForm,promoBox))),container.NewTabItem("Dados fiscais e complementares",container.NewVScroll(fiscal)))
+  var d dialog.Dialog
+  save:=widget.NewButton("Salvar",func(){p:=productFull{ID:editID,InternalCode:internal.Text,Barcode:barcode.Text,Description:name.Text,Brand:brand.Text,Category:category.Text,Unit:unit.Selected,Cost:pf(cost.Text),Price:pf(price.Text),Stock:pf(stock.Text),MinStock:pf(minStock.Text),Expiration:expiration.Text,Status:statusSel.Selected,Promo:promo.Checked,PromoDiscount:pf(promoDiscount.Text),PhotoURL:photo.Text,NCM:ncm.Text,CEST:cest.Text,CFOP:cfop.Text,CST:cst.Text,Origin:origin.Selected,GTIN:gtin.Text,TribUnit:tribUnit.Text,CNAE:cnae.Text,SoldByWeight:weight.Checked};if er:=s.saveProduct211(p,pf(icms.Text),pf(pis.Text),pf(cofins.Text));er!=nil{dialog.ShowError(er,w);return};refresh();d.Hide();dialog.ShowInformation("Produtos","Produto salvo.",w)});save.Importance=widget.HighImportance
+  actions:=container.NewGridWithColumns(2,save,widget.NewButton("Cancelar",func(){d.Hide()}))
+  title:="Cadastro de produto";if existing!=nil{title="Cadastro / edição de produto"}
+  d=dialog.NewCustom(title,"Fechar",container.NewBorder(nil,actions,nil,nil,body),w);d.Resize(fyne.NewSize(920,720));d.Show()
+ }
+ newBtn:=widget.NewButton("Cadastro / Edição",func(){openForm(nil)});newBtn.Importance=widget.HighImportance
+ editBtn:=widget.NewButton("Editar produto selecionado",func(){id:=table.Selected();if id.Row<=0||id.Row>len(rows){dialog.ShowInformation("Produtos","Selecione um produto na lista.",w);return};r:=rows[id.Row-1];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er!=nil{dialog.ShowError(er,w);return};openForm(&p)})
+ table.OnDoubleTapped=func(id widget.TableCellID){if id.Row<=0||id.Row>len(rows){return};r:=rows[id.Row-1];p,er:=s.loadProduct211(r[1],r[0],r[2]);if er==nil{openForm(&p)}}
+ clearSearch:=widget.NewButton("Limpar",func(){search.SetText("");filter.SetSelected("TODOS");refresh()})
+ header:=container.NewVBox(widget.NewLabelWithStyle("Produtos cadastrados",fyne.TextAlignLeading,fyne.TextStyle{Bold:true}),widget.NewLabel("Consulta de produtos • cadastro e edição abrem em formulário separado, conforme Armazém Gratidão 2.1.1"),container.NewBorder(nil,nil,search,container.NewHBox(filter,clearSearch,newBtn,editBtn)))
+ return container.NewBorder(header,nil,nil,nil,table)
 }
+
