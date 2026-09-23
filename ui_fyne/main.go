@@ -18,7 +18,6 @@ func (gratitudeTheme) Color(n fyne.ThemeColorName,v fyne.ThemeVariant) color.Col
  case theme.ColorNamePrimary: return color.NRGBA{R:18,G:76,B:170,A:255}
  case theme.ColorNameError: return color.NRGBA{R:210,G:35,B:42,A:255}
  case theme.ColorNameSelection: return color.NRGBA{R:18,G:76,B:170,A:70}
- case theme.ColorNameForeground: return color.NRGBA{R:0,G:0,B:0,A:255}
  }
  return theme.DefaultTheme().Color(n,v)
 }
