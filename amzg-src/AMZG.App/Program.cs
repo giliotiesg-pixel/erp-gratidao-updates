@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using AMZG.Core;
 namespace AMZG.App;
 internal static class Program { [STAThread] static void Main(){ApplicationConfiguration.Initialize();Application.Run(new MainForm());} }
 public sealed class MainForm:Form{
@@ -12,14 +13,34 @@ public sealed class MainForm:Form{
   Text="AMZ.G — Migração v2.1.9";WindowState=FormWindowState.Maximized;MinimumSize=new Size(1100,700);
   header.Controls.Add(new Label{Text="ARMAZÉM GRATIDÃO",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold)});
   header.Controls.Add(toggle);toggle.BringToFront();toggle.Click+=(_,_)=>{menuOpen=!menuOpen;menu.Visible=menuOpen;};
-  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();
+  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();Shown+=async (_,_)=>await CheckUpdateAsync(false);
  }
  void BuildMenu(){
   var f=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10,14,10,14)};
   foreach(var name in new[]{"Início","PDV","Vendas","Caixa","Produtos","Estoque","Validade","Compras","Fiscal","Clientes / Fornecedores","Empresa","Fiado","Contas","Lucro","Relatórios","Ofertas","Cofre Digital","Configurações"}){
    var b=new RoundedButton{Radius=12,Text=name,Width=210,Height=34,Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,BackColor=name=="Início"?Color.FromArgb(15,61,102):Color.White,ForeColor=name=="Início"?Color.White:Color.FromArgb(32,33,36),Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
-   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();f.Controls.Add(b);
+   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();if(name=="Configurações")b.Click+=(_,_)=>OpenSettings();f.Controls.Add(b);
   } menu.Controls.Add(f);
+ }
+ void OpenSettings(){
+  body.Controls.Clear();var p=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(24),BackColor=Color.FromArgb(244,246,248)};
+  p.Controls.Add(new Label{Text="Configurações",AutoSize=true,Font=new Font("Segoe UI",19,FontStyle.Bold),Margin=new Padding(0,0,0,14)});
+  p.Controls.Add(new Label{Text="Atualizações do sistema",AutoSize=true,Font=new Font("Segoe UI",12,FontStyle.Bold),Margin=new Padding(0,0,0,8)});
+  p.Controls.Add(new Label{Text="Versão instalada: "+AutomaticUpdater.CurrentVersion,AutoSize=true,ForeColor=Color.FromArgb(66,91,114),Margin=new Padding(0,0,0,10)});
+  var b=new RoundedButton{Radius=12,Text="Verificar atualização",AutoSize=true,Height=34,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,61,102)};
+  b.Click+=async (_,_)=>await CheckUpdateAsync(true);p.Controls.Add(b);body.Controls.Add(p);
+ }
+ async Task CheckUpdateAsync(bool manual){
+  try{
+   var m=await AutomaticUpdater.CheckAsync();
+   if(m is null){if(manual)MessageBox.Show("O AMZ.G já está atualizado.","Atualizações",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+   var answer=MessageBox.Show($"Nova atualização disponível: v{m.Version}\n\n{m.Notes}\n\nDeseja baixar e instalar agora?","Atualização disponível",MessageBoxButtons.YesNo,MessageBoxIcon.Information);
+   if(answer!=DialogResult.Yes)return;
+   using var dlg=new Form{Text="Atualizando AMZ.G",Width=460,Height=150,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,ControlBox=false};
+   var label=new Label{Text="Baixando e validando atualização...",Dock=DockStyle.Top,Height=45,Padding=new Padding(15,15,0,0)};
+   var bar=new ProgressBar{Dock=DockStyle.Top,Height=24,Margin=new Padding(15)};dlg.Controls.Add(bar);dlg.Controls.Add(label);
+   var progress=new Progress<int>(x=>bar.Value=Math.Clamp(x,0,100));dlg.Shown+=async (_,_)=>{try{var file=await AutomaticUpdater.DownloadAndValidateAsync(m,progress);label.Text="Backup concluído. Instalando atualização...";await Task.Delay(500);AutomaticUpdater.ApplyAndRestart(file);}catch(Exception ex){dlg.Close();MessageBox.Show("Não foi possível instalar a atualização.\n\n"+ex.Message,"Falha na atualização",MessageBoxButtons.OK,MessageBoxIcon.Error);}};dlg.ShowDialog(this);
+  }catch(Exception ex){if(manual)MessageBox.Show("Não foi possível verificar atualizações.\n\n"+ex.Message,"Atualizações",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
  }
  RoundedPanel Card(){return new RoundedPanel{Radius=16,Dock=DockStyle.Fill,BackColor=Color.White,Padding=new Padding(1)};}
  void OpenInicio(){
