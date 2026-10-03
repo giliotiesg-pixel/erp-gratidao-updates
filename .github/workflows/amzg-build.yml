@@ -1,0 +1,28 @@
+name: AMZG Windows Build
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'amzg-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+      - name: Build AMZG
+        shell: cmd
+        run: GERAR-AMZG-CI.bat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AMZG-Setup
+          path: installer/Output/AMZG-Setup.exe
