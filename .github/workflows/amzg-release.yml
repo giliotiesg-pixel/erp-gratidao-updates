@@ -29,6 +29,8 @@ jobs:
           dotnet publish AMZG.Maintenance/AMZG.Maintenance.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o maintenance-publish
           Copy-Item maintenance-publish/AMZG.Maintenance.exe publish/AMZG.Maintenance.exe -Force
           if (Get-ChildItem publish -Recurse -Include *.db,*.sqlite,*.sqlite3) { throw 'Banco encontrado no pacote. Publicação bloqueada.' }
+          if (!(Test-Path publish/AMZG.exe)) { throw 'AMZG.exe ausente.' }
+          if (!(Test-Path publish/AMZG.Maintenance.exe)) { throw 'AMZG.Maintenance.exe ausente.' }
       - name: Build installer
         shell: powershell
         run: |
@@ -64,5 +66,9 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add amzg-manifest.json
-          git commit -m "AMZG: activate update $v" || exit 0
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host 'Manifesto já está atualizado.'; exit 0 }
+          git commit -m "AMZG: activate update $v"
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar commit do manifesto.' }
           git push
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar manifesto.' }
