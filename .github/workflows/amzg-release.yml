@@ -76,5 +76,26 @@ jobs:
           if ($LASTEXITCODE -eq 0) { Write-Host 'Manifesto já está atualizado.'; exit 0 }
           git commit -m "AMZG: activate update $v"
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar commit do manifesto.' }
-          git push
-          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar manifesto.' }
+
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar referência remota.' }
+
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) {
+            git rebase --abort
+            throw 'Conflito ao integrar alterações remotas antes de publicar o manifesto.'
+          }
+
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) {
+            Start-Sleep -Seconds 2
+            git fetch origin main
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar referência remota na segunda tentativa.' }
+            git rebase origin/main
+            if ($LASTEXITCODE -ne 0) {
+              git rebase --abort
+              throw 'Conflito na segunda tentativa de publicar o manifesto.'
+            }
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar manifesto após nova tentativa.' }
+          }
