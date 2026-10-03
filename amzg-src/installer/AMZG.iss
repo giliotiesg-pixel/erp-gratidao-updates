@@ -1,5 +1,5 @@
 #define MyAppName "AMZ.G"
-#define MyAppVersion "0.8.1"
+#define MyAppVersion "0.8.2"
 #define MyAppExeName "AMZG.exe"
 [Setup]
 AppId={{7A32C3E9-35DF-4A1B-A5E2-9A13DAF1A710}
