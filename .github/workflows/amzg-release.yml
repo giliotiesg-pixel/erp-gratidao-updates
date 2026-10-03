@@ -1,0 +1,68 @@
+name: AMZG Windows Release
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'amzg-src/**'
+permissions:
+  contents: write
+jobs:
+  build-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: amzg-src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+      - name: Restore and publish
+        shell: powershell
+        run: |
+          dotnet restore AMZG.App/AMZG.App.csproj
+          dotnet restore AMZG.Maintenance/AMZG.Maintenance.csproj
+          dotnet publish AMZG.App/AMZG.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+          dotnet publish AMZG.Maintenance/AMZG.Maintenance.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o maintenance-publish
+          Copy-Item maintenance-publish/AMZG.Maintenance.exe publish/AMZG.Maintenance.exe -Force
+          if (Get-ChildItem publish -Recurse -Include *.db,*.sqlite,*.sqlite3) { throw 'Banco encontrado no pacote. Publicação bloqueada.' }
+      - name: Build installer
+        shell: powershell
+        run: |
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/AMZG.iss
+      - name: Read version and SHA
+        id: meta
+        shell: powershell
+        run: |
+          $cs = Get-Content AMZG.Core/AutomaticUpdater.cs -Raw
+          $v = [regex]::Match($cs, 'CurrentVersion="([^"]+)"').Groups[1].Value
+          if (-not $v) { throw 'Versão não encontrada.' }
+          $exe = 'installer/Output/AMZG-Setup.exe'
+          if (!(Test-Path $exe)) { throw 'AMZG-Setup.exe não foi gerado.' }
+          $sha=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: amzg-v${{ steps.meta.outputs.version }}
+          name: AMZ.G v${{ steps.meta.outputs.version }}
+          files: amzg-src/installer/Output/AMZG-Setup.exe
+          generate_release_notes: true
+      - name: Activate update manifest
+        shell: powershell
+        working-directory: .
+        run: |
+          $v='${{ steps.meta.outputs.version }}'
+          $sha='${{ steps.meta.outputs.sha }}'
+          $url="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v$v/AMZG-Setup.exe"
+          $m=[ordered]@{Version=$v;PackageUrl=$url;Sha256=$sha;Mandatory=$false;Modules=@('AMZ.G');Notes="Atualização automática AMZ.G v$v"}
+          $m | ConvertTo-Json -Depth 5 | Set-Content amzg-manifest.json -Encoding utf8
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add amzg-manifest.json
+          git commit -m "AMZG: activate update $v" || exit 0
+          git push
