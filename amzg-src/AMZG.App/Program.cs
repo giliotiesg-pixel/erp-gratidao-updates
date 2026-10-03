@@ -1,0 +1,43 @@
+using System.Drawing;
+namespace AMZG.App;
+internal static class Program { [STAThread] static void Main(){ApplicationConfiguration.Initialize();Application.Run(new MainForm());} }
+public sealed class MainForm:Form{
+ readonly Panel menu=new(){Width=250,Dock=DockStyle.Left,BackColor=Color.White,AutoScroll=true};
+ readonly Panel body=new(){Dock=DockStyle.Fill,BackColor=Color.FromArgb(244,246,248)};
+ readonly Panel header=new(){Height=54,Dock=DockStyle.Top,BackColor=Color.FromArgb(15,61,102)};
+ readonly Button toggle=new(){Text="☰",Width=52,Dock=DockStyle.Left,FlatStyle=FlatStyle.Flat,ForeColor=Color.White,BackColor=Color.FromArgb(15,61,102),Font=new Font("Segoe UI",14,FontStyle.Bold)};
+ bool menuOpen=true;
+ public MainForm(){
+  Text="AMZ.G — Migração v2.1.9";WindowState=FormWindowState.Maximized;MinimumSize=new Size(1100,700);
+  header.Controls.Add(new Label{Text="ARMAZÉM GRATIDÃO",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold)});
+  header.Controls.Add(toggle);toggle.BringToFront();toggle.Click+=(_,_)=>{menuOpen=!menuOpen;menu.Visible=menuOpen;};
+  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();
+ }
+ void BuildMenu(){
+  var f=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10,14,10,14)};
+  foreach(var name in new[]{"Início","PDV","Vendas","Caixa","Produtos","Estoque","Validade","Compras","Fiscal","Clientes / Fornecedores","Empresa","Fiado","Contas","Lucro","Relatórios","Ofertas","Cofre Digital","Configurações"}){
+   var b=new Button{Text=name,Width=210,Height=36,Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,BackColor=name=="Início"?Color.FromArgb(15,61,102):Color.White,ForeColor=name=="Início"?Color.White:Color.FromArgb(32,33,36),Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
+   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();f.Controls.Add(b);
+  } menu.Controls.Add(f);
+ }
+ Panel Card(){return new Panel{Dock=DockStyle.Fill,BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};}
+ void OpenInicio(){
+  body.Controls.Clear();
+  var scroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(18),BackColor=Color.FromArgb(244,246,248)};
+  var page=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,ColumnCount=1};page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+  var h=new Panel{Height=74};h.Controls.Add(new Label{Text="Faturamento",Dock=DockStyle.Top,Height=38,Font=new Font("Segoe UI",19,FontStyle.Bold)});h.Controls.Add(new Label{Text="Resumo das vendas e dos valores faturados.",Dock=DockStyle.Bottom,Height=28,ForeColor=Color.FromArgb(66,91,114),Font=new Font("Segoe UI",10)});page.Controls.Add(h);
+  var cards=new TableLayoutPanel{Height=110,ColumnCount=4,Dock=DockStyle.Top,Margin=new Padding(0,0,0,18)};for(int i=0;i<4;i++)cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+  string[] labs={"Faturamento hoje","Vendas hoje","Lucro hoje","Faturamento do mês"}, vals={"R$ 0,00","0","R$ 0,00","R$ 0,00"};
+  for(int i=0;i<4;i++){var c=Card();c.Margin=new Padding(i==0?0:7,0,i==3?0:7,0);c.Controls.Add(new Label{Text=vals[i],Dock=DockStyle.Fill,Padding=new Padding(16,20,0,0),Font=new Font("Segoe UI",18,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)});c.Controls.Add(new Label{Text=labs[i],Dock=DockStyle.Top,Height=32,Padding=new Padding(16,10,0,0),ForeColor=Color.FromArgb(100,116,139)});cards.Controls.Add(c,i,0);}page.Controls.Add(cards);
+  var two=new TableLayoutPanel{Height=315,ColumnCount=2,Dock=DockStyle.Top,Margin=new Padding(0,0,0,16)};two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,66.7f));two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.3f));
+  two.Controls.Add(TableCard("Produtos mais vendidos hoje",new[]{"Produto","Quantidade","Total"},new[]{"Atualizar produtos mais vendidos"}),0,0);
+  two.Controls.Add(TableCard("Produtos mais vendidos do mês",new[]{"Produto","Qtd. vendida","Vendas","Total"},new[]{"Atualizar","Histórico dos meses anteriores"}),1,0);page.Controls.Add(two);
+  var recent=TableCard("Vendas recentes",new[]{"Data","Cliente","Pagamento","Total"},Array.Empty<string>());recent.Height=280;page.Controls.Add(recent);
+  scroll.Controls.Add(page);body.Controls.Add(scroll);
+ }
+ Panel TableCard(string title,string[] cols,string[] actions){
+  var c=Card();c.Margin=new Padding(0,0,8,0);var head=new Panel{Dock=DockStyle.Top,Height=54,Padding=new Padding(10,7,10,5)};head.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",11,FontStyle.Bold)});
+  if(actions.Length>0){var f=new FlowLayoutPanel{Dock=DockStyle.Right,AutoSize=true,WrapContents=false};foreach(var a in actions)f.Controls.Add(new Button{Text=a,AutoSize=true,Height=30,Margin=new Padding(4,0,0,0)});head.Controls.Add(f);f.BringToFront();}
+  var g=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White,BorderStyle=BorderStyle.None};foreach(var x in cols)g.Columns.Add("c"+g.Columns.Count,x);c.Controls.Add(g);c.Controls.Add(head);return c;
+ }
+}
