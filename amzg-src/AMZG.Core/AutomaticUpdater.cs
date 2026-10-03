@@ -1,0 +1,1 @@
+namespace AMZG.Core; public static class AutomaticUpdater { public const string CurrentVersion="0.8.0"; }
