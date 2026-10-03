@@ -1,0 +1,10 @@
+{
+  "Version": "0.6.2",
+  "PackageUrl": "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/latest/download/AMZG-Setup.exe",
+  "Sha256": "PENDING_WINDOWS_BUILD",
+  "Mandatory": false,
+  "Modules": [
+    "AMZ.G"
+  ],
+  "Notes": "Canal AMZ.G preparado. A publicação só deve ser ativada após gerar AMZG-Setup.exe e substituir este SHA pelo hash real."
+}
