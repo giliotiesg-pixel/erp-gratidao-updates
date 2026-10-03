@@ -13,14 +13,27 @@ public sealed class MainForm:Form{
   Text="AMZ.G — Migração v2.1.9";WindowState=FormWindowState.Maximized;MinimumSize=new Size(1100,700);
   header.Controls.Add(new Label{Text="ARMAZÉM GRATIDÃO",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold)});
   header.Controls.Add(toggle);toggle.BringToFront();toggle.Click+=(_,_)=>{menuOpen=!menuOpen;menu.Visible=menuOpen;};
-  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();Shown+=async (_,_)=>await CheckUpdateAsync(false);
+  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();ApplyBoldStyle(this);Shown+=async (_,_)=>await CheckUpdateAsync(false);
  }
  void BuildMenu(){
   var f=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10,14,10,14)};
   foreach(var name in new[]{"Início","PDV","Vendas","Caixa","Produtos","Estoque","Validade","Compras","Fiscal","Clientes / Fornecedores","Empresa","Fiado","Contas","Lucro","Relatórios","Ofertas","Cofre Digital","Configurações"}){
    var b=new RoundedButton{Radius=12,Text=name,Width=210,Height=34,Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,BackColor=name=="Início"?Color.FromArgb(15,61,102):Color.White,ForeColor=name=="Início"?Color.White:Color.FromArgb(32,33,36),Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
-   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();if(name=="Configurações")b.Click+=(_,_)=>OpenSettings();f.Controls.Add(b);
+   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();if(name=="PDV")b.Click+=(_,_)=>OpenPdv();if(name=="Configurações")b.Click+=(_,_)=>OpenSettings();f.Controls.Add(b);
   } menu.Controls.Add(f);
+ }
+ void OpenPdv(){
+  body.Controls.Clear();
+  var p=new Panel{Dock=DockStyle.Fill,Padding=new Padding(24),BackColor=Color.FromArgb(244,246,248)};
+  var title=new Label{Text="PDV",Dock=DockStyle.Top,Height=48,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)};
+  var info=new Label{Text="Ponto de Venda",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(66,91,114)};
+  p.Controls.Add(info);p.Controls.Add(title);body.Controls.Add(p);ApplyBoldStyle(p);
+ }
+ void ApplyBoldStyle(Control root){
+  foreach(Control x in root.Controls){
+   if(x is Button || x is Label && (x.Font.Size>=11 || x.Dock==DockStyle.Top))x.Font=new Font(x.Font,x.Font.Style|FontStyle.Bold);
+   if(x.HasChildren)ApplyBoldStyle(x);
+  }
  }
  void OpenSettings(){
   body.Controls.Clear();var p=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(24),BackColor=Color.FromArgb(244,246,248)};
@@ -28,7 +41,7 @@ public sealed class MainForm:Form{
   p.Controls.Add(new Label{Text="Atualizações do sistema",AutoSize=true,Font=new Font("Segoe UI",12,FontStyle.Bold),Margin=new Padding(0,0,0,8)});
   p.Controls.Add(new Label{Text="Versão instalada: "+AutomaticUpdater.CurrentVersion,AutoSize=true,ForeColor=Color.FromArgb(66,91,114),Margin=new Padding(0,0,0,10)});
   var b=new RoundedButton{Radius=12,Text="Verificar atualização",AutoSize=true,Height=34,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,61,102)};
-  b.Click+=async (_,_)=>await CheckUpdateAsync(true);p.Controls.Add(b);body.Controls.Add(p);
+  b.Click+=async (_,_)=>await CheckUpdateAsync(true);p.Controls.Add(b);body.Controls.Add(p);ApplyBoldStyle(p);
  }
  async Task CheckUpdateAsync(bool manual){
   try{
@@ -47,7 +60,10 @@ public sealed class MainForm:Form{
   body.Controls.Clear();
   var scroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(18),BackColor=Color.FromArgb(244,246,248)};
   var page=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,ColumnCount=1};page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-  var h=new Panel{Height=74};h.Controls.Add(new Label{Text="Faturamento",Dock=DockStyle.Top,Height=38,Font=new Font("Segoe UI",19,FontStyle.Bold)});h.Controls.Add(new Label{Text="Resumo das vendas e dos valores faturados.",Dock=DockStyle.Bottom,Height=28,ForeColor=Color.FromArgb(66,91,114),Font=new Font("Segoe UI",10)});page.Controls.Add(h);
+  var h=new Panel{Height=74};
+  var venda=new RoundedButton{Radius=13,Text="VENDA - IR AO PDV",Dock=DockStyle.Right,Width=190,Height=38,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(15,61,102),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+  venda.Click+=(_,_)=>OpenPdv();h.Controls.Add(venda);
+  h.Controls.Add(new Label{Text="Faturamento",Dock=DockStyle.Top,Height=38,Font=new Font("Segoe UI",19,FontStyle.Bold)});h.Controls.Add(new Label{Text="Resumo das vendas e dos valores faturados.",Dock=DockStyle.Bottom,Height=28,ForeColor=Color.FromArgb(66,91,114),Font=new Font("Segoe UI",10)});page.Controls.Add(h);
   var cards=new TableLayoutPanel{Height=92,ColumnCount=4,Dock=DockStyle.Top,Margin=new Padding(0,0,0,18)};for(int i=0;i<4;i++)cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
   string[] labs={"Faturamento hoje","Vendas hoje","Lucro hoje","Faturamento do mês"}, vals={"R$ 0,00","0","R$ 0,00","R$ 0,00"};
   for(int i=0;i<4;i++){var c=Card();c.Margin=new Padding(i==0?0:7,0,i==3?0:7,0);c.Controls.Add(new Label{Text=vals[i],Dock=DockStyle.Fill,Padding=new Padding(14,14,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)});c.Controls.Add(new Label{Text=labs[i],Dock=DockStyle.Top,Height=28,Padding=new Padding(14,8,0,0),ForeColor=Color.FromArgb(100,116,139)});cards.Controls.Add(c,i,0);}page.Controls.Add(cards);
@@ -55,7 +71,7 @@ public sealed class MainForm:Form{
   two.Controls.Add(TableCard("Produtos mais vendidos hoje",new[]{"Produto","Quantidade","Total"},new[]{"Atualizar produtos mais vendidos"}),0,0);
   two.Controls.Add(TableCard("Produtos mais vendidos do mês",new[]{"Produto","Qtd. vendida","Vendas","Total"},new[]{"Atualizar","Histórico dos meses anteriores"}),1,0);page.Controls.Add(two);
   var recent=TableCard("Vendas recentes",new[]{"Data","Cliente","Pagamento","Total"},Array.Empty<string>());recent.Height=250;page.Controls.Add(recent);
-  scroll.Controls.Add(page);body.Controls.Add(scroll);
+  scroll.Controls.Add(page);body.Controls.Add(scroll);ApplyBoldStyle(scroll);
  }
  RoundedPanel TableCard(string title,string[] cols,string[] actions){
   var c=Card();c.Margin=new Padding(0,0,8,0);var head=new Panel{Dock=DockStyle.Top,Height=48,Padding=new Padding(10,7,10,5)};head.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",11,FontStyle.Bold)});
