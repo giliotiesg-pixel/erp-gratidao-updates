@@ -23,10 +23,16 @@ jobs:
       - name: Restore and publish
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           dotnet restore AMZG.App/AMZG.App.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Falha no restore do AMZG.App.' }
           dotnet restore AMZG.Maintenance/AMZG.Maintenance.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Falha no restore do AMZG.Maintenance.' }
           dotnet publish AMZG.App/AMZG.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na compilação do AMZG.App.' }
           dotnet publish AMZG.Maintenance/AMZG.Maintenance.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o maintenance-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na compilação do AMZG.Maintenance.' }
+          if (!(Test-Path maintenance-publish/AMZG.Maintenance.exe)) { throw 'AMZG.Maintenance.exe não foi gerado.' }
           Copy-Item maintenance-publish/AMZG.Maintenance.exe publish/AMZG.Maintenance.exe -Force
           if (Get-ChildItem publish -Recurse -Include *.db,*.sqlite,*.sqlite3) { throw 'Banco encontrado no pacote. Publicação bloqueada.' }
           if (!(Test-Path publish/AMZG.exe)) { throw 'AMZG.exe ausente.' }
