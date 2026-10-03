@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 namespace AMZG.Core;
 public sealed record UpdateManifest(string Version,string PackageUrl,string Sha256,bool Mandatory,string[]? Modules,string? Notes);
 public static class AutomaticUpdater {
- public const string CurrentVersion="0.8.1";
+ public const string CurrentVersion="0.8.2";
  public const string ManifestUrl="https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/amzg-manifest.json";
  static readonly HttpClient Http=new(){Timeout=TimeSpan.FromMinutes(5)};
  public static async Task<UpdateManifest?> CheckAsync(CancellationToken ct=default){
