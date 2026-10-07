@@ -20,11 +20,19 @@ public static class AutomaticUpdater {
   var ext=Path.GetExtension(new Uri(m.PackageUrl).AbsolutePath);
   if(!ext.Equals(".exe",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Formato de atualização não suportado.");
   var dst=Path.Combine(SafeStorage.UpdateRoot,$"AMZG-Setup-{m.Version}.exe");
+  if(File.Exists(dst)){
+   if(string.Equals(SafeStorage.Sha256(dst),m.Sha256,StringComparison.OrdinalIgnoreCase)){progress?.Report(100);return dst;}
+   File.Delete(dst);
+  }
+  var temp=dst+".download";
+  if(File.Exists(temp))File.Delete(temp);
   using var resp=await Http.GetAsync(m.PackageUrl,HttpCompletionOption.ResponseHeadersRead,ct);resp.EnsureSuccessStatusCode();
-  var len=resp.Content.Headers.ContentLength??-1;await using var input=await resp.Content.ReadAsStreamAsync(ct);await using var output=File.Create(dst);
+  var len=resp.Content.Headers.ContentLength??-1;await using var input=await resp.Content.ReadAsStreamAsync(ct);await using var output=File.Create(temp);
   var buf=new byte[81920];long total=0;int n;while((n=await input.ReadAsync(buf,ct))>0){await output.WriteAsync(buf.AsMemory(0,n),ct);total+=n;if(len>0)progress?.Report((int)(total*100/len));}
   await output.FlushAsync(ct);
-  if(!string.Equals(SafeStorage.Sha256(dst),m.Sha256,StringComparison.OrdinalIgnoreCase)){File.Delete(dst);throw new InvalidDataException("SHA-256 da atualização é inválido.");}
+  output.Close();
+  if(!string.Equals(SafeStorage.Sha256(temp),m.Sha256,StringComparison.OrdinalIgnoreCase)){File.Delete(temp);throw new InvalidDataException("SHA-256 da atualização é inválido.");}
+  File.Move(temp,dst,true);
   return dst;
  }
  public static void ApplyAndRestart(string installer){
