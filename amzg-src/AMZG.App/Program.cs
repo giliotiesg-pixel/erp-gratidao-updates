@@ -24,11 +24,53 @@ public sealed class MainForm:Form{
  }
  void OpenPdv(){
   body.Controls.Clear();
-  var p=new Panel{Dock=DockStyle.Fill,Padding=new Padding(24),BackColor=Color.FromArgb(244,246,248)};
-  var title=new Label{Text="PDV",Dock=DockStyle.Top,Height=48,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)};
-  var info=new Label{Text="Ponto de Venda",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(66,91,114)};
-  p.Controls.Add(info);p.Controls.Add(title);body.Controls.Add(p);ApplyBoldStyle(p);
+  var page=new Panel{Dock=DockStyle.Fill,Padding=new Padding(18),AutoScroll=true,BackColor=Color.FromArgb(244,246,248)};
+  var title=new Label{Text="PDV — Ponto de Venda",Dock=DockStyle.Top,Height=42,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)};
+  var top=new TableLayoutPanel{Dock=DockStyle.Top,Height=92,ColumnCount=5,Padding=new Padding(0,8,0,8)};
+  top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,105));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,105));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));
+  var search=new TextBox{Name="saleSearch",Dock=DockStyle.Fill,Font=new Font("Segoe UI",14,FontStyle.Bold),PlaceholderText="Código de barras ou produto"};
+  var qty=new NumericUpDown{Name="saleQuantity",Dock=DockStyle.Fill,Minimum=1,Maximum=9999,Value=1,DecimalPlaces=0,Font=new Font("Segoe UI",12,FontStyle.Bold)};
+  var weight=new NumericUpDown{Name="saleWeight",Dock=DockStyle.Fill,Minimum=0,Maximum=9999,DecimalPlaces=3,Increment=.001M,Font=new Font("Segoe UI",12,FontStyle.Bold)};
+  var consult=ActionButton("🔎 Consulta de produto",Color.White,Color.FromArgb(15,61,102));
+  var add=ActionButton("+ Adicionar à venda",Color.FromArgb(15,61,102),Color.White);
+  top.Controls.Add(Field("Código de barras / Produto",search),0,0);top.Controls.Add(Field("Quantidade",qty),1,0);top.Controls.Add(Field("Peso (kg)",weight),2,0);top.Controls.Add(consult,3,0);top.Controls.Add(add,4,0);
+
+  var cartCard=Card();cartCard.Dock=DockStyle.Top;cartCard.Height=315;cartCard.Margin=new Padding(0,0,0,12);
+  var cart=new DataGridView{Name="pdvCart",Dock=DockStyle.Fill,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White,BorderStyle=BorderStyle.None};
+  foreach(var x in new[]{"Produto","Qtd.","Peso","Preço/kg","Preço","Total"})cart.Columns.Add("c"+cart.Columns.Count,x);
+  cartCard.Controls.Add(cart);cartCard.Controls.Add(new Label{Text="Itens da venda",Dock=DockStyle.Top,Height=38,Padding=new Padding(12,9,0,0),Font=new Font("Segoe UI",12,FontStyle.Bold)});
+
+  var bottom=new TableLayoutPanel{Dock=DockStyle.Top,Height=245,ColumnCount=2};bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,62));bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));
+  var sale=Card();sale.Margin=new Padding(0,0,8,0);var form=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(14)};
+  var customer=new ComboBox{Width=430,DropDownStyle=ComboBoxStyle.DropDown,Font=new Font("Segoe UI",11,FontStyle.Bold)};customer.Items.Add("Consumidor");customer.SelectedIndex=0;
+  var discPct=new NumericUpDown{Width=150,Maximum=100,DecimalPlaces=2,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+  var discValue=new NumericUpDown{Width=150,Maximum=1000000,DecimalPlaces=2,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+  form.Controls.Add(new Label{Text="Cliente",AutoSize=true});form.Controls.Add(customer);
+  var drow=new FlowLayoutPanel{Width=520,Height=65};drow.Controls.Add(Field("Desconto %",discPct));drow.Controls.Add(Field("Desconto R$",discValue));form.Controls.Add(drow);
+  var pay=new ComboBox{Width=430,DropDownStyle=ComboBoxStyle.DropDownList,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+  pay.Items.AddRange(new object[]{"Dinheiro","Pix com QR Code","Pix sem QR Code","Cartão Débito","Cartão Crédito","Vale Pluxee","Vale VR","Vale Ticket","Vale Alelo","Fiado"});pay.SelectedIndex=0;
+  form.Controls.Add(new Label{Text="Forma de pagamento",AutoSize=true});form.Controls.Add(pay);sale.Controls.Add(form);
+
+  var totals=Card();totals.Margin=new Padding(8,0,0,0);var tf=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(16)};
+  var subtotal=new Label{Text="Subtotal: R$ 0,00",AutoSize=true,Font=new Font("Segoe UI",13,FontStyle.Bold)};
+  var discount=new Label{Text="Desconto: R$ 0,00",AutoSize=true,Font=new Font("Segoe UI",13,FontStyle.Bold)};
+  var total=new Label{Text="TOTAL: R$ 0,00",AutoSize=true,Font=new Font("Segoe UI",24,FontStyle.Bold),ForeColor=Color.FromArgb(15,61,102)};
+  var finish=ActionButton("FINALIZAR VENDA",Color.FromArgb(15,61,102),Color.White);finish.Width=280;finish.Height=45;
+  tf.Controls.Add(subtotal);tf.Controls.Add(discount);tf.Controls.Add(total);tf.Controls.Add(finish);totals.Controls.Add(tf);
+  bottom.Controls.Add(sale,0,0);bottom.Controls.Add(totals,1,0);
+
+  decimal CartSubtotal(){decimal s=0;foreach(DataGridViewRow r in cart.Rows)if(r.Cells[5].Value is decimal d)s+=d;else if(decimal.TryParse(Convert.ToString(r.Cells[5].Value),out var x))s+=x;return s;}
+  void Recalc(){var s=CartSubtotal();var dv=Math.Min(s,discValue.Value+s*discPct.Value/100M);subtotal.Text=$"Subtotal: {s:C2}";discount.Text=$"Desconto: {dv:C2}";total.Text=$"TOTAL: {Math.Max(0,s-dv):C2}";}
+  add.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(search.Text)){MessageBox.Show("Informe ou bipe um produto.","PDV");search.Focus();return;}decimal unit=0;decimal line=0;var q=qty.Value;var w=weight.Value;line=unit*(w>0?w:q);cart.Rows.Add(search.Text,q,w,unit,unit,line);search.Clear();qty.Value=1;weight.Value=0;Recalc();search.Focus();};
+  search.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter){add.PerformClick();e.SuppressKeyPress=true;}};
+  discPct.ValueChanged+=(_,_)=>Recalc();discValue.ValueChanged+=(_,_)=>Recalc();
+  consult.Click+=(_,_)=>MessageBox.Show(string.IsNullOrWhiteSpace(search.Text)?"Bipe ou informe o código do produto.":"Consulta: "+search.Text,"Consulta de produto");
+  finish.Click+=(_,_)=>{if(cart.Rows.Count==0){MessageBox.Show("Adicione produtos antes de finalizar.","PDV");return;}MessageBox.Show("Estrutura do PDV pronta. A gravação da venda no SQLite será conectada na próxima etapa.","PDV");};
+
+  page.Controls.Add(bottom);page.Controls.Add(cartCard);page.Controls.Add(top);page.Controls.Add(title);body.Controls.Add(page);ApplyBoldStyle(page);search.Focus();
  }
+ Control Field(string label,Control input){var p=new Panel{Width=input.Width>0?Math.Max(input.Width,100):180,Height=66,Margin=new Padding(4)};var l=new Label{Text=label,Dock=DockStyle.Top,Height=24,Font=new Font("Segoe UI",9,FontStyle.Bold)};input.Dock=DockStyle.Bottom;input.Height=34;p.Controls.Add(input);p.Controls.Add(l);return p;}
+ RoundedButton ActionButton(string text,Color back,Color fore){var b=new RoundedButton{Radius=12,Text=text,Dock=DockStyle.Fill,Margin=new Padding(5,24,5,5),FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=fore,Font=new Font("Segoe UI",9,FontStyle.Bold)};b.FlatAppearance.BorderColor=Color.FromArgb(190,204,220);return b;}
  void ApplyBoldStyle(Control root){
   foreach(Control x in root.Controls){
    if(x is Button || x is Label && (x.Font.Size>=11 || x.Dock==DockStyle.Top))x.Font=new Font(x.Font,x.Font.Style|FontStyle.Bold);
