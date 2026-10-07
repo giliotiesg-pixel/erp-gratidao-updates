@@ -28,7 +28,18 @@ public sealed class MainForm:Form{
   var title=new Label{Text="PDV — Ponto de Venda",Dock=DockStyle.Top,Height=42,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)};
   var top=new TableLayoutPanel{Dock=DockStyle.Top,Height=92,ColumnCount=5,Padding=new Padding(0,8,0,8)};
   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,105));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,105));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));
-  var search=new TextBox{Name="saleSearch",Dock=DockStyle.Fill,Font=new Font("Segoe UI",14,FontStyle.Bold),PlaceholderText="Código de barras ou produto"};
+  var search=new TextBox{Name="saleSearch",Dock=DockStyle.Fill,Font=new Font("Segoe UI",14,FontStyle.Bold),PlaceholderText="Digite a descrição ou bipe o código de barras"};
+  var suggestions=new ListBox{Name="pdvProductSuggestions",Visible=false,Height=150,Font=new Font("Segoe UI",11,FontStyle.Bold),IntegralHeight=false};
+  var productNames=new List<string>();
+  void RefreshSuggestions(){
+   var term=search.Text.Trim();suggestions.BeginUpdate();suggestions.Items.Clear();
+   if(term.Length>0)foreach(var name in productNames.Where(x=>x.Contains(term,StringComparison.CurrentCultureIgnoreCase)).Take(12))suggestions.Items.Add(name);
+   suggestions.EndUpdate();suggestions.Visible=suggestions.Items.Count>0;
+  }
+  search.TextChanged+=(_,_)=>RefreshSuggestions();
+  suggestions.Click+=(_,_)=>{if(suggestions.SelectedItem is string name){search.Text=name;suggestions.Visible=false;search.Focus();search.SelectionStart=search.TextLength;}};
+  suggestions.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter&&suggestions.SelectedItem is string name){search.Text=name;suggestions.Visible=false;search.Focus();e.SuppressKeyPress=true;}};
+  search.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}if(e.KeyCode==Keys.Escape)suggestions.Visible=false;};
   var qty=new NumericUpDown{Name="saleQuantity",Dock=DockStyle.Fill,Minimum=1,Maximum=9999,Value=1,DecimalPlaces=0,Font=new Font("Segoe UI",12,FontStyle.Bold)};
   var weight=new NumericUpDown{Name="saleWeight",Dock=DockStyle.Fill,Minimum=0,Maximum=9999,DecimalPlaces=3,Increment=.001M,Font=new Font("Segoe UI",12,FontStyle.Bold)};
   var consult=ActionButton("🔎 Consulta de produto",Color.White,Color.FromArgb(15,61,102));
@@ -67,7 +78,8 @@ public sealed class MainForm:Form{
   consult.Click+=(_,_)=>MessageBox.Show(string.IsNullOrWhiteSpace(search.Text)?"Bipe ou informe o código do produto.":"Consulta: "+search.Text,"Consulta de produto");
   finish.Click+=(_,_)=>{if(cart.Rows.Count==0){MessageBox.Show("Adicione produtos antes de finalizar.","PDV");return;}MessageBox.Show("Estrutura do PDV pronta. A gravação da venda no SQLite será conectada na próxima etapa.","PDV");};
 
-  page.Controls.Add(bottom);page.Controls.Add(cartCard);page.Controls.Add(top);page.Controls.Add(title);body.Controls.Add(page);ApplyBoldStyle(page);search.Focus();
+  page.Controls.Add(bottom);page.Controls.Add(cartCard);page.Controls.Add(top);page.Controls.Add(title);body.Controls.Add(page);page.Controls.Add(suggestions);
+  void PositionSuggestions(){var pt=page.PointToClient(search.PointToScreen(new Point(0,search.Height)));suggestions.SetBounds(pt.X,pt.Y,Math.Max(260,search.Width),150);suggestions.BringToFront();}\n  page.Layout+=(_,_)=>PositionSuggestions();top.Layout+=(_,_)=>PositionSuggestions();PositionSuggestions();ApplyBoldStyle(page);search.Focus();
  }
  Control Field(string label,Control input){var p=new Panel{Width=input.Width>0?Math.Max(input.Width,100):180,Height=66,Margin=new Padding(4)};var l=new Label{Text=label,Dock=DockStyle.Top,Height=24,Font=new Font("Segoe UI",9,FontStyle.Bold)};input.Dock=DockStyle.Bottom;input.Height=34;p.Controls.Add(input);p.Controls.Add(l);return p;}
  RoundedButton ActionButton(string text,Color back,Color fore){var b=new RoundedButton{Radius=12,Text=text,Dock=DockStyle.Fill,Margin=new Padding(5,24,5,5),FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=fore,Font=new Font("Segoe UI",9,FontStyle.Bold)};b.FlatAppearance.BorderColor=Color.FromArgb(190,204,220);return b;}
