@@ -1,5 +1,5 @@
 #define MyAppName "AMZ.G"
-#define MyAppVersion "0.8.2"
+#define MyAppVersion "0.8.3"
 #define MyAppExeName "AMZG.exe"
 [Setup]
 AppId={{7A32C3E9-35DF-4A1B-A5E2-9A13DAF1A710}
@@ -27,4 +27,4 @@ Name: "C:\AMZG-Seguranca\Recuperacao"
 Name: "{autoprograms}\AMZ.G"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\AMZ.G"; Filename: "{app}\{#MyAppExeName}"
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir AMZ.G"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Abrir AMZ.G"; Flags: nowait
