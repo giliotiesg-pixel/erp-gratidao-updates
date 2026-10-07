@@ -26,11 +26,16 @@ public static class AutomaticUpdater {
   }
   var temp=dst+".download";
   if(File.Exists(temp))File.Delete(temp);
-  using var resp=await Http.GetAsync(m.PackageUrl,HttpCompletionOption.ResponseHeadersRead,ct);resp.EnsureSuccessStatusCode();
-  var len=resp.Content.Headers.ContentLength??-1;await using var input=await resp.Content.ReadAsStreamAsync(ct);await using var output=File.Create(temp);
-  var buf=new byte[81920];long total=0;int n;while((n=await input.ReadAsync(buf,ct))>0){await output.WriteAsync(buf.AsMemory(0,n),ct);total+=n;if(len>0)progress?.Report((int)(total*100/len));}
-  await output.FlushAsync(ct);
-  output.Close();
+  try{
+   using var resp=await Http.GetAsync(m.PackageUrl,HttpCompletionOption.ResponseHeadersRead,ct);resp.EnsureSuccessStatusCode();
+   var len=resp.Content.Headers.ContentLength??-1;
+   await using(var input=await resp.Content.ReadAsStreamAsync(ct))
+   await using(var output=File.Create(temp)){
+    var buf=new byte[81920];long total=0;int n;
+    while((n=await input.ReadAsync(buf,ct))>0){await output.WriteAsync(buf.AsMemory(0,n),ct);total+=n;if(len>0)progress?.Report((int)(total*100/len));}
+    await output.FlushAsync(ct);
+   }
+  }catch{try{File.Delete(temp);}catch{}throw;}
   if(!string.Equals(SafeStorage.Sha256(temp),m.Sha256,StringComparison.OrdinalIgnoreCase)){File.Delete(temp);throw new InvalidDataException("SHA-256 da atualização é inválido.");}
   File.Move(temp,dst,true);
   return dst;
@@ -38,7 +43,8 @@ public static class AutomaticUpdater {
  public static void ApplyAndRestart(string installer){
   if(!File.Exists(installer))throw new FileNotFoundException("Instalador da atualização não encontrado.",installer);
   SafeStorage.BackupDatabase();
-  Process.Start(new ProcessStartInfo(installer,"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS"){UseShellExecute=true,Verb="runas"});
+  var process=Process.Start(new ProcessStartInfo(installer,"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS"){UseShellExecute=true,Verb="runas"});
+  if(process is null)throw new InvalidOperationException("O instalador não foi iniciado.");
   Environment.Exit(0);
  }
 }
