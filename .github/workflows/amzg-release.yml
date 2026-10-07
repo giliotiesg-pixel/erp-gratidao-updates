@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - 'amzg-src/**'
+concurrency:
+  group: amzg-windows-release
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
@@ -41,6 +44,7 @@ jobs:
         shell: powershell
         run: |
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/AMZG.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar instalador Inno Setup.' }
       - name: Read version and SHA
         id: meta
         shell: powershell
@@ -51,6 +55,9 @@ jobs:
           $exe = 'installer/Output/AMZG-Setup.exe'
           if (!(Test-Path $exe)) { throw 'AMZG-Setup.exe não foi gerado.' }
           $sha=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $appVersion=[xml](Get-Content AMZG.App/AMZG.App.csproj -Raw)
+          $iss=Get-Content installer/AMZG.iss -Raw
+          if ($appVersion.Project.PropertyGroup.Version -ne $v -or $iss -notmatch ('MyAppVersion "'+[regex]::Escape($v)+'"')) { throw 'Versões do aplicativo, atualizador e instalador não coincidem.' }
           "version=$v" >> $env:GITHUB_OUTPUT
           "sha=$sha" >> $env:GITHUB_OUTPUT
       - name: Publish release
