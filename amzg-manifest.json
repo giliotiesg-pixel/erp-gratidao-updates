@@ -1,10 +1,10 @@
 {
-    "Version":  "0.8.2",
-    "PackageUrl":  "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v0.8.2/AMZG-Setup.exe",
-    "Sha256":  "47f0ce18e3d99c9e718c925391729c401f076149df9ecfafd2aacf4a47b6f025",
+    "Version":  "0.8.3",
+    "PackageUrl":  "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v0.8.3/AMZG-Setup.exe",
+    "Sha256":  "971bca4c643614da29f6c622148b7d87fecd2bed4baf8fb5fbcc2d1853bdce32",
     "Mandatory":  false,
     "Modules":  [
                     "AMZ.G"
                 ],
-    "Notes":  "AtualizaÃ§Ã£o automÃ¡tica AMZ.G v0.8.2"
+    "Notes":  "AtualizaÃ§Ã£o automÃ¡tica AMZ.G v0.8.3"
 }
