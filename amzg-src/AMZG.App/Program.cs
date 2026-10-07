@@ -79,7 +79,8 @@ public sealed class MainForm:Form{
   finish.Click+=(_,_)=>{if(cart.Rows.Count==0){MessageBox.Show("Adicione produtos antes de finalizar.","PDV");return;}MessageBox.Show("Estrutura do PDV pronta. A gravação da venda no SQLite será conectada na próxima etapa.","PDV");};
 
   page.Controls.Add(bottom);page.Controls.Add(cartCard);page.Controls.Add(top);page.Controls.Add(title);body.Controls.Add(page);page.Controls.Add(suggestions);
-  void PositionSuggestions(){var pt=page.PointToClient(search.PointToScreen(new Point(0,search.Height)));suggestions.SetBounds(pt.X,pt.Y,Math.Max(260,search.Width),150);suggestions.BringToFront();}\n  page.Layout+=(_,_)=>PositionSuggestions();top.Layout+=(_,_)=>PositionSuggestions();PositionSuggestions();ApplyBoldStyle(page);search.Focus();
+  void PositionSuggestions(){var pt=page.PointToClient(search.PointToScreen(new Point(0,search.Height)));suggestions.SetBounds(pt.X,pt.Y,Math.Max(260,search.Width),150);suggestions.BringToFront();}
+  page.Layout+=(_,_)=>PositionSuggestions();top.Layout+=(_,_)=>PositionSuggestions();PositionSuggestions();ApplyBoldStyle(page);search.Focus();
  }
  Control Field(string label,Control input){var p=new Panel{Width=input.Width>0?Math.Max(input.Width,100):180,Height=66,Margin=new Padding(4)};var l=new Label{Text=label,Dock=DockStyle.Top,Height=24,Font=new Font("Segoe UI",9,FontStyle.Bold)};input.Dock=DockStyle.Bottom;input.Height=34;p.Controls.Add(input);p.Controls.Add(l);return p;}
  RoundedButton ActionButton(string text,Color back,Color fore){var b=new RoundedButton{Radius=12,Text=text,Dock=DockStyle.Fill,Margin=new Padding(5,24,5,5),FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=fore,Font=new Font("Segoe UI",9,FontStyle.Bold)};b.FlatAppearance.BorderColor=Color.FromArgb(190,204,220);return b;}
