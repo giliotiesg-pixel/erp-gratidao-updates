@@ -29,6 +29,12 @@ jobs:
           if ($pkg.version -ne '12.1.6') { throw 'Versao inesperada do aplicativo' }
           if ($pkg.build.productName -ne 'AMZ.G') { throw 'Produto inesperado' }
           $pkg.devDependencies.electron = '22.3.27'
+          $preflightPath = 'app/scripts/preflight.js'
+          if (-not (Test-Path $preflightPath)) { throw 'Preflight nao encontrado' }
+          $preflight = Get-Content $preflightPath -Raw
+          if (-not $preflight.Contains('38.0.0')) { throw 'Versao antiga nao encontrada no preflight' }
+          $preflight = $preflight.Replace('38.0.0', '22.3.27')
+          Set-Content -Path $preflightPath -Value $preflight -Encoding utf8
           $pkg | ConvertTo-Json -Depth 100 | Set-Content -Path $path -Encoding utf8
           if (Test-Path 'app/package-lock.json') { Remove-Item 'app/package-lock.json' -Force }
           if (Test-Path 'app/npm-shrinkwrap.json') { Remove-Item 'app/npm-shrinkwrap.json' -Force }
