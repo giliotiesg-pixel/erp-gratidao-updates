@@ -1,0 +1,60 @@
+name: Teste AMZG 12.1.6 Windows 8
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - teste-amzg-12-1-6-windows8
+    paths:
+      - '.github/workflows/teste-amzg-12-1-6-windows8.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Baixar codigo-fonte original
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.6/AMZG_v12.1.6_Estoque_Excluir_Vendas_CORRIGIDO.zip'
+          Invoke-WebRequest -Uri $url -OutFile amzg-source.zip
+          Expand-Archive -Path amzg-source.zip -DestinationPath app -Force
+      - name: Preparar dependencia Electron para Windows 8
+        shell: pwsh
+        run: |
+          $path = 'app/package.json'
+          $pkg = Get-Content $path -Raw | ConvertFrom-Json
+          if ($pkg.version -ne '12.1.6') { throw 'Versao inesperada do aplicativo' }
+          if ($pkg.build.productName -ne 'AMZ.G') { throw 'Produto inesperado' }
+          $pkg.devDependencies.electron = '22.3.27'
+          $pkg | ConvertTo-Json -Depth 100 | Set-Content -Path $path -Encoding utf8
+          if (Test-Path 'app/package-lock.json') { Remove-Item 'app/package-lock.json' -Force }
+          if (Test-Path 'app/npm-shrinkwrap.json') { Remove-Item 'app/npm-shrinkwrap.json' -Force }
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependencias
+        working-directory: app
+        run: npm install --no-audit --no-fund
+      - name: Compilar instalador de teste
+        working-directory: app
+        run: npm run build:nsis
+      - name: Verificar executavel e SHA256
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem app/dist -Filter '*.exe' -File | Where-Object { $_.Name -like '*Setup*' } | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador nao encontrado' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          "Arquivo: $($exe.Name)" | Add-Content $env:GITHUB_STEP_SUMMARY
+          "SHA256: $hash" | Add-Content $env:GITHUB_STEP_SUMMARY
+          Write-Host "SHA256: $hash"
+      - name: Disponibilizar instalador experimental (sem publicar release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AMZG-12.1.6-Windows8-EXPERIMENTAL
+          path: app/dist/*Setup*.exe
+          if-no-files-found: error
+          retention-days: 14
