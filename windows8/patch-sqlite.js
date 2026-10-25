@@ -65,7 +65,8 @@ fs.writeFileSync(adapterPath,adapter);
 for(const rel of ['scripts/recuperar-dados-automaticamente.js','scripts/consolidar-bancos-universal.js','scripts/testar-sqlite-electron.js']) {
  const p=path.join(root,rel);if(!fs.existsSync(p))throw new Error('Arquivo ausente '+rel);
  let c=fs.readFileSync(p,'utf8');
- c=c.replace(/const\\s*\\{\\s*DatabaseSync\\s*\\}\\s*=\\s*require\\(['"]node:sqlite['"]\\);?/g,"const DatabaseSync = require('../src/database-adapter');");
+ c=c.replace("const {DatabaseSync}=require('node:sqlite');", "const DatabaseSync = require('../src/database-adapter');");
+ c=c.replace("const { DatabaseSync } = require('node:sqlite');", "const DatabaseSync = require('../src/database-adapter');");
  if(c.includes("require('node:sqlite')"))throw new Error('Referencia node:sqlite nao migrada em '+rel);
  fs.writeFileSync(p,c);
 }
