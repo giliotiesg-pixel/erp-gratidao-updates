@@ -15,29 +15,15 @@ jobs:
   build:
     runs-on: windows-2022
     steps:
+      - uses: actions/checkout@v4
       - name: Baixar codigo-fonte original
         shell: pwsh
         run: |
           $url = 'https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/amzg-v12.1.6/AMZG_v12.1.6_Estoque_Excluir_Vendas_CORRIGIDO.zip'
           Invoke-WebRequest -Uri $url -OutFile amzg-source.zip
           Expand-Archive -Path amzg-source.zip -DestinationPath app -Force
-      - name: Preparar dependencia Electron para Windows 8
-        shell: pwsh
-        run: |
-          $path = 'app/package.json'
-          $pkg = Get-Content $path -Raw | ConvertFrom-Json
-          if ($pkg.version -ne '12.1.6') { throw 'Versao inesperada do aplicativo' }
-          if ($pkg.build.productName -ne 'AMZ.G') { throw 'Produto inesperado' }
-          $pkg.devDependencies.electron = '22.3.27'
-          $preflightPath = 'app/scripts/preflight.js'
-          if (-not (Test-Path $preflightPath)) { throw 'Preflight nao encontrado' }
-          $preflight = Get-Content $preflightPath -Raw
-          if (-not $preflight.Contains('38.0.0')) { throw 'Versao antiga nao encontrada no preflight' }
-          $preflight = $preflight.Replace('38.0.0', '22.3.27')
-          Set-Content -Path $preflightPath -Value $preflight -Encoding utf8
-          $pkg | ConvertTo-Json -Depth 100 | Set-Content -Path $path -Encoding utf8
-          if (Test-Path 'app/package-lock.json') { Remove-Item 'app/package-lock.json' -Force }
-          if (Test-Path 'app/npm-shrinkwrap.json') { Remove-Item 'app/npm-shrinkwrap.json' -Force }
+      - name: Aplicar compatibilidade SQLite para Windows 8
+        run: node windows8/patch-sqlite.js
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
@@ -45,6 +31,9 @@ jobs:
       - name: Instalar dependencias
         working-directory: app
         run: npm install --no-audit --no-fund
+      - name: Validar adaptador SQLite
+        working-directory: app
+        run: node scripts/verificar-banco-integrado.js
       - name: Compilar instalador de teste
         working-directory: app
         run: npm run build:nsis
