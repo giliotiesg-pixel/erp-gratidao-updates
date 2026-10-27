@@ -88,23 +88,42 @@ namespace ArmazemGratidao {
     try{
      if(Path.GetFullPath(dlg.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))throw new Exception("Escolha o banco original, diferente do banco importado.");
      string imported=SalesSummary(dbPath),original=SalesSummary(dlg.FileName);
-     long lastImported;
-     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())){
-      c.Open();using(var q=new SQLiteCommand("SELECT COALESCE(MAX(id),0) FROM sales",c))lastImported=Convert.ToInt64(q.ExecuteScalar());
+     var known=new System.Collections.Generic.HashSet<long>();
+     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+      c.Open();using(var q=new SQLiteCommand("SELECT id FROM sales",c))using(var reader=q.ExecuteReader())
+       while(reader.Read())known.Add(Convert.ToInt64(reader.GetValue(0)));
      }
-     long newer;string lastDate;
-     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,ReadOnly=true}.ToString())){
-      c.Open();using(var q=new SQLiteCommand("SELECT COUNT(*),COALESCE(MAX(created_at),'SEM DATA') FROM sales WHERE id>@last",c)){
-       q.Parameters.AddWithValue("@last",lastImported);
-       using(var reader=q.ExecuteReader()){reader.Read();newer=Convert.ToInt64(reader.GetValue(0));lastDate=Convert.ToString(reader.GetValue(1));}
+     var missing=new System.Collections.Generic.List<string[]>();
+     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,ReadOnly=true,FailIfMissing=true}.ToString())){
+      c.Open();using(var q=new SQLiteCommand("SELECT id,created_at,customer_name,gross_total FROM sales ORDER BY id",c))
+      using(var reader=q.ExecuteReader()){
+       while(reader.Read()){
+        long id=Convert.ToInt64(reader.GetValue(0));
+        if(!known.Contains(id))missing.Add(new string[]{id.ToString(),Convert.ToString(reader.GetValue(1)),Convert.ToString(reader.GetValue(2)),Convert.ToString(reader.GetValue(3))});
+       }
       }
      }
-     MessageBox.Show("BANCO IMPORTADO"+Environment.NewLine+imported+Environment.NewLine+Environment.NewLine+
+     string message="BANCO IMPORTADO"+Environment.NewLine+imported+Environment.NewLine+Environment.NewLine+
       "BANCO ORIGINAL SELECIONADO"+Environment.NewLine+original+Environment.NewLine+Environment.NewLine+
-      "Vendas com número superior ao último importado: "+newer+Environment.NewLine+
-      "Data mais recente entre elas: "+lastDate+Environment.NewLine+Environment.NewLine+
-      "Comparação somente de leitura. Nenhuma venda foi copiada, excluída ou alterada."+
-      Environment.NewLine+"Observação: números iguais não garantem que os registros sejam idênticos.","Localizar vendas ausentes");
+      "Vendas ausentes por número de identificação: "+missing.Count+Environment.NewLine+
+      "A comparação considera todos os números, inclusive lacunas antigas."+Environment.NewLine+
+      "Nenhum registro foi alterado. Números iguais podem conter dados diferentes.";
+     if(missing.Count>0 && MessageBox.Show(message+Environment.NewLine+Environment.NewLine+"Deseja salvar a relação das vendas ausentes em CSV?","Localizar vendas ausentes",MessageBoxButtons.YesNo,MessageBoxIcon.Information)==DialogResult.Yes){
+      using(var save=new SaveFileDialog {Title="Salvar relação de vendas ausentes",Filter="CSV (*.csv)|*.csv",FileName="vendas-ausentes-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
+       if(save.ShowDialog()==DialogResult.OK){
+        if(File.Exists(save.FileName))throw new Exception("Escolha um nome de relatório novo para não sobrescrever arquivos.");
+        using(var writer=new StreamWriter(save.FileName,false,new System.Text.UTF8Encoding(true))){
+         writer.WriteLine("numero;data;cliente;valor");
+         foreach(var sale in missing){
+          var parts=new System.Collections.Generic.List<string>();
+          foreach(var value in sale)parts.Add("\\""+value.Replace("\\"","\\"\\"")+"\\"");
+          writer.WriteLine(string.Join(";",parts.ToArray()));
+         }
+        }
+        MessageBox.Show("Relatório salvo: "+save.FileName);
+       }
+      }
+     }else if(missing.Count==0)MessageBox.Show(message,"Localizar vendas ausentes");
     }catch(Exception ex){MessageBox.Show(ex.Message,"Comparação não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
   }
