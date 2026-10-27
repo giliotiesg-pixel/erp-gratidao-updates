@@ -26,6 +26,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
+   AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
    AddButton(bar,"Conferir valores",CheckSaleDifferences);
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
@@ -122,6 +123,79 @@ namespace ArmazemGratidao {
       MessageBox.Show("Relatório salvo: "+save.FileName);
      }
     }catch(Exception ex){MessageBox.Show(ex.Message,"Conferência não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
+  }
+  void PrepareRecoveredSales(object sender,EventArgs e){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}
+   using(var pick=new OpenFileDialog {Title="Selecione o banco SQLite com vendas recuperadas",Filter="Banco SQLite (*.db)|*.db"}){
+    if(pick.ShowDialog()!=DialogResult.OK)return;
+    if(Path.GetFullPath(pick.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase)){MessageBox.Show("Selecione outro banco.");return;}
+    using(var save=new SaveFileDialog {Title="Salvar banco de teste com vendas recuperadas",Filter="Banco SQLite (*.db)|*.db",FileName="armazem-recuperado-teste-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".db"}){
+     if(save.ShowDialog()!=DialogResult.OK)return;
+     if(File.Exists(save.FileName)){MessageBox.Show("Escolha um arquivo novo, sem sobrescrever.");return;}
+     if(Path.GetFullPath(save.FileName).Equals(Path.GetFullPath(pick.FileName),StringComparison.OrdinalIgnoreCase)){MessageBox.Show("O destino não pode ser a origem.");return;}
+     try{
+      int imported=0,items=0,credits=0,payments=0;
+      using(var original=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=save.FileName,FailIfMissing=false}.ToString()))
+      using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=pick.FileName,ReadOnly=true,FailIfMissing=true}.ToString())){
+       original.Open();dest.Open();source.Open();
+       using(var cmd=new SQLiteCommand("PRAGMA integrity_check",source))if(Convert.ToString(cmd.ExecuteScalar())!="ok")throw new Exception("Banco de recuperação com erro de integridade.");
+       original.BackupDatabase(dest,"main","main",-1,null,0);
+       var absent=new System.Collections.Generic.HashSet<long>();
+       using(var cmd=new SQLiteCommand("SELECT id FROM sales",source))using(var reader=cmd.ExecuteReader()){
+        while(reader.Read()){
+         long id=Convert.ToInt64(reader.GetValue(0));
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE id=@id",dest)){
+          check.Parameters.AddWithValue("@id",id);
+          if(Convert.ToInt32(check.ExecuteScalar())==0)absent.Add(id);
+         }
+        }
+       }
+       if(absent.Count==0){MessageBox.Show("Nenhuma venda ausente encontrada. Banco de teste criado sem alterações.");return;}
+       if(MessageBox.Show("Foram identificadas "+absent.Count+" vendas ausentes. Criar uma CÓPIA de teste com essas vendas, itens e pagamentos? O estoque não será movimentado e o banco em uso ficará intacto.","Preparar recuperação",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       using(var tx=dest.BeginTransaction()){
+        foreach(string table in new[]{"sales","sale_items","sale_payments","credit_payments"}){
+         var columns=new System.Collections.Generic.List<string>();
+         using(var schema=new SQLiteCommand("PRAGMA table_info("+table+")",source))using(var reader=schema.ExecuteReader()){
+          while(reader.Read())columns.Add(Convert.ToString(reader["name"]));
+         }
+         if(columns.Count==0)throw new Exception("Tabela ausente no arquivo de recuperação: "+table);
+         var target=new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+         using(var schema=new SQLiteCommand("PRAGMA table_info("+table+")",dest,tx))using(var reader=schema.ExecuteReader()){
+          while(reader.Read())target.Add(Convert.ToString(reader["name"]));
+         }
+         foreach(string col in columns)if(!target.Contains(col))throw new Exception("Coluna incompatível em "+table+": "+col);
+         string quoted=string.Join(",",columns.ConvertAll(x=>"\""+x.Replace("\"","\"\"")+"\"").ToArray());
+         using(var query=new SQLiteCommand("SELECT "+quoted+" FROM "+table,source))
+         using(var reader=query.ExecuteReader()){
+          while(reader.Read()){
+           long saleId=Convert.ToInt64(reader[table=="sales"?"id":"sale_id"]);
+           if(!absent.Contains(saleId))continue;
+           long rowId=Convert.ToInt64(reader["id"]);
+           using(var check=new SQLiteCommand("SELECT COUNT(*) FROM "+table+" WHERE id=@id",dest,tx)){
+            check.Parameters.AddWithValue("@id",rowId);
+            if(Convert.ToInt32(check.ExecuteScalar())!=0)throw new Exception("Conflito de identificador em "+table+" ID "+rowId+". Nenhuma alteração será salva.");
+           }
+           string placeholders=string.Join(",",columns.ConvertAll(x=>"@"+x).ToArray());
+           using(var insert=new SQLiteCommand("INSERT INTO "+table+" ("+quoted+") VALUES ("+placeholders+")",dest,tx)){
+            foreach(string col in columns)insert.Parameters.AddWithValue("@"+col,reader[col]==DBNull.Value?(object)DBNull.Value:reader[col]);
+            insert.ExecuteNonQuery();
+           }
+           if(table=="sales")imported++;
+           if(table=="sale_items")items++;
+           if(table=="credit_payments")credits++;
+           if(table=="sale_payments")payments++;
+          }
+         }
+        }
+        tx.Commit();
+       }
+       using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Falha na integridade do banco de teste.");
+      }
+      MessageBox.Show("BANCO DE TESTE CRIADO"+Environment.NewLine+"Vendas: "+imported+Environment.NewLine+"Itens: "+items+Environment.NewLine+"Pagamentos Fiado: "+credits+Environment.NewLine+"Outros pagamentos: "+payments+Environment.NewLine+Environment.NewLine+"Arquivo: "+save.FileName+Environment.NewLine+"Banco original e estoque preservados.","Recuperação preparada");
+     }catch(Exception ex){MessageBox.Show(ex.Message+Environment.NewLine+"O banco original não foi modificado. Se existir um arquivo de teste incompleto, descarte-o.","Recuperação interrompida",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
    }
   }
   void CompareSales(object sender,EventArgs e){
