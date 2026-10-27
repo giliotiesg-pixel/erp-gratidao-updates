@@ -14,12 +14,12 @@ jobs:
         uses: NuGet/setup-nuget@v2
       - name: Restaurar SQLite
         shell: pwsh
-        run: nuget restore novo-win8/packages.config -PackagesDirectory novo-win8/packages -NonInteractive
+        run: nuget install System.Data.SQLite.Core -Version 1.0.118 -OutputDirectory novo-win8/packages -NonInteractive -DependencyVersion Highest
       - name: Ajustar referencia SQLite para o caminho real do pacote
         shell: pwsh
         run: |
-          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter System.Data.SQLite.dll | Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
-          if (!$dll) { Get-ChildItem novo-win8/packages -Recurse -File | Select-Object -ExpandProperty FullName; throw "System.Data.SQLite.dll x64 nao encontrado no pacote NuGet" }
+          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter System.Data.SQLite.dll | Where-Object { $_.FullName -match 'net4' } | Select-Object -First 1
+          if (!$dll) { Get-ChildItem novo-win8/packages -Recurse -File | Select-Object -ExpandProperty FullName; throw "System.Data.SQLite.dll nao encontrado apos instalacao das dependencias" }
           Write-Host "DLL encontrada: $($dll.FullName)"
           $proj = "novo-win8/ArmazemGratidao.csproj"
           [xml]$xml = Get-Content $proj
