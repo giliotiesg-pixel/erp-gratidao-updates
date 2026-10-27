@@ -60,13 +60,29 @@ namespace ArmazemGratidao {
    grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
+  static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
+   var existing=new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+   using(var cmd=new SQLiteCommand("PRAGMA table_info("+table+")",conn))
+   using(var reader=cmd.ExecuteReader())while(reader.Read())existing.Add(Convert.ToString(reader["name"]));
+   foreach(var column in required)if(!existing.Contains(column))
+    throw new Exception("Banco incompatível para gravar venda: coluna "+table+"."+column+" ausente. Nenhum registro foi alterado.");
+  }
+  void ValidateSaleSchema(SQLiteConnection conn,string method) {
+   RequireColumns(conn,"sales","id","customer_name","payment_method","gross_total","total_cost","net_profit","profit_reserve_10","created_at");
+   RequireColumns(conn,"sale_items","sale_id","product_id","barcode","name","quantity","unit_price","unit_cost","total");
+   RequireColumns(conn,"products","id","stock");
+   RequireColumns(conn,"stock_audit_log","product_id","product_name","barcode","event_type","quantity_before","quantity_after","quantity_delta","reference_type","reference_id","reason");
+   if(method!="FIADO")RequireColumns(conn,"sale_payments","sale_id","payment_method","amount");
+  }
   void Finish(){
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    var method=Convert.ToString(payment.SelectedItem);if(method=="FIADO"&&string.IsNullOrWhiteSpace(customer.Text)){MessageBox.Show("Informe o cliente para venda fiado.");return;}
    var sum=cart.Sum(i=>i.Total);if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
    if(MessageBox.Show("Finalizar venda de R$ "+sum.ToString("N2")+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
    try {
-    using(var c=Open())using(var tx=c.BeginTransaction()) {
+    using(var c=Open()){
+     ValidateSaleSchema(c,method);
+     using(var tx=c.BeginTransaction()) {
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,datetime('now','localtime')); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
@@ -87,6 +103,7 @@ namespace ArmazemGratidao {
      if(method!="FIADO")using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",method);q.Parameters.AddWithValue("@total",sum);q.ExecuteNonQuery();}
      tx.Commit();
      MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Clear();Render();code.Focus();
+    }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
