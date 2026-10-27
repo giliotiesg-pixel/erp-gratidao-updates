@@ -1,0 +1,45 @@
+name: Compilar Armazem Gratidao Novo Windows 8
+on:
+  push:
+    paths:
+      - 'novo-win8/**'
+      - '.github/workflows/compilar-amzg-novo-win8.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar NuGet
+        uses: NuGet/setup-nuget@v2
+      - name: Restaurar SQLite
+        shell: pwsh
+        run: nuget restore novo-win8/packages.config -PackagesDirectory novo-win8/packages -NonInteractive
+      - name: Compilar WinForms .NET Framework 4.8
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/ArmazemGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal
+      - name: Copiar SQLite nativo
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter SQLite.Interop.dll | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (!$dll) { throw "SQLite.Interop.dll x64 nao encontrado" }
+          New-Item -ItemType Directory -Force novo-win8/bin/x64/Release/x64 | Out-Null
+          Copy-Item $dll.FullName novo-win8/bin/x64/Release/x64/SQLite.Interop.dll
+      - name: Instalar Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Gerar Setup EXE
+        shell: pwsh
+        working-directory: novo-win8
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup nao encontrado" }
+          & $iscc instalador.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publicar instalador como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-Novo-Windows8-Setup
+          path: novo-win8/installer/*.exe
+          if-no-files-found: error
