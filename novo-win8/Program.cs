@@ -116,7 +116,7 @@ namespace ArmazemGratidao {
          writer.WriteLine("numero;data;cliente;valor");
          foreach(var sale in missing){
           var parts=new System.Collections.Generic.List<string>();
-          foreach(var value in sale)parts.Add("\\""+value.Replace("\\"","\\"\\"")+"\\"");
+          foreach(var value in sale)parts.Add(((char)34)+value.Replace(((char)34).ToString(),new string((char)34,2))+((char)34));
           writer.WriteLine(string.Join(";",parts.ToArray()));
          }
         }
