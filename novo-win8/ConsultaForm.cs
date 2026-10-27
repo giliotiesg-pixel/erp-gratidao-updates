@@ -9,6 +9,7 @@ namespace ArmazemGratidao {
  public sealed class ConsultaForm:Form {
   readonly string db;readonly bool credit;bool previous=false;
   readonly TextBox saleSearch=new TextBox {Width=110};
+  readonly Label summary=new Label {Dock=DockStyle.Bottom,Height=36,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(235,241,249)};
   readonly DataGridView master=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly DataGridView details=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly Label heading=new Label {Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",13,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft};
@@ -29,6 +30,7 @@ namespace ArmazemGratidao {
     Controls.Add(bar);
    }
    heading.Text=fiado?"FIADO | Selecione um cliente":"VENDAS | Selecione uma venda para visualizar todos os itens";
+   if(!fiado)Controls.Add(summary);
    master.SelectionChanged+=(s,e)=>LoadDetails();
    LoadMaster();
   }
@@ -46,7 +48,11 @@ namespace ArmazemGratidao {
     master.DataSource=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
      Query("SELECT id AS venda,created_at AS data,customer_name AS cliente,payment_method AS pagamento,gross_total AS total FROM sales WHERE date(created_at) "+(previous?"<":"=")+" date('now','localtime') ORDER BY id DESC LIMIT 3000");
-    if(!credit)heading.Text=previous?"VENDAS ANTERIORES | Selecione uma venda":"VENDAS DO DIA | Selecione uma venda";
+    if(!credit){
+     heading.Text=previous?"VENDAS ANTERIORES | Selecione uma venda":"VENDAS DO DIA | Selecione uma venda";
+     var dt=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE date(created_at) "+(previous?"<":"=")+" date('now','localtime')");
+     summary.Text="  "+(previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  Total: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2");
+    }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
   }
   void SearchSale(){
@@ -56,6 +62,7 @@ namespace ArmazemGratidao {
     master.DataSource=Query("SELECT id AS venda,created_at AS data,customer_name AS cliente,payment_method AS pagamento,gross_total AS total FROM sales WHERE id=@id","@id",id);
     heading.Text=((DataTable)master.DataSource).Rows.Count==0?"Venda nao encontrada.":"VENDA #"+id+" | Resultado da busca";
     if(((DataTable)master.DataSource).Rows.Count==0)details.DataSource=null;
+    else summary.Text="  Consulta individual: venda #"+id+" | R$ "+Convert.ToDecimal(((DataTable)master.DataSource).Rows[0]["total"]).ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na busca");}
   }
   static string Csv(object value){
