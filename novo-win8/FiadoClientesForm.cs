@@ -27,6 +27,7 @@ namespace ArmazemGratidao {
    method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"});method.SelectedIndex=0;bottom.Controls.Add(method);
    bottom.Controls.Add(new Label {Text="Valor R$:",AutoSize=true,Padding=new Padding(0,9,0,0)});bottom.Controls.Add(amount);
    var pay=new Button {Text="Registrar baixa",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
+   var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(selected);
    Controls.Add(split);LoadClients();
@@ -63,6 +64,22 @@ namespace ArmazemGratidao {
     selected.Text="FIADO | "+name+" | Saldo em aberto R$ "+total.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
   }
+  void ShowSaleDetails(){
+   DataGridView view=openSales.Focused?openSales:paidSales.Focused?paidSales:openSales;
+   if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda para consultar.");return;}
+   try{
+    var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
+    var form=new Form {Text="Venda #"+id+" - Itens e recebimentos",Width=960,Height=620,StartPosition=FormStartPosition.CenterParent};
+    var tabs=new TabControl {Dock=DockStyle.Fill};
+    var items=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+    items.DataSource=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+    var payments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+    payments.DataSource=Query("SELECT paid_at AS data,payment_method AS forma,amount AS valor FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
+    var a=new TabPage("Itens da venda");a.Controls.Add(items);var b=new TabPage("Pagamentos anteriores");b.Controls.Add(payments);
+    tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
+    using(form)form.ShowDialog(this);
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
+  }
   void Pay(){
    if(openSales.CurrentRow==null){MessageBox.Show("Selecione uma venda em aberto.");return;}
    if(amount.Value<=0){MessageBox.Show("Informe o valor recebido.");return;}
@@ -71,6 +88,8 @@ namespace ArmazemGratidao {
    if(amount.Value>balance+0.005M){MessageBox.Show("O pagamento nao pode ultrapassar o saldo da venda.");return;}
    if(MessageBox.Show("Registrar recebimento de R$ "+amount.Value.ToString("N2")+" na venda #"+saleId+"?","Confirmar baixa",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
    try {
+    var backup=db+".antes-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+    using(var source=Open(true))using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup,FailIfMissing=false}.ToString())){copy.Open();source.BackupDatabase(copy,"main","main",-1,null,0);}
     using(var c=Open())using(var tx=c.BeginTransaction()) {
      decimal actual;
      using(var q=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name",c,tx)) {
