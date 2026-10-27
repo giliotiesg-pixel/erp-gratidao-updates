@@ -21,7 +21,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
-   AddButton(bar,"Fiado",(s,e)=>OpenConsult(true));
+   AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>ShowTable("products","SELECT id,barcode,name,price,stock FROM products ORDER BY name LIMIT 3000"));
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>MessageBox.Show("Modulo "+module+": migracao das funcoes 12.1.6 ainda pendente. Nenhuma alteracao sera feita nos dados.","Modulo em desenvolvimento"));
    bar.AutoScroll=true;
