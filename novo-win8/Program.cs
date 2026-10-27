@@ -27,6 +27,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
+   AddButton(bar,"Aplicar recuperação",ApplyRecovery);
    AddButton(bar,"Conferir valores",CheckSaleDifferences);
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
@@ -123,6 +124,61 @@ namespace ArmazemGratidao {
       MessageBox.Show("Relatório salvo: "+save.FileName);
      }
     }catch(Exception ex){MessageBox.Show(ex.Message,"Conferência não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
+  }
+  void ApplyRecovery(object sender,EventArgs e){
+   if(!File.Exists(dbPath)){MessageBox.Show("Banco atual não encontrado.");return;}
+   using(var pick=new OpenFileDialog {Title="Selecione o banco de TESTE gerado em Preparar recuperação",Filter="Banco SQLite (*.db)|*.db"}){
+    if(pick.ShowDialog()!=DialogResult.OK)return;
+    if(Path.GetFullPath(pick.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase)){MessageBox.Show("Selecione um banco de teste diferente do banco atual.");return;}
+    try{
+     int currentCount,testCount,extra;
+     using(var current=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+     using(var candidate=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=pick.FileName,ReadOnly=true,FailIfMissing=true}.ToString())){
+      current.Open();candidate.Open();
+      foreach(var conn in new[]{current,candidate}){
+       using(var check=new SQLiteCommand("PRAGMA integrity_check",conn))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Integridade SQLite inválida.");
+      }
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales",current))currentCount=Convert.ToInt32(q.ExecuteScalar());
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales",candidate))testCount=Convert.ToInt32(q.ExecuteScalar());
+      var currentIds=new System.Collections.Generic.HashSet<long>();
+      using(var q=new SQLiteCommand("SELECT id FROM sales",current))using(var reader=q.ExecuteReader())while(reader.Read())currentIds.Add(Convert.ToInt64(reader.GetValue(0)));
+      extra=0;
+      using(var q=new SQLiteCommand("SELECT id FROM sales",candidate))using(var reader=q.ExecuteReader())while(reader.Read())if(!currentIds.Contains(Convert.ToInt64(reader.GetValue(0))))extra++;
+      if(extra==0){MessageBox.Show("Nenhuma venda nova identificada. Banco atual preservado.");return;}
+      if(testCount!=currentCount+extra)throw new Exception("O banco de teste não contém todas as vendas atuais. Recuperação bloqueada.");
+      foreach(var table in new[]{"sales","sale_items","sale_payments","credit_payments","products"}){
+       using(var a=new SQLiteCommand("SELECT COUNT(*) FROM "+table,current))
+       using(var b=new SQLiteCommand("SELECT COUNT(*) FROM "+table,candidate)){
+        long x=Convert.ToInt64(a.ExecuteScalar()),y=Convert.ToInt64(b.ExecuteScalar());
+        if(y<x)throw new Exception("Banco de teste perdeu registros em "+table+". Aplicação bloqueada.");
+        if(table=="products" && x!=y)throw new Exception("Quantidade de produtos diferente. Aplicação bloqueada.");
+       }
+      }
+     }
+     if(MessageBox.Show("Foram identificadas "+extra+" vendas adicionais no banco de teste."+Environment.NewLine+
+      "O programa fará um BACKUP do banco atual e depois substituirá a cópia de trabalho pelo banco de teste."+Environment.NewLine+
+      "Faça isso somente com o caixa parado e depois de conferir os dados. Deseja continuar?",
+      "CONFIRMAR RECUPERAÇÃO",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+     string backup=dbPath+".antes-recuperacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmss-fff")+".db";
+     using(var current=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+     using(var target=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup,FailIfMissing=false}.ToString())){
+      current.Open();target.Open();current.BackupDatabase(target,"main","main",-1,null,0);
+     }
+     string staged=Path.Combine(dataDir,"recuperacao-"+Guid.NewGuid().ToString("N")+".db");
+     try{
+      using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=pick.FileName,ReadOnly=true,FailIfMissing=true}.ToString()))
+      using(var target=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=staged,FailIfMissing=false}.ToString())){
+       source.Open();target.Open();source.BackupDatabase(target,"main","main",-1,null,0);
+      }
+      using(var verify=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=staged,ReadOnly=true,FailIfMissing=true}.ToString())){
+       verify.Open();using(var q=new SQLiteCommand("PRAGMA integrity_check",verify))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Falha na verificação final da cópia.");
+      }
+      File.Replace(staged,dbPath,null);
+      status.Text="Recuperação aplicada. "+extra+" vendas adicionais. Backup: "+backup;
+      MessageBox.Show("Recuperação aplicada. Vendas adicionais: "+extra+Environment.NewLine+"Backup do banco anterior: "+backup+Environment.NewLine+"Confira Vendas e Fiado antes de continuar a operar.","Recuperação concluída");
+     }finally{if(File.Exists(staged))File.Delete(staged);}
+    }catch(Exception ex){MessageBox.Show("Recuperação não aplicada: "+ex.Message,"Recuperação bloqueada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
   }
   void PrepareRecoveredSales(object sender,EventArgs e){
