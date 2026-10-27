@@ -101,9 +101,8 @@ namespace ArmazemGratidao {
      using(var q=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),'Recebimento registrado no novo Fiado')",c,tx)) {
       q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@amount",amount.Value);q.Parameters.AddWithValue("@method",Convert.ToString(method.SelectedItem));q.ExecuteNonQuery();
      }
-     if(actual-amount.Value<=0.005M)using(var q=new SQLiteCommand("UPDATE sales SET settled_at=datetime('now','localtime'),settlement_method=@method WHERE id=@id",c,tx)){
-      q.Parameters.AddWithValue("@method",Convert.ToString(method.SelectedItem));q.Parameters.AddWithValue("@id",saleId);q.ExecuteNonQuery();
-     }
+     // No banco original 12.1.6, a quitacao e calculada pelos registros
+     // de credit_payments. Nao alterar colunas inexistentes em sales.
      tx.Commit();
     }
     amount.Value=0;SelectClient(customer);MessageBox.Show("Pagamento registrado. Saldo atualizado.");LoadClients();
