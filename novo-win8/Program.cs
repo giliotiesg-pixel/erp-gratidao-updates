@@ -23,7 +23,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>ShowTable("products","SELECT id,barcode,name,price,stock FROM products ORDER BY name LIMIT 3000"));
-   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>MessageBox.Show("Modulo "+module+": migracao das funcoes 12.1.6 ainda pendente. Nenhuma alteracao sera feita nos dados.","Modulo em desenvolvimento"));
+   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
    bar.AutoScroll=true;
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
