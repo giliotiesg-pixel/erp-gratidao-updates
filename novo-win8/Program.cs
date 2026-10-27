@@ -26,6 +26,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
+   AddButton(bar,"Conferir valores",CheckSaleDifferences);
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
@@ -79,6 +80,48 @@ namespace ArmazemGratidao {
      if(!reader.Read())return "Nenhuma venda encontrada.";
      return "Quantidade: "+reader.GetValue(0)+" | Último número: "+reader.GetValue(1)+" | Data mais recente: "+reader.GetValue(2);
     }
+   }
+  }
+  void CheckSaleDifferences(object sender,EventArgs e){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro um banco.");return;}
+   using(var dlg=new OpenFileDialog {Title="Selecione o banco original para conferir valores das vendas",Filter="Bancos SQLite|*.db;*.sqlite;*.sqlite3|Todos os arquivos|*.*"}){
+    if(dlg.ShowDialog()!=DialogResult.OK)return;
+    try{
+     if(Path.GetFullPath(dlg.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))throw new Exception("Selecione um banco diferente do importado.");
+     var imported=new System.Collections.Generic.Dictionary<long,decimal>();
+     using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+      conn.Open();using(var cmd=new SQLiteCommand("SELECT id,gross_total FROM sales",conn))using(var reader=cmd.ExecuteReader())
+       while(reader.Read())imported[Convert.ToInt64(reader.GetValue(0))]=Convert.ToDecimal(reader.GetValue(1));
+     }
+     var differences=new System.Collections.Generic.List<string>();
+     long compared=0;
+     using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,ReadOnly=true,FailIfMissing=true}.ToString())){
+      conn.Open();using(var cmd=new SQLiteCommand("SELECT id,gross_total FROM sales ORDER BY id",conn))using(var reader=cmd.ExecuteReader()){
+       while(reader.Read()){
+        long id=Convert.ToInt64(reader.GetValue(0));
+        decimal original=Convert.ToDecimal(reader.GetValue(1));
+        decimal current;
+        if(!imported.TryGetValue(id,out current))continue;
+        compared++;
+        if(Math.Abs(original-current)>0.005m)differences.Add(id+";"+original.ToString(System.Globalization.CultureInfo.InvariantCulture)+";"+current.ToString(System.Globalization.CultureInfo.InvariantCulture));
+       }
+      }
+     }
+     string msg="Vendas presentes nos dois bancos: "+compared+Environment.NewLine+
+      "Vendas com total diferente: "+differences.Count+Environment.NewLine+
+      "Comparação somente de leitura; não altera banco, vendas ou estoque.";
+     if(differences.Count==0){MessageBox.Show(msg,"Conferir valores");return;}
+     if(MessageBox.Show(msg+Environment.NewLine+"Salvar relatório CSV?","Conferir valores",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+     using(var save=new SaveFileDialog {Title="Salvar diferenças de valores",Filter="CSV (*.csv)|*.csv",FileName="divergencias-vendas-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
+      if(save.ShowDialog()!=DialogResult.OK)return;
+      if(File.Exists(save.FileName))throw new Exception("Escolha um nome novo para não sobrescrever relatório anterior.");
+      using(var writer=new StreamWriter(save.FileName,false,new System.Text.UTF8Encoding(true))){
+       writer.WriteLine("numero_venda;valor_original;valor_importado");
+       foreach(string line in differences)writer.WriteLine(line);
+      }
+      MessageBox.Show("Relatório salvo: "+save.FileName);
+     }
+    }catch(Exception ex){MessageBox.Show(ex.Message,"Conferência não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
   }
   void CompareSales(object sender,EventArgs e){
