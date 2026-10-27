@@ -18,6 +18,7 @@ namespace ArmazemGratidao {
    Text="Armazem Gratidao - Vendas e Fiado";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(18,75,163),Padding=new Padding(8)};
    AddButton(bar,"Importar banco",ImportDatabase);
+   AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>ShowTable("sales","SELECT id,created_at,customer_name,payment_method,gross_total,status FROM sales ORDER BY created_at DESC LIMIT 2000"));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>ShowTable("credit_payments","SELECT id,sale_id,amount,payment_method,paid_at FROM credit_payments ORDER BY paid_at DESC LIMIT 2000"));
