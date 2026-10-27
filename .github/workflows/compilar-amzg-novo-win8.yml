@@ -18,8 +18,8 @@ jobs:
       - name: Ajustar referencia SQLite para o caminho real do pacote
         shell: pwsh
         run: |
-          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter System.Data.SQLite.dll | Where-Object { $_.FullName -match '\\lib\\' } | Select-Object -First 1
-          if (!$dll) { throw "System.Data.SQLite.dll nao encontrado no pacote NuGet" }
+          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter System.Data.SQLite.dll | Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
+          if (!$dll) { Get-ChildItem novo-win8/packages -Recurse -File | Select-Object -ExpandProperty FullName; throw "System.Data.SQLite.dll x64 nao encontrado no pacote NuGet" }
           Write-Host "DLL encontrada: $($dll.FullName)"
           $proj = "novo-win8/ArmazemGratidao.csproj"
           [xml]$xml = Get-Content $proj
