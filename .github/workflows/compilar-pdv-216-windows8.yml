@@ -1,0 +1,42 @@
+name: Compilar PDV 2.1.6 Windows 8 (sem dados privados)
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(toJSON(github.event.release.assets.*.name), 'amzg-2.1.6-fonte-sem-dados.zip')
+    runs-on: windows-2022
+    steps:
+      - name: Baixar pacote de codigo da release (sem banco de clientes)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download amzg-2.1.6-fonte --repo "${{ github.repository }}" --pattern "amzg-2.1.6-fonte-sem-dados.zip" --dir .
+          if (!(Test-Path "amzg-2.1.6-fonte-sem-dados.zip")) { throw "Envie o pacote de codigo sem dados privados para a release amzg-2.1.6-fonte." }
+          Expand-Archive "amzg-2.1.6-fonte-sem-dados.zip" -DestinationPath app
+      - name: Preparar Node e conferir Electron 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Compilar instalador
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem app -Filter package.json -Recurse | Select-Object -First 1
+          if (!$package) { throw "package.json ausente" }
+          Set-Location $package.DirectoryName
+          $p = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($p.devDependencies.electron -notmatch '^22\\.') { throw "Electron deve ser 22.x para Windows 8" }
+          npm install --no-audit --no-fund
+          npx electron-builder --win nsis --x64
+          if ($LASTEXITCODE -ne 0) { throw "Compilacao falhou" }
+      - name: Guardar EXE do programa sem banco privado
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-2.1.6-Setup-Windows8
+          path: app/**/dist/*.exe
+          if-no-files-found: error
+          retention-days: 14
