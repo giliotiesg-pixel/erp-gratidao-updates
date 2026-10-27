@@ -15,6 +15,20 @@ jobs:
       - name: Restaurar SQLite
         shell: pwsh
         run: nuget restore novo-win8/packages.config -PackagesDirectory novo-win8/packages -NonInteractive
+      - name: Ajustar referencia SQLite para o caminho real do pacote
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter System.Data.SQLite.dll | Where-Object { $_.FullName -match '\\lib\\' } | Select-Object -First 1
+          if (!$dll) { throw "System.Data.SQLite.dll nao encontrado no pacote NuGet" }
+          Write-Host "DLL encontrada: $($dll.FullName)"
+          $proj = "novo-win8/ArmazemGratidao.csproj"
+          [xml]$xml = Get-Content $proj
+          $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+          $ns.AddNamespace("m", "http://schemas.microsoft.com/developer/msbuild/2003")
+          $ref = $xml.SelectSingleNode("//m:Reference[@Include='System.Data.SQLite']/m:HintPath", $ns)
+          if (!$ref) { throw "Referencia SQLite ausente no projeto" }
+          $ref.InnerText = $dll.FullName
+          $xml.Save((Resolve-Path $proj).Path)
       - name: Compilar WinForms .NET Framework 4.8
         shell: pwsh
         run: |
