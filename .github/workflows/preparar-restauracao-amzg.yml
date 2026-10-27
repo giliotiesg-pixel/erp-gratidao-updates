@@ -1,0 +1,61 @@
+name: Preparar restauracao local AMZG (sem publicar dados)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/preparar-restauracao-amzg.yml'
+permissions:
+  contents: read
+jobs:
+  pacote:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar ferramenta segura
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path pacote | Out-Null
+          @'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RESTAURAR.ps1"
+          pause
+          '@ | Set-Content -Path pacote/RESTAURAR_DADOS.bat -Encoding ascii
+          @'
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path $PSScriptRoot 'armazem-gratidao.db'
+          $destDir = Join-Path $env:APPDATA 'Armazem Gratidao\Universal'
+          $dest = Join-Path $destDir 'armazem-gratidao.db'
+          if (-not (Test-Path $source)) { throw 'Coloque uma COPIA do banco recuperado armazem-gratidao.db nesta pasta.' }
+          $bytes = [System.IO.File]::ReadAllBytes($source)
+          if ($bytes.Length -lt 100 -or [Text.Encoding]::ASCII.GetString($bytes,0,16) -ne "SQLite format 3`0") { throw 'Arquivo de origem nao parece ser um banco SQLite valido.' }
+          if (Get-Process -Name 'Armazem*','AMZG*' -ErrorAction SilentlyContinue) { throw 'Feche o Armazem Gratidao antes de continuar.' }
+          New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+          if (Test-Path $dest) {
+            $existing = (Get-Item $dest).Length
+            $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $backup = "$dest.backup-$stamp"
+            Copy-Item -LiteralPath $dest -Destination $backup -ErrorAction Stop
+            Write-Host "Backup do banco atual: $backup"
+            throw "Restauracao interrompida: ja existe banco ($existing bytes). Para evitar perda de dados, nao sera substituido. E necessario comparar e mesclar os bancos."
+          }
+          Copy-Item -LiteralPath $source -Destination $dest -ErrorAction Stop
+          if ((Get-FileHash $source -Algorithm SHA256).Hash -ne (Get-FileHash $dest -Algorithm SHA256).Hash) { Remove-Item $dest -ErrorAction SilentlyContinue; throw 'Falha na verificacao SHA256 da copia.' }
+          Write-Host 'Banco copiado e hash conferido. Abra o programa e valide Vendas, Fiado e Produtos.'
+          '@ | Set-Content -Path pacote/RESTAURAR.ps1 -Encoding utf8
+          @'
+          FERRAMENTA DE RESTAURACAO LOCAL - NAO E INSTALADOR
+          1. Feche o programa.
+          2. Copie seu banco recuperado armazem-gratidao.db para esta pasta.
+          3. Execute RESTAURAR_DADOS.bat.
+          4. Se ja houver banco, o processo faz backup e interrompe sem sobrescrever.
+          5. Confirme as telas Vendas, Fiado e Produtos apos copiar.
+          AVISO: O formato do banco deve ser compativel com a versao instalada.
+          NUNCA envie bancos de clientes e vendas para repositorios publicos.
+          '@ | Set-Content -Path pacote/LEIA_PRIMEIRO.txt -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AMZG-Restauracao-Local-Sem-Dados
+          path: pacote/
+          retention-days: 30
