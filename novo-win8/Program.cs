@@ -18,6 +18,8 @@ namespace ArmazemGratidao {
    Text="Armazem Gratidao - Vendas e Fiado";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(18,75,163),Padding=new Padding(8)};
    AddButton(bar,"Importar banco",ImportDatabase);
+   AddButton(bar,"Backup do banco",BackupDatabase);
+   AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
@@ -29,6 +31,41 @@ namespace ArmazemGratidao {
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
   }
   void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,AutoSize=true,Height=34,BackColor=Color.White,ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)};b.Click+=click;parent.Controls.Add(b);}
+  void BackupDatabase(object sender,EventArgs e) {
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
+   using(var dlg=new SaveFileDialog {Title="Salvar copia de seguranca SQLite",Filter="Banco SQLite (*.db)|*.db",FileName="armazem-gratidao-backup-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".db"}) {
+    if(dlg.ShowDialog()!=DialogResult.OK)return;
+    try {
+     if(Path.GetFullPath(dlg.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))throw new Exception("Escolha um destino diferente do banco em uso.");
+     if(File.Exists(dlg.FileName))throw new Exception("Escolha um nome de arquivo novo para nao sobrescrever backups anteriores.");
+     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,FailIfMissing=false}.ToString())) {
+      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
+     }
+     using(var check=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,ReadOnly=true,FailIfMissing=true}.ToString())) {
+      check.Open();using(var cmd=new SQLiteCommand("PRAGMA integrity_check",check))if(Convert.ToString(cmd.ExecuteScalar())!="ok")throw new Exception("Backup criado, mas a verificacao de integridade falhou.");
+     }
+     status.Text="Backup SQLite criado e validado: "+dlg.FileName;
+     MessageBox.Show("Backup concluido e verificado. O banco em uso nao foi modificado.");
+    }catch(Exception ex){MessageBox.Show(ex.Message,"Backup nao concluido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
+  }
+  void CheckDatabase(object sender,EventArgs e) {
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
+   try {
+    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+     conn.Open();
+     string result;using(var cmd=new SQLiteCommand("PRAGMA integrity_check",conn))result=Convert.ToString(cmd.ExecuteScalar());
+     if(result!="ok")throw new Exception("Integridade SQLite: "+result);
+     var counts=new System.Text.StringBuilder("Integridade SQLite: OK"+Environment.NewLine);
+     foreach(var table in new[]{"sales","sale_items","credit_payments","products"}){
+      using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM "+table,conn))counts.AppendLine(table+": "+cmd.ExecuteScalar());
+     }
+     status.Text="Integridade do banco: OK. Consultas realizadas sem alteracoes.";
+     MessageBox.Show(counts.ToString(),"Verificacao do banco");
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Problema na verificacao",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
   void ImportDatabase(object sender,EventArgs e) {
    using(var dlg=new OpenFileDialog {Title="Selecionar banco antigo (somente leitura)",Filter="Bancos SQLite|*.db;*.sqlite;*.sqlite3|Todos os arquivos|*.*"}) {
     if(dlg.ShowDialog()!=DialogResult.OK)return;
