@@ -25,6 +25,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Verificar banco",CheckDatabase);
+   AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
@@ -69,6 +70,43 @@ namespace ArmazemGratidao {
      MessageBox.Show(counts.ToString(),"Verificacao do banco");
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Problema na verificacao",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+  static string SalesSummary(string path) {
+   using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=path,ReadOnly=true,FailIfMissing=true}.ToString())){
+    conn.Open();
+    using(var cmd=new SQLiteCommand("SELECT COUNT(*),COALESCE(MAX(id),0),COALESCE(MAX(created_at),'SEM DATA') FROM sales",conn))
+    using(var reader=cmd.ExecuteReader()){
+     if(!reader.Read())return "Nenhuma venda encontrada.";
+     return "Quantidade: "+reader.GetValue(0)+" | Último número: "+reader.GetValue(1)+" | Data mais recente: "+reader.GetValue(2);
+    }
+   }
+  }
+  void CompareSales(object sender,EventArgs e){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro um banco para comparar.");return;}
+   using(var dlg=new OpenFileDialog {Title="Selecione o banco original para localizar vendas posteriores (somente leitura)",Filter="Bancos SQLite|*.db;*.sqlite;*.sqlite3|Todos os arquivos|*.*"}){
+    if(dlg.ShowDialog()!=DialogResult.OK)return;
+    try{
+     if(Path.GetFullPath(dlg.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))throw new Exception("Escolha o banco original, diferente do banco importado.");
+     string imported=SalesSummary(dbPath),original=SalesSummary(dlg.FileName);
+     long lastImported;
+     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())){
+      c.Open();using(var q=new SQLiteCommand("SELECT COALESCE(MAX(id),0) FROM sales",c))lastImported=Convert.ToInt64(q.ExecuteScalar());
+     }
+     long newer;string lastDate;
+     using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dlg.FileName,ReadOnly=true}.ToString())){
+      c.Open();using(var q=new SQLiteCommand("SELECT COUNT(*),COALESCE(MAX(created_at),'SEM DATA') FROM sales WHERE id>@last",c)){
+       q.Parameters.AddWithValue("@last",lastImported);
+       using(var reader=q.ExecuteReader()){reader.Read();newer=Convert.ToInt64(reader.GetValue(0));lastDate=Convert.ToString(reader.GetValue(1));}
+      }
+     }
+     MessageBox.Show("BANCO IMPORTADO"+Environment.NewLine+imported+Environment.NewLine+Environment.NewLine+
+      "BANCO ORIGINAL SELECIONADO"+Environment.NewLine+original+Environment.NewLine+Environment.NewLine+
+      "Vendas com número superior ao último importado: "+newer+Environment.NewLine+
+      "Data mais recente entre elas: "+lastDate+Environment.NewLine+Environment.NewLine+
+      "Comparação somente de leitura. Nenhuma venda foi copiada, excluída ou alterada."+
+      Environment.NewLine+"Observação: números iguais não garantem que os registros sejam idênticos.","Localizar vendas ausentes");
+    }catch(Exception ex){MessageBox.Show(ex.Message,"Comparação não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
   }
   void ImportDatabase(object sender,EventArgs e) {
    using(var dlg=new OpenFileDialog {Title="Selecionar banco antigo (somente leitura)",Filter="Bancos SQLite|*.db;*.sqlite;*.sqlite3|Todos os arquivos|*.*"}) {
