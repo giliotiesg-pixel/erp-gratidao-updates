@@ -64,6 +64,7 @@ namespace ArmazemGratidao {
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
    var settle=new Button {Text="Receber todas as vendas",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
+   var fixDate=new Button {Text="Corrigir data do pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(95,64,145),ForeColor=Color.White};fixDate.Click+=(s,e)=>CorrectPaymentDate();bottom.Controls.Add(fixDate);
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var auditHistory=new Button {Text="Histórico de alterações",AutoSize=true,Height=36,BackColor=Color.FromArgb(80,60,125),ForeColor=Color.White};auditHistory.Click+=(s,e)=>ShowItemAuditHistory();bottom.Controls.Add(auditHistory);
@@ -123,6 +124,59 @@ namespace ArmazemGratidao {
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Saldo R$ "+total.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
+  }
+  void CorrectPaymentDate(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   try{
+    var rows=Query("SELECT p.id AS id,p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY p.paid_at DESC,p.id DESC","@name",customer);
+    if(rows.Rows.Count==0){MessageBox.Show("Este cliente não possui pagamentos registrados.");return;}
+    using(var form=new Form {Text="Corrigir data de pagamento - "+customer,Width=850,Height=530,StartPosition=FormStartPosition.CenterParent}){
+     var grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=rows};
+     var bottomBar=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=54,Padding=new Padding(8)};
+     var change=new Button {Text="Alterar data do pagamento selecionado",AutoSize=true,Height=36};
+     change.Click+=(s,e)=>{
+      if(grid.CurrentRow==null)return;
+      var row=((DataRowView)grid.CurrentRow.DataBoundItem).Row;
+      long id=Convert.ToInt64(row["id"]);string original=Convert.ToString(row["data"]);
+      DateTime parsed;if(!DateTime.TryParse(original,out parsed))parsed=DateTime.Today;
+      using(var dialog=new Form {Text="Data do pagamento #"+id,Width=430,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+       var date=new DateTimePicker {Left=18,Top=38,Width=370,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm",ShowUpDown=true,Value=parsed};
+       var reason=new TextBox {Left=18,Top=116,Width=370};
+       var save=new Button {Text="Salvar correção",Left=210,Top=156,Width=178,Height=34};
+       dialog.Controls.Add(new Label {Text="Data e hora correta do recebimento",Left=18,Top=17,AutoSize=true});
+       dialog.Controls.Add(date);dialog.Controls.Add(new Label {Text="Motivo da correção (obrigatório)",Left=18,Top=94,AutoSize=true});dialog.Controls.Add(reason);dialog.Controls.Add(save);
+       save.Click+=(sender,args)=>{
+        if(reason.Text.Trim().Length<5){MessageBox.Show("Informe o motivo com pelo menos 5 caracteres.");return;}
+        string corrected=date.Value.ToString("yyyy-MM-dd HH:mm:ss");
+        if(corrected==original){MessageBox.Show("A data não foi alterada.");return;}
+        if(date.Value>DateTime.Now.AddMinutes(5)){MessageBox.Show("A data não pode estar no futuro.");return;}
+        if(MessageBox.Show("Corrigir pagamento #"+id+" de "+original+" para "+corrected+"?","Confirmar correção auditável",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        try{
+         using(var connection=Open(false)){
+          string backup=db+".antes-data-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+          using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
+          using(var tx=connection.BeginTransaction()){
+           using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS fiado_payment_date_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,payment_id INTEGER NOT NULL,sale_id INTEGER NOT NULL,old_paid_at TEXT NOT NULL,new_paid_at TEXT NOT NULL,reason TEXT NOT NULL,changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",connection,tx))create.ExecuteNonQuery();
+           using(var update=new SQLiteCommand("UPDATE credit_payments SET paid_at=@new WHERE id=@id AND paid_at=@old AND sale_id IN (SELECT s.id FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer)",connection,tx)){
+            update.Parameters.AddWithValue("@new",corrected);update.Parameters.AddWithValue("@id",id);update.Parameters.AddWithValue("@old",original);update.Parameters.AddWithValue("@customer",customer);
+            if(update.ExecuteNonQuery()!=1)throw new Exception("Pagamento alterado por outro processo. Atualize a tela.");
+           }
+           using(var log=new SQLiteCommand("INSERT INTO fiado_payment_date_audit(payment_id,sale_id,old_paid_at,new_paid_at,reason) VALUES(@id,@sale,@old,@new,@reason)",connection,tx)){
+            log.Parameters.AddWithValue("@id",id);log.Parameters.AddWithValue("@sale",Convert.ToInt64(row["venda"]));log.Parameters.AddWithValue("@old",original);log.Parameters.AddWithValue("@new",corrected);log.Parameters.AddWithValue("@reason",reason.Text.Trim());log.ExecuteNonQuery();
+           }
+           tx.Commit();
+          }
+         }
+         dialog.DialogResult=DialogResult.OK;dialog.Close();
+        }catch(Exception ex){MessageBox.Show(ex.Message,"Correção não realizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+       };
+       if(dialog.ShowDialog(form)==DialogResult.OK){form.DialogResult=DialogResult.OK;form.Close();}
+      }
+     };
+     bottomBar.Controls.Add(change);form.Controls.Add(grid);form.Controls.Add(bottomBar);
+     if(form.ShowDialog(this)==DialogResult.OK){SelectClient(customer);MessageBox.Show("Data corrigida e auditada. Valor e forma de pagamento preservados.");}
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao corrigir data",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void AuditBalances(){
    try{
