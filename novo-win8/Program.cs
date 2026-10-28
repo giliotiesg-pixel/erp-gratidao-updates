@@ -24,6 +24,8 @@ namespace ArmazemGratidao {
    var header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
    menuToggle.Left=10;menuToggle.Top=8;menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
+   AddSection(bar,"PRINCIPAL");
+   AddButton(bar,"Início",ShowHome);
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
@@ -42,6 +44,39 @@ namespace ArmazemGratidao {
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
+   ShowHome(this,EventArgs.Empty);
+  }
+  void ShowHome(object sender,EventArgs e){
+   grid.Visible=false;
+   var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
+   var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(22),BackColor=Color.FromArgb(245,247,251)};
+   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=940,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
+   home.Controls.Add(title);
+   var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
+   home.Controls.Add(date);
+   var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
+    Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var form=new PdvForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
+    Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
+    Tuple.Create("Clientes",(EventHandler)((s,a)=>OpenHomeModule("Clientes"))),
+    Tuple.Create("Compras",(EventHandler)((s,a)=>OpenHomeModule("Compras"))),
+    Tuple.Create("Caixa",(EventHandler)((s,a)=>OpenHomeModule("Caixa"))),
+    Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
+    Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
+    Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
+    Tuple.Create("Backup do banco",(EventHandler)BackupDatabase)
+   };
+   foreach(var action in actions){
+    var button=new Button {Text=action.Item1,Width=208,Height=78,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    button.FlatAppearance.BorderColor=Color.FromArgb(213,221,236);button.Click+=action.Item2;home.Controls.Add(button);
+   }
+   Controls.Add(home);home.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+  }
+  void OpenHomeModule(string module){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
+   using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);
   }
   void AddSection(Control parent,string title){parent.Controls.Add(new Label {Text=title,Width=175,Height=29,TextAlign=ContentAlignment.BottomLeft,ForeColor=Color.FromArgb(188,209,245),Font=new Font("Segoe UI",8,FontStyle.Bold),Padding=new Padding(7,0,0,4),Margin=new Padding(3,11,3,2)});}
   void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,Width=175,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,3,3,3)};b.FlatAppearance.BorderSize=0;b.Click+=click;parent.Controls.Add(b);}
