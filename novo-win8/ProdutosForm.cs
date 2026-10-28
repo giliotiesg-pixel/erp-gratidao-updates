@@ -242,13 +242,46 @@ namespace ArmazemGratidao {
     }
    }
   }
+  static string LookupBarcodeName(string barcode){
+   System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
+   string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name";
+   using(var client=new System.Net.WebClient()){
+    client.Encoding=System.Text.Encoding.UTF8;
+    client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (product lookup)";
+    string json=client.DownloadString(url);
+    foreach(string key in new[]{"product_name_pt","product_name"}){
+     var match=System.Text.RegularExpressions.Regex.Match(json,"\\""+key+"\\"\\s*:\\s*\\"((?:\\\\.|[^\\"\\\\])*)\\"");
+     if(match.Success){
+      string name=System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value).Trim();
+      if(name.Length>0)return name;
+     }
+    }
+   }
+   return null;
+  }
   void InsertProduct(){
    using(var form=new Form {Text="Inserir produto",Width=460,Height=360,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(15)};
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var name=new TextBox();var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     Control[] fields={barcode,name,price,cost,stock};string[] labels={"Código de barras","Descrição","Preço de venda","Custo","Estoque inicial"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+    var lookup=new Button {Text="Buscar descrição na internet",Width=225,Height=32};
+    lookup.Click+=async (s,e)=>{
+     string code=barcode.Text.Trim();
+     if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){
+      MessageBox.Show("Informe um código de barras numérico de 8 a 14 dígitos.");return;
+     }
+     lookup.Enabled=false;lookup.Text="Consultando...";
+     try{
+      string description=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeName(code));
+      if(string.IsNullOrWhiteSpace(description)){MessageBox.Show("Produto não encontrado na base pública. Preencha manualmente.");return;}
+      if(!string.IsNullOrWhiteSpace(name.Text)&&MessageBox.Show("Substituir a descrição digitada por:\n"+description+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+      name.Text=description;
+     }catch(Exception ex){MessageBox.Show("Consulta indisponível: "+ex.Message+"\nVocê pode continuar o cadastro manualmente.","Busca de produto");}
+     finally{lookup.Enabled=true;lookup.Text="Buscar descrição na internet";}
+    };
+    panel.Controls.Add(lookup,1,5);
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -274,7 +307,7 @@ namespace ArmazemGratidao {
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
-    panel.Controls.Add(save,1,5);form.Controls.Add(panel);
+    panel.Controls.Add(save,1,6);form.Controls.Add(panel);
     if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
   }
