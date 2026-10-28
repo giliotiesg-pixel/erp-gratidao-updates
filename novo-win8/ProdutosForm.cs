@@ -9,16 +9,19 @@ namespace ArmazemGratidao {
   readonly string db;
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
   readonly TextBox search=new TextBox {Width=240};
+  bool showInactive=false;
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   public ProdutosForm(string database) {
    db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=56,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
    bar.Controls.Add(search);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>LoadProducts();bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();LoadProducts();search.Focus();};bar.Controls.Add(clear);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
+   var inactive=new Button {Text="Inativos",Width=105,Height=33};inactive.Click+=(s,e)=>{showInactive=!showInactive;inactive.Text=showInactive?"Todos os produtos":"Inativos";LoadProducts();};bar.Controls.Add(inactive);
+   var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
@@ -27,14 +30,44 @@ namespace ArmazemGratidao {
   SQLiteConnection Open(bool readOnly=true){
    var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;
   }
+  HashSet<string> ProductColumns(SQLiteConnection c){
+   var cols=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+   using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))
+   using(var r=cmd.ExecuteReader())while(r.Read())cols.Add(Convert.ToString(r["name"]));
+   return cols;
+  }
+  void ExportProducts(){
+   using(var dlg=new SaveFileDialog {Title="Exportar produtos para CSV",Filter="CSV separado por ponto e virgula (*.csv)|*.csv",FileName="produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
+    if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+    try{
+     using(var c=Open())
+     using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products ORDER BY name",c))
+     using(var r=cmd.ExecuteReader())
+     using(var writer=new System.IO.StreamWriter(dlg.FileName,false,new System.Text.UTF8Encoding(true))){
+      writer.WriteLine("ID;CodigoDeBarras;Descricao;Preco;Custo;Estoque");
+      while(r.Read()){
+       var cells=new string[6];
+       for(int i=0;i<6;i++)cells[i]="\""+Convert.ToString(r.GetValue(i)).Replace("\"","\"\"")+"\"";
+       writer.WriteLine(string.Join(";",cells));
+      }
+     }
+     MessageBox.Show("Produtos exportados. O banco não foi modificado.");
+    }catch(Exception ex){MessageBox.Show(ex.Message,"Falha na exportação");}
+   }
+  }
   void LoadProducts(){
    try{
-    using(var c=Open())using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao,price AS preco,cost AS custo,stock AS estoque FROM products WHERE name LIKE @q OR barcode LIKE @q ORDER BY name LIMIT 2000",c)){
+    using(var c=Open()){
+    var cols=ProductColumns(c);
+    string activeColumn=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
+    if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
+    string filter=showInactive?" AND COALESCE(\""+activeColumn+"\",1)=0":"";
+    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao,price AS preco,cost AS custo,stock AS estoque FROM products WHERE (name LIKE @q OR barcode LIKE @q)"+filter+" ORDER BY name LIMIT 2000",c)){
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
      info.Text="  "+dt.Rows.Count+" produtos exibidos. Cadastro preservado.";
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
+   }}catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
   }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
