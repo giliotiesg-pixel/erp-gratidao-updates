@@ -5,6 +5,8 @@ on:
       - 'novo-win8/**'
       - '.github/workflows/compilar-amzg-novo-win8.yml'
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: windows-2022
@@ -57,3 +59,15 @@ jobs:
           name: Armazem-Gratidao-Novo-Windows8-Setup
           path: novo-win8/installer/*.exe
           if-no-files-found: error
+      - name: Publicar instalador EXE no Releases
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @(Get-ChildItem "novo-win8/installer" -Filter *.exe -File)
+          if ($files.Count -eq 0) { throw "Nenhum instalador EXE foi gerado" }
+          $tag = "amzg-novo-win8-build-${{ github.run_number }}"
+          $paths = @($files | ForEach-Object { $_.FullName })
+          gh release create $tag @paths --title "Armazem Gratidao Novo - compilacao ${{ github.run_number }}" --notes "Instalador Windows x64 gerado automaticamente. Antes de instalar, faca backup do banco de dados. Importacao sobre banco existente bloqueada para proteger vendas e fiado." --target "${{ github.sha }}" --latest
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador no Releases" }
