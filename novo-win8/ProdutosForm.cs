@@ -22,6 +22,7 @@ namespace ArmazemGratidao {
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
    var inactive=new Button {Text="Inativos",Width=105,Height=33};inactive.Click+=(s,e)=>{showInactive=!showInactive;inactive.Text=showInactive?"Todos os produtos":"Inativos";LoadProducts();};bar.Controls.Add(inactive);
    var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
+   var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
@@ -65,6 +66,98 @@ namespace ArmazemGratidao {
     }
     LoadProducts();MessageBox.Show("Produto reativado. Estoque preservado.");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Falha na reativação");}
+  }
+  void ImportProductsCsv(){
+   using(var dlg=new OpenFileDialog {Title="Importar produtos (CSV)",Filter="CSV (*.csv)|*.csv"}){
+    if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+    try{
+     var rows=new List<string[]>();
+     var lines=System.IO.File.ReadAllLines(dlg.FileName,System.Text.Encoding.UTF8);
+     if(lines.Length<2)throw new Exception("Arquivo sem produtos.");
+     var header=ParseCsvLine(lines[0]);
+     int barcodeIndex=-1,nameIndex=-1,priceIndex=-1,costIndex=-1,stockIndex=-1;
+     for(int i=0;i<header.Count;i++){
+      string h=header[i].Trim().Trim('\uFEFF').ToLowerInvariant().Replace(" ","").Replace("_","");
+      if(h=="codigodebarras"||h=="barcode"||h=="ean")barcodeIndex=i;
+      if(h=="descricao"||h=="name"||h=="produto")nameIndex=i;
+      if(h=="preco"||h=="price"||h=="precovenda")priceIndex=i;
+      if(h=="custo"||h=="cost")costIndex=i;
+      if(h=="estoque"||h=="stock")stockIndex=i;
+     }
+     if(barcodeIndex<0||nameIndex<0||priceIndex<0)throw new Exception("CSV precisa ter CodigoDeBarras, Descricao e Preco.");
+     var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+     for(int n=1;n<lines.Length;n++){
+      if(string.IsNullOrWhiteSpace(lines[n]))continue;
+      var fields=ParseCsvLine(lines[n]);
+      int max=Math.Max(barcodeIndex,Math.Max(nameIndex,priceIndex));
+      if(fields.Count<=max)throw new Exception("Linha "+(n+1)+": colunas insuficientes.");
+      string code=fields[barcodeIndex].Trim(),name=fields[nameIndex].Trim();
+      if(code.Length==0||name.Length==0)throw new Exception("Linha "+(n+1)+": código ou descrição vazios.");
+      if(!seen.Add(code))throw new Exception("Código duplicado no CSV: "+code);
+      decimal price=ParseMoney(fields[priceIndex],n+1);
+      decimal cost=costIndex>=0&&costIndex<fields.Count?ParseMoney(fields[costIndex],n+1):0;
+      decimal stock=stockIndex>=0&&stockIndex<fields.Count?ParseMoney(fields[stockIndex],n+1):0;
+      if(price<0||cost<0||stock<0)throw new Exception("Linha "+(n+1)+": valores negativos.");
+      rows.Add(new[]{code,name,price.ToString(System.Globalization.CultureInfo.InvariantCulture),cost.ToString(System.Globalization.CultureInfo.InvariantCulture),stock.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+     }
+     if(rows.Count==0)throw new Exception("Nenhum produto válido.");
+     using(var c=Open(false)){
+      var cols=ProductColumns(c);
+      foreach(var required in new[]{"barcode","name","price","cost","stock"})if(!cols.Contains(required))throw new Exception("Banco incompatível: falta products."+required);
+      int existing=0;
+      using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE barcode=@barcode",c)){
+       var p=check.Parameters.Add("@barcode",DbType.String);
+       foreach(var row in rows){p.Value=row[0];if(Convert.ToInt64(check.ExecuteScalar())>0)existing++;}
+      }
+      if(MessageBox.Show("Produtos no arquivo: "+rows.Count+"\nJá cadastrados (serão ignorados): "+existing+"\nNovos: "+(rows.Count-existing)+"\n\nNenhum cadastro ou estoque existente será modificado. Importar?","Conferir importação",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+      if(existing==rows.Count){MessageBox.Show("Todos os produtos já estão cadastrados. Nada foi alterado.");return;}
+      string backup=db+".antes-importar-produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+      using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
+       copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);
+      }
+      int inserted=0;
+      using(var tx=c.BeginTransaction()){
+       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE barcode=@barcode",c,tx))
+       using(var insert=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock) VALUES(@barcode,@name,@price,@cost,@stock)",c,tx)){
+        var cp=check.Parameters.Add("@barcode",DbType.String);
+        var bp=insert.Parameters.Add("@barcode",DbType.String);
+        var np=insert.Parameters.Add("@name",DbType.String);
+        var pp=insert.Parameters.Add("@price",DbType.Decimal);
+        var co=insert.Parameters.Add("@cost",DbType.Decimal);
+        var st=insert.Parameters.Add("@stock",DbType.Decimal);
+        foreach(var row in rows){
+         cp.Value=row[0];if(Convert.ToInt64(check.ExecuteScalar())>0)continue;
+         bp.Value=row[0];np.Value=row[1];
+         pp.Value=decimal.Parse(row[2],System.Globalization.CultureInfo.InvariantCulture);
+         co.Value=decimal.Parse(row[3],System.Globalization.CultureInfo.InvariantCulture);
+         st.Value=decimal.Parse(row[4],System.Globalization.CultureInfo.InvariantCulture);
+         inserted+=insert.ExecuteNonQuery();
+        }
+       }
+       tx.Commit();
+      }
+      LoadProducts();MessageBox.Show(inserted+" produtos novos importados. Existentes preservados.\nBackup: "+backup);
+     }
+    }catch(Exception ex){MessageBox.Show(ex.Message,"Importação cancelada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
+  }
+  static decimal ParseMoney(string raw,int line){
+   decimal result;
+   if(!decimal.TryParse(raw.Trim(),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out result)
+    &&!decimal.TryParse(raw.Trim(),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out result))
+    throw new Exception("Linha "+line+": número inválido: "+raw);
+   return result;
+  }
+  static List<string> ParseCsvLine(string line){
+   var values=new List<string>();var cell=new System.Text.StringBuilder();bool quoted=false;
+   for(int i=0;i<line.Length;i++){
+    char ch=line[i];
+    if(ch=='"'){if(quoted&&i+1<line.Length&&line[i+1]=='"'){cell.Append('"');i++;}else quoted=!quoted;}
+    else if(ch==';'&&!quoted){values.Add(cell.ToString());cell.Clear();}
+    else cell.Append(ch);
+   }
+   if(quoted)throw new Exception("CSV com aspas não fechadas.");
+   values.Add(cell.ToString());return values;
   }
   void ExportProducts(){
    using(var dlg=new SaveFileDialog {Title="Exportar produtos para CSV",Filter="CSV separado por ponto e virgula (*.csv)|*.csv",FileName="produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
