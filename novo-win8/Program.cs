@@ -17,11 +17,14 @@ namespace ArmazemGratidao {
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
    dbPath=Path.Combine(dataDir,"armazem-gratidao.db");
-   Text="Armazém Gratidão Novo";Width=1200;Height=760;Font=new Font("Segoe UI",10);
+   Text="Armazém Gratidão Novo";Width=1200;Height=760;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(245,247,251);
    var bar=sideMenu;
+   grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
+   status.BackColor=Color.FromArgb(234,238,247);status.ForeColor=Color.FromArgb(30,40,55);status.Padding=new Padding(12,0,0,0);
    var header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
    menuToggle.Left=10;menuToggle.Top=8;menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
+   AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Verificar banco",CheckDatabase);
@@ -29,16 +32,19 @@ namespace ArmazemGratidao {
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
    AddButton(bar,"Aplicar recuperação",ApplyRecovery);
    AddButton(bar,"Conferir valores",CheckSaleDifferences);
+   AddSection(bar,"OPERAÇÃO");
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);});
+   AddSection(bar,"GESTÃO");
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
   }
-  void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,Width=175,Height=39,BackColor=Color.White,ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)};b.Click+=click;parent.Controls.Add(b);}
+  void AddSection(Control parent,string title){parent.Controls.Add(new Label {Text=title,Width=175,Height=29,TextAlign=ContentAlignment.BottomLeft,ForeColor=Color.FromArgb(188,209,245),Font=new Font("Segoe UI",8,FontStyle.Bold),Padding=new Padding(7,0,0,4),Margin=new Padding(3,11,3,2)});}
+  void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,Width=175,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,3,3,3)};b.FlatAppearance.BorderSize=0;b.Click+=click;parent.Controls.Add(b);}
   void BackupDatabase(object sender,EventArgs e) {
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
    using(var dlg=new SaveFileDialog {Title="Salvar copia de seguranca SQLite",Filter="Banco SQLite (*.db)|*.db",FileName="armazem-gratidao-backup-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".db"}) {
