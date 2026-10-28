@@ -52,6 +52,8 @@ namespace ArmazemGratidao {
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
+   openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
+   paidSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=1;ShowSaleDetails();}};
    Controls.Add(split);
    clientHome=new Panel {Dock=DockStyle.Fill,BackColor=Color.White};
    var homeHeader=new Label {Dock=DockStyle.Top,Height=70,Text="FIADO  |  SELECIONE UM CLIENTE",Font=new Font("Segoe UI",17,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),TextAlign=ContentAlignment.MiddleCenter};
@@ -170,21 +172,22 @@ namespace ArmazemGratidao {
     var form=new Form {Text="Venda #"+id+" - Itens e recebimentos",Width=960,Height=620,StartPosition=FormStartPosition.CenterParent};
     var tabs=new TabControl {Dock=DockStyle.Fill};
     var items=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-    items.DataSource=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+    items.DataSource=Query("SELECT id,name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
     var payments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
     payments.DataSource=Query("SELECT paid_at AS data,payment_method AS forma,amount AS valor FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
     var a=new TabPage("Itens da venda");a.Controls.Add(items);var b=new TabPage("Pagamentos anteriores");b.Controls.Add(payments);
     tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
     var edit=new Button {Text="Editar item selecionado (com auditoria)",Dock=DockStyle.Bottom,Height=42,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
-    edit.Click+=(s,e)=>{form.Close();EditSaleItem(id);};form.Controls.Add(edit);
+    edit.Click+=(s,e)=>{if(items.CurrentRow==null){MessageBox.Show("Selecione um item da venda.");return;}long itemId=Convert.ToInt64(items.CurrentRow.Cells["id"].Value);form.Close();EditSaleItem(id,itemId);};form.Controls.Add(edit);
     using(form)form.ShowDialog(this);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
   }
-  void EditSaleItem(long saleId){
+  void EditSaleItem(long saleId,long selectedItemId){
    try{
     var rows=Query("SELECT id, name AS produto, quantity AS quantidade, unit_price AS preco, total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",saleId);
     using(var form=new Form {Text="Auditoria de itens - venda #"+saleId,Width=880,Height=550,StartPosition=FormStartPosition.CenterParent}){
      var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=rows};
+     foreach(DataGridViewRow candidate in table.Rows){if(candidate.Cells["id"].Value!=null && Convert.ToInt64(candidate.Cells["id"].Value)==selectedItemId){candidate.Selected=true;table.CurrentCell=candidate.Cells["produto"];break;}}
      var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=60,Padding=new Padding(8)};
      var save=new Button {Text="Alterar item selecionado",Width=210,Height=38,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
      footer.Controls.Add(save);form.Controls.Add(table);form.Controls.Add(footer);
