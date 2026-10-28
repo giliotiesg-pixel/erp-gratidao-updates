@@ -144,7 +144,8 @@ namespace ArmazemGratidao {
    }
   }
   void ShowSaleDetails(){
-   if(saleTabs!=null && saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}\n   DataGridView view=SelectedSaleGrid();
+   if(saleTabs!=null && saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
+   DataGridView view=SelectedSaleGrid();
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda para consultar.");return;}
    try{
     var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
