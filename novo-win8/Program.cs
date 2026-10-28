@@ -11,13 +11,41 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>ButtonTextVisibility.CheckOpenForms(); Application.Run(new MainForm()); }
+ }
+ static class ButtonTextVisibility {
+  static readonly System.Collections.Generic.Dictionary<Button,string> inspected=new System.Collections.Generic.Dictionary<Button,string>();
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms)Check(form);
+  }
+  static void Check(Control parent){
+   foreach(Control child in parent.Controls){
+    var button=child as Button;
+    if(button!=null && !string.IsNullOrWhiteSpace(button.Text)){
+     string signature=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+     string previous;
+     if(!inspected.TryGetValue(button,out previous) || previous!=signature){
+      var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
+      int desired=size.Width+24;
+      if(button.Image!=null)desired+=button.Image.Width+8;
+      if(button.Width<desired && button.Dock==DockStyle.None && button.Parent is FlowLayoutPanel){
+       button.AutoSize=false;button.Width=desired;
+      }
+      button.AutoEllipsis=true;
+      button.TextAlign=ContentAlignment.MiddleCenter;
+      button.UseMnemonic=false;
+      inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+     }
+    }
+    if(child.HasChildren)Check(child);
+   }
+  }
  }
  public sealed class MainForm : Form {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
-  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=205,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
+  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
