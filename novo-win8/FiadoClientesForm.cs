@@ -304,6 +304,12 @@ namespace ArmazemGratidao {
      sb.AppendLine("Venda #"+id+" | "+Convert.ToString(sale["data"]));
      var items=Query("SELECT name,quantity,unit_price,total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
      foreach(DataRow item in items.Rows)sb.AppendLine("  "+Convert.ToString(item["name"])+" - "+Convert.ToDecimal(item["quantity"]).ToString("N3")+" x R$ "+Convert.ToDecimal(item["unit_price"]).ToString("N2")+" = R$ "+Convert.ToDecimal(item["total"]).ToString("N2"));
+     var payments=Query("SELECT paid_at,payment_method,amount FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
+     if(payments.Rows.Count>0){
+      sb.AppendLine("  PAGAMENTOS REGISTRADOS:");
+      foreach(DataRow paymentRow in payments.Rows)
+       sb.AppendLine("  "+Convert.ToString(paymentRow["paid_at"])+" | "+Convert.ToString(paymentRow["payment_method"])+" | R$ "+Convert.ToDecimal(paymentRow["amount"]).ToString("N2"));
+     }
      sb.AppendLine("  Total: R$ "+Convert.ToDecimal(sale["total"]).ToString("N2")+" | Pago: R$ "+Convert.ToDecimal(sale["pago"]).ToString("N2")+" | Saldo: R$ "+balance.ToString("N2"));
      sb.AppendLine("--------------------------------");
     }
@@ -334,6 +340,13 @@ namespace ArmazemGratidao {
     sb.AppendLine("--------------------------------");
     foreach(DataRow item in rows.Rows)sb.AppendLine(Convert.ToString(item["produto"])+" | "+Convert.ToDecimal(item["quantidade"]).ToString("N3")+" x R$ "+Convert.ToDecimal(item["preco"]).ToString("N2")+" = R$ "+Convert.ToDecimal(item["valor"]).ToString("N2"));
     sb.AppendLine("--------------------------------");
+    var payments=Query("SELECT paid_at,payment_method,amount FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
+    if(payments.Rows.Count>0){
+     sb.AppendLine("PAGAMENTOS REGISTRADOS:");
+     foreach(DataRow paymentRow in payments.Rows)
+      sb.AppendLine(Convert.ToString(paymentRow["paid_at"])+" | "+Convert.ToString(paymentRow["payment_method"])+" | R$ "+Convert.ToDecimal(paymentRow["amount"]).ToString("N2"));
+     sb.AppendLine("--------------------------------");
+    }
     sb.AppendLine("Total: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["valor"].Value).ToString("N2"));
     sb.AppendLine("Recebido: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["pago"].Value).ToString("N2"));
     sb.AppendLine("Saldo: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["saldo"].Value).ToString("N2"));
