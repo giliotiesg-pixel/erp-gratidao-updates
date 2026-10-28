@@ -122,7 +122,7 @@ namespace ArmazemGratidao {
      try{
       using(var connection=Open(false)){
        string previous;
-       using(var check=new SQLiteCommand("SELECT COALESCE(customer_name,'') FROM sales WHERE id=@id AND "+CreditFilter,connection)){
+       using(var check=new SQLiteCommand("SELECT COALESCE(s.customer_name,'') FROM sales s WHERE s.id=@id AND "+CreditFilter,connection)){
         check.Parameters.AddWithValue("@id",id);object result=check.ExecuteScalar();
         if(result==null){MessageBox.Show("Venda fiado não encontrada.");return;}
         previous=Convert.ToString(result);
@@ -131,7 +131,7 @@ namespace ArmazemGratidao {
        if(MessageBox.Show("Venda #"+id+"\\nCliente atual: "+(previous.Trim().Length==0?"SEM CLIENTE":previous)+"\\nNovo cliente: "+newName+"\\n\\nConfirmar correção?","Confirmar vínculo",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
        string backup=db+".antes-corrigir-cliente-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
        using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
-       using(var tx=connection.BeginTransaction())using(var update=new SQLiteCommand("UPDATE sales SET customer_name=@name WHERE id=@id AND COALESCE(customer_name,'')=@previous AND "+CreditFilter,connection,tx)){
+       using(var tx=connection.BeginTransaction())using(var update=new SQLiteCommand("UPDATE sales AS s SET customer_name=@name WHERE s.id=@id AND COALESCE(s.customer_name,'')=@previous AND "+CreditFilter,connection,tx)){
         update.Parameters.AddWithValue("@name",newName);update.Parameters.AddWithValue("@id",id);update.Parameters.AddWithValue("@previous",previous);
         if(update.ExecuteNonQuery()!=1)throw new Exception("A venda foi modificada. Atualize e tente novamente.");
         tx.Commit();
