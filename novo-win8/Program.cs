@@ -197,6 +197,9 @@ namespace ArmazemGratidao {
    }
   }
   void ApplyRecovery(object sender,EventArgs e){
+   MessageBox.Show("Aplicacao automatica temporariamente bloqueada: a validacao anterior comparava apenas contagens e poderia substituir registros alterados, inclusive do Fiado. O banco ativo foi preservado. Use Preparar recuperacao para gerar e conferir uma copia de teste.","Protecao contra perda de dados",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+   return;
+
    if(!File.Exists(dbPath)){MessageBox.Show("Banco atual não encontrado.");return;}
    using(var pick=new OpenFileDialog {Title="Selecione o banco de TESTE gerado em Preparar recuperação",Filter="Banco SQLite (*.db)|*.db"}){
     if(pick.ShowDialog()!=DialogResult.OK)return;
@@ -371,6 +374,13 @@ namespace ArmazemGratidao {
    }
   }
   void ImportDatabase(object sender,EventArgs e) {
+   // Nunca substituir um banco existente durante importacao.
+   // O fluxo de recuperacao cria uma COPIA de teste e preserva os registros ativos.
+   if(File.Exists(dbPath)){
+    MessageBox.Show("Ja existe um banco de dados no programa. A importacao direta foi bloqueada para impedir que vendas, fiado, produtos e pagamentos desaparecam.\n\nSelecione o banco de origem na proxima janela para PREPARAR uma recuperacao em copia de teste. O banco atual nao sera substituido.","Protecao dos dados",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    PrepareRecoveredSales(sender,e);
+    return;
+   }
    using(var dlg=new OpenFileDialog {Title="Selecionar banco antigo (somente leitura)",Filter="Bancos SQLite|*.db;*.sqlite;*.sqlite3|Todos os arquivos|*.*"}) {
     if(dlg.ShowDialog()!=DialogResult.OK)return;
     try {
