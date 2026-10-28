@@ -250,7 +250,7 @@ namespace ArmazemGratidao {
     client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (product lookup)";
     string json=client.DownloadString(url);
     foreach(string key in new[]{"product_name_pt","product_name"}){
-     var match=System.Text.RegularExpressions.Regex.Match(json,"\\""+key+"\\"\\s*:\\s*\\"((?:\\\\.|[^\\"\\\\])*)\\"");
+     var match=System.Text.RegularExpressions.Regex.Match(json, "\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
      if(match.Success){
       string name=System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value).Trim();
       if(name.Length>0)return name;
