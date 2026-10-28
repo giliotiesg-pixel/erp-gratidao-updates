@@ -46,8 +46,8 @@ namespace ArmazemGratidao {
    var previousItemTab=new TabPage("Produtos da venda selecionada");previousItemTab.Controls.Add(previousItems);
    var previousPaymentTab=new TabPage("Pagamentos desta venda");previousPaymentTab.Controls.Add(previousPayments);
    previousDetailTabs.TabPages.Add(previousItemTab);previousDetailTabs.TabPages.Add(previousPaymentTab);
-   pendingSplit.Panel1.Controls.Add(openSales);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
-   previousSplit.Panel1.Controls.Add(paidSales);previousSplit.Panel2.Controls.Add(previousDetailTabs);
+   SetupSaleSelection(openSales,pendingSplit.Panel1,false);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
+   SetupSaleSelection(paidSales,previousSplit.Panel1,true);previousSplit.Panel2.Controls.Add(previousDetailTabs);
    pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
    openSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(openSales,pendingItems,pendingPayments);
    paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(paidSales,previousItems,previousPayments);
@@ -96,6 +96,29 @@ namespace ArmazemGratidao {
   }
   const string CreditFilter="(UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%')";
   const string Balance="COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0)";
+  void SetupSaleSelection(DataGridView grid, SplitterPanel panel, bool paid) {
+   var mark=new DataGridViewCheckBoxColumn();
+   mark.Name="marcar";mark.HeaderText="Selecionar";mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
+   grid.Columns.Add(mark);
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=40,WrapContents=false};
+   var all=new CheckBox {Text="Selecionar todas",AutoSize=true,Margin=new Padding(8,10,15,0)};
+   var total=new Label {Text="Total selecionado: R$ 0,00",AutoSize=true,Margin=new Padding(5,10,0,0)};
+   bar.Controls.Add(all);bar.Controls.Add(total);
+   Action sum=()=>{
+    decimal value=0;
+    foreach(DataGridViewRow row in grid.Rows) {
+     if(row.IsNewRow||!Convert.ToBoolean(row.Cells["marcar"].Value??false))continue;
+     var v=row.Cells[paid?"valor":"saldo"].Value;
+     if(v!=null&&v!=DBNull.Value)value+=Convert.ToDecimal(v);
+    }
+    total.Text="Total selecionado: R$ "+value.ToString("N2");
+   };
+   all.CheckedChanged+=(s,e)=>{foreach(DataGridViewRow row in grid.Rows)if(!row.IsNewRow)row.Cells["marcar"].Value=all.Checked;sum();};
+   grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
+   grid.CellValueChanged+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex==grid.Columns["marcar"].Index)sum();};
+   grid.DataBindingComplete+=(s,e)=>{all.Checked=false;sum();};
+   panel.Controls.Add(grid);panel.Controls.Add(bar);
+  }
   void LoadClients(){
    try {
     var dt=Query("SELECT COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) AS saldo FROM sales s WHERE "+CreditFilter+" GROUP BY COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') ORDER BY cliente");
