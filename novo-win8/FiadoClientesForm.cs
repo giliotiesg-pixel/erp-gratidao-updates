@@ -36,11 +36,21 @@ namespace ArmazemGratidao {
    var previousItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
    var pendingSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235};
    var previousSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235};
-   pendingSplit.Panel1.Controls.Add(openSales);pendingSplit.Panel2.Controls.Add(pendingItems);
-   previousSplit.Panel1.Controls.Add(paidSales);previousSplit.Panel2.Controls.Add(previousItems);
+   var pendingPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+   var previousPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+   var pendingDetailTabs=new TabControl {Dock=DockStyle.Fill};
+   var previousDetailTabs=new TabControl {Dock=DockStyle.Fill};
+   var pendingItemTab=new TabPage("Produtos da venda selecionada");pendingItemTab.Controls.Add(pendingItems);
+   var pendingPaymentTab=new TabPage("Pagamentos desta venda");pendingPaymentTab.Controls.Add(pendingPayments);
+   pendingDetailTabs.TabPages.Add(pendingItemTab);pendingDetailTabs.TabPages.Add(pendingPaymentTab);
+   var previousItemTab=new TabPage("Produtos da venda selecionada");previousItemTab.Controls.Add(previousItems);
+   var previousPaymentTab=new TabPage("Pagamentos desta venda");previousPaymentTab.Controls.Add(previousPayments);
+   previousDetailTabs.TabPages.Add(previousItemTab);previousDetailTabs.TabPages.Add(previousPaymentTab);
+   pendingSplit.Panel1.Controls.Add(openSales);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
+   previousSplit.Panel1.Controls.Add(paidSales);previousSplit.Panel2.Controls.Add(previousDetailTabs);
    pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
-   openSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleItems(openSales,pendingItems);
-   paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleItems(paidSales,previousItems);
+   openSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(openSales,pendingItems,pendingPayments);
+   paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(paidSales,previousItems,previousPayments);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
    var switchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,Padding=new Padding(5),BackColor=Color.FromArgb(232,242,252)};
@@ -173,15 +183,16 @@ namespace ArmazemGratidao {
     if(form.ShowDialog(this)==DialogResult.OK){LoadClients();SelectClient(customer);MessageBox.Show("Cliente da venda atualizado. Valores e pagamentos preservados.");}
    }
   }
-  void RefreshSelectedSaleItems(DataGridView sales,DataGridView items){
-   if(sales.CurrentRow==null || sales.CurrentRow.IsNewRow || !sales.Columns.Contains("venda")){
-    items.DataSource=null;return;
-   }
+  void RefreshSelectedSaleDetails(DataGridView sales,DataGridView items,DataGridView payments){
+   items.DataSource=null;payments.DataSource=null;
+   if(sales.CurrentRow==null || sales.CurrentRow.IsNewRow || !sales.Columns.Contains("venda"))return;
    try{
     var sale=sales.CurrentRow.Cells["venda"].Value;
-    if(sale==null || sale==DBNull.Value){items.DataSource=null;return;}
-    items.DataSource=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",Convert.ToInt64(sale));
-   }catch(Exception ex){items.DataSource=null;items.Tag=ex.Message;}
+    if(sale==null || sale==DBNull.Value)return;
+    long id=Convert.ToInt64(sale);
+    items.DataSource=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+    payments.DataSource=Query("SELECT paid_at AS data,payment_method AS forma,amount AS valor FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
+   }catch(Exception ex){items.DataSource=null;payments.DataSource=null;MessageBox.Show(ex.Message,"Erro ao consultar venda");}
   }
   void ShowSaleDetails(){
    if(saleTabs!=null && saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
