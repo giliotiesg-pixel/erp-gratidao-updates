@@ -48,6 +48,7 @@ namespace ArmazemGratidao {
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var auditHistory=new Button {Text="Histórico de alterações",AutoSize=true,Height=36,BackColor=Color.FromArgb(80,60,125),ForeColor=Color.White};auditHistory.Click+=(s,e)=>ShowItemAuditHistory();bottom.Controls.Add(auditHistory);
+   var statement=new Button {Text="Extrato do cliente / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};statement.Click+=(s,e)=>SendCustomerStatement();bottom.Controls.Add(statement);
    var receipt=new Button {Text="Cupom / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};receipt.Click+=(s,e)=>SendReceipt();bottom.Controls.Add(receipt);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
@@ -284,6 +285,40 @@ namespace ArmazemGratidao {
      form.Controls.Add(table);form.Controls.Add(header);form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível consultar auditoria",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void SendCustomerStatement(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   try{
+    var sales=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS total,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.created_at,s.id","@name",customer);
+    if(sales.Rows.Count==0){MessageBox.Show("Este cliente não possui vendas em aberto.");return;}
+    var sb=new System.Text.StringBuilder();
+    sb.AppendLine("ARMAZEM GRATIDAO - EXTRATO DE FIADO");
+    sb.AppendLine("Cliente: "+customer);
+    sb.AppendLine("Emitido em: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
+    sb.AppendLine("--------------------------------");
+    decimal totalDue=0;
+    foreach(DataRow sale in sales.Rows){
+     long id=Convert.ToInt64(sale["venda"]);
+     decimal balance=Convert.ToDecimal(sale["saldo"]);
+     totalDue+=balance;
+     sb.AppendLine("Venda #"+id+" | "+Convert.ToString(sale["data"]));
+     var items=Query("SELECT name,quantity,unit_price,total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+     foreach(DataRow item in items.Rows)sb.AppendLine("  "+Convert.ToString(item["name"])+" - "+Convert.ToDecimal(item["quantity"]).ToString("N3")+" x R$ "+Convert.ToDecimal(item["unit_price"]).ToString("N2")+" = R$ "+Convert.ToDecimal(item["total"]).ToString("N2"));
+     sb.AppendLine("  Total: R$ "+Convert.ToDecimal(sale["total"]).ToString("N2")+" | Pago: R$ "+Convert.ToDecimal(sale["pago"]).ToString("N2")+" | Saldo: R$ "+balance.ToString("N2"));
+     sb.AppendLine("--------------------------------");
+    }
+    sb.AppendLine("TOTAL EM ABERTO: R$ "+totalDue.ToString("N2"));
+    sb.AppendLine("Documento informativo, nao fiscal.");
+    using(var form=new Form {Text="Extrato do cliente - "+customer,Width=720,Height=660,StartPosition=FormStartPosition.CenterParent}){
+     var preview=new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,Dock=DockStyle.Fill,Font=new Font("Consolas",10),Text=sb.ToString()};
+     var actions=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=60,Padding=new Padding(8)};
+     var copy=new Button {Text="Copiar extrato",Width=160,Height=38};
+     copy.Click+=(s,e)=>{Clipboard.SetText(sb.ToString());MessageBox.Show("Extrato copiado.");};
+     var share=new Button {Text="Abrir WhatsApp",Width=180,Height=38,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};
+     share.Click+=(s,e)=>{System.Diagnostics.Process.Start("https://api.whatsapp.com/send?text="+Uri.EscapeDataString(sb.ToString()));};
+     actions.Controls.Add(copy);actions.Controls.Add(share);form.Controls.Add(preview);form.Controls.Add(actions);form.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível gerar extrato",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void SendReceipt(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
