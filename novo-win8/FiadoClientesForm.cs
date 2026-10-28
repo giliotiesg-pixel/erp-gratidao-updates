@@ -27,10 +27,14 @@ namespace ArmazemGratidao {
    split.Panel1.Controls.Add(new Label {Text="  PESQUISAR CLIENTE",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.White,BackColor=Color.FromArgb(20,73,158)});
    var tabs=new TabControl {Dock=DockStyle.Fill};
    saleTabs=tabs;
-   var pending=new TabPage("Vendas em aberto");pending.Controls.Add(openSales);
-   var previous=new TabPage("Vendas anteriores / Pagas");previous.Controls.Add(paidSales);
+   var pending=new TabPage("Fiado atual - em aberto");pending.Controls.Add(openSales);
+   var previous=new TabPage("Fiados anteriores - pagos");previous.Controls.Add(paidSales);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
+   var switchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,Padding=new Padding(5),BackColor=Color.FromArgb(232,242,252)};
+   var showOpen=new Button {Text="Fiado atual - em aberto",Width=190,Height=32,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
+   var showPrevious=new Button {Text="Fiados anteriores - pagos",Width=210,Height=32,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
+   tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
    var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=122,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"});method.SelectedIndex=0;bottom.Controls.Add(method);
@@ -41,7 +45,7 @@ namespace ArmazemGratidao {
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
-   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
+   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
    Controls.Add(split);LoadClients();
   }
@@ -80,7 +84,7 @@ namespace ArmazemGratidao {
     paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY s.id DESC","@name",name);
     paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY p.paid_at DESC,p.id DESC","@name",name);
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
-    selected.Text="FIADO | "+name+" | Saldo em aberto R$ "+total.ToString("N2");
+    selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Saldo R$ "+total.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
   }
   void AuditBalances(){
@@ -197,6 +201,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Recebimento não realizado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void Pay(){
+   if(saleTabs!=null && saleTabs.SelectedIndex!=0){MessageBox.Show("Selecione uma venda na aba Fiado atual - em aberto.");return;}
    if(openSales.CurrentRow==null){MessageBox.Show("Selecione uma venda em aberto.");return;}
    if(amount.Value<=0){MessageBox.Show("Informe o valor recebido.");return;}
    long saleId=Convert.ToInt64(openSales.CurrentRow.Cells["venda"].Value);
