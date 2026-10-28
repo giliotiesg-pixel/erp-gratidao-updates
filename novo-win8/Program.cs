@@ -54,6 +54,32 @@ namespace ArmazemGratidao {
    home.Controls.Add(title);
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
+   var metrics=new System.Collections.Generic.List<Tuple<string,string>>();
+   if(File.Exists(dbPath)){
+    try{
+     using(var db=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+      db.Open();
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
+       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
+       metrics.Add(Tuple.Create("VENDAS DO DIA",Convert.ToString(q.ExecuteScalar())));
+      }
+      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
+       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
+       metrics.Add(Tuple.Create("TOTAL VENDIDO HOJE","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
+      }
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products",db))
+       metrics.Add(Tuple.Create("PRODUTOS CADASTRADOS",Convert.ToString(q.ExecuteScalar())));
+     }
+    }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
+   }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
+   foreach(var metric in metrics){
+    var panel=new Panel {Width=285,Height=103,BackColor=Color.White,Margin=new Padding(7,4,7,14)};
+    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=34,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)});
+    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Bottom,Height=60,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",15,FontStyle.Bold),AutoEllipsis=true});
+    home.Controls.Add(panel);
+   }
+   home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
+
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var form=new PdvForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
