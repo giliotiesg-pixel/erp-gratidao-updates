@@ -21,7 +21,7 @@ namespace ArmazemGratidao {
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=55,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(232,242,252),TextAlign=ContentAlignment.MiddleLeft};
   public FiadoClientesForm(string database) {
-   db=database;Text="Armazem Gratidao | Fiado por Cliente";StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=Size;MaximumSize=Size;
+   db=database;Text="Armazem Gratidao | Fiado por Cliente";StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=new Size(640,480);
    var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
@@ -80,8 +80,8 @@ namespace ArmazemGratidao {
    clientHome.Controls.Add(new Label {Dock=DockStyle.Fill,Text="Clique no nome do cliente à esquerda para consultar vendas, itens, pagamentos e emitir cupom.",Font=new Font("Segoe UI",12),TextAlign=ContentAlignment.MiddleCenter});
    clientHome.Controls.Add(homeHeader);
    split.Panel2.Controls.Add(clientHome);clientHome.BringToFront();
-   var back=new Button {Text="← Voltar aos clientes",Dock=DockStyle.Top,Height=37,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
-   back.Click+=(s,e)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();};
+   var back=new Button {Text="←",Dock=DockStyle.Top,Height=37,Width=56,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",16,FontStyle.Bold),BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
+   back.Click+=(s,e)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();WindowState=FormWindowState.Normal;};
    split.Panel2.Controls.Add(back);back.BringToFront();
    split.Panel2Collapsed=true;
    LoadClients();
@@ -105,7 +105,7 @@ namespace ArmazemGratidao {
      allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      visibleClients++;
-     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Width=Math.Max(190,(clients.ClientSize.Width-45)/3),Height=96,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
+     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Width=155,Height=55,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
      b.Click+=(s,e)=>SelectClient(Convert.ToString(((Button)s).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
