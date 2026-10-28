@@ -3,6 +3,11 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
+using System.Net;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Web.Script.Serialization;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
  static class Program {
@@ -11,6 +16,7 @@ namespace ArmazemGratidao {
  public sealed class MainForm : Form {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
+  const int InstalledBuild=55;
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=205,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
@@ -26,6 +32,7 @@ namespace ArmazemGratidao {
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início",ShowHome);
+   AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
@@ -45,6 +52,54 @@ namespace ArmazemGratidao {
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
+  }
+  async Task CheckUpdates(){
+   try{
+    status.Text="Consultando versão publicada...";
+    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+    string json;
+    using(var web=new WebClient()){
+     web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+     web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
+     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases/latest"));
+    }
+    var release=new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string,object>;
+    if(release==null)throw new Exception("Resposta de atualização inválida.");
+    string tag=Convert.ToString(release["tag_name"]);
+    const string prefix="amzg-novo-win8-build-";
+    int remoteBuild;
+    if(!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)||!int.TryParse(tag.Substring(prefix.Length),out remoteBuild))throw new Exception("Versão publicada não reconhecida.");
+    if(remoteBuild<=InstalledBuild){status.Text="Versão atualizada (build "+InstalledBuild+").";MessageBox.Show("Você já está na versão mais recente disponível.\\nVersão instalada: build "+InstalledBuild);return;}
+    var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
+    System.Collections.Generic.Dictionary<string,object> asset=null;
+    foreach(object obj in assets){
+     var item=obj as System.Collections.Generic.Dictionary<string,object>;
+     if(item!=null&&Convert.ToString(item["name"])=="Armazem-Gratidao-Novo-Windows8-Setup.exe"){asset=item;break;}
+    }
+    if(asset==null)throw new Exception("O release não contém o instalador Windows.");
+    string digest=asset.ContainsKey("digest")?Convert.ToString(asset["digest"]):"";
+    if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
+    string url=Convert.ToString(asset["browser_download_url"]);
+    if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
+    if(MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
+    string dir=Path.Combine(Path.GetTempPath(),"ArmazemGratidaoNovo-Atualizacoes");
+    Directory.CreateDirectory(dir);
+    string installer=Path.Combine(dir,"Armazem-Gratidao-Novo-build-"+remoteBuild+"-Setup.exe");
+    status.Text="Baixando atualização build "+remoteBuild+"...";
+    using(var web=new WebClient())await web.DownloadFileTaskAsync(new Uri(url),installer);
+    string actual;
+    using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
+    if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase)){File.Delete(installer);throw new Exception("SHA-256 inválido. Instalador rejeitado.");}
+    if(File.Exists(dbPath)){
+     string backup=Path.Combine(dataDir,"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db");
+     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
+      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
+     }
+    }
+    Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
+    Close();
+   }catch(Exception ex){status.Text="Não foi possível atualizar.";MessageBox.Show(ex.Message,"Atualização não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
   }
   void ShowHome(object sender,EventArgs e){
    grid.Visible=false;
@@ -95,7 +150,8 @@ namespace ArmazemGratidao {
     Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
     Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
-    Tuple.Create("Backup do banco",(EventHandler)BackupDatabase)
+    Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
+    Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
    foreach(var action in actions){
     var button=new Button {Text=action.Item1,Width=208,Height=78,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",11,FontStyle.Bold)};
