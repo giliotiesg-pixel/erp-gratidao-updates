@@ -47,6 +47,7 @@ namespace ArmazemGratidao {
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
+   var auditHistory=new Button {Text="Histórico de alterações",AutoSize=true,Height=36,BackColor=Color.FromArgb(80,60,125),ForeColor=Color.White};auditHistory.Click+=(s,e)=>ShowItemAuditHistory();bottom.Controls.Add(auditHistory);
    var receipt=new Button {Text="Cupom / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};receipt.Click+=(s,e)=>SendReceipt();bottom.Controls.Add(receipt);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
@@ -259,6 +260,27 @@ namespace ArmazemGratidao {
      form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao editar venda");}
+  }
+  void ShowItemAuditHistory(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   if(saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda em aberto ou paga.");return;}
+   var view=SelectedSaleGrid();
+   if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda.");return;}
+   long saleId=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
+   try{
+    using(var connection=Open(true)){
+     using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='fiado_item_audit'",connection)){
+      if(Convert.ToInt32(exists.ExecuteScalar())==0){MessageBox.Show("Esta venda ainda não possui alterações de itens registradas.");return;}
+     }
+    }
+    var data=Query("SELECT changed_at AS data,item_id AS item,old_name AS produto_anterior,new_name AS produto_novo,old_qty AS quantidade_anterior,new_qty AS quantidade_nova,old_price AS preco_anterior,new_price AS preco_novo,old_total AS item_anterior,new_total AS item_novo,old_sale_total AS venda_anterior,new_sale_total AS venda_nova,reason AS motivo FROM fiado_item_audit WHERE sale_id=@sale ORDER BY id DESC","@sale",saleId);
+    if(data.Rows.Count==0){MessageBox.Show("Nenhuma alteração de itens registrada para a venda #"+saleId+".");return;}
+    using(var form=new Form {Text="Histórico de alterações - venda #"+saleId,Width=1100,Height=580,StartPosition=FormStartPosition.CenterParent}){
+     var header=new Label {Text="  AUDITORIA DA VENDA #"+saleId+" | "+data.Rows.Count+" alteração(ões) | Somente leitura",Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.FromArgb(232,242,252),ForeColor=Color.FromArgb(20,73,158),TextAlign=ContentAlignment.MiddleLeft};
+     var table=new DataGridView {Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
+     form.Controls.Add(table);form.Controls.Add(header);form.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível consultar auditoria",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void SendReceipt(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
