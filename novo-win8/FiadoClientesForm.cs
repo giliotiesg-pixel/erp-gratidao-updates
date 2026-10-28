@@ -16,11 +16,14 @@ namespace ArmazemGratidao {
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   string customer="";
   TabControl saleTabs;
+  Panel clientHome;
+  SplitContainer detailSplit;
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=55,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(232,242,252),TextAlign=ContentAlignment.MiddleLeft};
   public FiadoClientesForm(string database) {
    db=database;Text="Armazem Gratidao | Fiado por Cliente";Width=1250;Height=790;
    var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265};
+   detailSplit=split;
    split.Panel1.Controls.Add(clients);
    clientSearch.TextChanged+=(s,e)=>LoadClients();
    split.Panel1.Controls.Add(clientSearch);
@@ -44,10 +47,20 @@ namespace ArmazemGratidao {
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
+   var receipt=new Button {Text="Cupom / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};receipt.Click+=(s,e)=>SendReceipt();bottom.Controls.Add(receipt);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
-   Controls.Add(split);LoadClients();
+   Controls.Add(split);
+   clientHome=new Panel {Dock=DockStyle.Fill,BackColor=Color.White};
+   var homeHeader=new Label {Dock=DockStyle.Top,Height=70,Text="FIADO  |  SELECIONE UM CLIENTE",Font=new Font("Segoe UI",17,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),TextAlign=ContentAlignment.MiddleCenter};
+   clientHome.Controls.Add(new Label {Dock=DockStyle.Fill,Text="Clique no nome do cliente à esquerda para consultar vendas, itens, pagamentos e emitir cupom.",Font=new Font("Segoe UI",12),TextAlign=ContentAlignment.MiddleCenter});
+   clientHome.Controls.Add(homeHeader);
+   split.Panel2.Controls.Add(clientHome);clientHome.BringToFront();
+   var back=new Button {Text="← Voltar aos clientes",Dock=DockStyle.Top,Height=37,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
+   back.Click+=(s,e)=>{customer="";clientHome.Visible=true;clientHome.BringToFront();};
+   split.Panel2.Controls.Add(back);back.BringToFront();
+   LoadClients();
   }
   SQLiteConnection Open(bool readOnly=false) {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;}
   DataTable Query(string sql,string p=null,object value=null) {
@@ -77,7 +90,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
   }
   void SelectClient(string name){
-   customer=name;selected.Text="FIADO | "+customer;
+   customer=name;clientHome.Visible=false;selected.Text="FIADO | "+customer;
    try {
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name";
     openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY s.id DESC","@name",name);
@@ -163,6 +176,34 @@ namespace ArmazemGratidao {
     tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
     using(form)form.ShowDialog(this);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
+  }
+  void SendReceipt(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   var view=SelectedSaleGrid();
+   if(saleTabs.SelectedIndex==2 || view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba em aberto ou pagas.");return;}
+   try{
+    long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
+    var rows=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+    var sb=new System.Text.StringBuilder();
+    sb.AppendLine("ARMAZEM GRATIDAO - COMPROVANTE DE FIADO");
+    sb.AppendLine("Cliente: "+customer);
+    sb.AppendLine("Venda: #"+id+" | Data: "+Convert.ToString(view.CurrentRow.Cells["data"].Value));
+    sb.AppendLine("--------------------------------");
+    foreach(DataRow item in rows.Rows)sb.AppendLine(Convert.ToString(item["produto"])+" | "+Convert.ToDecimal(item["quantidade"]).ToString("N3")+" x R$ "+Convert.ToDecimal(item["preco"]).ToString("N2")+" = R$ "+Convert.ToDecimal(item["valor"]).ToString("N2"));
+    sb.AppendLine("--------------------------------");
+    sb.AppendLine("Total: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["valor"].Value).ToString("N2"));
+    sb.AppendLine("Recebido: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["pago"].Value).ToString("N2"));
+    sb.AppendLine("Saldo: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["saldo"].Value).ToString("N2"));
+    sb.AppendLine("Documento informativo, nao fiscal.");
+    using(var form=new Form {Text="Cupom da venda #"+id,Width=640,Height=610,StartPosition=FormStartPosition.CenterParent}){
+     var preview=new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Consolas",11),Text=sb.ToString()};
+     var actions=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=55,Padding=new Padding(8)};
+     var copy=new Button {Text="Copiar cupom",Width=145,Height=34};copy.Click+=(s,e)=>{Clipboard.SetText(sb.ToString());MessageBox.Show("Cupom copiado.");};
+     var send=new Button {Text="Enviar pelo WhatsApp",Width=200,Height=34,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};
+     send.Click+=(s,e)=>{System.Diagnostics.Process.Start("https://api.whatsapp.com/send?text="+Uri.EscapeDataString(sb.ToString()));};
+     actions.Controls.Add(copy);actions.Controls.Add(send);form.Controls.Add(preview);form.Controls.Add(actions);form.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Nao foi possivel gerar o cupom");}
   }
   void PayAll(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
