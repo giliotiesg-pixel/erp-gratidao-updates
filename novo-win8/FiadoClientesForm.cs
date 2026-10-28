@@ -30,8 +30,17 @@ namespace ArmazemGratidao {
    split.Panel1.Controls.Add(new Label {Text="  PESQUISAR CLIENTE",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.White,BackColor=Color.FromArgb(20,73,158)});
    var tabs=new TabControl {Dock=DockStyle.Fill};
    saleTabs=tabs;
-   var pending=new TabPage("Fiado atual - em aberto");pending.Controls.Add(openSales);
-   var previous=new TabPage("Fiados anteriores - pagos");previous.Controls.Add(paidSales);
+   var pending=new TabPage("Fiado atual - em aberto");
+   var previous=new TabPage("Fiados anteriores - pagos");
+   var pendingItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+   var previousItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+   var pendingSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235};
+   var previousSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235};
+   pendingSplit.Panel1.Controls.Add(openSales);pendingSplit.Panel2.Controls.Add(pendingItems);
+   previousSplit.Panel1.Controls.Add(paidSales);previousSplit.Panel2.Controls.Add(previousItems);
+   pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
+   openSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleItems(openSales,pendingItems);
+   paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleItems(paidSales,previousItems);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
    var switchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,Padding=new Padding(5),BackColor=Color.FromArgb(232,242,252)};
@@ -163,6 +172,16 @@ namespace ArmazemGratidao {
     };
     if(form.ShowDialog(this)==DialogResult.OK){LoadClients();SelectClient(customer);MessageBox.Show("Cliente da venda atualizado. Valores e pagamentos preservados.");}
    }
+  }
+  void RefreshSelectedSaleItems(DataGridView sales,DataGridView items){
+   if(sales.CurrentRow==null || sales.CurrentRow.IsNewRow || !sales.Columns.Contains("venda")){
+    items.DataSource=null;return;
+   }
+   try{
+    var sale=sales.CurrentRow.Cells["venda"].Value;
+    if(sale==null || sale==DBNull.Value){items.DataSource=null;return;}
+    items.DataSource=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",Convert.ToInt64(sale));
+   }catch(Exception ex){items.DataSource=null;items.Tag=ex.Message;}
   }
   void ShowSaleDetails(){
    if(saleTabs!=null && saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
