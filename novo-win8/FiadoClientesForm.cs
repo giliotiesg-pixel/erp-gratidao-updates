@@ -21,8 +21,8 @@ namespace ArmazemGratidao {
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=55,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(232,242,252),TextAlign=ContentAlignment.MiddleLeft};
   public FiadoClientesForm(string database) {
-   db=database;Text="Armazem Gratidao | Fiado por Cliente";Width=1250;Height=790;
-   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265};
+   db=database;Text="Armazem Gratidao | Fiado por Cliente";Width=1250;Height=790;StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;MinimizeBox=false;
+   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
    clientSearch.TextChanged+=(s,e)=>LoadClients();
