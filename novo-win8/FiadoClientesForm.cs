@@ -81,8 +81,9 @@ namespace ArmazemGratidao {
    clientHome.Controls.Add(homeHeader);
    split.Panel2.Controls.Add(clientHome);clientHome.BringToFront();
    var back=new Button {Text="← Voltar aos clientes",Dock=DockStyle.Top,Height=37,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
-   back.Click+=(s,e)=>{customer="";clientHome.Visible=true;clientHome.BringToFront();};
+   back.Click+=(s,e)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();};
    split.Panel2.Controls.Add(back);back.BringToFront();
+   split.Panel2Collapsed=true;
    LoadClients();
   }
   SQLiteConnection Open(bool readOnly=false) {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;}
@@ -104,7 +105,7 @@ namespace ArmazemGratidao {
      allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      visibleClients++;
-     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Width=225,Height=52,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
+     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Width=Math.Max(240,clients.ClientSize.Width-35),Height=52,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
      b.Click+=(s,e)=>SelectClient(Convert.ToString(((Button)s).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
@@ -113,7 +114,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
   }
   void SelectClient(string name){
-   customer=name;clientHome.Visible=false;selected.Text="FIADO | "+customer;
+   customer=name;detailSplit.Panel1Collapsed=true;detailSplit.Panel2Collapsed=false;clientHome.Visible=false;selected.Text="FIADO | "+customer;
    try {
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name";
     openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY s.id DESC","@name",name);
