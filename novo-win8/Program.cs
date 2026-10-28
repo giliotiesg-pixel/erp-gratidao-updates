@@ -12,6 +12,7 @@ namespace ArmazemGratidao {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=205,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
@@ -21,7 +22,6 @@ namespace ArmazemGratidao {
    var bar=sideMenu;
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
    status.BackColor=Color.FromArgb(234,238,247);status.ForeColor=Color.FromArgb(30,40,55);status.Padding=new Padding(12,0,0,0);
-   var header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
    menuToggle.Left=10;menuToggle.Top=8;menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
