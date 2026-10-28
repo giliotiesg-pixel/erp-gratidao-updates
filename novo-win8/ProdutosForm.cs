@@ -27,7 +27,34 @@ namespace ArmazemGratidao {
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
+   StyleProductsScreen(bar);
    Controls.Add(grid);Controls.Add(info);Controls.Add(bar);LoadProducts();
+  }
+  static void StyleButton(Button b,Color background){
+   b.UseVisualStyleBackColor=false;b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=1;
+   b.FlatAppearance.BorderColor=Color.FromArgb(22,35,55);b.BackColor=background;
+   b.ForeColor=Color.White;b.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   b.Padding=new Padding(5,2,5,2);b.Height=Math.Max(b.Height,39);
+  }
+  static void StyleDialog(Form form,TableLayoutPanel panel){
+   form.BackColor=Color.FromArgb(245,248,252);form.ForeColor=Color.FromArgb(18,31,50);
+   form.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   panel.BackColor=form.BackColor;
+   foreach(Control control in panel.Controls){
+    if(control is Label){control.ForeColor=Color.FromArgb(18,31,50);control.Font=new Font("Segoe UI",10,FontStyle.Bold);}
+    if(control is TextBox || control is NumericUpDown){control.BackColor=Color.White;control.ForeColor=Color.Black;control.Font=new Font("Segoe UI",11,FontStyle.Regular);}
+    if(control is Button)StyleButton((Button)control,Color.FromArgb(19,92,169));
+   }
+  }
+  void StyleProductsScreen(FlowLayoutPanel bar){
+   search.BackColor=Color.White;search.ForeColor=Color.Black;search.Font=new Font("Segoe UI",11,FontStyle.Regular);
+   Color[] colors={Color.FromArgb(20,103,180),Color.FromArgb(12,120,82),Color.FromArgb(105,65,170),Color.FromArgb(92,100,112),Color.FromArgb(15,110,125),Color.FromArgb(147,67,35),Color.FromArgb(23,111,75),Color.FromArgb(72,86,153),Color.FromArgb(130,55,105)};
+   int index=0;foreach(Control control in bar.Controls)if(control is Button)StyleButton((Button)control,colors[(index++)%colors.Length]);
+   grid.BackgroundColor=Color.White;grid.DefaultCellStyle.BackColor=Color.White;grid.DefaultCellStyle.ForeColor=Color.Black;
+   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
+   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",10,FontStyle.Regular);
+   info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
    var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;
@@ -235,7 +262,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       panel.Controls.Add(save,1,4);form.Controls.Add(panel);
+       panel.Controls.Add(save,1,4);StyleDialog(form,panel);form.Controls.Add(panel);
        if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
       }
      }
@@ -307,7 +334,7 @@ namespace ArmazemGratidao {
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
-    panel.Controls.Add(save,1,6);form.Controls.Add(panel);
+    panel.Controls.Add(save,1,6);StyleDialog(form,panel);form.Controls.Add(panel);
     if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
   }
