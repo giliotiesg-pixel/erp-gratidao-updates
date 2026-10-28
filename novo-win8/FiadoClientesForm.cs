@@ -15,6 +15,7 @@ namespace ArmazemGratidao {
   readonly NumericUpDown amount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=130};
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   string customer="";
+  TabControl saleTabs;
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=55,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(232,242,252),TextAlign=ContentAlignment.MiddleLeft};
   public FiadoClientesForm(string database) {
@@ -25,6 +26,7 @@ namespace ArmazemGratidao {
    split.Panel1.Controls.Add(clientSearch);
    split.Panel1.Controls.Add(new Label {Text="  PESQUISAR CLIENTE",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.White,BackColor=Color.FromArgb(20,73,158)});
    var tabs=new TabControl {Dock=DockStyle.Fill};
+   saleTabs=tabs;
    var pending=new TabPage("Vendas em aberto");pending.Controls.Add(openSales);
    var previous=new TabPage("Vendas anteriores / Pagas");previous.Controls.Add(paidSales);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
@@ -35,6 +37,7 @@ namespace ArmazemGratidao {
    bottom.Controls.Add(new Label {Text="Valor R$:",AutoSize=true,Padding=new Padding(0,9,0,0)});bottom.Controls.Add(amount);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
    var settle=new Button {Text="Receber todas as vendas",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
+   var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
@@ -78,6 +81,46 @@ namespace ArmazemGratidao {
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     selected.Text="FIADO | "+name+" | Saldo em aberto R$ "+total.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
+  }
+  DataGridView SelectedSaleGrid(){
+   if(saleTabs!=null && saleTabs.SelectedIndex==1)return paidSales;
+   return openSales;
+  }
+  void CorrectCustomer(){
+   var view=SelectedSaleGrid();
+   if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
+   long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
+   using(var form=new Form {Text="Corrigir cliente - venda #"+id,Width=510,Height=205,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    var input=new TextBox {Left=18,Top=52,Width=455,Font=new Font("Segoe UI",12),Text=customer=="SEM CLIENTE"?"":customer};
+    var label=new Label {Left=18,Top=16,Width=450,Height=30,Text="Nome correto do cliente:",Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    var save=new Button {Text="Salvar cliente",Left=290,Top=103,Width=183,Height=39,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
+    form.Controls.Add(label);form.Controls.Add(input);form.Controls.Add(save);
+    save.Click+=(s,e)=>{
+     string newName=input.Text.Trim();
+     if(newName.Length==0){MessageBox.Show("Informe o nome do cliente.");return;}
+     try{
+      using(var connection=Open(false)){
+       string previous;
+       using(var check=new SQLiteCommand("SELECT COALESCE(customer_name,'') FROM sales WHERE id=@id AND "+CreditFilter,connection)){
+        check.Parameters.AddWithValue("@id",id);object result=check.ExecuteScalar();
+        if(result==null){MessageBox.Show("Venda fiado não encontrada.");return;}
+        previous=Convert.ToString(result);
+       }
+       if(string.Equals(previous.Trim(),newName,StringComparison.Ordinal)){form.DialogResult=DialogResult.Cancel;form.Close();return;}
+       if(MessageBox.Show("Venda #"+id+"\\nCliente atual: "+(previous.Trim().Length==0?"SEM CLIENTE":previous)+"\\nNovo cliente: "+newName+"\\n\\nConfirmar correção?","Confirmar vínculo",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       string backup=db+".antes-corrigir-cliente-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
+       using(var tx=connection.BeginTransaction())using(var update=new SQLiteCommand("UPDATE sales SET customer_name=@name WHERE id=@id AND COALESCE(customer_name,'')=@previous AND "+CreditFilter,connection,tx)){
+        update.Parameters.AddWithValue("@name",newName);update.Parameters.AddWithValue("@id",id);update.Parameters.AddWithValue("@previous",previous);
+        if(update.ExecuteNonQuery()!=1)throw new Exception("A venda foi modificada. Atualize e tente novamente.");
+        tx.Commit();
+       }
+      }
+      customer=newName;form.DialogResult=DialogResult.OK;form.Close();
+     }catch(Exception ex){MessageBox.Show(ex.Message,"Cliente não alterado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    if(form.ShowDialog(this)==DialogResult.OK){LoadClients();SelectClient(customer);MessageBox.Show("Cliente da venda atualizado. Valores e pagamentos preservados.");}
+   }
   }
   void ShowSaleDetails(){
    DataGridView view=openSales.Focused?openSales:paidSales.Focused?paidSales:openSales;
