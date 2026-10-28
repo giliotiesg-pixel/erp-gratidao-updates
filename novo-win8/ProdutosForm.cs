@@ -11,6 +11,7 @@ namespace ArmazemGratidao {
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
+  readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
    db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
@@ -28,7 +29,8 @@ namespace ArmazemGratidao {
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
    StyleProductsScreen(bar);
-   Controls.Add(grid);Controls.Add(info);Controls.Add(bar);LoadProducts();
+   metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
+   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(bar);LoadProducts();
   }
   static void StyleButton(Button b,Color background){
    b.UseVisualStyleBackColor=false;b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=1;
@@ -54,6 +56,11 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",10,FontStyle.Regular);
+   grid.RowTemplate.Height=35;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
+   grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
+   grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+   grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
@@ -216,6 +223,9 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
      info.Text="  "+dt.Rows.Count+" produtos exibidos. Cadastro preservado.";
+     decimal stockTotal=0,stockValue=0;int zeroStock=0;
+     foreach(DataRow row in dt.Rows){decimal qty=0,cost=0;decimal.TryParse(Convert.ToString(row["estoque"]),out qty);decimal.TryParse(Convert.ToString(row["custo"]),out cost);stockTotal+=qty;stockValue+=qty*cost;if(qty<=0)zeroStock++;}
+     metrics.Text="    PRODUTOS: "+dt.Rows.Count+"     |     SEM ESTOQUE: "+zeroStock+"     |     UNIDADES: "+stockTotal.ToString("N3")+"     |     CUSTO ESTIMADO: R$ "+stockValue.ToString("N2");
     }
    }}catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
   }
