@@ -31,6 +31,12 @@ jobs:
           if (!$ref) { throw "Referencia SQLite ausente no projeto" }
           $ref.InnerText = $dll.FullName
           $xml.Save((Resolve-Path $proj).Path)
+      - name: Gravar versao real da compilacao no executavel
+        shell: pwsh
+        run: |
+          $version = "1.0.${{ github.run_number }}.0"
+          $assembly = "using System.Reflection;`n[assembly: AssemblyVersion(`"$version`")]`n[assembly: AssemblyFileVersion(`"$version`")]`n"
+          Set-Content -Path novo-win8/BuildVersion.cs -Value $assembly -Encoding UTF8
       - name: Compilar WinForms .NET Framework 4.8
         shell: pwsh
         run: |
