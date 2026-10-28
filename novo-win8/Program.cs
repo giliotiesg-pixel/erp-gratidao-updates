@@ -54,6 +54,9 @@ namespace ArmazemGratidao {
    home.Controls.Add(title);
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
+   var refresh=new Button {Text="Atualizar indicadores",Width=200,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold),Margin=new Padding(8)};
+   refresh.FlatAppearance.BorderSize=0;refresh.Click+=ShowHome;home.Controls.Add(refresh);
+   home.Controls.Add(new Label {Text="",Width=680,Height=40});
    var metrics=new System.Collections.Generic.List<Tuple<string,string>>();
    if(File.Exists(dbPath)){
     try{
@@ -98,7 +101,7 @@ namespace ArmazemGratidao {
     var button=new Button {Text=action.Item1,Width=208,Height=78,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     button.FlatAppearance.BorderColor=Color.FromArgb(213,221,236);button.Click+=action.Item2;home.Controls.Add(button);
    }
-   Controls.Add(home);home.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+   Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
   }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
@@ -392,7 +395,7 @@ namespace ArmazemGratidao {
   void OpenConsult(bool credit) {if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ConsultaForm(dbPath,credit))form.ShowDialog(this);}
   void ShowTable(string table,string sql) {
    if(!File.Exists(dbPath)) {MessageBox.Show("Importe primeiro o banco de dados.");return;}
-   try {using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())) {conn.Open();var dt=new DataTable();using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);grid.DataSource=dt;status.Text=table+": "+dt.Rows.Count+" registros exibidos (somente leitura).";}}
+   try {using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())) {conn.Open();var dt=new DataTable();using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);grid.DataSource=dt;var home=Controls["homePanel"];if(home!=null){Controls.Remove(home);home.Dispose();}grid.Visible=true;grid.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text=table+": "+dt.Rows.Count+" registros exibidos (somente leitura).";}}
    catch(Exception ex) {MessageBox.Show(ex.Message,"Erro na consulta",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
  }
