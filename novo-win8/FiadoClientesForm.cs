@@ -32,6 +32,7 @@ namespace ArmazemGratidao {
    method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"});method.SelectedIndex=0;bottom.Controls.Add(method);
    bottom.Controls.Add(new Label {Text="Valor R$:",AutoSize=true,Padding=new Padding(0,9,0,0)});bottom.Controls.Add(amount);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
+   var settle=new Button {Text="Receber todas as vendas",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
    var inspect=new Button {Text="Itens e pagamentos da venda",AutoSize=true,Height=36};inspect.Click+=(s,e)=>ShowSaleDetails();bottom.Controls.Add(inspect);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
@@ -90,6 +91,42 @@ namespace ArmazemGratidao {
     tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
     using(form)form.ShowDialog(this);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
+  }
+  void PayAll(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   if(customer=="SEM CLIENTE"){MessageBox.Show("Identifique o cliente antes de receber todas as vendas.");return;}
+   try{
+    DataTable sales=Query("SELECT s.id AS venda,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.id","@name",customer);
+    if(sales.Rows.Count==0){MessageBox.Show("Este cliente não possui vendas em aberto.");return;}
+    decimal total=0;foreach(DataRow row in sales.Rows)total+=Convert.ToDecimal(row["saldo"]);
+    string paymentMethod=Convert.ToString(method.SelectedItem);
+    if(MessageBox.Show("Cliente: "+customer+"\\nVendas em aberto: "+sales.Rows.Count+"\\nTotal a receber: R$ "+total.ToString("N2")+"\\nForma: "+paymentMethod+"\\n\\nConfirmar recebimento integral?","Conferir baixa de fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+    using(var c=Open(false)){
+     // Backup antes da transação. Nenhuma venda ou estoque será reescrito.
+     string backup=db+".antes-fiado-total-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);}
+     using(var tx=c.BeginTransaction()){
+      using(var q=new SQLiteCommand("SELECT s.id,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.id",c,tx)){
+       q.Parameters.AddWithValue("@name",customer);
+       var pending=new DataTable();using(var adapter=new SQLiteDataAdapter(q))adapter.Fill(pending);
+       if(pending.Rows.Count!=sales.Rows.Count)throw new Exception("As vendas foram alteradas. Atualize a tela.");
+       decimal actualTotal=0;foreach(DataRow row in pending.Rows)actualTotal+=Convert.ToDecimal(row["saldo"]);
+       if(Math.Abs(actualTotal-total)>0.005M)throw new Exception("O saldo mudou. Atualize a tela.");
+       using(var insert=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),'Quitação integral por cliente no novo Fiado')",c,tx)){
+        foreach(DataRow row in pending.Rows){
+         insert.Parameters.Clear();insert.Parameters.AddWithValue("@sale",Convert.ToInt64(row["id"]));
+         insert.Parameters.AddWithValue("@amount",Convert.ToDecimal(row["saldo"]));
+         insert.Parameters.AddWithValue("@method",paymentMethod);
+         insert.ExecuteNonQuery();
+        }
+       }
+      }
+      tx.Commit();
+     }
+    }
+    amount.Value=0;LoadClients();SelectClient(customer);
+    MessageBox.Show("Recebimento confirmado: R$ "+total.ToString("N2")+"\\nVendas quitadas: "+sales.Rows.Count);
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Recebimento não realizado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void Pay(){
    if(openSales.CurrentRow==null){MessageBox.Show("Selecione uma venda em aberto.");return;}
