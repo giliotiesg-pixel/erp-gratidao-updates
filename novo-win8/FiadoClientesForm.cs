@@ -174,8 +174,91 @@ namespace ArmazemGratidao {
     payments.DataSource=Query("SELECT paid_at AS data,payment_method AS forma,amount AS valor FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
     var a=new TabPage("Itens da venda");a.Controls.Add(items);var b=new TabPage("Pagamentos anteriores");b.Controls.Add(payments);
     tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
+    var edit=new Button {Text="Editar item selecionado (com auditoria)",Dock=DockStyle.Bottom,Height=42,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
+    edit.Click+=(s,e)=>{form.Close();EditSaleItem(id);};form.Controls.Add(edit);
     using(form)form.ShowDialog(this);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
+  }
+  void EditSaleItem(long saleId){
+   try{
+    var rows=Query("SELECT id, name AS produto, quantity AS quantidade, unit_price AS preco, total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",saleId);
+    using(var form=new Form {Text="Auditoria de itens - venda #"+saleId,Width=880,Height=550,StartPosition=FormStartPosition.CenterParent}){
+     var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=rows};
+     var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=60,Padding=new Padding(8)};
+     var save=new Button {Text="Alterar item selecionado",Width=210,Height=38,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};
+     footer.Controls.Add(save);form.Controls.Add(table);form.Controls.Add(footer);
+     save.Click+=(s,e)=>{
+      if(table.CurrentRow==null)return;
+      var row=((DataRowView)table.CurrentRow.DataBoundItem).Row;
+      long itemId=Convert.ToInt64(row["id"]);
+      string oldName=Convert.ToString(row["produto"]);
+      decimal oldQty=Convert.ToDecimal(row["quantidade"]),oldPrice=Convert.ToDecimal(row["preco"]),oldTotal=Convert.ToDecimal(row["valor"]);
+      using(var dialog=new Form {Text="Editar item #"+itemId,Width=530,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+       var name=new TextBox {Left=20,Top=42,Width=465,Text=oldName};
+       var qty=new NumericUpDown {Left=20,Top=112,Width=210,DecimalPlaces=3,Maximum=1000000,Minimum=0.001M,Value=Math.Max(0.001M,oldQty)};
+       var price=new NumericUpDown {Left=250,Top=112,Width=235,DecimalPlaces=2,Maximum=1000000,Value=Math.Max(0,oldPrice)};
+       var reason=new TextBox {Left=20,Top=184,Width=465};
+       var confirm=new Button {Text="Conferir e salvar",Left=290,Top=232,Width=195,Height=38};
+       dialog.Controls.Add(new Label {Text="Descrição do produto",Left=20,Top=20,AutoSize=true});
+       dialog.Controls.Add(name);
+       dialog.Controls.Add(new Label {Text="Quantidade",Left=20,Top=90,AutoSize=true});
+       dialog.Controls.Add(qty);
+       dialog.Controls.Add(new Label {Text="Preço unitário R$",Left=250,Top=90,AutoSize=true});
+       dialog.Controls.Add(price);
+       dialog.Controls.Add(new Label {Text="Motivo da alteração (obrigatório)",Left=20,Top=162,AutoSize=true});
+       dialog.Controls.Add(reason);dialog.Controls.Add(confirm);
+       confirm.Click+=(sender,args)=>{
+        string newName=name.Text.Trim(),why=reason.Text.Trim();
+        decimal newQty=qty.Value,newPrice=price.Value,newTotal=decimal.Round(newQty*newPrice,2,MidpointRounding.AwayFromZero);
+        if(newName.Length==0 || why.Length<5){MessageBox.Show("Informe produto e motivo com pelo menos 5 caracteres.");return;}
+        if(newName==oldName && newQty==oldQty && newPrice==oldPrice){MessageBox.Show("Nenhuma alteração.");return;}
+        try{
+         using(var connection=Open(false)){
+          using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sale_items WHERE id=@item AND sale_id=@sale AND name=@name AND ABS(quantity-@qty)<0.00001 AND ABS(unit_price-@price)<0.00001 AND ABS(total-@total)<0.01",connection)){
+           check.Parameters.AddWithValue("@item",itemId);check.Parameters.AddWithValue("@sale",saleId);check.Parameters.AddWithValue("@name",oldName);check.Parameters.AddWithValue("@qty",oldQty);check.Parameters.AddWithValue("@price",oldPrice);check.Parameters.AddWithValue("@total",oldTotal);
+           if(Convert.ToInt32(check.ExecuteScalar())!=1)throw new Exception("Item alterado por outro processo. Atualize.");
+          }
+          decimal received;
+          using(var paid=new SQLiteCommand("SELECT COALESCE(SUM(amount),0) FROM credit_payments WHERE sale_id=@sale",connection)){paid.Parameters.AddWithValue("@sale",saleId);received=Convert.ToDecimal(paid.ExecuteScalar());}
+          decimal previousGross;
+          using(var totalCmd=new SQLiteCommand("SELECT gross_total FROM sales WHERE id=@sale AND (UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(status,'')) LIKE '%FIADO%')",connection)){
+           totalCmd.Parameters.AddWithValue("@sale",saleId);var result=totalCmd.ExecuteScalar();
+           if(result==null)throw new Exception("Venda fiado não encontrada.");
+           previousGross=Convert.ToDecimal(result);
+          }
+          decimal newGross=decimal.Round(previousGross-oldTotal+newTotal,2);
+          if(newGross<received-0.005M)throw new Exception("Novo total menor que os pagamentos já recebidos. Faça a conferência antes de alterar.");
+          if(MessageBox.Show("Venda #"+saleId+"\\nItem: "+oldName+"\\nAntes: R$ "+oldTotal.ToString("N2")+"\\nDepois: R$ "+newTotal.ToString("N2")+"\\nTotal da venda: R$ "+previousGross.ToString("N2")+" -> R$ "+newGross.ToString("N2")+"\\nMotivo: "+why+"\\n\\nConfirmar alteração auditada?","Confirmar edição",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+          string backup=db+".antes-editar-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+          using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
+          using(var tx=connection.BeginTransaction()){
+           using(var update=new SQLiteCommand("UPDATE sale_items SET name=@name,quantity=@qty,unit_price=@price,total=@total WHERE id=@id AND sale_id=@sale AND name=@oldName AND ABS(quantity-@oldQty)<0.00001 AND ABS(unit_price-@oldPrice)<0.00001 AND ABS(total-@oldTotal)<0.01",connection,tx)){
+            update.Parameters.AddWithValue("@name",newName);update.Parameters.AddWithValue("@qty",newQty);update.Parameters.AddWithValue("@price",newPrice);update.Parameters.AddWithValue("@total",newTotal);update.Parameters.AddWithValue("@id",itemId);update.Parameters.AddWithValue("@sale",saleId);update.Parameters.AddWithValue("@oldName",oldName);update.Parameters.AddWithValue("@oldQty",oldQty);update.Parameters.AddWithValue("@oldPrice",oldPrice);update.Parameters.AddWithValue("@oldTotal",oldTotal);
+            if(update.ExecuteNonQuery()!=1)throw new Exception("O item foi alterado. Operação cancelada.");
+           }
+           using(var update=new SQLiteCommand("UPDATE sales SET gross_total=@new WHERE id=@sale AND ABS(gross_total-@old)<0.01",connection,tx)){
+            update.Parameters.AddWithValue("@new",newGross);update.Parameters.AddWithValue("@old",previousGross);update.Parameters.AddWithValue("@sale",saleId);
+            if(update.ExecuteNonQuery()!=1)throw new Exception("Total da venda alterado. Operação cancelada.");
+           }
+           using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS fiado_item_audit (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,item_id INTEGER NOT NULL,old_name TEXT,new_name TEXT,old_qty REAL,new_qty REAL,old_price REAL,new_price REAL,old_total REAL,new_total REAL,old_sale_total REAL,new_sale_total REAL,reason TEXT NOT NULL,changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",connection,tx))create.ExecuteNonQuery();
+           using(var log=new SQLiteCommand("INSERT INTO fiado_item_audit(sale_id,item_id,old_name,new_name,old_qty,new_qty,old_price,new_price,old_total,new_total,old_sale_total,new_sale_total,reason) VALUES(@sale,@item,@oldName,@name,@oldQty,@qty,@oldPrice,@price,@oldTotal,@total,@oldGross,@gross,@reason)",connection,tx)){
+            log.Parameters.AddWithValue("@sale",saleId);log.Parameters.AddWithValue("@item",itemId);log.Parameters.AddWithValue("@oldName",oldName);log.Parameters.AddWithValue("@name",newName);log.Parameters.AddWithValue("@oldQty",oldQty);log.Parameters.AddWithValue("@qty",newQty);log.Parameters.AddWithValue("@oldPrice",oldPrice);log.Parameters.AddWithValue("@price",newPrice);log.Parameters.AddWithValue("@oldTotal",oldTotal);log.Parameters.AddWithValue("@total",newTotal);log.Parameters.AddWithValue("@oldGross",previousGross);log.Parameters.AddWithValue("@gross",newGross);log.Parameters.AddWithValue("@reason",why);log.ExecuteNonQuery();
+           }
+           tx.Commit();
+          }
+         }
+         dialog.DialogResult=DialogResult.OK;dialog.Close();
+        }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+       };
+       if(dialog.ShowDialog(form)==DialogResult.OK){
+        table.DataSource=Query("SELECT id, name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",saleId);
+        LoadClients();MessageBox.Show("Item alterado com registro de auditoria e backup. Estoque não modificado.");
+       }
+      }
+     };
+     form.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao editar venda");}
   }
   void SendReceipt(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
