@@ -21,6 +21,7 @@ namespace ArmazemGratidao {
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();LoadProducts();search.Focus();};bar.Controls.Add(clear);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
    var inactive=new Button {Text="Inativos",Width=105,Height=33};inactive.Click+=(s,e)=>{showInactive=!showInactive;inactive.Text=showInactive?"Todos os produtos":"Inativos";LoadProducts();};bar.Controls.Add(inactive);
+   var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
@@ -35,6 +36,35 @@ namespace ArmazemGratidao {
    using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))
    using(var r=cmd.ExecuteReader())while(r.Read())cols.Add(Convert.ToString(r["name"]));
    return cols;
+  }
+  void ReactivateProduct(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto inativo.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
+   try{
+    using(var c=Open(false)){
+     var cols=ProductColumns(c);
+     string column=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
+     if(column==null){MessageBox.Show("Este banco não possui campo de situação compatível. Nada foi alterado.");return;}
+     using(var check=new SQLiteCommand("SELECT COALESCE(\""+column+"\",1) FROM products WHERE id=@id",c)){
+      check.Parameters.AddWithValue("@id",id);
+      object value=check.ExecuteScalar();
+      if(value==null){MessageBox.Show("Produto não encontrado.");return;}
+      if(Convert.ToInt32(value)!=0){MessageBox.Show("Este produto já está ativo.");return;}
+     }
+     if(MessageBox.Show("Reativar o produto selecionado? O estoque não será alterado.","Confirmar reativação",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     string backup=db+".antes-reativar-produto-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
+      copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);
+     }
+     using(var tx=c.BeginTransaction())using(var cmd=new SQLiteCommand("UPDATE products SET \""+column+"\"=1 WHERE id=@id AND COALESCE(\""+column+"\",1)=0",c,tx)){
+      cmd.Parameters.AddWithValue("@id",id);
+      if(cmd.ExecuteNonQuery()!=1)throw new Exception("Nenhum produto foi reativado.");
+      tx.Commit();
+     }
+    }
+    LoadProducts();MessageBox.Show("Produto reativado. Estoque preservado.");
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Falha na reativação");}
   }
   void ExportProducts(){
    using(var dlg=new SaveFileDialog {Title="Exportar produtos para CSV",Filter="CSV separado por ponto e virgula (*.csv)|*.csv",FileName="produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
