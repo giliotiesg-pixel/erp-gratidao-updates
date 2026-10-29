@@ -31,6 +31,7 @@ namespace ArmazemGratidao {
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
+   var history=new Button {Text="Histórico QTD",Width=150,Height=33};history.Click+=(s,e)=>ShowProductQuantityHistory();bar.Controls.Add(history);
    var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
@@ -102,6 +103,35 @@ namespace ArmazemGratidao {
    using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))
    using(var r=cmd.ExecuteReader())while(r.Read())cols.Add(Convert.ToString(r["name"]));
    return cols;
+  }
+  void ShowProductQuantityHistory(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para consultar o histórico.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
+   string description=Convert.ToString(grid.CurrentRow.Cells["descricao"].Value);
+   try{
+    var history=new DataTable();
+    using(var c=Open()){
+     using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='product_quantity_movements'",c)){
+      if(Convert.ToInt64(exists.ExecuteScalar())==0){
+       MessageBox.Show("Este produto ainda não possui histórico de entradas de QTD neste registro. Nenhum dado foi alterado.","Histórico de QTD");
+       return;
+      }
+     }
+     using(var cmd=new SQLiteCommand("SELECT movement_at AS data_hora, quantity_before AS qtd_anterior, quantity_added AS qtd_adicionada, quantity_after AS qtd_final, reason AS motivo FROM product_quantity_movements WHERE product_id=@id ORDER BY id DESC LIMIT 1000",c)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(history);
+     }
+    }
+    using(var form=new Form {Text="Histórico QTD - "+description,Width=900,Height=560,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false}){
+     var header=new Label {Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Text="Produto: "+description+"  |  Entradas registradas: "+history.Rows.Count+(history.Rows.Count==1000?" (últimas 1.000)":"") ,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(235,242,250)};
+     var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=history,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
+     var close=new Button {Text="Fechar",Dock=DockStyle.Bottom,Height=42};
+     close.Click+=(s,e)=>form.Close();
+     form.Controls.Add(table);form.Controls.Add(header);form.Controls.Add(close);
+     form.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível consultar o histórico. Nenhum dado foi alterado.\n"+ex.Message,"Histórico de QTD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void AddProductQuantity(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para adicionar quantidade.");return;}
