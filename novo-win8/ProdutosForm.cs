@@ -402,9 +402,18 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
      info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
-     decimal stockTotal=0,stockValue=0;int zeroStock=0;
-     foreach(DataRow row in dt.Rows){decimal qty=0,cost=0;decimal.TryParse(Convert.ToString(row["estoque"]),out qty);decimal.TryParse(Convert.ToString(row["custo"]),out cost);stockTotal+=qty;stockValue+=qty*cost;if(qty<=0)zeroStock++;}
-     metrics.Text="    NESTA PÁGINA: "+dt.Rows.Count+"     |     SEM ESTOQUE: "+zeroStock+"     |     UNIDADES: "+stockTotal.ToString("N3")+"     |     CUSTO ESTIMADO: R$ "+stockValue.ToString("N2");
+     // Indicadores do catálogo filtrado inteiro, não apenas da página exibida.
+     using(var totals=new SQLiteCommand("SELECT SUM(CASE WHEN COALESCE(stock,0)<=0 THEN 1 ELSE 0 END), COALESCE(SUM(COALESCE(stock,0)),0), COALESCE(SUM(COALESCE(stock,0)*COALESCE(cost,0)),0) FROM products WHERE ("+searchColumns+")"+filter,c)){
+      totals.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+      using(var result=totals.ExecuteReader()){
+       if(result.Read()){
+        long zeroStock=result.IsDBNull(0)?0:Convert.ToInt64(result.GetValue(0));
+        decimal stockTotal=result.IsDBNull(1)?0:Convert.ToDecimal(result.GetValue(1),System.Globalization.CultureInfo.InvariantCulture);
+        decimal stockValue=result.IsDBNull(2)?0:Convert.ToDecimal(result.GetValue(2),System.Globalization.CultureInfo.InvariantCulture);
+        metrics.Text="    PRODUTOS: "+total+"     |     SEM ESTOQUE: "+zeroStock+"     |     UNIDADES: "+stockTotal.ToString("N3")+"     |     CUSTO ESTIMADO: R$ "+stockValue.ToString("N2");
+       }
+      }
+     }
     }
    }}catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
   }
