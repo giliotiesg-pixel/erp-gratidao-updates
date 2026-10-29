@@ -661,10 +661,12 @@ namespace ArmazemGratidao {
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
     string lastLookupCode="";
+    int lookupGeneration=0;
     Func<System.Threading.Tasks.Task> fetchProduct=async ()=>{
      string code=barcode.Text.Trim();
      if(lookingUp||code==lastLookupCode)return;
      if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
+     int thisLookup=++lookupGeneration;
      lookingUp=true;lookup.Enabled=false;lookup.Text="Pesquisando...";lookupStatus.Text="Consultando catálogo local e base pública...";
      try{
       string localName=LookupLocalProductName(code);
@@ -674,7 +676,7 @@ namespace ArmazemGratidao {
        lastLookupCode=code;return;
       }
       var data=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(code));
-      if(barcode.IsDisposed||form.IsDisposed||barcode.Text.Trim()!=code){lookupStatus.Text="Código alterado durante a pesquisa. Pesquise novamente.";return;}
+      if(barcode.IsDisposed||form.IsDisposed||thisLookup!=lookupGeneration||barcode.Text.Trim()!=code){if(!lookupStatus.IsDisposed)lookupStatus.Text="Código alterado durante a pesquisa. Pesquise novamente.";return;}
       if(data==null||string.IsNullOrWhiteSpace(data.Name)){
        lookupStatus.Text="Produto não encontrado. Complete o cadastro manualmente.";
        lastLookupCode=code;return;
@@ -694,7 +696,7 @@ namespace ArmazemGratidao {
     };
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
     barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
-    barcode.TextChanged+=(s,e)=>{if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
+    barcode.TextChanged+=(s,e)=>{lookupGeneration++;if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
     barcode.MaxLength=14;
     barcode.ShortcutsEnabled=true;
     barcode.CharacterCasing=CharacterCasing.Normal;
