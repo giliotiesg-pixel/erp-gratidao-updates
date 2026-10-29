@@ -264,7 +264,7 @@ namespace ArmazemGratidao {
       decimal oldCost=Convert.ToDecimal(r["cost"]);
       string oldBrand=columns.Contains("brand")?Convert.ToString(r["brand"]):"";
       string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
-      DateTime oldExpiry;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
+      DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
       bool oldWeight=weightCol!=null&&r["saved_weight"]!=DBNull.Value&&Convert.ToString(r["saved_weight"])!="0";
       using(var form=new Form {Text="Editar produto #"+id,Width=560,Height=495,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
