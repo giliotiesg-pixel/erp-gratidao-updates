@@ -113,6 +113,7 @@ namespace ArmazemGratidao {
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
    grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
    grid.DataBindingComplete+=(s,e)=>{if(grid.Columns.Contains("descricao")){grid.Columns["descricao"].MinimumWidth=260;grid.Columns["descricao"].FillWeight=230;grid.Columns["descricao"].DefaultCellStyle.WrapMode=DataGridViewTriState.True;}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
+   grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}};
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
