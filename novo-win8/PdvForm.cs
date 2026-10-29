@@ -59,6 +59,7 @@ namespace ArmazemGratidao {
      }
     }
     if(matches.Count==0){MessageBox.Show("Produto não cadastrado.");return;}
+    if(matches.Count>1 && matches.Count(x=>string.Equals((x.Barcode??"").Trim(),search,StringComparison.OrdinalIgnoreCase))>1){MessageBox.Show("Atenção: existem produtos diferentes cadastrados com o mesmo código de barras. Confira a descrição e o preço antes de selecionar.","Código de barras duplicado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     if(matches.Count>100){matches.RemoveAt(100);MessageBox.Show("A pesquisa encontrou mais de 100 produtos. Exibindo os primeiros 100; refine a descrição ou informe o código para localizar o produto desejado.","Muitos resultados");}
     Item selected=matches[0];
     if(matches.Count>1){
