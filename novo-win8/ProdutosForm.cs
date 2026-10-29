@@ -596,10 +596,17 @@ namespace ArmazemGratidao {
    var match=System.Text.RegularExpressions.Regex.Match(json,pattern);
    return match.Success?System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value).Trim():"";
   }
+  sealed class ProductLookupWebClient:System.Net.WebClient{
+   protected override System.Net.WebRequest GetWebRequest(Uri address){
+    var request=base.GetWebRequest(address);
+    request.Timeout=8000;
+    return request;
+   }
+  }
   static BarcodeProductData LookupBarcodeProduct(string barcode){
    System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
    string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name,brands,categories,status";
-   using(var client=new System.Net.WebClient()){
+   using(var client=new ProductLookupWebClient()){
     client.Encoding=System.Text.Encoding.UTF8;
     client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (barcode product lookup)";
     string json=client.DownloadString(url);
