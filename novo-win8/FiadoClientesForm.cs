@@ -130,9 +130,9 @@ namespace ArmazemGratidao {
    foreach(Control control in clients.Controls){
     var button=control as Button;
     if(button==null)continue;
-    button.MinimumSize=Size.Empty;
-    button.MaximumSize=Size.Empty;
     button.AutoSize=false;
+    button.MinimumSize=new Size(width,72);
+    button.MaximumSize=new Size(width,72);
     button.Size=new Size(width,72);
     button.Margin=new Padding(0,0,gap,gap);
    }
