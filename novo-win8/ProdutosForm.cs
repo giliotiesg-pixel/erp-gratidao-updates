@@ -17,7 +17,7 @@ namespace ArmazemGratidao {
    db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
    bar.Controls.Add(search);
-   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>LoadProducts();bar.Controls.Add(statusFilter);
+   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>LoadProducts();bar.Controls.Add(statusFilter);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>LoadProducts();bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
@@ -254,6 +254,9 @@ namespace ArmazemGratidao {
     if(cols.Contains("category"))searchColumns+=" OR category LIKE @q";
     string extraSelect=(cols.Contains("brand")?",brand AS marca":"")+(cols.Contains("category")?",category AS categoria":"");
     string expiryColumn=cols.Contains("expiry_date")?"expiry_date":cols.Contains("expiration_date")?"expiration_date":cols.Contains("validade")?"validade":null;
+    if((mode==5||mode==6)&&expiryColumn==null){info.Text="  Este banco não possui campo de validade; filtro indisponível.";grid.DataSource=null;metrics.Text="";return;}
+    if(mode==5)filter+=" AND date(\""+expiryColumn+"\") < date('now','localtime') AND date(\""+expiryColumn+"\") IS NOT NULL";
+    if(mode==6)filter+=" AND date(\""+expiryColumn+"\") >= date('now','localtime') AND date(\""+expiryColumn+"\") <= date('now','localtime','+30 days')";
     if(expiryColumn!=null)extraSelect+=",\""+expiryColumn+"\" AS validade";
     string weightColumn=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
     if(weightColumn!=null)extraSelect+=",\""+weightColumn+"\" AS venda_por_peso";
