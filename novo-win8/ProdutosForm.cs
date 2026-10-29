@@ -603,11 +603,11 @@ namespace ArmazemGratidao {
     if(string.IsNullOrWhiteSpace(name))return null;
     string brand=JsonProductField(json,"brands");
     string category=JsonProductField(json,"categories");
-    if(brand.Contains(","))brand=brand.Split(\',\')[0].Trim();
-    if(category.Contains(","))category=category.Split(\',\')[0].Trim();
-    name=System.Text.RegularExpressions.Regex.Replace(name,@"\\s+"," ").Trim();
-    brand=System.Text.RegularExpressions.Regex.Replace(brand,@"\\s+"," ").Trim();
-    category=System.Text.RegularExpressions.Regex.Replace(category,@"\\s+"," ").Trim();
+    if(brand.Contains(","))brand=brand.Split(',')[0].Trim();
+    if(category.Contains(","))category=category.Split(',')[0].Trim();
+    name=System.Text.RegularExpressions.Regex.Replace(name,@"\s+"," ").Trim();
+    brand=System.Text.RegularExpressions.Regex.Replace(brand,@"\s+"," ").Trim();
+    category=System.Text.RegularExpressions.Regex.Replace(category,@"\s+"," ").Trim();
     return new BarcodeProductData {Name=name,Brand=brand,Category=category};
    }
   }
