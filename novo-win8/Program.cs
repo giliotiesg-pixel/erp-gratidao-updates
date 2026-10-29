@@ -28,7 +28,7 @@ namespace ArmazemGratidao {
       var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
       int desired=size.Width+24;
       if(button.Image!=null)desired+=button.Image.Width+8;
-      if(button.Width<desired && button.Dock==DockStyle.None && button.Parent is FlowLayoutPanel){
+      if(button.Width<desired && button.Dock==DockStyle.None && button.Parent is FlowLayoutPanel && !(button.MinimumSize.Width>0 && button.MaximumSize.Width==button.MinimumSize.Width)){
        button.AutoSize=false;button.Width=desired;
       }
       button.AutoEllipsis=true;
