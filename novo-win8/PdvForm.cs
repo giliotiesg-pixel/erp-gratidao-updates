@@ -32,6 +32,7 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
+   var edit=new Button {Text="Editar quantidade / preço",AutoSize=true,Height=40};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var remove=new Button {Text="Remover item",AutoSize=true,Height=40};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);footer.Controls.Add(total);
    grid.Font=new Font("Segoe UI",11,FontStyle.Regular);grid.RowTemplate.Height=38;
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&e.Value!=null){string name=grid.Columns[e.ColumnIndex].Name.ToLowerInvariant();if(name.Contains("descri")||name.Contains("nome")||name.Contains("name")){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}}};
@@ -83,6 +84,35 @@ namespace ArmazemGratidao {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Price,i.Total);
    grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");
+  }
+  void EditSelected(){
+   if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
+   var item=cart[grid.CurrentRow.Index];
+   try{
+    using(var dialog=new Form {Text="Editar item da venda",Width=450,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+     var nameLabel=new Label {Text=item.Name,Left=15,Top=15,Width=400,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+     var quantityLabel=new Label {Text="Quantidade:",Left=15,Top=65,Width=125};
+     var quantityInput=new NumericUpDown {Left=150,Top=60,Width=210,DecimalPlaces=3,Minimum=0.001M,Maximum=999999,Value=item.Qty};
+     var priceLabel=new Label {Text="Preço unitário (R$):",Left=15,Top=105,Width=130};
+     var priceInput=new NumericUpDown {Left=150,Top=100,Width=210,DecimalPlaces=2,Minimum=0,Maximum=99999999,Value=item.Price};
+     var preview=new Label {Left=15,Top=145,Width=400,Height=26,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+     Action update=()=>preview.Text="Subtotal: R$ "+Math.Round(quantityInput.Value*priceInput.Value,2).ToString("N2");
+     quantityInput.ValueChanged+=(s,e)=>update();priceInput.ValueChanged+=(s,e)=>update();update();
+     var save=new Button {Text="Aplicar alterações",Left=205,Top=180,Width=155,Height=34,DialogResult=DialogResult.OK};
+     dialog.Controls.AddRange(new Control[]{nameLabel,quantityLabel,quantityInput,priceLabel,priceInput,preview,save});
+     dialog.AcceptButton=save;
+     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+     decimal available;
+     using(var connection=Open())using(var cmd=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",connection)){
+      cmd.Parameters.AddWithValue("@id",item.Id);
+      var value=cmd.ExecuteScalar();if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado no estoque.");
+      available=Dec(value);
+     }
+     if(quantityInput.Value>available){MessageBox.Show("Estoque insuficiente. Disponível: "+available.ToString("N3"));return;}
+     item.Qty=quantityInput.Value;item.Price=priceInput.Value;
+     Render();
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível editar o item");}
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
