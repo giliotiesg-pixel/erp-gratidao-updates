@@ -73,6 +73,8 @@ namespace ArmazemGratidao {
       var choose=new Button {Text="Adicionar selecionado",Dock=DockStyle.Bottom,Height=45,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
       choose.Click+=(s,e)=>{if(list.CurrentRow!=null){dialog.Tag=list.CurrentRow.Index;dialog.DialogResult=DialogResult.OK;}};
       list.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){dialog.Tag=e.RowIndex;dialog.DialogResult=DialogResult.OK;}};
+      dialog.KeyPreview=true;
+      dialog.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Escape){dialog.DialogResult=DialogResult.Cancel;e.Handled=true;}else if(e.KeyCode==Keys.Enter && list.CurrentRow!=null){dialog.Tag=list.CurrentRow.Index;dialog.DialogResult=DialogResult.OK;e.Handled=true;e.SuppressKeyPress=true;}};
       dialog.Controls.Add(list);dialog.Controls.Add(choose);
       if(dialog.ShowDialog(this)!=DialogResult.OK||!(dialog.Tag is int))return;
       selected=matches[(int)dialog.Tag];
