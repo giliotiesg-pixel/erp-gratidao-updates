@@ -667,6 +667,7 @@ namespace ArmazemGratidao {
      if(lookingUp||code==lastLookupCode)return;
      if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
      int thisLookup=++lookupGeneration;
+     string initialName=name.Text,initialBrand=brand.Text,initialCategory=category.Text;
      lookingUp=true;lookup.Enabled=false;lookup.Text="Pesquisando...";lookupStatus.Text="Consultando catálogo local e base pública...";
      try{
       string localName=LookupLocalProductName(code);
@@ -681,6 +682,8 @@ namespace ArmazemGratidao {
        lookupStatus.Text="Produto não encontrado. Complete o cadastro manualmente.";
        lastLookupCode=code;return;
       }
+      bool editedDuringLookup=name.Text!=initialName||brand.Text!=initialBrand||category.Text!=initialCategory;
+      if(editedDuringLookup){lookupStatus.Text="Campos alterados durante a pesquisa. Dados digitados preservados; pesquise novamente se desejar.";lastLookupCode=code;return;}
       bool hasManualText=!string.IsNullOrWhiteSpace(name.Text)||!string.IsNullOrWhiteSpace(brand.Text)||!string.IsNullOrWhiteSpace(category.Text);
       if(hasManualText&&MessageBox.Show("Dados encontrados na internet para "+code+".\nSubstituir os campos de descrição, marca e categoria já preenchidos?","Confirmar preenchimento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){
        lookupStatus.Text="Dados existentes mantidos.";lastLookupCode=code;return;
