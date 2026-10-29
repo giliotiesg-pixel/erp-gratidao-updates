@@ -18,11 +18,14 @@ namespace ArmazemGratidao {
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
-   db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
+   db=database;Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
-   bar.Controls.Add(search);
+   var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(235,242,250),WrapContents=false};
+   search.Width=360;search.Font=new Font("Segoe UI",12,FontStyle.Regular);
+   searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
+   searchBar.Controls.Add(search);
    statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
-   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
+   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};searchBar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();currentPage=0;LoadProducts();search.Focus();};bar.Controls.Add(clear);
@@ -43,12 +46,16 @@ namespace ArmazemGratidao {
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
+   var toggleMenu=new Button {Text="☰ Mostrar menu de ações",Width=220,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+   toggleMenu.Click+=(s,e)=>{bar.Visible=!bar.Visible;toggleMenu.Text=bar.Visible?"☰ Ocultar menu de ações":"☰ Mostrar menu de ações";if(bar.Visible)ResizeProductsToolbar(bar);};
+   searchBar.Controls.Add(toggleMenu);
+   bar.Visible=false;
    StyleProductsScreen(bar);
    ResizeProductsToolbar(bar);
    bar.ClientSizeChanged+=(s,e)=>ResizeProductsToolbar(bar);
    Resize+=(s,e)=>ResizeProductsToolbar(bar);
    metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
-   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(bar);LoadProducts();
+   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(bar);Controls.Add(searchBar);LoadProducts();
   }
   bool resizingProductsToolbar=false;
   void ResizeProductsToolbar(FlowLayoutPanel bar){
@@ -111,8 +118,15 @@ namespace ArmazemGratidao {
    grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-   grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
-   grid.DataBindingComplete+=(s,e)=>{if(grid.Columns.Contains("descricao")){grid.Columns["descricao"].MinimumWidth=260;grid.Columns["descricao"].FillWeight=230;grid.Columns["descricao"].DefaultCellStyle.WrapMode=DataGridViewTriState.True;}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
+   grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   grid.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
+   grid.DataBindingComplete+=(s,e)=>{
+    foreach(DataGridViewColumn col in grid.Columns){col.Width=115;col.MinimumWidth=75;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
+    if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
+    if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].Width=160;
+    if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=360;desc.Width=Math.Max(420,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
+    grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
+   };
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}};
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
@@ -428,7 +442,8 @@ namespace ArmazemGratidao {
     if(mode==3)filter=" AND COALESCE(stock,0)<=0";
     if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
     if((mode==1||mode==2)&&activeColumn==null){info.Text="  Este banco não possui campo de status; filtro indisponível.";return;}
-    string searchColumns="name LIKE @q OR barcode LIKE @q";
+    string searchColumns="name LIKE @q OR TRIM(COALESCE(barcode,'')) LIKE @q";
+    if(cols.Contains("internal_code"))searchColumns+=" OR TRIM(COALESCE(internal_code,'')) LIKE @q";
     if(cols.Contains("brand"))searchColumns+=" OR brand LIKE @q";
     if(cols.Contains("category"))searchColumns+=" OR category LIKE @q";
     string extraSelect=(cols.Contains("brand")?",brand AS marca":"")+(cols.Contains("category")?",category AS categoria":"");
