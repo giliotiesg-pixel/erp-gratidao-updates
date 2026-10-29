@@ -206,26 +206,31 @@ namespace ArmazemGratidao {
    values.Add(cell.ToString());return values;
   }
   static string BuildProductsExportSql(HashSet<string> cols){
-   return "SELECT id,barcode,name,price,cost,stock"+(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+" FROM products ORDER BY name";
+   string expiry=cols.Contains("expiry_date")?"expiry_date":cols.Contains("expiration_date")?"expiration_date":cols.Contains("validade")?"validade":null;
+   string weight=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
+   return "SELECT id,barcode,name,price,cost,stock"+(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+(expiry!=null?",\""+expiry+"\"":"")+(weight!=null?",\""+weight+"\"":"")+" FROM products ORDER BY name";
   }
   void ExportProducts(){
    using(var dlg=new SaveFileDialog {Title="Exportar produtos para CSV",Filter="CSV separado por ponto e virgula (*.csv)|*.csv",FileName="produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
     try{
-     using(var c=Open())
-     using(var cmd=new SQLiteCommand(BuildProductsExportSql(ProductColumns(c)),c))
-     using(var r=cmd.ExecuteReader())
-     using(var writer=new System.IO.StreamWriter(dlg.FileName,false,new System.Text.UTF8Encoding(true))){
-      var names=new List<string> {"ID","CodigoDeBarras","Descricao","Preco","Custo","Estoque"};
+     using(var c=Open()){
       var cols=ProductColumns(c);
+      var names=new List<string> {"ID","CodigoDeBarras","Descricao","Preco","Custo","Estoque"};
       if(cols.Contains("brand"))names.Add("Marca");
       if(cols.Contains("category"))names.Add("Categoria");
-      writer.WriteLine(string.Join(";",names));
+      if(cols.Contains("expiry_date")||cols.Contains("expiration_date")||cols.Contains("validade"))names.Add("Validade");
+      if(cols.Contains("sold_by_weight")||cols.Contains("is_weighted")||cols.Contains("por_peso"))names.Add("VendaPorPeso");
+      using(var cmd=new SQLiteCommand(BuildProductsExportSql(cols),c))
+      using(var r=cmd.ExecuteReader())
+      using(var writer=new System.IO.StreamWriter(dlg.FileName,false,new System.Text.UTF8Encoding(true))){
+       writer.WriteLine(string.Join(";",names));
       while(r.Read()){
        var cells=new string[r.FieldCount];
        for(int i=0;i<r.FieldCount;i++)cells[i]="\""+Convert.ToString(r.GetValue(i)).Replace("\"","\"\"")+"\"";
        writer.WriteLine(string.Join(";",cells));
       }
+     }
      }
      MessageBox.Show("Produtos exportados. O banco não foi modificado.");
     }catch(Exception ex){MessageBox.Show(ex.Message,"Falha na exportação");}
