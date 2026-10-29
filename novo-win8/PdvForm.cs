@@ -11,6 +11,7 @@ namespace ArmazemGratidao {
  public sealed class PdvForm : Form {
   sealed class Item {public long Id;public string Barcode,Name;public decimal Qty,Price,Cost;public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
+  bool finishingSale=false;
   readonly List<Item> cart=new List<Item>();
   readonly TextBox code=new TextBox {Width=260,Font=new Font("Segoe UI",14,FontStyle.Bold)};
   readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Value=1,Width=95};
@@ -174,6 +175,7 @@ namespace ArmazemGratidao {
    }
   }
   void Finish(){
+   if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
@@ -190,6 +192,7 @@ namespace ArmazemGratidao {
    string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
    if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+   finishingSale=true;
    try {
     using(var c=Open()){
      ValidateSaleSchema(c,method);
@@ -222,6 +225,7 @@ namespace ArmazemGratidao {
     }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   finally{finishingSale=false;}
   }
  }
 }
