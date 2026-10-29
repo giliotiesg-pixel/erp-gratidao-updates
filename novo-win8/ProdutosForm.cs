@@ -10,6 +10,10 @@ namespace ArmazemGratidao {
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
+  const int PageSize=250;
+  int currentPage=0;
+  readonly Button previousPage=new Button {Text="Página anterior",Width=155,Height=33};
+  readonly Button nextPage=new Button {Text="Próxima página",Width=155,Height=33};
   readonly ComboBox statusFilter=new ComboBox {Width=155,DropDownStyle=ComboBoxStyle.DropDownList};
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
@@ -17,11 +21,11 @@ namespace ArmazemGratidao {
    db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
    bar.Controls.Add(search);
-   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>LoadProducts();bar.Controls.Add(statusFilter);
-   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>LoadProducts();bar.Controls.Add(find);
+   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
+   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
-   var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();LoadProducts();search.Focus();};bar.Controls.Add(clear);
+   var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();currentPage=0;LoadProducts();search.Focus();};bar.Controls.Add(clear);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
 
    var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
@@ -32,8 +36,10 @@ namespace ArmazemGratidao {
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
    var history=new Button {Text="Histórico QTD",Width=150,Height=33};history.Click+=(s,e)=>ShowProductQuantityHistory();bar.Controls.Add(history);
-   var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
-   search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
+   var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();currentPage=0;statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
+   previousPage.Click+=(s,e)=>{if(currentPage>0){currentPage--;LoadProducts();}};bar.Controls.Add(previousPage);
+   nextPage.Click+=(s,e)=>{currentPage++;LoadProducts();};bar.Controls.Add(nextPage);
+   search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
    StyleProductsScreen(bar);
@@ -381,13 +387,24 @@ namespace ArmazemGratidao {
     if(expiryColumn!=null)extraSelect+=",\""+expiryColumn+"\" AS validade";
     string weightColumn=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
     if(weightColumn!=null)extraSelect+=",\""+weightColumn+"\" AS venda_por_peso";
-    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name LIMIT 2000",c)){
+    long total;
+    using(var count=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE ("+searchColumns+")"+filter,c)){
+     count.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+     total=Convert.ToInt64(count.ExecuteScalar());
+    }
+    int pages=(int)Math.Max(1,(total+PageSize-1)/PageSize);
+    if(currentPage>=pages)currentPage=pages-1;
+    previousPage.Enabled=currentPage>0;
+    nextPage.Enabled=currentPage<pages-1;
+    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name,id LIMIT @limit OFFSET @offset",c)){
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+     cmd.Parameters.AddWithValue("@limit",PageSize);
+     cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
-     info.Text="  "+dt.Rows.Count+" produtos exibidos. Cadastro preservado.";
+     info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
      decimal stockTotal=0,stockValue=0;int zeroStock=0;
      foreach(DataRow row in dt.Rows){decimal qty=0,cost=0;decimal.TryParse(Convert.ToString(row["estoque"]),out qty);decimal.TryParse(Convert.ToString(row["custo"]),out cost);stockTotal+=qty;stockValue+=qty*cost;if(qty<=0)zeroStock++;}
-     metrics.Text="    PRODUTOS: "+dt.Rows.Count+"     |     SEM ESTOQUE: "+zeroStock+"     |     UNIDADES: "+stockTotal.ToString("N3")+"     |     CUSTO ESTIMADO: R$ "+stockValue.ToString("N2");
+     metrics.Text="    NESTA PÁGINA: "+dt.Rows.Count+"     |     SEM ESTOQUE: "+zeroStock+"     |     UNIDADES: "+stockTotal.ToString("N3")+"     |     CUSTO ESTIMADO: R$ "+stockValue.ToString("N2");
     }
    }}catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
   }
