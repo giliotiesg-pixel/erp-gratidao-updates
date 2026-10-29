@@ -322,11 +322,13 @@ namespace ArmazemGratidao {
    return null;
   }
   void InsertProduct(){
-   using(var form=new Form {Text="Inserir produto",Width=540,Height=450,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
+   using(var form=new Form {Text="Inserir produto",Width=560,Height=530,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
-    Control[] fields={barcode,name,brand,category,price,cost,stock};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial"};
+    var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
+    var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=false};
+    var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true};var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
+    Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
     var lookup=new Button {Text="Buscar descrição na internet",Width=225,Height=32};
     lookup.Click+=async (s,e)=>{
@@ -343,7 +345,7 @@ namespace ArmazemGratidao {
      }catch(Exception ex){MessageBox.Show("Consulta indisponível: "+ex.Message+"\nVocê pode continuar o cadastro manualmente.","Busca de produto");}
      finally{lookup.Enabled=true;lookup.Text="Buscar descrição na internet";}
     };
-    panel.Controls.Add(lookup,1,7);
+    panel.Controls.Add(lookup,1,9);
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -361,19 +363,23 @@ namespace ArmazemGratidao {
        using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
         copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);
        }
-       string extraCols=(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"");
-       string extraParams=(cols.Contains("brand")?",@brand":"")+(cols.Contains("category")?",@category":"");
+       string expiryCol=cols.Contains("expiry_date")?"expiry_date":cols.Contains("expiration_date")?"expiration_date":cols.Contains("validade")?"validade":null;
+       string weightCol=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
+       string extraCols=(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+(expiryCol!=null?",\""+expiryCol+"\"":"")+(weightCol!=null?",\""+weightCol+"\"":"");
+       string extraParams=(cols.Contains("brand")?",@brand":"")+(cols.Contains("category")?",@category":"")+(expiryCol!=null?",@expiry":"")+(weightCol!=null?",@weight":"");
        using(var tx=c.BeginTransaction())using(var cmd=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock"+extraCols+") VALUES(@barcode,@name,@price,@cost,@stock"+extraParams+")",c,tx)){
         cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());cmd.Parameters.AddWithValue("@name",name.Text.Trim());cmd.Parameters.AddWithValue("@price",price.Value);cmd.Parameters.AddWithValue("@cost",cost.Value);cmd.Parameters.AddWithValue("@stock",stock.Value);
         if(cols.Contains("brand"))cmd.Parameters.AddWithValue("@brand",brand.Text.Trim());
         if(cols.Contains("category"))cmd.Parameters.AddWithValue("@category",category.Text.Trim());
+        if(expiryCol!=null)cmd.Parameters.AddWithValue("@expiry",expiry.Checked?(object)expiry.Value.ToString("yyyy-MM-dd"):DBNull.Value);
+        if(weightCol!=null)cmd.Parameters.AddWithValue("@weight",byWeight.Checked?1:0);
         cmd.ExecuteNonQuery();tx.Commit();
        }
       }
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
-    panel.Controls.Add(save,1,8);StyleDialog(form,panel);form.Controls.Add(panel);
+    panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
     if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
   }
