@@ -56,16 +56,28 @@ namespace ArmazemGratidao {
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
-   var toggleMenu=new Button {Text="☰ Mostrar menu de ações",Width=220,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
-   toggleMenu.Click+=(s,e)=>{bar.Visible=!bar.Visible;toggleMenu.Text=bar.Visible?"☰ Ocultar menu de ações":"☰ Mostrar menu de ações";if(bar.Visible)ResizeProductsToolbar(bar);};
+   var menu=new ContextMenuStrip();
+   foreach(Control control in bar.Controls){
+    Button action=control as Button;
+    if(action!=null){
+     var entry=new ToolStripMenuItem(action.Text);
+     entry.Click+=(s,e)=>action.PerformClick();
+     menu.Items.Add(entry);
+    }
+   }
+   var filters=new ToolStripMenuItem("Filtros");
+   for(int i=0;i<statusFilter.Items.Count;i++){
+    int index=i;
+    var option=new ToolStripMenuItem(Convert.ToString(statusFilter.Items[i]));
+    option.Click+=(s,e)=>statusFilter.SelectedIndex=index;
+    filters.DropDownItems.Add(option);
+   }
+   menu.Items.Add(filters);
+   var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+   toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
-   bar.Visible=false;
-   StyleProductsScreen(bar);
-   ResizeProductsToolbar(bar);
-   bar.ClientSizeChanged+=(s,e)=>ResizeProductsToolbar(bar);
-   Resize+=(s,e)=>ResizeProductsToolbar(bar);
    metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
-   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(bar);Controls.Add(searchBar);LoadProducts();
+   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);LoadProducts();
   }
   bool resizingProductsToolbar=false;
   void ResizeProductsToolbar(FlowLayoutPanel bar){
