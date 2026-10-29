@@ -31,8 +31,29 @@ namespace ArmazemGratidao {
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
    StyleProductsScreen(bar);
+   ResizeProductsToolbar(bar);
+   bar.ClientSizeChanged+=(s,e)=>ResizeProductsToolbar(bar);
+   Resize+=(s,e)=>ResizeProductsToolbar(bar);
    metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(bar);LoadProducts();
+  }
+  bool resizingProductsToolbar=false;
+  void ResizeProductsToolbar(FlowLayoutPanel bar){
+   if(resizingProductsToolbar)return;
+   resizingProductsToolbar=true;
+   try{
+    int available=Math.Max(300,bar.ClientSize.Width-bar.Padding.Horizontal-12);
+    int rowWidth=0,rows=1,rowHeight=0;
+    foreach(Control control in bar.Controls){
+     if(!control.Visible)continue;
+     int w=control.Width+control.Margin.Horizontal;
+     int h=control.Height+control.Margin.Vertical;
+     if(rowWidth>0&&rowWidth+w>available){rows++;rowWidth=0;}
+     rowWidth+=w;rowHeight=Math.Max(rowHeight,h);
+    }
+    int desired=Math.Max(58,bar.Padding.Vertical+rows*Math.Max(40,rowHeight)+8);
+    if(bar.Height!=desired)bar.Height=desired;
+   }finally{resizingProductsToolbar=false;}
   }
   static void StyleButton(Button b,Color background){
    b.UseVisualStyleBackColor=false;b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=1;
@@ -52,8 +73,11 @@ namespace ArmazemGratidao {
   }
   void StyleProductsScreen(FlowLayoutPanel bar){
    search.BackColor=Color.White;search.ForeColor=Color.Black;search.Font=new Font("Segoe UI",11,FontStyle.Regular);
-   Color[] colors={Color.FromArgb(20,103,180),Color.FromArgb(12,120,82),Color.FromArgb(105,65,170),Color.FromArgb(92,100,112),Color.FromArgb(15,110,125),Color.FromArgb(147,67,35),Color.FromArgb(23,111,75),Color.FromArgb(72,86,153),Color.FromArgb(130,55,105)};
-   int index=0;foreach(Control control in bar.Controls)if(control is Button)StyleButton((Button)control,colors[(index++)%colors.Length]);
+   int index=0;foreach(Control control in bar.Controls)if(control is Button){
+    bool primary=index==1||index==2;
+    StyleButton((Button)control,primary?Color.FromArgb(190,30,48):Color.FromArgb(20,73,158));
+    index++;
+   }
    grid.BackgroundColor=Color.White;grid.DefaultCellStyle.BackColor=Color.White;grid.DefaultCellStyle.ForeColor=Color.Black;
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
