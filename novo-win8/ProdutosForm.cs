@@ -362,6 +362,14 @@ namespace ArmazemGratidao {
     }
    }
   }
+  string LookupLocalProductName(string barcode){
+   using(var connection=Open())
+   using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE barcode=@barcode LIMIT 1",connection)){
+    cmd.Parameters.AddWithValue("@barcode",barcode);
+    var result=cmd.ExecuteScalar();
+    return result==null||result==DBNull.Value?null:Convert.ToString(result);
+   }
+  }
   static string LookupBarcodeName(string barcode){
    System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
    string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name";
@@ -403,6 +411,12 @@ namespace ArmazemGratidao {
      }
      lookup.Enabled=false;lookup.Text="Consultando...";
      try{
+      string localName=LookupLocalProductName(code);
+      if(!string.IsNullOrWhiteSpace(localName)){
+       name.Text=localName;
+       MessageBox.Show("Produto encontrado no banco local: "+localName+"\nEste código já está cadastrado. Nenhum dado foi alterado.","Catálogo offline");
+       return;
+      }
       string description=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeName(code));
       if(string.IsNullOrWhiteSpace(description)){MessageBox.Show("Produto não encontrado na base pública. Preencha manualmente.");return;}
       if(!string.IsNullOrWhiteSpace(name.Text)&&MessageBox.Show("Substituir a descrição digitada por:\n"+description+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
