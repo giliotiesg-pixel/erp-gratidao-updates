@@ -36,6 +36,7 @@ namespace ArmazemGratidao {
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
    var history=new Button {Text="Histórico QTD",Width=150,Height=33};history.Click+=(s,e)=>ShowProductQuantityHistory();bar.Controls.Add(history);
+   var exportHistory=new Button {Text="Exportar histórico QTD",Width=190,Height=33};exportHistory.Click+=(s,e)=>ExportProductQuantityHistory();bar.Controls.Add(exportHistory);
    var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();currentPage=0;statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
    previousPage.Click+=(s,e)=>{if(currentPage>0){currentPage--;LoadProducts();}};bar.Controls.Add(previousPage);
    nextPage.Click+=(s,e)=>{currentPage++;LoadProducts();};bar.Controls.Add(nextPage);
@@ -109,6 +110,42 @@ namespace ArmazemGratidao {
    using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))
    using(var r=cmd.ExecuteReader())while(r.Read())cols.Add(Convert.ToString(r["name"]));
    return cols;
+  }
+  void ExportProductQuantityHistory(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para exportar o histórico.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
+   string description=Convert.ToString(grid.CurrentRow.Cells["descricao"].Value);
+   try{
+    using(var c=Open()){
+     using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='product_quantity_movements'",c)){
+      if(Convert.ToInt64(exists.ExecuteScalar())==0){MessageBox.Show("Ainda não existem entradas de QTD registradas para exportação.");return;}
+     }
+     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM product_quantity_movements WHERE product_id=@id",c)){
+      check.Parameters.AddWithValue("@id",id);
+      if(Convert.ToInt64(check.ExecuteScalar())==0){MessageBox.Show("Este produto não possui entradas de QTD registradas.");return;}
+     }
+     using(var dlg=new SaveFileDialog {Title="Exportar histórico de QTD",Filter="CSV separado por ponto e vírgula (*.csv)|*.csv",FileName="historico-qtd-produto-"+id+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
+      if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+      string temp=dlg.FileName+".tmp-"+Guid.NewGuid().ToString("N");
+      try{
+       using(var cmd=new SQLiteCommand("SELECT movement_at,quantity_before,quantity_added,quantity_after,reason FROM product_quantity_movements WHERE product_id=@id ORDER BY id",c))
+       using(var writer=new System.IO.StreamWriter(temp,false,new System.Text.UTF8Encoding(true))){
+        cmd.Parameters.AddWithValue("@id",id);
+        writer.WriteLine("ProdutoID;Descricao;DataHora;QtdAnterior;QtdAdicionada;QtdFinal;Motivo");
+        using(var r=cmd.ExecuteReader())while(r.Read()){
+         var cells=new string[]{id.ToString(),description,Convert.ToString(r.GetValue(0)),Convert.ToString(r.GetValue(1),System.Globalization.CultureInfo.InvariantCulture),Convert.ToString(r.GetValue(2),System.Globalization.CultureInfo.InvariantCulture),Convert.ToString(r.GetValue(3),System.Globalization.CultureInfo.InvariantCulture),Convert.ToString(r.GetValue(4))};
+         for(int i=0;i<cells.Length;i++)cells[i]="\""+(cells[i]??"").Replace("\"","\"\"")+"\"";
+         writer.WriteLine(string.Join(";",cells));
+        }
+       }
+       if(System.IO.File.Exists(dlg.FileName))System.IO.File.Delete(dlg.FileName);
+       System.IO.File.Move(temp,dlg.FileName);
+       MessageBox.Show("Histórico de QTD exportado. O estoque e o banco não foram alterados.","Exportação concluída");
+      }finally{if(System.IO.File.Exists(temp))System.IO.File.Delete(temp);}
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível exportar o histórico.\n"+ex.Message,"Exportação de QTD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void ShowProductQuantityHistory(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para consultar o histórico.");return;}
