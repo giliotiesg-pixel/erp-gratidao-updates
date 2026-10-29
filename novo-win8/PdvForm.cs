@@ -173,7 +173,9 @@ namespace ArmazemGratidao {
    List<KeyValuePair<string,decimal>> split=null;
    if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
-   if(MessageBox.Show("Finalizar venda de R$ "+sum.ToString("N2")+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+   string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
+   if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
+   if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    try {
     using(var c=Open()){
      ValidateSaleSchema(c,method);
