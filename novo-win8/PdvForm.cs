@@ -168,6 +168,12 @@ namespace ArmazemGratidao {
   }
   void Finish(){
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
+   foreach(var item in cart){
+    if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
+     MessageBox.Show("Item inválido no carrinho: "+item.Name+". Confira quantidade, preço e cadastro antes de finalizar.","Conferência dos itens",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+     return;
+    }
+   }
    var method=Convert.ToString(payment.SelectedItem);if(method=="FIADO"&&string.IsNullOrWhiteSpace(customer.Text)){MessageBox.Show("Informe o cliente para venda fiado.");return;}
    var sum=cart.Sum(i=>i.Total);
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
