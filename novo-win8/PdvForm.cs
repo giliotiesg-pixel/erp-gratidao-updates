@@ -17,6 +17,7 @@ namespace ArmazemGratidao {
   readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Value=1,Width=95};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
+  readonly Label changeLabel=new Label {AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Padding=new Padding(0,9,0,0)};
   readonly ComboBox payment=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   readonly TextBox customer=new TextBox {Width=180};
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
@@ -31,7 +32,8 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
-   footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);
+   footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
+   payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="Editar quantidade / preço",AutoSize=true,Height=40};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var remove=new Button {Text="Remover item",AutoSize=true,Height=40};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
@@ -91,7 +93,15 @@ namespace ArmazemGratidao {
   void Render() {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Price,i.Total);
-   grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");
+   grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");UpdateChange();
+  }
+  void UpdateChange(){
+   bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
+   changeLabel.Visible=cash;
+   if(!cash)return;
+   decimal difference=received.Value-cart.Sum(i=>i.Total);
+   changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
+   changeLabel.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
   }
   void EditSelected(){
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
