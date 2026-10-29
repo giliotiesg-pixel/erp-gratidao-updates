@@ -114,17 +114,19 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",10,FontStyle.Regular);
-   grid.RowTemplate.Height=35;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
+   grid.RowTemplate.Height=48;grid.RowTemplate.MinimumHeight=48;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
    grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
    grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   grid.AllowUserToResizeColumns=false;grid.AllowUserToOrderColumns=false;grid.AllowUserToResizeRows=false;
    grid.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
    grid.DataBindingComplete+=(s,e)=>{
-    foreach(DataGridViewColumn col in grid.Columns){col.Width=115;col.MinimumWidth=75;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
+    foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.False;col.Width=115;col.MinimumWidth=75;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
     if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].Width=160;
     if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=360;desc.Width=Math.Max(420,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
+    if(grid.Columns.Contains("qtd")){grid.Columns["qtd"].HeaderText="QTD";grid.Columns["qtd"].Width=100;}
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
    };
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}};
@@ -453,6 +455,7 @@ namespace ArmazemGratidao {
     if(mode==6)filter+=" AND date(\""+expiryColumn+"\") >= date('now','localtime') AND date(\""+expiryColumn+"\") <= date('now','localtime','+30 days')";
     if(expiryColumn!=null)extraSelect+=",\""+expiryColumn+"\" AS validade";
     string weightColumn=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
+    extraSelect+=",COALESCE(stock,0) AS qtd";
     if(weightColumn!=null)extraSelect+=",\""+weightColumn+"\" AS venda_por_peso";
     long total;
     using(var count=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE ("+searchColumns+")"+filter,c)){
