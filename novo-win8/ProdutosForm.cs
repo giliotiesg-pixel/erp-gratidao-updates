@@ -30,6 +30,7 @@ namespace ArmazemGratidao {
    var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
+   var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
