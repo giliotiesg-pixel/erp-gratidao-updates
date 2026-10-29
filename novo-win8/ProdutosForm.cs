@@ -586,17 +586,18 @@ namespace ArmazemGratidao {
   }
   sealed class BarcodeProductData {public string Name,Brand,Category;}
   static string JsonProductField(string json,string key){
-   var match=System.Text.RegularExpressions.Regex.Match(json,"\\\""+System.Text.RegularExpressions.Regex.Escape(key)+"\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"\\\\])*)\\\"");
+   string pattern="\\\""+System.Text.RegularExpressions.Regex.Escape(key)+"\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"";
+   var match=System.Text.RegularExpressions.Regex.Match(json,pattern);
    return match.Success?System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value).Trim():"";
   }
   static BarcodeProductData LookupBarcodeProduct(string barcode){
    System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
-   string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name,brands,categories";
+   string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name,brands,categories,status";
    using(var client=new System.Net.WebClient()){
     client.Encoding=System.Text.Encoding.UTF8;
     client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (barcode product lookup)";
     string json=client.DownloadString(url);
-    if(!System.Text.RegularExpressions.Regex.IsMatch(json,@"\"status\"\\s*:\\s*1(?:\\D|$)"))return null;
+    if(!System.Text.RegularExpressions.Regex.IsMatch(json,"\\\"status\\\"\\s*:\\s*1(?:\\D|$)"))return null;
     string name=JsonProductField(json,"product_name_pt");
     if(string.IsNullOrWhiteSpace(name))name=JsonProductField(json,"product_name");
     if(string.IsNullOrWhiteSpace(name))return null;
