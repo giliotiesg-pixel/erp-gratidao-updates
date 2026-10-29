@@ -74,9 +74,21 @@ namespace ArmazemGratidao {
    b.ForeColor=Color.White;b.Font=new Font("Segoe UI",10,FontStyle.Bold);
    b.Padding=new Padding(5,2,5,2);b.Height=Math.Max(b.Height,39);
   }
+  static void FitDialogToScreen(Form form){
+   var bounds=Screen.FromControl(form).WorkingArea;
+   int maxWidth=Math.Max(320,bounds.Width-24);
+   int maxHeight=Math.Max(240,bounds.Height-24);
+   form.MinimumSize=Size.Empty;
+   if(form.Width>maxWidth)form.Width=maxWidth;
+   if(form.Height>maxHeight)form.Height=maxHeight;
+   form.AutoScroll=true;
+   form.StartPosition=FormStartPosition.CenterParent;
+  }
   static void StyleDialog(Form form,TableLayoutPanel panel){
    form.BackColor=Color.FromArgb(245,248,252);form.ForeColor=Color.FromArgb(18,31,50);
    form.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   form.Shown+=(s,e)=>FitDialogToScreen(form);
+   panel.AutoScroll=true;
    panel.BackColor=form.BackColor;
    foreach(Control control in panel.Controls){
     if(control is Label){control.ForeColor=Color.FromArgb(18,31,50);control.Font=new Font("Segoe UI",10,FontStyle.Bold);}
@@ -173,6 +185,7 @@ namespace ArmazemGratidao {
      var close=new Button {Text="Fechar",Dock=DockStyle.Bottom,Height=42};
      close.Click+=(s,e)=>form.Close();
      form.Controls.Add(table);form.Controls.Add(header);form.Controls.Add(close);
+     form.Shown+=(s,e)=>FitDialogToScreen(form);
      form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível consultar o histórico. Nenhum dado foi alterado.\n"+ex.Message,"Histórico de QTD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
