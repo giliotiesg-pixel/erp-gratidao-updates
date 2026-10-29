@@ -81,7 +81,7 @@ namespace ArmazemGratidao {
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
    searchBar.Controls.Add(selectAll);
-   selectAll.CheckedChanged+=(s,e)=>{foreach(DataGridViewRow row in grid.Rows){if(row.IsNewRow)continue;long id;if(long.TryParse(Convert.ToString(row.Cells["codigo_interno"].Value),out id)){if(selectAll.Checked)checkedProducts.Add(id);else checkedProducts.Remove(id);row.Cells["selecionar"].Value=selectAll.Checked;}}};
+   selectAll.CheckedChanged+=(s,e)=>{if(!grid.Columns.Contains("selecionar")||!grid.Columns.Contains("codigo_interno"))return;foreach(DataGridViewRow row in grid.Rows){if(row.IsNewRow)continue;long id;if(long.TryParse(Convert.ToString(row.Cells["codigo_interno"].Value),out id)){if(selectAll.Checked)checkedProducts.Add(id);else checkedProducts.Remove(id);row.Cells["selecionar"].Value=selectAll.Checked;}}};
    var deleteSelected=new Button {Text="Excluir Item",Width=115,Height=35,BackColor=Color.FromArgb(180,35,45),ForeColor=Color.White};
    deleteSelected.Click+=(s,e)=>DeleteCheckedProducts();searchBar.Controls.Add(deleteSelected);
    previousPage.Text="◀";previousPage.Width=42;previousPage.Height=35;
@@ -161,6 +161,7 @@ namespace ArmazemGratidao {
     applyingColumnWidths=true;
     try{
     if(!grid.Columns.Contains("selecionar")){var checkbox=new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="✓",Width=45,MinimumWidth=40,ReadOnly=false};grid.Columns.Insert(0,checkbox);}
+    if(!grid.Columns.Contains("codigo_interno"))return;
     foreach(DataGridViewRow row in grid.Rows){long id;if(long.TryParse(Convert.ToString(row.Cells["codigo_interno"].Value),out id))row.Cells["selecionar"].Value=checkedProducts.Contains(id);}
     foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.True;col.MinimumWidth=55;col.Width=115;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;string heading=col.HeaderText.Replace("_"," ");col.HeaderText=System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(heading.ToLowerInvariant());}
     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
