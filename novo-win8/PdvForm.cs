@@ -43,22 +43,41 @@ namespace ArmazemGratidao {
   void AddProduct() {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
-    using(var c=Open())using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code OR name LIKE @name ORDER BY CASE WHEN barcode=@code THEN 0 WHEN internal_code=@code THEN 1 ELSE 2 END, name LIMIT 2",c)) {
-     cmd.Parameters.AddWithValue("@code",search);cmd.Parameters.AddWithValue("@name","%"+search+"%");
-     using(var r=cmd.ExecuteReader()) {
-      if(!r.Read()) {MessageBox.Show("Produto não cadastrado.");return;}
-      var id=Convert.ToInt64(r["id"]);var stock=Dec(r["stock"]);var quantity=qty.Value;
-      string productBarcode=Convert.ToString(r["barcode"]),productName=Convert.ToString(r["name"]);
-      decimal productPrice=Dec(r["price"]),productCost=Dec(r["cost"]);
-      if(r.Read()){MessageBox.Show("Há mais de um produto com esse nome. Informe o código de barras ou o código interno para escolher corretamente.","Produtos encontrados");return;}
-      var existing=cart.FirstOrDefault(x=>x.Id==id);
-      if(stock < quantity+(existing==null?0:existing.Qty)) {MessageBox.Show("Estoque insuficiente. Disponivel: "+stock);return;}
-      if(existing!=null)existing.Qty+=quantity;
-      else cart.Add(new Item {Id=id,Barcode=productBarcode,Name=productName,Qty=quantity,Price=productPrice,Cost=productCost});
+    var matches=new List<Item>();
+    var stocks=new Dictionary<long,decimal>();
+    using(var connection=Open())
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code OR name LIKE @name ORDER BY CASE WHEN barcode=@code THEN 0 WHEN internal_code=@code THEN 1 ELSE 2 END,name LIMIT 100",connection)){
+     cmd.Parameters.AddWithValue("@code",search);
+     cmd.Parameters.AddWithValue("@name","%"+search+"%");
+     using(var reader=cmd.ExecuteReader())while(reader.Read()){
+      var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+      matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
      }
     }
+    if(matches.Count==0){MessageBox.Show("Produto não cadastrado.");return;}
+    Item selected=matches[0];
+    if(matches.Count>1){
+     using(var dialog=new Form {Text="Selecione o produto",Width=780,Height=500,StartPosition=FormStartPosition.CenterParent,MinimumSize=new Size(580,350)}){
+      var list=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+      var dt=new DataTable();dt.Columns.Add("Código");dt.Columns.Add("Descrição");dt.Columns.Add("Preço");dt.Columns.Add("Estoque");
+      foreach(var item in matches)dt.Rows.Add(item.Barcode,item.Name,item.Price.ToString("N2"),stocks[item.Id].ToString("N3"));
+      list.DataSource=dt;
+      list.Columns[1].FillWeight=260;
+      var choose=new Button {Text="Adicionar selecionado",Dock=DockStyle.Bottom,Height=45,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+      choose.Click+=(s,e)=>{if(list.CurrentRow!=null){dialog.Tag=list.CurrentRow.Index;dialog.DialogResult=DialogResult.OK;}};
+      list.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){dialog.Tag=e.RowIndex;dialog.DialogResult=DialogResult.OK;}};
+      dialog.Controls.Add(list);dialog.Controls.Add(choose);
+      if(dialog.ShowDialog(this)!=DialogResult.OK||!(dialog.Tag is int))return;
+      selected=matches[(int)dialog.Tag];
+     }
+    }
+    decimal quantity=qty.Value;
+    var existing=cart.FirstOrDefault(x=>x.Id==selected.Id);
+    if(stocks[selected.Id]<quantity+(existing==null?0:existing.Qty)){MessageBox.Show("Estoque insuficiente. Disponível: "+stocks[selected.Id].ToString("N3"));return;}
+    if(existing!=null)existing.Qty+=quantity;
+    else {selected.Qty=quantity;cart.Add(selected);}
     code.Clear();qty.Value=1;Render();code.Focus();
-   } catch(Exception ex) {MessageBox.Show(ex.Message,"Erro ao adicionar");}
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao adicionar");}
   }
   void Render() {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
