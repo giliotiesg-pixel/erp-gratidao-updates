@@ -52,7 +52,8 @@ namespace ArmazemGratidao {
     if(!credit){
      heading.Text=previous?"VENDAS ANTERIORES | Selecione uma venda":"VENDAS DO DIA | Selecione uma venda";
      var dt=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE date(created_at) "+(previous?"<":"=")+" date('now','localtime')");
-     summary.Text="  "+(previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  Total: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2");
+     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE date(created_at) >= date(\'now\',\'localtime\',\'start of month\') AND date(created_at) < date(\'now\',\'localtime\',\'start of month\',\'+1 month\')");
+     summary.Text="  "+(previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  Total do período: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2")+"  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2");
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
   }
