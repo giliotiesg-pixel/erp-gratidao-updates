@@ -195,18 +195,25 @@ namespace ArmazemGratidao {
    if(quoted)throw new Exception("CSV com aspas não fechadas.");
    values.Add(cell.ToString());return values;
   }
+  static string BuildProductsExportSql(HashSet<string> cols){
+   return "SELECT id,barcode,name,price,cost,stock"+(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+" FROM products ORDER BY name";
+  }
   void ExportProducts(){
    using(var dlg=new SaveFileDialog {Title="Exportar produtos para CSV",Filter="CSV separado por ponto e virgula (*.csv)|*.csv",FileName="produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
     try{
      using(var c=Open())
-     using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products ORDER BY name",c))
+     using(var cmd=new SQLiteCommand(BuildProductsExportSql(ProductColumns(c)),c))
      using(var r=cmd.ExecuteReader())
      using(var writer=new System.IO.StreamWriter(dlg.FileName,false,new System.Text.UTF8Encoding(true))){
-      writer.WriteLine("ID;CodigoDeBarras;Descricao;Preco;Custo;Estoque");
+      var names=new List<string> {"ID","CodigoDeBarras","Descricao","Preco","Custo","Estoque"};
+      var cols=ProductColumns(c);
+      if(cols.Contains("brand"))names.Add("Marca");
+      if(cols.Contains("category"))names.Add("Categoria");
+      writer.WriteLine(string.Join(";",names));
       while(r.Read()){
-       var cells=new string[6];
-       for(int i=0;i<6;i++)cells[i]="\""+Convert.ToString(r.GetValue(i)).Replace("\"","\"\"")+"\"";
+       var cells=new string[r.FieldCount];
+       for(int i=0;i<r.FieldCount;i++)cells[i]="\""+Convert.ToString(r.GetValue(i)).Replace("\"","\"\"")+"\"";
        writer.WriteLine(string.Join(";",cells));
       }
      }
