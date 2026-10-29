@@ -170,6 +170,7 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    var method=Convert.ToString(payment.SelectedItem);if(method=="FIADO"&&string.IsNullOrWhiteSpace(customer.Text)){MessageBox.Show("Informe o cliente para venda fiado.");return;}
    var sum=cart.Sum(i=>i.Total);
+   if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
    if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
