@@ -584,6 +584,12 @@ namespace ArmazemGratidao {
     return result==null||result==DBNull.Value?null:Convert.ToString(result);
    }
   }
+  static bool ValidBarcodeCheckDigit(string barcode){
+   if(barcode.Length!=12&&barcode.Length!=13&&barcode.Length!=14)return true;
+   int sum=0;
+   for(int i=barcode.Length-2,weight=3;i>=0;i--,weight=weight==3?1:3)sum+=(barcode[i]-'0')*weight;
+   return (10-(sum%10))%10==barcode[barcode.Length-1]-'0';
+  }
   sealed class BarcodeProductData {public string Name,Brand,Category;}
   static string JsonProductField(string json,string key){
    string pattern="\\\""+System.Text.RegularExpressions.Regex.Escape(key)+"\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"";
@@ -681,13 +687,18 @@ namespace ArmazemGratidao {
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
     barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
     barcode.TextChanged+=(s,e)=>{if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
+    barcode.MaxLength=14;
+    barcode.ShortcutsEnabled=true;
+    barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
     panel.Controls.Add(lookupStatus,1,9);
     panel.Controls.Add(lookup,1,10);
 
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
+     barcode.Text=barcode.Text.Trim();
      if(!string.IsNullOrWhiteSpace(barcode.Text)&&!System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$")){MessageBox.Show("Código de barras inválido. Informe 8 a 14 dígitos.","Cadastro de produto");return;}
+     if(!string.IsNullOrWhiteSpace(barcode.Text)&&barcode.Text.Length>=12&&!ValidBarcodeCheckDigit(barcode.Text)){if(MessageBox.Show("O dígito verificador do código de barras não confere. Deseja revisar o código antes de salvar?","Conferir código",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){barcode.Focus();return;}}
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
      try{
       using(var c=Open(false)){
