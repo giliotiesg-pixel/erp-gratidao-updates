@@ -335,8 +335,15 @@ namespace ArmazemGratidao {
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
+    HashSet<string> availableColumns;
+    using(var checkConnection=Open())availableColumns=ProductColumns(checkConnection);
+    brand.Enabled=availableColumns.Contains("brand");
+    category.Enabled=availableColumns.Contains("category");
     var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=false};
-    var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true};var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
+    var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true};
+    expiry.Enabled=availableColumns.Contains("expiry_date")||availableColumns.Contains("expiration_date")||availableColumns.Contains("validade");
+    byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
+    var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
     var lookup=new Button {Text="Buscar descrição na internet",Width=225,Height=32};
