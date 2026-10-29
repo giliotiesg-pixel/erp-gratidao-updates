@@ -137,7 +137,7 @@ namespace ArmazemGratidao {
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();code.Clear();qty.Value=1;Render();code.Focus();
+   cart.Clear();code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
