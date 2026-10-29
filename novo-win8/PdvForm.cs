@@ -78,9 +78,13 @@ namespace ArmazemGratidao {
       list.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){dialog.Tag=e.RowIndex;dialog.DialogResult=DialogResult.OK;}};
       dialog.KeyPreview=true;
       dialog.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Escape){dialog.DialogResult=DialogResult.Cancel;e.Handled=true;}else if(e.KeyCode==Keys.Enter && list.CurrentRow!=null){dialog.Tag=list.CurrentRow.Index;dialog.DialogResult=DialogResult.OK;e.Handled=true;e.SuppressKeyPress=true;}};
-      dialog.Controls.Add(list);dialog.Controls.Add(choose);
+      var cancel=new Button {Text="Cancelar seleção",Dock=DockStyle.Bottom,Height=38};
+      cancel.Click+=(s,e)=>{dialog.DialogResult=DialogResult.Cancel;};
+      dialog.Controls.Add(list);dialog.Controls.Add(cancel);dialog.Controls.Add(choose);
       if(dialog.ShowDialog(this)!=DialogResult.OK||!(dialog.Tag is int))return;
-      selected=matches[(int)dialog.Tag];
+      int selectedIndex=(int)dialog.Tag;
+      if(selectedIndex<0||selectedIndex>=matches.Count)return;
+      selected=matches[selectedIndex];
      }
     }
     decimal quantity=qty.Value;
