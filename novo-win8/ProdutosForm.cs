@@ -667,7 +667,7 @@ namespace ArmazemGratidao {
        lastLookupCode=code;return;
       }
       var data=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(code));
-      if(barcode.IsDisposed||form.IsDisposed||barcode.Text.Trim()!=code)return;
+      if(barcode.IsDisposed||form.IsDisposed||barcode.Text.Trim()!=code){lookupStatus.Text="Código alterado durante a pesquisa. Pesquise novamente.";return;}
       if(data==null||string.IsNullOrWhiteSpace(data.Name)){
        lookupStatus.Text="Produto não encontrado. Complete o cadastro manualmente.";
        lastLookupCode=code;return;
@@ -676,9 +676,10 @@ namespace ArmazemGratidao {
       if(hasManualText&&MessageBox.Show("Dados encontrados na internet para "+code+".\nSubstituir os campos de descrição, marca e categoria já preenchidos?","Confirmar preenchimento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){
        lookupStatus.Text="Dados existentes mantidos.";lastLookupCode=code;return;
       }
+      if(data.Name.Length>250){lookupStatus.Text="Descrição muito longa na base pública. Revise antes de salvar.";data.Name=data.Name.Substring(0,250).Trim();}
       name.Text=data.Name;
-      if(brand.Enabled&&!string.IsNullOrWhiteSpace(data.Brand))brand.Text=data.Brand;
-      if(category.Enabled&&!string.IsNullOrWhiteSpace(data.Category))category.Text=data.Category;
+      if(brand.Enabled&&!string.IsNullOrWhiteSpace(data.Brand))brand.Text=data.Brand.Length>120?data.Brand.Substring(0,120).Trim():data.Brand;
+      if(category.Enabled&&!string.IsNullOrWhiteSpace(data.Category))category.Text=data.Category.Length>120?data.Category.Substring(0,120).Trim():data.Category;
       lookupStatus.Text="Preenchido pela base pública. Confira os dados e informe preço, custo e estoque antes de salvar.";
       lastLookupCode=code;
      }catch(Exception ex){lookupStatus.Text="Busca indisponível. Cadastro manual liberado.";MessageBox.Show("Consulta online indisponível: "+ex.Message,"Busca de produto");}
