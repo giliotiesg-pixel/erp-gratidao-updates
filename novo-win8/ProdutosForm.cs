@@ -33,7 +33,7 @@ namespace ArmazemGratidao {
    searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
    searchBar.Controls.Add(search);
    statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
-   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};searchBar.Controls.Add(find);
+   var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();currentPage=0;LoadProducts();search.Focus();};bar.Controls.Add(clear);
@@ -123,8 +123,9 @@ namespace ArmazemGratidao {
    grid.BackgroundColor=Color.White;grid.DefaultCellStyle.BackColor=Color.White;grid.DefaultCellStyle.ForeColor=Color.Black;
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
-   grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",10,FontStyle.Regular);
-   grid.RowTemplate.Height=32;grid.RowTemplate.MinimumHeight=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
+   grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",9,FontStyle.Regular);
+   grid.DefaultCellStyle.Padding=new Padding(3,2,3,2);
+   grid.RowTemplate.Height=27;grid.RowTemplate.MinimumHeight=27;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
    grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
@@ -135,7 +136,7 @@ namespace ArmazemGratidao {
    grid.DataBindingComplete+=(s,e)=>{
     applyingColumnWidths=true;
     try{
-    foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.True;col.MinimumWidth=55;col.Width=115;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
+    foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.True;col.MinimumWidth=55;col.Width=115;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;string heading=col.HeaderText.Replace("_"," ");col.HeaderText=System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(heading.ToLowerInvariant());}
     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
     if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].Width=160;
     if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=150;desc.Width=Math.Max(300,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
@@ -144,7 +145,7 @@ namespace ArmazemGratidao {
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
     }finally{applyingColumnWidths=false;}
    };
-   grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}};
+   grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(5,2,5,2);}};
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
