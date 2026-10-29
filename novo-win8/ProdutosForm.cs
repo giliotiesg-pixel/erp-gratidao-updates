@@ -11,6 +11,8 @@ namespace ArmazemGratidao {
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
+  readonly HashSet<long> checkedProducts=new HashSet<long>();
+  readonly CheckBox selectAll=new CheckBox {Text="Selecionar todos",AutoSize=true,Padding=new Padding(3,9,3,0)};
   bool applyingColumnWidths=false;
   readonly Dictionary<string,int> savedColumnWidths=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
   readonly Timer searchDelay=new Timer {Interval=300};
@@ -55,6 +57,8 @@ namespace ArmazemGratidao {
    search.TextChanged+=(s,e)=>{searchDelay.Stop();searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
+   grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
+   grid.CellValueChanged+=(s,e)=>{if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name!="selecionar")return;long id;if(long.TryParse(Convert.ToString(grid.Rows[e.RowIndex].Cells["codigo_interno"].Value),out id)){if(Convert.ToBoolean(grid.Rows[e.RowIndex].Cells["selecionar"].Value))checkedProducts.Add(id);else checkedProducts.Remove(id);}};
 
    var menu=new ContextMenuStrip();
    foreach(Control control in bar.Controls){
@@ -76,6 +80,10 @@ namespace ArmazemGratidao {
    var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
+   searchBar.Controls.Add(selectAll);
+   selectAll.CheckedChanged+=(s,e)=>{foreach(DataGridViewRow row in grid.Rows){if(row.IsNewRow)continue;long id;if(long.TryParse(Convert.ToString(row.Cells["codigo_interno"].Value),out id)){if(selectAll.Checked)checkedProducts.Add(id);else checkedProducts.Remove(id);row.Cells["selecionar"].Value=selectAll.Checked;}}};
+   var deleteSelected=new Button {Text="Excluir Item",Width=115,Height=35,BackColor=Color.FromArgb(180,35,45),ForeColor=Color.White};
+   deleteSelected.Click+=(s,e)=>DeleteCheckedProducts();searchBar.Controls.Add(deleteSelected);
    previousPage.Text="◀";previousPage.Width=42;previousPage.Height=35;
    nextPage.Text="▶";nextPage.Width=42;nextPage.Height=35;
    searchBar.Controls.Add(previousPage);
@@ -152,12 +160,15 @@ namespace ArmazemGratidao {
    grid.DataBindingComplete+=(s,e)=>{
     applyingColumnWidths=true;
     try{
+    if(!grid.Columns.Contains("selecionar")){var checkbox=new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="✓",Width=45,MinimumWidth=40,ReadOnly=false};grid.Columns.Insert(0,checkbox);}
+    foreach(DataGridViewRow row in grid.Rows){long id;if(long.TryParse(Convert.ToString(row.Cells["codigo_interno"].Value),out id))row.Cells["selecionar"].Value=checkedProducts.Contains(id);}
     foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.True;col.MinimumWidth=55;col.Width=115;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;string heading=col.HeaderText.Replace("_"," ");col.HeaderText=System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(heading.ToLowerInvariant());}
     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
     if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].Width=160;
     if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=150;desc.Width=Math.Max(300,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
     if(grid.Columns.Contains("qtd")){grid.Columns["qtd"].HeaderText="QTD";grid.Columns["qtd"].Width=100;}
     foreach(DataGridViewColumn col in grid.Columns){int saved;if(savedColumnWidths.TryGetValue(col.Name,out saved))col.Width=Math.Max(col.MinimumWidth,saved);}
+    grid.Columns["selecionar"].Width=45;grid.Columns["selecionar"].ReadOnly=false;
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
     }finally{applyingColumnWidths=false;}
    };
@@ -462,6 +473,28 @@ namespace ArmazemGratidao {
      MessageBox.Show("Produtos exportados. O banco não foi modificado.");
     }catch(Exception ex){MessageBox.Show(ex.Message,"Falha na exportação");}
    }
+  }
+  void DeleteCheckedProducts(){
+   var ids=checkedProducts.ToArray();
+   if(ids.Length==0){MessageBox.Show("Marque os produtos que deseja excluir.");return;}
+   if(MessageBox.Show("Remover "+ids.Length+" produto(s) da lista de ativos? Os registros de vendas e o histórico serão preservados.","Confirmar exclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+   try{
+    using(var connection=Open(false)){
+     var cols=ProductColumns(connection);
+     string active=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
+     if(active==null){MessageBox.Show("Este banco não possui campo de inativação. Nenhum produto foi excluído.");return;}
+     string backup=db+".antes-excluir-produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
+     using(var tx=connection.BeginTransaction()){
+      foreach(long id in ids){
+       using(var cmd=new SQLiteCommand("UPDATE products SET \""+active+"\"=0 WHERE id=@id",connection,tx)){cmd.Parameters.AddWithValue("@id",id);cmd.ExecuteNonQuery();}
+      }
+      tx.Commit();
+     }
+    }
+    checkedProducts.Clear();selectAll.Checked=false;LoadProducts();
+    MessageBox.Show("Produtos inativados. Histórico preservado.");
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Exclusão não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void LoadProducts(){
    try{
