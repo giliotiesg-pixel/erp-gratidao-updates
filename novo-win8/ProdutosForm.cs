@@ -28,6 +28,8 @@ namespace ArmazemGratidao {
    var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
+   var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
+   var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
@@ -362,6 +364,24 @@ namespace ArmazemGratidao {
      }
     }
    }
+  }
+  void CopySelectedBarcode(){
+   if(grid.CurrentRow==null||!grid.Columns.Contains("codigo_barras")){MessageBox.Show("Selecione um produto.");return;}
+   string barcode=Convert.ToString(grid.CurrentRow.Cells["codigo_barras"].Value).Trim();
+   if(barcode.Length==0){MessageBox.Show("Produto sem código de barras.");return;}
+   try{Clipboard.SetText(barcode);info.Text="  Código de barras copiado: "+barcode;}
+   catch(Exception ex){MessageBox.Show("Não foi possível copiar: "+ex.Message);}
+  }
+  void ShowSelectedProductDetails(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
+   var lines=new List<string>();
+   foreach(DataGridViewCell cell in grid.CurrentRow.Cells){
+    if(!cell.OwningColumn.Visible)continue;
+    string name=cell.OwningColumn.HeaderText.Replace("_"," ");
+    string value=cell.Value==null||cell.Value==DBNull.Value?"—":Convert.ToString(cell.Value);
+    lines.Add(name+": "+value);
+   }
+   MessageBox.Show(string.Join("\n",lines),"Detalhes do produto",MessageBoxButtons.OK,MessageBoxIcon.Information);
   }
   async System.Threading.Tasks.Task ConsultBarcode(Button trigger){
    using(var dialog=new Form {Text="Consulta de código de barras",Width=470,Height=190,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
