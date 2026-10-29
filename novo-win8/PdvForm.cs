@@ -28,7 +28,7 @@ namespace ArmazemGratidao {
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;AddProduct();}};
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=126,Padding=new Padding(10),AutoScroll=true};
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   payment.Items.AddRange(new object[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO","FIADO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
+   payment.Items.AddRange(new object[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
@@ -130,10 +130,49 @@ namespace ArmazemGratidao {
    RequireColumns(conn,"stock_audit_log","product_id","product_name","barcode","event_type","quantity_before","quantity_after","quantity_delta","reference_type","reference_id","reason");
    if(method!="FIADO")RequireColumns(conn,"sale_payments","sale_id","payment_method","amount");
   }
+  List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
+   var methods=new[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO"};
+   using(var dialog=new Form {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    var combos=new ComboBox[3];var values=new NumericUpDown[3];
+    var info=new Label {Left=18,Top=15,Width=440,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    dialog.Controls.Add(info);
+    for(int i=0;i<3;i++){
+     var label=new Label {Left=18,Top=58+i*53,Width=55,Text=(i+1)+"ª forma"};
+     combos[i]=new ComboBox {Left=85,Top=53+i*53,Width=165,DropDownStyle=ComboBoxStyle.DropDownList};
+     combos[i].Items.AddRange(methods);combos[i].SelectedIndex=i==0?0:-1;
+     values[i]=new NumericUpDown {Left=265,Top=53+i*53,Width=175,DecimalPlaces=2,Maximum=99999999};
+     if(i==0)values[i].Value=Math.Min(amount,values[i].Maximum);
+     dialog.Controls.AddRange(new Control[]{label,combos[i],values[i]});
+    }
+    var status=new Label {Left=18,Top=218,Width=430,Height=25};
+    Action update=()=>status.Text="Informado: R$ "+values.Sum(v=>v.Value).ToString("N2")+" / Total: R$ "+amount.ToString("N2");
+    foreach(var v in values)v.ValueChanged+=(s,e)=>update();update();
+    var confirm=new Button {Text="Confirmar pagamentos",Left=240,Top=250,Width=200,Height=35};
+    List<KeyValuePair<string,decimal>> selected=null;
+    confirm.Click+=(s,e)=>{
+     var parts=new List<KeyValuePair<string,decimal>>();
+     for(int i=0;i<3;i++){
+      if(values[i].Value==0)continue;
+      if(combos[i].SelectedIndex<0){MessageBox.Show("Escolha a forma para cada valor informado.");return;}
+      string method=Convert.ToString(combos[i].SelectedItem);
+      if(parts.Any(p=>p.Key==method)){MessageBox.Show("Utilize cada forma de pagamento apenas uma vez.");return;}
+      parts.Add(new KeyValuePair<string,decimal>(method,values[i].Value));
+     }
+     if(parts.Count<2){MessageBox.Show("Para pagamento dividido, informe pelo menos duas formas.");return;}
+     if(parts.Sum(p=>p.Value)!=amount){MessageBox.Show("A soma dos pagamentos deve ser exatamente R$ "+amount.ToString("N2"));return;}
+     selected=parts;dialog.DialogResult=DialogResult.OK;
+    };
+    dialog.Controls.Add(status);dialog.Controls.Add(confirm);
+    return dialog.ShowDialog(this)==DialogResult.OK?selected:null;
+   }
+  }
   void Finish(){
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    var method=Convert.ToString(payment.SelectedItem);if(method=="FIADO"&&string.IsNullOrWhiteSpace(customer.Text)){MessageBox.Show("Informe o cliente para venda fiado.");return;}
-   var sum=cart.Sum(i=>i.Total);if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
+   var sum=cart.Sum(i=>i.Total);
+   List<KeyValuePair<string,decimal>> split=null;
+   if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
+   if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
    if(MessageBox.Show("Finalizar venda de R$ "+sum.ToString("N2")+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
    try {
     using(var c=Open()){
@@ -156,7 +195,12 @@ namespace ArmazemGratidao {
        q.Parameters.AddWithValue("@id",i.Id);q.Parameters.AddWithValue("@name",i.Name);q.Parameters.AddWithValue("@barcode",i.Barcode);q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@after",before-i.Qty);q.Parameters.AddWithValue("@delta",-i.Qty);q.Parameters.AddWithValue("@sale",saleId);q.ExecuteNonQuery();
       }
      }
-     if(method!="FIADO")using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",method);q.Parameters.AddWithValue("@total",sum);q.ExecuteNonQuery();}
+     if(method!="FIADO"){
+      var payments=method=="DIVIDIDO"?split:new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
+      foreach(var part in payments)using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){
+       q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",part.Key);q.Parameters.AddWithValue("@total",part.Value);q.ExecuteNonQuery();
+      }
+     }
      tx.Commit();
      MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Clear();Render();code.Focus();
     }
