@@ -578,7 +578,7 @@ namespace ArmazemGratidao {
   }
   string LookupLocalProductName(string barcode){
    using(var connection=Open())
-   using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE TRIM(COALESCE(barcode,\'\'))=@barcode LIMIT 1",connection)){
+   using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE TRIM(COALESCE(barcode,''))=@barcode LIMIT 1",connection)){
     cmd.Parameters.AddWithValue("@barcode",barcode.Trim());
     var result=cmd.ExecuteScalar();
     return result==null||result==DBNull.Value?null:Convert.ToString(result);
@@ -705,7 +705,7 @@ namespace ArmazemGratidao {
        var cols=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
        using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))using(var reader=cmd.ExecuteReader())while(reader.Read())cols.Add(Convert.ToString(reader["name"]));
        foreach(var field in new[]{"barcode","name","price","cost","stock"})if(!cols.Contains(field))throw new Exception("Campo necessário ausente: products."+field);
-       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE TRIM(COALESCE(barcode,\'\'))=@code AND @code<>''",c)){
+       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE TRIM(COALESCE(barcode,''))=@code AND @code<>''",c)){
         check.Parameters.AddWithValue("@code",barcode.Text.Trim());
         if(Convert.ToInt64(check.ExecuteScalar())>0)throw new Exception("Código de barras já cadastrado.");
        }
