@@ -4,12 +4,20 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Linq;
 namespace ArmazemGratidao {
  public sealed class ProdutosForm:Form {
   readonly string db;
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
+  bool applyingColumnWidths=false;
+  readonly Dictionary<string,int> savedColumnWidths=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+  readonly Timer searchDelay=new Timer {Interval=300};
+  string WidthSettingsPath {get{return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidao","produtos-colunas.txt");}}
+  void LoadColumnWidths(){try{if(!System.IO.File.Exists(WidthSettingsPath))return;foreach(string line in System.IO.File.ReadAllLines(WidthSettingsPath)){int sep=line.IndexOf('=');int width;if(sep>0&&int.TryParse(line.Substring(sep+1),out width)&&width>=55&&width<=2000)savedColumnWidths[line.Substring(0,sep)]=width;}}catch{}}
+  void SaveColumnWidths(){try{string dir=System.IO.Path.GetDirectoryName(WidthSettingsPath);System.IO.Directory.CreateDirectory(dir);System.IO.File.WriteAllLines(WidthSettingsPath,savedColumnWidths.Select(x=>x.Key+"="+x.Value).ToArray());}catch{}}
+
   const int PageSize=250;
   int currentPage=0;
   readonly Button previousPage=new Button {Text="Página anterior",Width=155,Height=33};
@@ -18,7 +26,7 @@ namespace ArmazemGratidao {
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
-   db=database;Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;
+   db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
    var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(235,242,250),WrapContents=false};
    search.Width=360;search.Font=new Font("Segoe UI",12,FontStyle.Regular);
@@ -43,7 +51,9 @@ namespace ArmazemGratidao {
    var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();currentPage=0;statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
    previousPage.Click+=(s,e)=>{if(currentPage>0){currentPage--;LoadProducts();}};bar.Controls.Add(previousPage);
    nextPage.Click+=(s,e)=>{currentPage++;LoadProducts();};bar.Controls.Add(nextPage);
-   search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;currentPage=0;LoadProducts();}};
+   searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
+   search.TextChanged+=(s,e)=>{searchDelay.Stop();searchDelay.Start();};
+   search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
    var toggleMenu=new Button {Text="☰ Mostrar menu de ações",Width=220,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
@@ -114,20 +124,25 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",10,FontStyle.Regular);
-   grid.RowTemplate.Height=48;grid.RowTemplate.MinimumHeight=48;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
+   grid.RowTemplate.Height=32;grid.RowTemplate.MinimumHeight=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
    grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
    grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
-   grid.AllowUserToResizeColumns=false;grid.AllowUserToOrderColumns=false;grid.AllowUserToResizeRows=false;
+   grid.AllowUserToResizeColumns=true;grid.AllowUserToOrderColumns=false;grid.AllowUserToResizeRows=false;
+   grid.ColumnWidthChanged+=(s,e)=>{if(!applyingColumnWidths&&e.Column!=null){savedColumnWidths[e.Column.Name]=e.Column.Width;SaveColumnWidths();}};
    grid.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
    grid.DataBindingComplete+=(s,e)=>{
-    foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.False;col.Width=115;col.MinimumWidth=75;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
+    applyingColumnWidths=true;
+    try{
+    foreach(DataGridViewColumn col in grid.Columns){col.Resizable=DataGridViewTriState.True;col.MinimumWidth=55;col.Width=115;col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;}
     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Width=95;
     if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].Width=160;
-    if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=360;desc.Width=Math.Max(420,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
+    if(grid.Columns.Contains("descricao")){var desc=grid.Columns["descricao"];desc.MinimumWidth=150;desc.Width=Math.Max(300,grid.ClientSize.Width-540);desc.DefaultCellStyle.WrapMode=DataGridViewTriState.True;desc.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;}
     if(grid.Columns.Contains("qtd")){grid.Columns["qtd"].HeaderText="QTD";grid.Columns["qtd"].Width=100;}
+    foreach(DataGridViewColumn col in grid.Columns){int saved;if(savedColumnWidths.TryGetValue(col.Name,out saved))col.Width=Math.Max(col.MinimumWidth,saved);}
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
+    }finally{applyingColumnWidths=false;}
    };
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}};
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
