@@ -245,7 +245,9 @@ namespace ArmazemGratidao {
    long id;
    if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
    using(var c=Open()){
-    using(var q=new SQLiteCommand("SELECT barcode,name,price,cost FROM products WHERE id=@id",c)){
+    var columns=ProductColumns(c);
+    string extra=(columns.Contains("brand")?",brand":"")+(columns.Contains("category")?",category":"");
+    using(var q=new SQLiteCommand("SELECT barcode,name,price,cost"+extra+" FROM products WHERE id=@id",c)){
      q.Parameters.AddWithValue("@id",id);
      using(var r=q.ExecuteReader()){
       if(!r.Read()){MessageBox.Show("Produto não encontrado.");return;}
@@ -253,13 +255,17 @@ namespace ArmazemGratidao {
       string oldName=Convert.ToString(r["name"]);
       decimal oldPrice=Convert.ToDecimal(r["price"]);
       decimal oldCost=Convert.ToDecimal(r["cost"]);
-      using(var form=new Form {Text="Editar produto #"+id,Width=470,Height=330,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=5,Padding=new Padding(15)};
+      string oldBrand=columns.Contains("brand")?Convert.ToString(r["brand"]):"";
+      string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
+      using(var form=new Form {Text="Editar produto #"+id,Width=540,Height=410,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(15)};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,140));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
        var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName};
+       var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
+       var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
        var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Value=oldPrice};
        var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Value=oldCost};
-       Control[] fields={code,name,price,cost};string[] labels={"Código de barras","Descrição","Preço de venda","Custo"};
+       Control[] fields={code,name,brand,category,price,cost};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo"};
        for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        var save=new Button {Text="Salvar alterações",Width=165,Height=38,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White};
        save.Click+=(s,e)=>{
@@ -274,8 +280,11 @@ namespace ArmazemGratidao {
           using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
            copy.Open();dbconn.BackupDatabase(copy,"main","main",-1,null,0);
           }
-          using(var tx=dbconn.BeginTransaction())using(var update=new SQLiteCommand("UPDATE products SET barcode=@barcode,name=@name,price=@price,cost=@cost WHERE id=@id",dbconn,tx)){
+          string optional=(columns.Contains("brand")?",brand=@brand":"")+(columns.Contains("category")?",category=@category":"");
+          using(var tx=dbconn.BeginTransaction())using(var update=new SQLiteCommand("UPDATE products SET barcode=@barcode,name=@name,price=@price,cost=@cost"+optional+" WHERE id=@id",dbconn,tx)){
            update.Parameters.AddWithValue("@barcode",code.Text.Trim());update.Parameters.AddWithValue("@name",name.Text.Trim());update.Parameters.AddWithValue("@price",price.Value);update.Parameters.AddWithValue("@cost",cost.Value);update.Parameters.AddWithValue("@id",id);
+           if(columns.Contains("brand"))update.Parameters.AddWithValue("@brand",brand.Text.Trim());
+           if(columns.Contains("category"))update.Parameters.AddWithValue("@category",category.Text.Trim());
            if(update.ExecuteNonQuery()!=1)throw new Exception("Produto não atualizado.");
            tx.Commit();
           }
@@ -283,7 +292,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       panel.Controls.Add(save,1,4);StyleDialog(form,panel);form.Controls.Add(panel);
+       panel.Controls.Add(save,1,6);StyleDialog(form,panel);form.Controls.Add(panel);
        if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
       }
      }
