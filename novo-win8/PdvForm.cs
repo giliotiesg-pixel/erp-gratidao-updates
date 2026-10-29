@@ -43,15 +43,18 @@ namespace ArmazemGratidao {
   void AddProduct() {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
-    using(var c=Open())using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code OR name LIKE @name ORDER BY CASE WHEN barcode=@code THEN 0 ELSE 1 END LIMIT 1",c)) {
+    using(var c=Open())using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code OR name LIKE @name ORDER BY CASE WHEN barcode=@code THEN 0 WHEN internal_code=@code THEN 1 ELSE 2 END, name LIMIT 2",c)) {
      cmd.Parameters.AddWithValue("@code",search);cmd.Parameters.AddWithValue("@name","%"+search+"%");
      using(var r=cmd.ExecuteReader()) {
-      if(!r.Read()) {MessageBox.Show("Produto nao cadastrado.");return;}
+      if(!r.Read()) {MessageBox.Show("Produto não cadastrado.");return;}
       var id=Convert.ToInt64(r["id"]);var stock=Dec(r["stock"]);var quantity=qty.Value;
+      string productBarcode=Convert.ToString(r["barcode"]),productName=Convert.ToString(r["name"]);
+      decimal productPrice=Dec(r["price"]),productCost=Dec(r["cost"]);
+      if(r.Read()){MessageBox.Show("Há mais de um produto com esse nome. Informe o código de barras ou o código interno para escolher corretamente.","Produtos encontrados");return;}
       var existing=cart.FirstOrDefault(x=>x.Id==id);
       if(stock < quantity+(existing==null?0:existing.Qty)) {MessageBox.Show("Estoque insuficiente. Disponivel: "+stock);return;}
       if(existing!=null)existing.Qty+=quantity;
-      else cart.Add(new Item {Id=id,Barcode=Convert.ToString(r["barcode"]),Name=Convert.ToString(r["name"]),Qty=quantity,Price=Dec(r["price"]),Cost=Dec(r["cost"])});
+      else cart.Add(new Item {Id=id,Barcode=productBarcode,Name=productName,Qty=quantity,Price=productPrice,Cost=productCost});
      }
     }
     code.Clear();qty.Value=1;Render();code.Focus();
