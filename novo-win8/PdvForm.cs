@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace ArmazemGratidao {
  public sealed class PdvForm : Form {
-  sealed class Item {public long Id;public string Barcode,Name;public decimal Qty,Price,Cost;public decimal Total {get{return Math.Round(Qty*Price,2);}}}
+  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
   readonly List<Item> cart=new List<Item>();
@@ -50,16 +50,17 @@ namespace ArmazemGratidao {
     var matches=new List<Item>();
     var stocks=new Dictionary<long,decimal>();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR (name LIKE @name AND NOT EXISTS (SELECT 1 FROM products AS exact WHERE TRIM(COALESCE(exact.barcode,''))=@code OR TRIM(COALESCE(exact.internal_code,''))=@code)) ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR (name LIKE @name AND NOT EXISTS (SELECT 1 FROM products AS exact WHERE TRIM(COALESCE(exact.barcode,''))=@code OR TRIM(COALESCE(exact.internal_code,''))=@code)) ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
      cmd.Parameters.AddWithValue("@code",search);
      cmd.Parameters.AddWithValue("@name","%"+search+"%");
      using(var reader=cmd.ExecuteReader())while(reader.Read()){
-      var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+      var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
       matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
      }
     }
     if(matches.Count==0){MessageBox.Show("Produto não cadastrado.");return;}
     if(matches.Count>1 && matches.Count(x=>string.Equals((x.Barcode??"").Trim(),search,StringComparison.OrdinalIgnoreCase))>1){MessageBox.Show("Atenção: existem produtos diferentes cadastrados com o mesmo código de barras. Confira a descrição e o preço antes de selecionar.","Código de barras duplicado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+    if(matches.Count>1 && matches.Count(x=>string.Equals((x.InternalCode??"").Trim(),search,StringComparison.OrdinalIgnoreCase))>1){MessageBox.Show("Atenção: existem produtos diferentes cadastrados com o mesmo código interno. Confira a descrição e o preço antes de selecionar.","Código interno duplicado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     if(matches.Count>100){matches.RemoveAt(100);MessageBox.Show("A pesquisa encontrou mais de 100 produtos. Exibindo os primeiros 100; refine a descrição ou informe o código para localizar o produto desejado.","Muitos resultados");}
     Item selected=matches[0];
     if(matches.Count>1){
