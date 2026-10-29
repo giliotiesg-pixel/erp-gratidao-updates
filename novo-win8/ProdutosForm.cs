@@ -692,7 +692,7 @@ namespace ArmazemGratidao {
       lookupStatus.Text="Preenchido pela base pública. Confira os dados e informe preço, custo e estoque antes de salvar.";
       lastLookupCode=code;
      }catch(Exception ex){lookupStatus.Text="Busca indisponível. Cadastro manual liberado.";MessageBox.Show("Consulta online indisponível: "+ex.Message,"Busca de produto");}
-     finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";}}
+     finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";if(!form.IsDisposed&&barcode.Text.Trim()!=code)lookupStatus.Text="Código alterado. Pressione Enter para pesquisar o novo código.";}}
     };
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
     barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
