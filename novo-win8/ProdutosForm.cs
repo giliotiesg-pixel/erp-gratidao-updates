@@ -231,7 +231,7 @@ namespace ArmazemGratidao {
     if(cols.Contains("brand"))searchColumns+=" OR brand LIKE @q";
     if(cols.Contains("category"))searchColumns+=" OR category LIKE @q";
     string extraSelect=(cols.Contains("brand")?",brand AS marca":"")+(cols.Contains("category")?",category AS categoria":"");
-    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name LIMIT 2000",c)){
+    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name LIMIT 2000",c)){
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
      info.Text="  "+dt.Rows.Count+" produtos exibidos. Cadastro preservado.";
