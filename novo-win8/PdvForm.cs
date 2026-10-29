@@ -66,10 +66,10 @@ namespace ArmazemGratidao {
     if(matches.Count>1){
      using(var dialog=new Form {Text="Selecione o produto",Width=780,Height=500,StartPosition=FormStartPosition.CenterParent,MinimumSize=new Size(580,350)}){
       var list=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-      var dt=new DataTable();dt.Columns.Add("Código");dt.Columns.Add("Descrição");dt.Columns.Add("Preço");dt.Columns.Add("Estoque");
-      foreach(var item in matches)dt.Rows.Add(item.Barcode,item.Name,item.Price.ToString("N2"),stocks[item.Id].ToString("N3"));
+      var dt=new DataTable();dt.Columns.Add("Código de barras");dt.Columns.Add("Código interno");dt.Columns.Add("Descrição");dt.Columns.Add("Preço");dt.Columns.Add("Estoque");
+      foreach(var item in matches)dt.Rows.Add(item.Barcode,item.InternalCode,item.Name,item.Price.ToString("N2"),stocks[item.Id].ToString("N3"));
       list.DataSource=dt;
-      list.Columns[1].FillWeight=260;
+      list.Columns[2].FillWeight=260;
       var choose=new Button {Text="Adicionar selecionado",Dock=DockStyle.Bottom,Height=45,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
       choose.Click+=(s,e)=>{if(list.CurrentRow!=null){dialog.Tag=list.CurrentRow.Index;dialog.DialogResult=DialogResult.OK;}};
       list.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){dialog.Tag=e.RowIndex;dialog.DialogResult=DialogResult.OK;}};
