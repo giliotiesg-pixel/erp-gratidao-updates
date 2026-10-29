@@ -13,6 +13,8 @@ namespace ArmazemGratidao {
    db=path;module=name;Text="Armazem Gratidao | "+name+" (Consulta)";Width=1100;Height=700;
    var top=new FlowLayoutPanel {Dock=DockStyle.Top,Height=55,Padding=new Padding(8),BackColor=Color.FromArgb(20,77,157)};
    var reload=new Button {Text="Atualizar consulta",AutoSize=true,Height=33};reload.Click+=(s,e)=>LoadData();top.Controls.Add(reload);
+   grid.Font=new Font("Segoe UI",11,FontStyle.Regular);grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;grid.RowTemplate.Height=38;
+   grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){string n=column.Name.ToLowerInvariant();if(n=="name"||n.Contains("descri")||n=="produto"||n=="cliente"){column.MinimumWidth=240;column.FillWeight=230;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
    Controls.Add(grid);Controls.Add(status);Controls.Add(top);LoadData();
   }
   void LoadData() {
