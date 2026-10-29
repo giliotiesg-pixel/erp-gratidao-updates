@@ -100,6 +100,7 @@ namespace ArmazemGratidao {
    grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;
    grid.ColumnHeadersHeight=42;grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
    grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+   grid.DataBindingComplete+=(s,e)=>{if(grid.Columns.Contains("descricao")){grid.Columns["descricao"].MinimumWidth=260;grid.Columns["descricao"].FillWeight=230;grid.Columns["descricao"].DefaultCellStyle.WrapMode=DataGridViewTriState.True;}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
    info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
@@ -166,7 +167,7 @@ namespace ArmazemGratidao {
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(history);
      }
     }
-    using(var form=new Form {Text="Histórico QTD - "+description,Width=900,Height=560,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false}){
+    using(var form=new Form {Text="Histórico QTD - "+description,Width=1080,Height=680,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false}){
      var header=new Label {Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Text="Produto: "+description+"  |  Entradas registradas: "+history.Rows.Count+(history.Rows.Count==1000?" (últimas 1.000)":"") ,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(235,242,250)};
      var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=history,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
      var close=new Button {Text="Fechar",Dock=DockStyle.Bottom,Height=42};
@@ -181,10 +182,10 @@ namespace ArmazemGratidao {
    long id;
    if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
    string description=Convert.ToString(grid.CurrentRow.Cells["descricao"].Value);
-   using(var form=new Form {Text="Adicionar QTD ao estoque",Width=460,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+   using(var form=new Form {Text="Adicionar QTD ao estoque",Width=650,Height=345,MinimumSize=new Size(600,320),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(15)};
-    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var productLabel=new Label {Text=description,AutoSize=true,MaximumSize=new Size(240,55)};
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var productLabel=new Label {Text=description,AutoSize=true,MaximumSize=new Size(420,75),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var quantity=new NumericUpDown {DecimalPlaces=3,Minimum=0.001M,Maximum=10000000M,Increment=1M,Value=1M,Width=180};
     var reason=new TextBox {Text="Entrada manual de estoque",Width=230,MaxLength=250};
     panel.Controls.Add(new Label {Text="Produto",AutoSize=true},0,0);panel.Controls.Add(productLabel,1,0);
@@ -475,9 +476,9 @@ namespace ArmazemGratidao {
       string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
       DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
       bool oldWeight=weightCol!=null&&r["saved_weight"]!=DBNull.Value&&Convert.ToString(r["saved_weight"])!="0";
-      using(var form=new Form {Text="Editar produto #"+id,Width=560,Height=495,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+      using(var form=new Form {Text="Editar produto #"+id,Width=760,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
-       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,140));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
        var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
        var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
@@ -541,7 +542,7 @@ namespace ArmazemGratidao {
    MessageBox.Show(string.Join("\n",lines),"Detalhes do produto",MessageBoxButtons.OK,MessageBoxIcon.Information);
   }
   async System.Threading.Tasks.Task ConsultBarcode(Button trigger){
-   using(var dialog=new Form {Text="Consulta de código de barras",Width=470,Height=190,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+   using(var dialog=new Form {Text="Consulta de código de barras",Width=650,Height=270,MinimumSize=new Size(600,240),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var label=new Label {Text="Digite ou leia o código de barras:",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",10,FontStyle.Bold)};
     var code=new TextBox {Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
     var confirm=new Button {Text="Consultar",Dock=DockStyle.Bottom,Height=42,DialogResult=DialogResult.OK};
@@ -587,9 +588,9 @@ namespace ArmazemGratidao {
    return null;
   }
   void InsertProduct(){
-   using(var form=new Form {Text="Inserir produto",Width=560,Height=530,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+   using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
-    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
     HashSet<string> availableColumns;
     using(var checkConnection=Open())availableColumns=ProductColumns(checkConnection);
