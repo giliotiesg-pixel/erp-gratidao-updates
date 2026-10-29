@@ -48,7 +48,7 @@ namespace ArmazemGratidao {
     var matches=new List<Item>();
     var stocks=new Dictionary<long,decimal>();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR name LIKE @name ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 100",connection)){
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR name LIKE @name ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
      cmd.Parameters.AddWithValue("@code",search);
      cmd.Parameters.AddWithValue("@name","%"+search+"%");
      using(var reader=cmd.ExecuteReader())while(reader.Read()){
@@ -57,6 +57,7 @@ namespace ArmazemGratidao {
      }
     }
     if(matches.Count==0){MessageBox.Show("Produto não cadastrado.");return;}
+    if(matches.Count>100){matches.RemoveAt(100);MessageBox.Show("A pesquisa encontrou mais de 100 produtos. Exibindo os primeiros 100; refine a descrição ou informe o código para localizar o produto desejado.","Muitos resultados");}
     Item selected=matches[0];
     if(matches.Count>1){
      using(var dialog=new Form {Text="Selecione o produto",Width=780,Height=500,StartPosition=FormStartPosition.CenterParent,MinimumSize=new Size(580,350)}){
