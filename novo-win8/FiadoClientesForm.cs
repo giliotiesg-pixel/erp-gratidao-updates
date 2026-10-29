@@ -25,6 +25,7 @@ namespace ArmazemGratidao {
    var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
+   clients.ClientSizeChanged+=(s,e)=>ArrangeClientBoxes();
    clientSearch.TextChanged+=(s,e)=>LoadClients();
    split.Panel1.Controls.Add(clientSearch);
    split.Panel1.Controls.Add(new Label {Text="  PESQUISAR CLIENTE",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.White,BackColor=Color.FromArgb(20,73,158)});
@@ -119,6 +120,24 @@ namespace ArmazemGratidao {
    grid.DataBindingComplete+=(s,e)=>{all.Checked=false;sum();};
    panel.Controls.Add(grid);panel.Controls.Add(bar);
   }
+  void ArrangeClientBoxes(){
+   int available=Math.Max(160,clients.ClientSize.Width-clients.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-8);
+   const int gap=12;
+   const int targetWidth=190;
+   int columns=Math.Max(1,(available+gap)/(targetWidth+gap));
+   int width=Math.Max(145,(available-(columns-1)*gap)/columns);
+   clients.SuspendLayout();
+   foreach(Control control in clients.Controls){
+    var button=control as Button;
+    if(button==null)continue;
+    button.MinimumSize=Size.Empty;
+    button.MaximumSize=Size.Empty;
+    button.AutoSize=false;
+    button.Size=new Size(width,72);
+    button.Margin=new Padding(0,0,gap,gap);
+   }
+   clients.ResumeLayout();
+  }
   void LoadClients(){
    try {
     var dt=Query("SELECT COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) AS saldo FROM sales s WHERE "+CreditFilter+" GROUP BY COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') ORDER BY cliente");
@@ -129,10 +148,11 @@ namespace ArmazemGratidao {
      allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      visibleClients++;
-     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(155,55),MinimumSize=new Size(155,55),MaximumSize=new Size(155,55),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
+     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(190,72),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
      b.Click+=(s,e)=>SelectClient(Convert.ToString(((Button)s).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
+    ArrangeClientBoxes();
     overview.Text="  FIADO  |  "+dt.Rows.Count+" CLIENTES  |  EM ABERTO: R$ "+allBalance.ToString("N2");
     if(customer.Length>0)SelectClient(customer);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
