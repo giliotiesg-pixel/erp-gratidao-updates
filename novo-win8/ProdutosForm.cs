@@ -10,18 +10,20 @@ namespace ArmazemGratidao {
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
+  readonly ComboBox statusFilter=new ComboBox {Width=155,DropDownStyle=ComboBoxStyle.DropDownList};
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
    db=database;Text="Armazém Gratidão | Produtos";Width=1100;Height=720;
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
    bar.Controls.Add(search);
+   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>LoadProducts();bar.Controls.Add(statusFilter);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>LoadProducts();bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();LoadProducts();search.Focus();};bar.Controls.Add(clear);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
-   var inactive=new Button {Text="Inativos",Width=105,Height=33};inactive.Click+=(s,e)=>{showInactive=!showInactive;inactive.Text=showInactive?"Todos os produtos":"Inativos";LoadProducts();};bar.Controls.Add(inactive);
+
    var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
    var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
@@ -218,8 +220,17 @@ namespace ArmazemGratidao {
     var cols=ProductColumns(c);
     string activeColumn=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
     if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
-    string filter=showInactive?" AND COALESCE(\""+activeColumn+"\",1)=0":"";
-    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao,price AS preco,cost AS custo,stock AS estoque FROM products WHERE (name LIKE @q OR barcode LIKE @q)"+filter+" ORDER BY name LIMIT 2000",c)){
+    string filter="";
+    int mode=statusFilter.SelectedIndex;
+    if(mode==1&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
+    if(mode==2&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=0";
+    if(mode==3)filter=" AND COALESCE(stock,0)<=0";
+    if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
+    if((mode==1||mode==2)&&activeColumn==null){info.Text="  Este banco não possui campo de status; filtro indisponível.";return;}
+    string searchColumns="name LIKE @q OR barcode LIKE @q";
+    if(cols.Contains("brand"))searchColumns+=" OR brand LIKE @q";
+    if(cols.Contains("category"))searchColumns+=" OR category LIKE @q";
+    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao,price AS preco,cost AS custo,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name LIMIT 2000",c)){
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
      info.Text="  "+dt.Rows.Count+" produtos exibidos. Cadastro preservado.";
