@@ -34,6 +34,7 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
+   received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="Editar quantidade / preço",AutoSize=true,Height=40};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var remove=new Button {Text="Remover item",AutoSize=true,Height=40};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
@@ -98,6 +99,7 @@ namespace ArmazemGratidao {
   void UpdateChange(){
    bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
    changeLabel.Visible=cash;
+   received.Enabled=cash;
    if(!cash)return;
    decimal difference=received.Value-cart.Sum(i=>i.Total);
    changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
