@@ -31,6 +31,7 @@ namespace ArmazemGratidao {
    }
    heading.Text=fiado?"FIADO | Selecione um cliente":"VENDAS | Selecione uma venda para visualizar todos os itens";
    if(!fiado)Controls.Add(summary);
+   foreach(var table in new[]{master,details}){table.Font=new Font("Segoe UI",11,FontStyle.Regular);table.RowTemplate.Height=38;table.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in table.Columns){string n=column.Name.ToLowerInvariant();if(n.Contains("descri")||n.Contains("produto")||n.Contains("cliente")||n=="name"){column.MinimumWidth=220;column.FillWeight=220;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};}
    master.SelectionChanged+=(s,e)=>LoadDetails();
    LoadMaster();
   }
