@@ -644,13 +644,13 @@ namespace ArmazemGratidao {
     Func<System.Threading.Tasks.Task> fetchProduct=async ()=>{
      string code=barcode.Text.Trim();
      if(lookingUp||code==lastLookupCode)return;
-     if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
+     if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
      lookingUp=true;lookup.Enabled=false;lookup.Text="Pesquisando...";lookupStatus.Text="Consultando catálogo local e base pública...";
      try{
       string localName=LookupLocalProductName(code);
       if(!string.IsNullOrWhiteSpace(localName)){
        lookupStatus.Text="Já cadastrado: "+localName+" — não é permitido duplicar.";
-       MessageBox.Show("Este código já pertence ao produto: "+localName+"\\nO cadastro existente não será alterado.","Produto existente");
+       MessageBox.Show("Este código já pertence ao produto: "+localName+"\nO cadastro existente não será alterado.","Produto existente");
        lastLookupCode=code;return;
       }
       var data=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(code));
@@ -660,7 +660,7 @@ namespace ArmazemGratidao {
        lastLookupCode=code;return;
       }
       bool hasManualText=!string.IsNullOrWhiteSpace(name.Text)||!string.IsNullOrWhiteSpace(brand.Text)||!string.IsNullOrWhiteSpace(category.Text);
-      if(hasManualText&&MessageBox.Show("Dados encontrados na internet para "+code+".\\nSubstituir os campos de descrição, marca e categoria já preenchidos?","Confirmar preenchimento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){
+      if(hasManualText&&MessageBox.Show("Dados encontrados na internet para "+code+".\nSubstituir os campos de descrição, marca e categoria já preenchidos?","Confirmar preenchimento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){
        lookupStatus.Text="Dados existentes mantidos.";lastLookupCode=code;return;
       }
       name.Text=data.Name;
@@ -672,7 +672,7 @@ namespace ArmazemGratidao {
      finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";}}
     };
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
-    barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\\d{8,14}$"))await fetchProduct();};
+    barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
     barcode.TextChanged+=(s,e)=>{if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
     panel.Controls.Add(lookupStatus,1,9);
@@ -680,6 +680,7 @@ namespace ArmazemGratidao {
 
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
+     if(!string.IsNullOrWhiteSpace(barcode.Text)&&!System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$")){MessageBox.Show("Código de barras inválido. Informe 8 a 14 dígitos.","Cadastro de produto");return;}
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
      try{
       using(var c=Open(false)){
