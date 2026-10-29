@@ -584,6 +584,25 @@ namespace ArmazemGratidao {
     return result==null||result==DBNull.Value?null:Convert.ToString(result);
    }
   }
+  sealed class BarcodeProductData {public string Name,Brand,Category;}
+  static string JsonProductField(string json,string key){
+   var match=System.Text.RegularExpressions.Regex.Match(json,"\\\""+System.Text.RegularExpressions.Regex.Escape(key)+"\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"\\\\])*)\\\"");
+   return match.Success?System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value).Trim():"";
+  }
+  static BarcodeProductData LookupBarcodeProduct(string barcode){
+   System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
+   string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name,brands,categories";
+   using(var client=new System.Net.WebClient()){
+    client.Encoding=System.Text.Encoding.UTF8;
+    client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (barcode product lookup)";
+    string json=client.DownloadString(url);
+    if(!System.Text.RegularExpressions.Regex.IsMatch(json,@"\"status\"\\s*:\\s*1(?:\\D|$)"))return null;
+    string name=JsonProductField(json,"product_name_pt");
+    if(string.IsNullOrWhiteSpace(name))name=JsonProductField(json,"product_name");
+    if(string.IsNullOrWhiteSpace(name))return null;
+    return new BarcodeProductData {Name=name,Brand=JsonProductField(json,"brands"),Category=JsonProductField(json,"categories")};
+   }
+  }
   static string LookupBarcodeName(string barcode){
    System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
    string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name";
@@ -603,7 +622,7 @@ namespace ArmazemGratidao {
   }
   void InsertProduct(){
    using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
     HashSet<string> availableColumns;
@@ -617,28 +636,47 @@ namespace ArmazemGratidao {
     var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
-    var lookup=new Button {Text="Buscar descrição na internet",Width=225,Height=32};
-    lookup.Click+=async (s,e)=>{
+    var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
+    var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
+    bool lookingUp=false;
+    string lastLookupCode="";
+    Func<System.Threading.Tasks.Task> fetchProduct=async ()=>{
      string code=barcode.Text.Trim();
-     if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){
-      MessageBox.Show("Informe um código de barras numérico de 8 a 14 dígitos.");return;
-     }
-     lookup.Enabled=false;lookup.Text="Consultando...";
+     if(lookingUp||code==lastLookupCode)return;
+     if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
+     lookingUp=true;lookup.Enabled=false;lookup.Text="Pesquisando...";lookupStatus.Text="Consultando catálogo local e base pública...";
      try{
       string localName=LookupLocalProductName(code);
       if(!string.IsNullOrWhiteSpace(localName)){
-       name.Text=localName;
-       MessageBox.Show("Produto encontrado no banco local: "+localName+"\nEste código já está cadastrado. Nenhum dado foi alterado.","Catálogo offline");
-       return;
+       lookupStatus.Text="Já cadastrado: "+localName+" — não é permitido duplicar.";
+       MessageBox.Show("Este código já pertence ao produto: "+localName+"\\nO cadastro existente não será alterado.","Produto existente");
+       lastLookupCode=code;return;
       }
-      string description=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeName(code));
-      if(string.IsNullOrWhiteSpace(description)){MessageBox.Show("Produto não encontrado na base pública. Preencha manualmente.");return;}
-      if(!string.IsNullOrWhiteSpace(name.Text)&&MessageBox.Show("Substituir a descrição digitada por:\n"+description+"?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
-      name.Text=description;
-     }catch(Exception ex){MessageBox.Show("Consulta indisponível: "+ex.Message+"\nVocê pode continuar o cadastro manualmente.","Busca de produto");}
-     finally{lookup.Enabled=true;lookup.Text="Buscar descrição na internet";}
+      var data=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(code));
+      if(barcode.IsDisposed||form.IsDisposed||barcode.Text.Trim()!=code)return;
+      if(data==null||string.IsNullOrWhiteSpace(data.Name)){
+       lookupStatus.Text="Produto não encontrado. Complete o cadastro manualmente.";
+       lastLookupCode=code;return;
+      }
+      bool hasManualText=!string.IsNullOrWhiteSpace(name.Text)||!string.IsNullOrWhiteSpace(brand.Text)||!string.IsNullOrWhiteSpace(category.Text);
+      if(hasManualText&&MessageBox.Show("Dados encontrados na internet para "+code+".\\nSubstituir os campos de descrição, marca e categoria já preenchidos?","Confirmar preenchimento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){
+       lookupStatus.Text="Dados existentes mantidos.";lastLookupCode=code;return;
+      }
+      name.Text=data.Name;
+      if(brand.Enabled&&!string.IsNullOrWhiteSpace(data.Brand))brand.Text=data.Brand;
+      if(category.Enabled&&!string.IsNullOrWhiteSpace(data.Category))category.Text=data.Category;
+      lookupStatus.Text="Preenchido pela base pública. Confira os dados e informe preço, custo e estoque antes de salvar.";
+      lastLookupCode=code;
+     }catch(Exception ex){lookupStatus.Text="Busca indisponível. Cadastro manual liberado.";MessageBox.Show("Consulta online indisponível: "+ex.Message,"Busca de produto");}
+     finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";}}
     };
-    panel.Controls.Add(lookup,1,9);
+    barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
+    barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\\d{8,14}$"))await fetchProduct();};
+    barcode.TextChanged+=(s,e)=>{if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
+    lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
+    panel.Controls.Add(lookupStatus,1,9);
+    panel.Controls.Add(lookup,1,10);
+
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -672,7 +710,7 @@ namespace ArmazemGratidao {
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
-    panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
+    panel.Controls.Add(save,1,11);StyleDialog(form,panel);form.Controls.Add(panel);
     if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
   }
