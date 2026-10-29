@@ -50,7 +50,7 @@ namespace ArmazemGratidao {
     var matches=new List<Item>();
     var stocks=new Dictionary<long,decimal>();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR name LIKE @name ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR (name LIKE @name AND NOT EXISTS (SELECT 1 FROM products AS exact WHERE TRIM(COALESCE(exact.barcode,''))=@code OR TRIM(COALESCE(exact.internal_code,''))=@code)) ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
      cmd.Parameters.AddWithValue("@code",search);
      cmd.Parameters.AddWithValue("@name","%"+search+"%");
      using(var reader=cmd.ExecuteReader())while(reader.Read()){
