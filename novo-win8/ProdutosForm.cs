@@ -59,7 +59,7 @@ namespace ArmazemGratidao {
    var menu=new ContextMenuStrip();
    foreach(Control control in bar.Controls){
     Button action=control as Button;
-    if(action!=null){
+    if(action!=null && action!=previousPage && action!=nextPage && action!=addQuantity && action!=history){
      var entry=new ToolStripMenuItem(action.Text);
      entry.Click+=(s,e)=>action.PerformClick();
      menu.Items.Add(entry);
@@ -76,6 +76,10 @@ namespace ArmazemGratidao {
    var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
+   previousPage.Text="◀";previousPage.Width=42;previousPage.Height=35;
+   nextPage.Text="▶";nextPage.Width=42;nextPage.Height=35;
+   searchBar.Controls.Add(previousPage);
+   searchBar.Controls.Add(nextPage);
    metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);LoadProducts();
   }
