@@ -111,7 +111,7 @@ namespace ArmazemGratidao {
      var lines=System.IO.File.ReadAllLines(dlg.FileName,System.Text.Encoding.UTF8);
      if(lines.Length<2)throw new Exception("Arquivo sem produtos.");
      var header=ParseCsvLine(lines[0]);
-     int barcodeIndex=-1,nameIndex=-1,priceIndex=-1,costIndex=-1,stockIndex=-1;
+     int barcodeIndex=-1,nameIndex=-1,priceIndex=-1,costIndex=-1,stockIndex=-1,brandIndex=-1,categoryIndex=-1;
      for(int i=0;i<header.Count;i++){
       string h=header[i].Trim().Trim('\uFEFF').ToLowerInvariant().Replace(" ","").Replace("_","");
       if(h=="codigodebarras"||h=="barcode"||h=="ean")barcodeIndex=i;
@@ -119,6 +119,8 @@ namespace ArmazemGratidao {
       if(h=="preco"||h=="price"||h=="precovenda")priceIndex=i;
       if(h=="custo"||h=="cost")costIndex=i;
       if(h=="estoque"||h=="stock")stockIndex=i;
+      if(h=="marca"||h=="brand")brandIndex=i;
+      if(h=="categoria"||h=="category")categoryIndex=i;
      }
      if(barcodeIndex<0||nameIndex<0||priceIndex<0)throw new Exception("CSV precisa ter CodigoDeBarras, Descricao e Preco.");
      var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -134,12 +136,16 @@ namespace ArmazemGratidao {
       decimal cost=costIndex>=0&&costIndex<fields.Count?ParseMoney(fields[costIndex],n+1):0;
       decimal stock=stockIndex>=0&&stockIndex<fields.Count?ParseMoney(fields[stockIndex],n+1):0;
       if(price<0||cost<0||stock<0)throw new Exception("Linha "+(n+1)+": valores negativos.");
-      rows.Add(new[]{code,name,price.ToString(System.Globalization.CultureInfo.InvariantCulture),cost.ToString(System.Globalization.CultureInfo.InvariantCulture),stock.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+      string brand=brandIndex>=0&&brandIndex<fields.Count?fields[brandIndex].Trim():"";
+      string category=categoryIndex>=0&&categoryIndex<fields.Count?fields[categoryIndex].Trim():"";
+      rows.Add(new[]{code,name,price.ToString(System.Globalization.CultureInfo.InvariantCulture),cost.ToString(System.Globalization.CultureInfo.InvariantCulture),stock.ToString(System.Globalization.CultureInfo.InvariantCulture),brand,category});
      }
      if(rows.Count==0)throw new Exception("Nenhum produto válido.");
      using(var c=Open(false)){
       var cols=ProductColumns(c);
       foreach(var required in new[]{"barcode","name","price","cost","stock"})if(!cols.Contains(required))throw new Exception("Banco incompatível: falta products."+required);
+      if((brandIndex>=0&&!cols.Contains("brand"))||(categoryIndex>=0&&!cols.Contains("category")))
+       throw new Exception("O arquivo possui Marca ou Categoria, mas o banco não contém esses campos. Importação cancelada para evitar perda de dados.");
       int existing=0;
       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE barcode=@barcode",c)){
        var p=check.Parameters.Add("@barcode",DbType.String);
@@ -154,19 +160,23 @@ namespace ArmazemGratidao {
       int inserted=0;
       using(var tx=c.BeginTransaction()){
        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE barcode=@barcode",c,tx))
-       using(var insert=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock) VALUES(@barcode,@name,@price,@cost,@stock)",c,tx)){
+       using(var insert=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock"+(brandIndex>=0?",brand":"")+(categoryIndex>=0?",category":"")+") VALUES(@barcode,@name,@price,@cost,@stock"+(brandIndex>=0?",@brand":"")+(categoryIndex>=0?",@category":"")+")",c,tx)){
         var cp=check.Parameters.Add("@barcode",DbType.String);
         var bp=insert.Parameters.Add("@barcode",DbType.String);
         var np=insert.Parameters.Add("@name",DbType.String);
         var pp=insert.Parameters.Add("@price",DbType.Decimal);
         var co=insert.Parameters.Add("@cost",DbType.Decimal);
         var st=insert.Parameters.Add("@stock",DbType.Decimal);
+        SQLiteParameter br=brandIndex>=0?insert.Parameters.Add("@brand",DbType.String):null;
+        SQLiteParameter ca=categoryIndex>=0?insert.Parameters.Add("@category",DbType.String):null;
         foreach(var row in rows){
          cp.Value=row[0];if(Convert.ToInt64(check.ExecuteScalar())>0)continue;
          bp.Value=row[0];np.Value=row[1];
          pp.Value=decimal.Parse(row[2],System.Globalization.CultureInfo.InvariantCulture);
          co.Value=decimal.Parse(row[3],System.Globalization.CultureInfo.InvariantCulture);
          st.Value=decimal.Parse(row[4],System.Globalization.CultureInfo.InvariantCulture);
+         if(br!=null)br.Value=row[5];
+         if(ca!=null)ca.Value=row[6];
          inserted+=insert.ExecuteNonQuery();
         }
        }
