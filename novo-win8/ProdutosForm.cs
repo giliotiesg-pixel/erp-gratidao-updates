@@ -30,6 +30,7 @@ namespace ArmazemGratidao {
    var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
+   var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
    var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
@@ -101,6 +102,68 @@ namespace ArmazemGratidao {
    using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))
    using(var r=cmd.ExecuteReader())while(r.Read())cols.Add(Convert.ToString(r["name"]));
    return cols;
+  }
+  void AddProductQuantity(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para adicionar quantidade.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto inválido.");return;}
+   string description=Convert.ToString(grid.CurrentRow.Cells["descricao"].Value);
+   using(var form=new Form {Text="Adicionar QTD ao estoque",Width=460,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(15)};
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var productLabel=new Label {Text=description,AutoSize=true,MaximumSize=new Size(240,55)};
+    var quantity=new NumericUpDown {DecimalPlaces=3,Minimum=0.001M,Maximum=10000000M,Increment=1M,Value=1M,Width=180};
+    var reason=new TextBox {Text="Entrada manual de estoque",Width=230,MaxLength=250};
+    panel.Controls.Add(new Label {Text="Produto",AutoSize=true},0,0);panel.Controls.Add(productLabel,1,0);
+    panel.Controls.Add(new Label {Text="QTD a somar",AutoSize=true},0,1);panel.Controls.Add(quantity,1,1);
+    panel.Controls.Add(new Label {Text="Motivo",AutoSize=true},0,2);panel.Controls.Add(reason,1,2);
+    var save=new Button {Text="Confirmar entrada",Width=175,Height=38};
+    save.Click+=(s,e)=>{
+     if(quantity.Value<=0){MessageBox.Show("Informe uma quantidade positiva.");return;}
+     if(string.IsNullOrWhiteSpace(reason.Text)){MessageBox.Show("Informe o motivo da entrada.");return;}
+     try{
+      using(var c=Open(false)){
+       decimal previous;
+       using(var read=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",c)){
+        read.Parameters.AddWithValue("@id",id);
+        object value=read.ExecuteScalar();
+        if(value==null)throw new Exception("Produto não encontrado.");
+        previous=value==DBNull.Value?0:Convert.ToDecimal(value,System.Globalization.CultureInfo.InvariantCulture);
+       }
+       decimal next=checked(previous+quantity.Value);
+       if(MessageBox.Show("Produto: "+description+"\nEstoque atual: "+previous.ToString("N3")+"\nEntrada: +"+quantity.Value.ToString("N3")+"\nNovo estoque: "+next.ToString("N3")+"\n\nConfirmar?","Confirmar entrada de estoque",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       string backup=db+".antes-entrada-qtd-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
+        copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);
+       }
+       using(var tx=c.BeginTransaction()){
+        using(var table=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_quantity_movements (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER NOT NULL, movement_at TEXT NOT NULL, quantity_before NUMERIC NOT NULL, quantity_added NUMERIC NOT NULL, quantity_after NUMERIC NOT NULL, reason TEXT NOT NULL)",c,tx))table.ExecuteNonQuery();
+        decimal current;
+        using(var read=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",c,tx)){
+         read.Parameters.AddWithValue("@id",id);
+         object value=read.ExecuteScalar();
+         if(value==null)throw new Exception("Produto não encontrado.");
+         current=value==DBNull.Value?0:Convert.ToDecimal(value,System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if(current!=previous)throw new Exception("Estoque alterado durante a operação. Atualize a tela e tente novamente.");
+        using(var update=new SQLiteCommand("UPDATE products SET stock=@stock WHERE id=@id",c,tx)){
+         update.Parameters.AddWithValue("@stock",next);update.Parameters.AddWithValue("@id",id);
+         if(update.ExecuteNonQuery()!=1)throw new Exception("Quantidade não atualizada.");
+        }
+        using(var log=new SQLiteCommand("INSERT INTO product_quantity_movements(product_id,movement_at,quantity_before,quantity_added,quantity_after,reason) VALUES(@id,@date,@before,@added,@after,@reason)",c,tx)){
+         log.Parameters.AddWithValue("@id",id);log.Parameters.AddWithValue("@date",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+         log.Parameters.AddWithValue("@before",previous);log.Parameters.AddWithValue("@added",quantity.Value);log.Parameters.AddWithValue("@after",next);log.Parameters.AddWithValue("@reason",reason.Text.Trim());
+         if(log.ExecuteNonQuery()!=1)throw new Exception("Movimentação não registrada.");
+        }
+        tx.Commit();
+       }
+      }
+      form.DialogResult=DialogResult.OK;form.Close();
+     }catch(Exception ex){MessageBox.Show(ex.Message,"Entrada de QTD não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    panel.Controls.Add(save,1,3);StyleDialog(form,panel);form.Controls.Add(panel);
+    if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();MessageBox.Show("Quantidade adicionada e movimentação registrada.");}
+   }
   }
   void ReactivateProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto inativo.");return;}
