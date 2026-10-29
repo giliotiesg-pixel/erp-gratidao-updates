@@ -129,7 +129,7 @@ namespace ArmazemGratidao {
      allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      visibleClients++;
-     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Width=155,Height=55,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
+     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(155,55),MinimumSize=new Size(155,55),MaximumSize=new Size(155,55),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
      b.Click+=(s,e)=>SelectClient(Convert.ToString(((Button)s).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
