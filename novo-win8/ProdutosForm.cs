@@ -27,6 +27,7 @@ namespace ArmazemGratidao {
    var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
    var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
+   var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditProduct();};
 
@@ -360,6 +361,27 @@ namespace ArmazemGratidao {
       }
      }
     }
+   }
+  }
+  async System.Threading.Tasks.Task ConsultBarcode(Button trigger){
+   using(var dialog=new Form {Text="Consulta de código de barras",Width=470,Height=190,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    var label=new Label {Text="Digite ou leia o código de barras:",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var code=new TextBox {Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
+    var confirm=new Button {Text="Consultar",Dock=DockStyle.Bottom,Height=42,DialogResult=DialogResult.OK};
+    dialog.Controls.Add(confirm);dialog.Controls.Add(code);dialog.Controls.Add(label);
+    dialog.AcceptButton=confirm;
+    if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+    string barcode=code.Text.Trim();
+    if(!System.Text.RegularExpressions.Regex.IsMatch(barcode,@"^\d{8,14}$")){MessageBox.Show("Código de barras inválido. Informe 8 a 14 dígitos.");return;}
+    try{
+     string local=LookupLocalProductName(barcode);
+     if(!string.IsNullOrWhiteSpace(local)){MessageBox.Show(local+"\nFonte: banco local. Nenhum dado alterado.","Produto encontrado");return;}
+     if(MessageBox.Show("Código não encontrado no catálogo local.\nDeseja pesquisar na internet?","Pesquisa opcional",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     trigger.Enabled=false;
+     string result=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeName(barcode));
+     MessageBox.Show(string.IsNullOrWhiteSpace(result)?"Produto não encontrado na base pública.":result+"\nFonte: consulta online. Nenhum dado alterado.","Resultado da consulta");
+    }catch(Exception ex){MessageBox.Show("Não foi possível consultar a internet. O programa continua disponível offline.\n"+ex.Message,"Consulta");}
+    finally{trigger.Enabled=true;}
    }
   }
   string LookupLocalProductName(string barcode){
