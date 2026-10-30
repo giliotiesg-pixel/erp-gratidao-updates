@@ -81,6 +81,7 @@ namespace ArmazemGratidao {
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
+   Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
   }
   async Task CheckUpdates(){
    try{
@@ -384,6 +385,91 @@ namespace ArmazemGratidao {
      }finally{if(File.Exists(staged))File.Delete(staged);}
     }catch(Exception ex){MessageBox.Show("Recuperação não aplicada: "+ex.Message,"Recuperação bloqueada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
+  }
+  void AutoRecoverSales(){
+   // Nunca altera o banco ativo: somente produz uma copia de teste.
+   if(!File.Exists(dbPath))return;
+   try{
+    string[] dirs={dataDir,AppDomain.CurrentDomain.BaseDirectory,
+      Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+      Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads")};
+    var sources=new System.Collections.Generic.List<string>();
+    foreach(string dir in dirs){
+     if(!Directory.Exists(dir))continue;
+     try{
+      foreach(string file in Directory.GetFiles(dir,"*.db",SearchOption.TopDirectoryOnly)){
+       string name=Path.GetFileName(file).ToLowerInvariant();
+       if((name.Contains("12.1.6")||name.Contains("consolidado")||name.Contains("antes-da-atualizacao")||name.Contains("recuperacao"))&&
+          !Path.GetFullPath(file).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))sources.Add(file);
+      }
+     }catch(System.UnauthorizedAccessException){}
+    }
+    int bestMissing=0;string best=null;
+    using(var current=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+     current.Open();
+     var known=new System.Collections.Generic.HashSet<long>();
+     using(var q=new SQLiteCommand("SELECT id FROM sales",current))using(var reader=q.ExecuteReader())while(reader.Read())known.Add(Convert.ToInt64(reader[0]));
+     foreach(string file in sources){
+      try{
+       using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=file,ReadOnly=true,FailIfMissing=true}.ToString())){
+        source.Open();int missing=0;
+        using(var q=new SQLiteCommand("SELECT id FROM sales",source))using(var reader=q.ExecuteReader())while(reader.Read())if(!known.Contains(Convert.ToInt64(reader[0])))missing++;
+        if(missing>bestMissing){bestMissing=missing;best=file;}
+       }
+      }catch(SQLiteException){}
+     }
+    }
+    if(best==null)return;
+    string destination=Path.Combine(dataDir,"recuperacao-automatica-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".db");
+    using(var current=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+    using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=best,ReadOnly=true,FailIfMissing=true}.ToString()))
+    using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=destination,FailIfMissing=false}.ToString())){
+     current.Open();source.Open();dest.Open();
+     using(var q=new SQLiteCommand("PRAGMA integrity_check",source))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Banco histórico com erro de integridade.");
+     current.BackupDatabase(dest,"main","main",-1,null,0);
+     var missing=new System.Collections.Generic.HashSet<long>();
+     using(var q=new SQLiteCommand("SELECT id FROM sales",source))using(var rd=q.ExecuteReader()){
+      while(rd.Read()){
+       long id=Convert.ToInt64(rd[0]);
+       using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE id=@id",dest)){
+        exists.Parameters.AddWithValue("@id",id);
+        if(Convert.ToInt32(exists.ExecuteScalar())==0)missing.Add(id);
+       }
+      }
+     }
+     using(var tx=dest.BeginTransaction()){
+      foreach(string table in new[]{"sales","sale_items","sale_payments","credit_payments"}){
+       var cols=new System.Collections.Generic.List<string>();
+       using(var q=new SQLiteCommand("PRAGMA table_info("+table+")",source))using(var rd=q.ExecuteReader())while(rd.Read())cols.Add(Convert.ToString(rd["name"]));
+       if(cols.Count==0)throw new Exception("Tabela histórica ausente: "+table);
+       var targetCols=new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+       using(var q=new SQLiteCommand("PRAGMA table_info("+table+")",dest,tx))using(var rd=q.ExecuteReader())while(rd.Read())targetCols.Add(Convert.ToString(rd["name"]));
+       foreach(string col in cols)if(!targetCols.Contains(col))throw new Exception("Estrutura incompatível: "+table+"."+col);
+       string fields=string.Join(",",cols.ConvertAll(x=>"\""+x.Replace("\"","\"\"")+"\"").ToArray());
+       string parameters=string.Join(",",cols.ConvertAll(x=>"@"+x).ToArray());
+       using(var q=new SQLiteCommand("SELECT "+fields+" FROM "+table,source))using(var rd=q.ExecuteReader()){
+        while(rd.Read()){
+         long saleId=Convert.ToInt64(rd[table=="sales"?"id":"sale_id"]);
+         if(!missing.Contains(saleId))continue;
+         long id=Convert.ToInt64(rd["id"]);
+         using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM "+table+" WHERE id=@id",dest,tx)){
+          exists.Parameters.AddWithValue("@id",id);
+          if(Convert.ToInt32(exists.ExecuteScalar())!=0)throw new Exception("Conflito de ID "+id+" em "+table+". Cópia não aplicada.");
+         }
+         using(var insert=new SQLiteCommand("INSERT INTO "+table+" ("+fields+") VALUES ("+parameters+")",dest,tx)){
+          foreach(string col in cols)insert.Parameters.AddWithValue("@"+col,rd[col]);
+          insert.ExecuteNonQuery();
+         }
+        }
+       }
+      }
+      tx.Commit();
+     }
+     using(var q=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Integridade da cópia recuperada inválida.");
+    }
+    status.Text="Recuperação automática: "+bestMissing+" vendas ausentes preparadas em cópia de teste.";
+    MessageBox.Show("Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.","Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
+   }catch(Exception ex){status.Text="Recuperação automática não concluída: "+ex.Message;}
   }
   void PrepareRecoveredSales(object sender,EventArgs e){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}
