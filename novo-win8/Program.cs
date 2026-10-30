@@ -11,7 +11,52 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>ButtonTextVisibility.CheckOpenForms(); Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{GrayWindowTitle.ApplyOpenForms();ButtonTextVisibility.CheckOpenForms();}; Application.Run(new MainForm()); }
+ }
+ static class GrayWindowTitle {
+  static readonly System.Collections.Generic.HashSet<Form> done=new System.Collections.Generic.HashSet<Form>();
+  [System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool ReleaseCapture();
+  [System.Runtime.InteropServices.DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr hwnd,int msg,IntPtr wp,IntPtr lp);
+  public static void ApplyOpenForms(){
+   foreach(Form form in Application.OpenForms){
+    if(done.Contains(form)||form.IsDisposed||!form.IsHandleCreated)continue;
+    done.Add(form);Install(form);
+   }
+  }
+  static void Install(Form form){
+   bool resizable=form.FormBorderStyle==FormBorderStyle.Sizable||form.FormBorderStyle==FormBorderStyle.SizableToolWindow;
+   bool canMaximize=form.MaximizeBox&&resizable;
+   form.FormBorderStyle=FormBorderStyle.None;
+   if(resizable){form.Padding=new Padding(5,0,5,5);var frame=new ResizeFrame(form);form.Tag=frame;form.FormClosed+=(s,e)=>frame.ReleaseHandle();}
+   var titleBar=new Panel {Dock=DockStyle.Top,Height=36,BackColor=Color.FromArgb(205,209,214)};
+   var caption=new Label {Text=form.Text,AutoEllipsis=true,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0),ForeColor=Color.FromArgb(32,37,44),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   var buttons=new FlowLayoutPanel {Dock=DockStyle.Right,Width=126,Height=36,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Margin=Padding.Empty,Padding=Padding.Empty};
+   Func<string,Button> make=(label)=>new Button {Text=label,Width=42,Height=34,Margin=Padding.Empty,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(205,209,214),ForeColor=Color.Black,Font=new Font("Segoe UI",11,FontStyle.Regular),TabStop=false};
+   var close=make("×");close.Click+=(s,e)=>form.Close();buttons.Controls.Add(close);
+   var max=make("□");max.Enabled=canMaximize;max.Click+=(s,e)=>form.WindowState=form.WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;buttons.Controls.Add(max);
+   var min=make("—");min.Enabled=form.MinimizeBox;min.Click+=(s,e)=>form.WindowState=FormWindowState.Minimized;buttons.Controls.Add(min);
+   titleBar.Controls.Add(caption);titleBar.Controls.Add(buttons);
+   Action drag=()=>{if(form.WindowState!=FormWindowState.Maximized){ReleaseCapture();SendMessage(form.Handle,0xA1,new IntPtr(2),IntPtr.Zero);}};
+   titleBar.MouseDown+=(s,e)=>{if(e.Button==MouseButtons.Left)drag();};
+   caption.MouseDown+=(s,e)=>{if(e.Button==MouseButtons.Left)drag();};
+   caption.DoubleClick+=(s,e)=>{if(canMaximize)form.WindowState=form.WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;};
+   form.Controls.Add(titleBar);titleBar.BringToFront();
+   form.TextChanged+=(s,e)=>caption.Text=form.Text;
+  }
+  sealed class ResizeFrame:NativeWindow {
+   readonly Form owner;
+   public ResizeFrame(Form form){owner=form;AssignHandle(form.Handle);}
+   protected override void WndProc(ref Message m){
+    if(m.Msg==0x84&&owner.WindowState==FormWindowState.Normal){
+     Point p=owner.PointToClient(new Point(unchecked((short)((long)m.LParam&0xffff)),unchecked((short)(((long)m.LParam>>16)&0xffff))));
+     int w=owner.ClientSize.Width,h=owner.ClientSize.Height;
+     bool left=p.X<6,right=p.X>=w-6,top=p.Y<6,bottom=p.Y>=h-6;
+     int hit=top?(left?13:right?14:12):bottom?(left?16:right?17:15):left?10:right?11:0;
+     if(hit!=0){m.Result=new IntPtr(hit);return;}
+    }
+    base.WndProc(ref m);
+   }
+  }
  }
  static class ButtonTextVisibility {
   static readonly System.Collections.Generic.Dictionary<Button,string> inspected=new System.Collections.Generic.Dictionary<Button,string>();
