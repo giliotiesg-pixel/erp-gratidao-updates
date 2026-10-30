@@ -27,8 +27,8 @@ namespace ArmazemGratidao {
   bool suppressLookup=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database) {
-   db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;
-   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=64,Padding=new Padding(8),BackColor=Color.FromArgb(205,209,214)};
+   db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;BackColor=Color.FromArgb(229,242,255);
+   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=64,Padding=new Padding(8),BackColor=Color.FromArgb(185,35,55)};
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
    saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;
