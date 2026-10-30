@@ -471,6 +471,72 @@ namespace ArmazemGratidao {
     MessageBox.Show("Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.","Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
    }catch(Exception ex){status.Text="Recuperação automática não concluída: "+ex.Message;}
   }
+  void IntegrateHistoricalSales(object sender,EventArgs e){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}
+   using(var picker=new OpenFileDialog {Title="Selecionar vendas de 01 a 19 de outubro de 2026",Filter="Banco de vendas (*.db)|*.db"}){
+    if(picker.ShowDialog(this)!=DialogResult.OK)return;
+    if(Path.GetFullPath(picker.FileName).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase)){MessageBox.Show("Escolha um banco histórico diferente do banco atual.");return;}
+    try{
+     int added=0,items=0,credit=0,payments=0;
+     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=picker.FileName,ReadOnly=true,FailIfMissing=true}.ToString()))
+     using(var target=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,FailIfMissing=true}.ToString())){
+      source.Open();target.Open();
+      using(var q=new SQLiteCommand("PRAGMA integrity_check",source))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Banco histórico danificado.");
+      using(var q=new SQLiteCommand("PRAGMA integrity_check",target))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Banco atual danificado.");
+      var missing=new System.Collections.Generic.HashSet<long>();
+      using(var q=new SQLiteCommand("SELECT id FROM sales WHERE substr(created_at,1,10) BETWEEN '2026-10-01' AND '2026-10-19'",source))
+      using(var reader=q.ExecuteReader()){
+       while(reader.Read()){
+        long id=Convert.ToInt64(reader[0]);
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE id=@id",target)){
+         check.Parameters.AddWithValue("@id",id);
+         if(Convert.ToInt32(check.ExecuteScalar())==0)missing.Add(id);
+        }
+       }
+      }
+      if(missing.Count==0){MessageBox.Show("Todas as vendas deste período já existem no banco atual.");return;}
+      if(MessageBox.Show("Foram encontradas "+missing.Count+" vendas ausentes de 01/10 a 19/10/2026.\\n\\nCriar backup e integrar essas vendas com itens e pagamentos, sem alterar estoque nem vendas existentes?","Integrar vendas históricas",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+      // Backup SQLite consistente antes de qualquer escrita.
+      string backup=Path.Combine(dataDir,"antes-integracao-vendas-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db");
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
+       dest.Open();target.BackupDatabase(dest,"main","main",-1,null,0);
+      }
+      using(var tx=target.BeginTransaction()){
+       foreach(string table in new[]{"sales","sale_items","sale_payments","credit_payments"}){
+        var cols=new System.Collections.Generic.List<string>();
+        using(var q=new SQLiteCommand("PRAGMA table_info("+table+")",source))using(var rd=q.ExecuteReader())while(rd.Read())cols.Add(Convert.ToString(rd["name"]));
+        if(cols.Count==0)throw new Exception("Tabela ausente no banco histórico: "+table);
+        var destCols=new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using(var q=new SQLiteCommand("PRAGMA table_info("+table+")",target,tx))using(var rd=q.ExecuteReader())while(rd.Read())destCols.Add(Convert.ToString(rd["name"]));
+        foreach(string col in cols)if(!destCols.Contains(col))throw new Exception("Coluna incompatível: "+table+"."+col);
+        string names=string.Join(",",cols.ConvertAll(x=>"\""+x.Replace("\"","\"\"")+"\"").ToArray());
+        string values=string.Join(",",cols.ConvertAll(x=>"@"+x).ToArray());
+        using(var q=new SQLiteCommand("SELECT "+names+" FROM "+table,source))using(var rd=q.ExecuteReader()){
+         while(rd.Read()){
+          long saleId=Convert.ToInt64(rd[table=="sales"?"id":"sale_id"]);
+          if(!missing.Contains(saleId))continue;
+          long id=Convert.ToInt64(rd["id"]);
+          using(var check=new SQLiteCommand("SELECT COUNT(*) FROM "+table+" WHERE id=@id",target,tx)){
+           check.Parameters.AddWithValue("@id",id);
+           if(Convert.ToInt32(check.ExecuteScalar())!=0)throw new Exception("ID conflitante em "+table+": "+id+". Nenhum dado foi integrado.");
+          }
+          using(var insert=new SQLiteCommand("INSERT INTO "+table+" ("+names+") VALUES ("+values+")",target,tx)){
+           foreach(string col in cols)insert.Parameters.AddWithValue("@"+col,rd[col]);
+           insert.ExecuteNonQuery();
+          }
+          if(table=="sales")added++;else if(table=="sale_items")items++;else if(table=="credit_payments")credit++;else payments++;
+         }
+        }
+       }
+       tx.Commit();
+      }
+      using(var q=new SQLiteCommand("PRAGMA integrity_check",target))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Falha de integridade após integração. Restaure o backup: "+backup);
+      MessageBox.Show("Integração concluída.\\nVendas: "+added+"\\nItens: "+items+"\\nPagamentos fiado: "+credit+"\\nOutros pagamentos: "+payments+"\\n\\nBackup: "+backup+"\\nEstoque preservado.","Vendas 01/10 a 19/10");
+      ShowTable("Vendas","SELECT id,created_at,customer_name,payment_method,gross_total,status FROM sales ORDER BY created_at DESC LIMIT 2000");
+     }
+    }catch(Exception ex){MessageBox.Show("Integração não concluída: "+ex.Message+"\\nAs alterações de uma transação incompleta são revertidas.","Proteção das vendas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }
+  }
   void PrepareRecoveredSales(object sender,EventArgs e){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}
    using(var pick=new OpenFileDialog {Title="Selecione o banco SQLite com vendas recuperadas",Filter="Banco SQLite (*.db)|*.db"}){
