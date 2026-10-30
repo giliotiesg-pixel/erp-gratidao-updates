@@ -18,7 +18,7 @@ namespace ArmazemGratidao {
    var split=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=340};
    split.Panel1.Controls.Add(master);split.Panel2.Controls.Add(details);Controls.Add(split);Controls.Add(heading);
    if(!fiado){
-    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=46,Padding=new Padding(5),BackColor=Color.FromArgb(185,35,55)};
+    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=46,Padding=new Padding(5),BackColor=Color.FromArgb(220,95,105)};
     var today=new Button {Text="Vendas do dia",Width=150,Height=33};today.Click+=(s,e)=>{previous=false;LoadMaster();};
     var older=new Button {Text="Vendas anteriores",Width=170,Height=33};older.Click+=(s,e)=>{previous=true;LoadMaster();};
     var refresh=new Button {Text="Atualizar",Width=110,Height=33};refresh.Click+=(s,e)=>LoadMaster();
