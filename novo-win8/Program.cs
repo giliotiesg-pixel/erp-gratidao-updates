@@ -156,6 +156,20 @@ namespace ArmazemGratidao {
       }
       using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products",db))
        metrics.Add(Tuple.Create("PRODUTOS CADASTRADOS",Convert.ToString(q.ExecuteScalar())));
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE COALESCE(stock,0)<=COALESCE(min_stock,0) AND COALESCE(active,1)=1",db))
+       metrics.Add(Tuple.Create("ESTOQUE BAIXO",Convert.ToString(q.ExecuteScalar())));
+      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(net_profit),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
+       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
+       metrics.Add(Tuple.Create("LUCRO DO DIA","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
+      }
+      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(profit_reserve_10),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
+       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
+       metrics.Add(Tuple.Create("RESERVA 10% DO DIA","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
+      }
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE UPPER(COALESCE(payment_method,''))='FIADO' AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db))
+       metrics.Add(Tuple.Create("VENDAS FIADO",""+Convert.ToString(q.ExecuteScalar())));
+      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db))
+       metrics.Add(Tuple.Create("TOTAL DE VENDAS",Convert.ToString(q.ExecuteScalar())));
      }
     }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
    }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
@@ -177,6 +191,7 @@ namespace ArmazemGratidao {
     Tuple.Create("Compras",(EventHandler)((s,a)=>OpenHomeModule("Compras"))),
     Tuple.Create("Caixa",(EventHandler)((s,a)=>OpenHomeModule("Caixa"))),
     Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
+    Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new LucroForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
     Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
