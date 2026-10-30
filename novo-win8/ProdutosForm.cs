@@ -89,6 +89,8 @@ namespace ArmazemGratidao {
    searchBar.Controls.Add(previousPage);
    searchBar.Controls.Add(nextPage);
    metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
+   StyleProductsScreen(bar);
+   if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);LoadProducts();
   }
   bool resizingProductsToolbar=false;
