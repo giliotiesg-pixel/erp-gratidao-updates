@@ -75,6 +75,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);});
+   AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new LucroForm(dbPath))form.ShowDialog(this);});
    AddSection(bar,"GESTÃO");
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
