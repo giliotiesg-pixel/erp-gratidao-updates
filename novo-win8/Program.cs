@@ -72,6 +72,7 @@ namespace ArmazemGratidao {
    AddSection(bar,"OPERAÇÃO");
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
+   AddButton(bar,"Integrar vendas 01 a 19/10",IntegrateHistoricalSales);
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);});
@@ -176,6 +177,7 @@ namespace ArmazemGratidao {
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var form=new PdvForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
+    Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
