@@ -9,12 +9,13 @@ using System.Windows.Forms;
 
 namespace ArmazemGratidao {
  public sealed class PdvForm : Form {
-  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public decimal Total {get{return Math.Round(Qty*Price,2);}}}
+  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
   readonly List<Item> cart=new List<Item>();
   readonly TextBox code=new TextBox {Width=260,Font=new Font("Segoe UI",14,FontStyle.Bold)};
-  readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Value=1,Width=95};
+  readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Increment=1M,Value=1,Width=95};
+  readonly ComboBox saleUnit=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=80};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
   readonly Label changeLabel=new Label {AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Padding=new Padding(0,9,0,0)};
@@ -30,6 +31,9 @@ namespace ArmazemGratidao {
    var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=64,Padding=new Padding(8),BackColor=Color.FromArgb(205,209,214)};
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
+   saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;
+   saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
+   header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=36,Font=new Font("Segoe UI",10,FontStyle.Bold)};add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();suggestions.Visible=false;AddProduct();}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=2)lookupDelay.Start();else suggestions.Visible=false;};
@@ -143,16 +147,17 @@ namespace ArmazemGratidao {
      }
     }
     decimal quantity=qty.Value;
-    var existing=cart.FirstOrDefault(x=>x.Id==selected.Id);
+    string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
+    var existing=cart.FirstOrDefault(x=>x.Id==selected.Id&&x.Unit==unit);
     if(stocks[selected.Id]<quantity+(existing==null?0:existing.Qty)){MessageBox.Show("Estoque insuficiente. Disponível: "+stocks[selected.Id].ToString("N3"));return;}
     if(existing!=null)existing.Qty+=quantity;
-    else {selected.Qty=quantity;cart.Add(selected);}
+    else {selected.Qty=quantity;selected.Unit=unit;cart.Add(selected);}
     suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;Render();code.Focus();
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao adicionar");}
   }
   void Render() {
-   var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
-   foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Price,i.Total);
+   var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Unidade");dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
+   foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Unit,i.Price,i.Total);
    grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");UpdateChange();
   }
   void UpdateChange(){
