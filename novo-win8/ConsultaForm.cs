@@ -25,6 +25,8 @@ namespace ArmazemGratidao {
     bar.Controls.Add(today);bar.Controls.Add(older);bar.Controls.Add(refresh);
     bar.Controls.Add(new Label {Text="Data:",AutoSize=true,Padding=new Padding(5,8,0,0)});bar.Controls.Add(dateFilter);
     var filter=new Button {Text="Ver data",Width=85,Height=33};filter.Click+=(s,e)=>{selectedDate=true;LoadMaster();};bar.Controls.Add(filter);
+    var editDate=new Button {Text="Atualizar data",Width=125,Height=33};editDate.Click+=(s,e)=>EditSaleDate();bar.Controls.Add(editDate);
+    var remove=new Button {Text="Excluir venda",Width=115,Height=33};remove.Click+=(s,e)=>DeleteSale();bar.Controls.Add(remove);
     bar.Controls.Add(new Label {Text="Numero da venda:",ForeColor=Color.White,AutoSize=true,Padding=new Padding(5,8,0,0)});
     bar.Controls.Add(saleSearch);
     var find=new Button {Text="Buscar venda",Width=120,Height=33};find.Click+=(s,e)=>SearchSale();bar.Controls.Add(find);
@@ -58,6 +60,73 @@ namespace ArmazemGratidao {
      summary.Text="  "+(selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  Total do período: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2")+"  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2");
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
+  }
+
+  long SelectedSale(){
+   if(master.CurrentRow==null||master.CurrentRow.IsNewRow||!master.Columns.Contains("venda"))throw new Exception("Selecione uma venda.");
+   return Convert.ToInt64(master.CurrentRow.Cells["venda"].Value);
+  }
+  static void WriteAudit(SQLiteConnection conn,SQLiteTransaction tx,long sale,string action,string before,string after){
+   using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sales_edit_audit (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,action TEXT NOT NULL,before_value TEXT,after_value TEXT,changed_at TEXT NOT NULL)",conn,tx))cmd.ExecuteNonQuery();
+   using(var cmd=new SQLiteCommand("INSERT INTO sales_edit_audit(sale_id,action,before_value,after_value,changed_at) VALUES(@id,@action,@before,@after,@at)",conn,tx)){
+    cmd.Parameters.AddWithValue("@id",sale);cmd.Parameters.AddWithValue("@action",action);cmd.Parameters.AddWithValue("@before",before);cmd.Parameters.AddWithValue("@after",after);cmd.Parameters.AddWithValue("@at",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.ExecuteNonQuery();
+   }
+  }
+  void EditSaleDate(){
+   try{
+    long id=SelectedSale();var dt=Query("SELECT created_at FROM sales WHERE id=@id","@id",id);
+    if(dt.Rows.Count==0)throw new Exception("Venda não encontrada.");
+    string before=Convert.ToString(dt.Rows[0][0]);DateTime original;
+    if(!DateTime.TryParse(before,out original))original=DateTime.Now;
+    using(var dialog=new Form{Text="Data da venda #"+id,Width=370,Height=165,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog}){
+     var picker=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",Value=original,Left=15,Top=15,Width=320};
+     var save=new Button{Text="Salvar",DialogResult=DialogResult.OK,Left=15,Top=62,Width=125};
+     dialog.Controls.Add(picker);dialog.Controls.Add(save);dialog.AcceptButton=save;
+     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+     string after=picker.Value.ToString("yyyy-MM-dd HH:mm:ss");
+     using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,FailIfMissing=true}.ToString())){
+      conn.Open();using(var tx=conn.BeginTransaction()){
+       using(var cmd=new SQLiteCommand("UPDATE sales SET created_at=@date WHERE id=@id",conn,tx)){
+        cmd.Parameters.AddWithValue("@date",after);cmd.Parameters.AddWithValue("@id",id);
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não atualizada.");
+       }
+       WriteAudit(conn,tx,id,"ALTERAR_DATA",before,after);tx.Commit();
+      }
+     }
+     selectedDate=true;dateFilter.Value=picker.Value;LoadMaster();
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Atualização não concluída");}
+  }
+  void DeleteSale(){
+   try{
+    long id=SelectedSale();
+    if(MessageBox.Show("Excluir venda #"+id+"? Os itens e pagamentos serão removidos e registrados na auditoria. O estoque não será alterado.","Confirmar exclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,FailIfMissing=true}.ToString())){
+     conn.Open();using(var tx=conn.BeginTransaction()){
+      var snapshot=new StringBuilder();
+      foreach(string table in new[]{"sales","sale_items","sale_payments","credit_payments"}){
+       string filter=table=="sales"?"id":"sale_id";
+       using(var q=new SQLiteCommand("SELECT * FROM "+table+" WHERE "+filter+"=@id",conn,tx)){
+        q.Parameters.AddWithValue("@id",id);
+        using(var rd=q.ExecuteReader())while(rd.Read()){
+         snapshot.Append(table).Append(":");
+         for(int i=0;i<rd.FieldCount;i++)snapshot.Append(rd.GetName(i)).Append("=").Append(Convert.ToString(rd.GetValue(i))).Append(";");
+         snapshot.AppendLine();
+        }
+       }
+      }
+      if(snapshot.Length==0)throw new Exception("Venda não encontrada.");
+      WriteAudit(conn,tx,id,"EXCLUIR_VENDA",snapshot.ToString(),"EXCLUIDA");
+      foreach(string table in new[]{"sale_items","sale_payments","credit_payments","sales"}){
+       using(var q=new SQLiteCommand("DELETE FROM "+table+" WHERE "+(table=="sales"?"id":"sale_id")+"=@id",conn,tx)){
+        q.Parameters.AddWithValue("@id",id);q.ExecuteNonQuery();
+       }
+      }
+      tx.Commit();
+     }
+    }
+    LoadMaster();MessageBox.Show("Venda excluída e registrada na auditoria.");
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Exclusão não concluída");}
   }
   void SearchSale(){
    long id;
