@@ -399,7 +399,7 @@ namespace ArmazemGratidao {
      try{
       foreach(string file in Directory.GetFiles(dir,"*.db",SearchOption.TopDirectoryOnly)){
        string name=Path.GetFileName(file).ToLowerInvariant();
-       if((name.Contains("12.1.6")||name.Contains("consolidado")||name.Contains("antes-da-atualizacao")||name.Contains("recuperacao"))&&
+       if(!name.StartsWith("recuperacao-automatica-") && (name.Contains("12.1.6")||name.Contains("consolidado")||name.Contains("antes-da-atualizacao")||name.Contains("recuperacao"))&&
           !Path.GetFullPath(file).Equals(Path.GetFullPath(dbPath),StringComparison.OrdinalIgnoreCase))sources.Add(file);
       }
      }catch(System.UnauthorizedAccessException){}
