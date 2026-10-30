@@ -45,7 +45,7 @@ namespace ArmazemGratidao {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
-  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
+  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(235,125,135)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(220,95,105)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
@@ -156,25 +156,16 @@ namespace ArmazemGratidao {
       }
       using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products",db))
        metrics.Add(Tuple.Create("PRODUTOS CADASTRADOS",Convert.ToString(q.ExecuteScalar())));
-      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE COALESCE(stock,0)<=0",db))
-       metrics.Add(Tuple.Create("PRODUTOS SEM ESTOQUE",Convert.ToString(q.ExecuteScalar())));
-      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(net_profit),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
-       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
-       metrics.Add(Tuple.Create("LUCRO DO DIA","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
+      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,7)=@month AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
+       q.Parameters.AddWithValue("@month",DateTime.Today.ToString("yyyy-MM"));
+       metrics.Add(Tuple.Create("TOTAL VENDIDO NO MÊS","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
       }
-      using(var q=new SQLiteCommand("SELECT COALESCE(SUM(profit_reserve_10),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
-       q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
-       metrics.Add(Tuple.Create("RESERVA 10% DO DIA","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
-      }
-      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE UPPER(COALESCE(payment_method,''))='FIADO' AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db))
-       metrics.Add(Tuple.Create("VENDAS FIADO",""+Convert.ToString(q.ExecuteScalar())));
-      using(var q=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db))
-       metrics.Add(Tuple.Create("TOTAL DE VENDAS",Convert.ToString(q.ExecuteScalar())));
      }
     }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
    }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
    foreach(var metric in metrics){
     var panel=new Panel {Width=285,Height=103,BackColor=Color.White,Margin=new Padding(7,4,7,14)};
+    RoundHomeControl(panel,16);
     panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=34,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)});
     panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Bottom,Height=60,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",15,FontStyle.Bold),AutoEllipsis=true});
     home.Controls.Add(panel);
@@ -197,11 +188,51 @@ namespace ArmazemGratidao {
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
+   var shortcuts=new FlowLayoutPanel {Width=950,Height=260,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
    foreach(var action in actions){
-    var button=new Button {Text=action.Item1,Width=208,Height=78,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",11,FontStyle.Bold)};
-    button.FlatAppearance.BorderColor=Color.FromArgb(213,221,236);button.Click+=action.Item2;home.Controls.Add(button);
+    var button=new Button {Text=action.Item1,Width=174,Height=49,Margin=new Padding(7),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",9,FontStyle.Bold)};
+    button.FlatAppearance.BorderColor=Color.FromArgb(235,125,135);button.Click+=action.Item2;RoundHomeControl(button,12);shortcuts.Controls.Add(button);
+   }
+   home.Controls.Add(shortcuts);
+   home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
+   var ranking=new Panel {Width=920,Height=270,BackColor=Color.White,Margin=new Padding(7,4,7,14),AutoScroll=true};
+   RoundHomeControl(ranking,16);
+   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(18,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",11,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
+   ranking.Controls.Add(rankingText);home.Controls.Add(ranking);
+   if(File.Exists(dbPath)){
+    try{using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+     conn.Open();
+     string sql="SELECT si.name, SUM(si.quantity) quantidade, SUM(si.total) valor FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY quantidade DESC,valor DESC LIMIT 10";
+     using(var cmd=new SQLiteCommand(sql,conn)){
+      cmd.Parameters.AddWithValue("@month",DateTime.Today.ToString("yyyy-MM"));
+      using(var reader=cmd.ExecuteReader()){
+       var lines=new System.Collections.Generic.List<string>();
+       int position=0;
+       while(reader.Read()){
+        position++;
+        lines.Add(position.ToString("00")+"º  "+Convert.ToString(reader["name"])+"     |     "+Convert.ToDecimal(reader["quantidade"]).ToString("N3")+" un./kg     |     R$ "+Convert.ToDecimal(reader["valor"]).ToString("N2"));
+       }
+       if(lines.Count>0)rankingText.Text=string.Join(Environment.NewLine+Environment.NewLine,lines);
+      }
+     }
+    }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
    }
    Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+  }
+  static void RoundHomeControl(Control control,int radius){
+   Action apply=()=>{
+    if(control.Width<radius*2||control.Height<radius*2)return;
+    using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
+     int d=radius*2;var rect=new Rectangle(0,0,control.Width,control.Height);
+     path.AddArc(rect.Left,rect.Top,d,d,180,90);
+     path.AddArc(rect.Right-d,rect.Top,d,d,270,90);
+     path.AddArc(rect.Right-d,rect.Bottom-d,d,d,0,90);
+     path.AddArc(rect.Left,rect.Bottom-d,d,d,90,90);
+     path.CloseFigure();
+     var previous=control.Region;control.Region=new Region(path);if(previous!=null)previous.Dispose();
+    }
+   };
+   control.Resize+=(s,e)=>apply();apply();
   }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
