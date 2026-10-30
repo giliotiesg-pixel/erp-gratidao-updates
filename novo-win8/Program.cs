@@ -46,7 +46,7 @@ namespace ArmazemGratidao {
   readonly string dbPath;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
-  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(185,35,55)};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(220,95,105)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
