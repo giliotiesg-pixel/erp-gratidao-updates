@@ -29,7 +29,7 @@ namespace ArmazemGratidao {
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
    db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;BackColor=Color.FromArgb(229,242,255);
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(185,35,55)};
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
    var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(229,242,255),WrapContents=false};
    search.Width=360;search.Font=new Font("Segoe UI",12,FontStyle.Regular);
    searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
@@ -77,7 +77,7 @@ namespace ArmazemGratidao {
     filters.DropDownItems.Add(option);
    }
    menu.Items.Add(filters);
-   var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(185,35,55),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+   var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
    searchBar.Controls.Add(selectAll);
@@ -147,8 +147,8 @@ namespace ArmazemGratidao {
     index++;
    }
    grid.BackgroundColor=Color.White;grid.DefaultCellStyle.BackColor=Color.White;grid.DefaultCellStyle.ForeColor=Color.Black;
-   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(185,35,55);grid.DefaultCellStyle.SelectionForeColor=Color.White;
-   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(185,35,55);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(220,95,105);grid.DefaultCellStyle.SelectionForeColor=Color.White;
+   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",9,FontStyle.Regular);
    grid.DefaultCellStyle.Padding=new Padding(3,2,3,2);
    grid.RowTemplate.Height=27;grid.RowTemplate.MinimumHeight=27;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
