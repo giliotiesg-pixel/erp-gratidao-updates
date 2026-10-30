@@ -28,9 +28,9 @@ namespace ArmazemGratidao {
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
   public ProdutosForm(string database) {
-   db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(20,73,158)};
-   var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(235,242,250),WrapContents=false};
+   db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;BackColor=Color.FromArgb(229,242,255);
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(185,35,55)};
+   var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(229,242,255),WrapContents=false};
    search.Width=360;search.Font=new Font("Segoe UI",12,FontStyle.Regular);
    searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
    searchBar.Controls.Add(search);
@@ -77,7 +77,7 @@ namespace ArmazemGratidao {
     filters.DropDownItems.Add(option);
    }
    menu.Items.Add(filters);
-   var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+   var toggleMenu=new Button {Text="☰ Menu",Width=115,Height=35,BackColor=Color.FromArgb(185,35,55),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
    searchBar.Controls.Add(selectAll);
@@ -88,7 +88,7 @@ namespace ArmazemGratidao {
    nextPage.Text="▶";nextPage.Width=42;nextPage.Height=35;
    searchBar.Controls.Add(previousPage);
    searchBar.Controls.Add(nextPage);
-   metrics.BackColor=Color.FromArgb(235,242,250);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
+   metrics.BackColor=Color.FromArgb(229,242,255);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);LoadProducts();
@@ -128,7 +128,7 @@ namespace ArmazemGratidao {
    form.StartPosition=FormStartPosition.CenterParent;
   }
   static void StyleDialog(Form form,TableLayoutPanel panel){
-   form.BackColor=Color.FromArgb(245,248,252);form.ForeColor=Color.FromArgb(18,31,50);
+   form.BackColor=Color.FromArgb(229,242,255);form.ForeColor=Color.FromArgb(18,31,50);
    form.Font=new Font("Segoe UI",10,FontStyle.Bold);
    form.Shown+=(s,e)=>FitDialogToScreen(form);
    panel.AutoScroll=true;
@@ -147,8 +147,8 @@ namespace ArmazemGratidao {
     index++;
    }
    grid.BackgroundColor=Color.White;grid.DefaultCellStyle.BackColor=Color.White;grid.DefaultCellStyle.ForeColor=Color.Black;
-   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(20,73,158);grid.DefaultCellStyle.SelectionForeColor=Color.White;
-   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,73,158);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(185,35,55);grid.DefaultCellStyle.SelectionForeColor=Color.White;
+   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(185,35,55);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.EnableHeadersVisualStyles=false;grid.Font=new Font("Segoe UI",9,FontStyle.Regular);
    grid.DefaultCellStyle.Padding=new Padding(3,2,3,2);
    grid.RowTemplate.Height=27;grid.RowTemplate.MinimumHeight=27;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,251);
@@ -176,7 +176,7 @@ namespace ArmazemGratidao {
     }finally{applyingColumnWidths=false;}
    };
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name=="descricao"&&e.Value!=null){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(5,2,5,2);}};
-   info.BackColor=Color.FromArgb(235,242,250);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   info.BackColor=Color.FromArgb(229,242,255);info.ForeColor=Color.FromArgb(20,35,55);info.Font=new Font("Segoe UI",10,FontStyle.Bold);
   }
   SQLiteConnection Open(bool readOnly=true){
    var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;
@@ -243,7 +243,7 @@ namespace ArmazemGratidao {
      }
     }
     using(var form=new Form {Text="Histórico QTD - "+description,Width=1080,Height=680,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false}){
-     var header=new Label {Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Text="Produto: "+description+"  |  Entradas registradas: "+history.Rows.Count+(history.Rows.Count==1000?" (últimas 1.000)":"") ,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(235,242,250)};
+     var header=new Label {Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Text="Produto: "+description+"  |  Entradas registradas: "+history.Rows.Count+(history.Rows.Count==1000?" (últimas 1.000)":"") ,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(229,242,255)};
      var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=history,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
      var close=new Button {Text="Fechar",Dock=DockStyle.Bottom,Height=42};
      close.Click+=(s,e)=>form.Close();
