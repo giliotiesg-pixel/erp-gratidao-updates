@@ -294,7 +294,7 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
-     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Clear();Render();code.Focus();
+     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="";Render();code.Focus();
     }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
