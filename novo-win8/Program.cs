@@ -46,7 +46,7 @@ namespace ArmazemGratidao {
   readonly string dbPath;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(20,69,147)};
-  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(18,75,163)};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(205,209,214)};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=38,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147)};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
@@ -57,7 +57,7 @@ namespace ArmazemGratidao {
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
    status.BackColor=Color.FromArgb(234,238,247);status.ForeColor=Color.FromArgb(30,40,55);status.Padding=new Padding(12,0,0,0);
    menuToggle.Left=10;menuToggle.Top=8;menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};header.Controls.Add(menuToggle);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(35,40,48),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=150,Top=12};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -133,7 +133,7 @@ namespace ArmazemGratidao {
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(22),BackColor=Color.FromArgb(245,247,251)};
-   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=940,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
+   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=940,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(85,90,98)};
    home.Controls.Add(title);
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
