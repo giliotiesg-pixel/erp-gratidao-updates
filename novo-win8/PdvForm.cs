@@ -19,7 +19,11 @@ namespace ArmazemGratidao {
   readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
   readonly Label changeLabel=new Label {AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Padding=new Padding(0,9,0,0)};
   readonly ComboBox payment=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
-  readonly TextBox customer=new TextBox {Width=180};
+  readonly ComboBox customer=new ComboBox {Width=205,DropDownStyle=ComboBoxStyle.DropDown};
+  readonly Timer lookupDelay=new Timer {Interval=250};
+  readonly ListBox suggestions=new ListBox {Visible=false,Width=510,Height=190,Font=new Font("Segoe UI",10)};
+  readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
+  bool suppressLookup=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database) {
    db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;
@@ -27,11 +31,17 @@ namespace ArmazemGratidao {
    header.Controls.Add(new Label {Text="Codigo / Nome:",AutoSize=true,ForeColor=Color.White,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.White,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
    var add=new Button {Text="Adicionar produto",AutoSize=true,Height=35};add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
-   code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;AddProduct();}};
+   code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();suggestions.Visible=false;AddProduct();}};
+   code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=2)lookupDelay.Start();else suggestions.Visible=false;};
+   lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
+   suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
+   suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=126,Padding=new Padding(10),AutoScroll=true};
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
+   customer.Enter+=(s,e)=>LoadCustomerOptions();
+   payment.SelectedIndexChanged+=(s,e)=>{if(Convert.ToString(payment.SelectedItem)=="FIADO")LoadCustomerOptions();};
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
@@ -41,12 +51,55 @@ namespace ArmazemGratidao {
    var clear=new Button {Text="Limpar carrinho",AutoSize=true,Height=40};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);footer.Controls.Add(total);
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditSelected();};
    grid.Font=new Font("Segoe UI",11,FontStyle.Regular);grid.RowTemplate.Height=38;
+   grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   grid.ColumnHeadersHeight=38;grid.RowHeadersVisible=false;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
+   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(40,100,170);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&e.Value!=null){string name=grid.Columns[e.ColumnIndex].Name.ToLowerInvariant();if(name.Contains("descri")||name.Contains("nome")||name.Contains("name")){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}}};
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){if(column.Name.ToLowerInvariant().Contains("descri")||column.Name.ToLowerInvariant().Contains("nome")||column.Name.ToLowerInvariant().Contains("name")){column.MinimumWidth=260;column.FillWeight=240;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
-   Controls.Add(grid);Controls.Add(footer);Controls.Add(header);Render();code.Focus();
+   Controls.Add(grid);Controls.Add(footer);Controls.Add(header);
+   suggestions.Parent=this;suggestions.Left=header.Left+130;suggestions.Top=header.Bottom;suggestions.BringToFront();
+   Render();code.Focus();
   }
   SQLiteConnection Open() {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
   static decimal Dec(object o) {return Convert.ToDecimal(o,CultureInfo.InvariantCulture);}
+  void LoadCustomerOptions(){
+   try{
+    string typed=customer.Text;
+    var names=new List<string>();
+    using(var connection=Open())
+    using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
+    using(var reader=cmd.ExecuteReader())while(reader.Read())names.Add(reader.GetString(0));
+    customer.BeginUpdate();customer.Items.Clear();customer.Items.AddRange(names.Cast<object>().ToArray());customer.EndUpdate();
+    customer.Text=typed;customer.SelectionStart=customer.Text.Length;
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao buscar clientes");}
+  }
+  void FindSuggestions(){
+   string term=code.Text.Trim();
+   if(term.Length<2)return;
+   try{
+    suggestions.Items.Clear();suggestionCodes.Clear();
+    using(var connection=Open())
+    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products WHERE name LIKE @start OR name LIKE @term OR TRIM(COALESCE(barcode,'')) LIKE @start OR TRIM(COALESCE(internal_code,'')) LIKE @start ORDER BY CASE WHEN name LIKE @start THEN 0 ELSE 1 END,name LIMIT 30",connection)){
+     cmd.Parameters.AddWithValue("@start",term+"%");cmd.Parameters.AddWithValue("@term","%"+term+"%");
+     using(var reader=cmd.ExecuteReader())while(reader.Read()){
+      string barcode=Convert.ToString(reader["barcode"]);string internalCode=Convert.ToString(reader["internal_code"]);
+      string key=!string.IsNullOrWhiteSpace(barcode)?barcode:internalCode;
+      if(string.IsNullOrWhiteSpace(key))continue;
+      int index=suggestions.Items.Add(Convert.ToString(reader["name"])+"  |  R$ "+Dec(reader["price"]).ToString("N2")+"  |  QTD "+Dec(reader["stock"]).ToString("N3")+"  |  "+key);
+      suggestionCodes[index]=key;
+     }
+    }
+    suggestions.Visible=suggestions.Items.Count>0;
+    if(suggestions.Visible)suggestions.BringToFront();
+   }catch{suggestions.Visible=false;}
+  }
+  void ChooseSuggestion(){
+   string selected;
+   if(!suggestionCodes.TryGetValue(suggestions.SelectedIndex,out selected))return;
+   suppressLookup=true;lookupDelay.Stop();suggestions.Visible=false;code.Text=selected;suppressLookup=false;
+   AddProduct();
+  }
   void AddProduct() {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
@@ -92,7 +145,7 @@ namespace ArmazemGratidao {
     if(stocks[selected.Id]<quantity+(existing==null?0:existing.Qty)){MessageBox.Show("Estoque insuficiente. Disponível: "+stocks[selected.Id].ToString("N3"));return;}
     if(existing!=null)existing.Qty+=quantity;
     else {selected.Qty=quantity;cart.Add(selected);}
-    code.Clear();qty.Value=1;Render();code.Focus();
+    suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;Render();code.Focus();
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao adicionar");}
   }
   void Render() {
