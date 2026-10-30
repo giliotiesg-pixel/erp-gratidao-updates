@@ -157,7 +157,7 @@ namespace ArmazemGratidao {
       using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products",db))
        metrics.Add(Tuple.Create("PRODUTOS CADASTRADOS",Convert.ToString(q.ExecuteScalar())));
       using(var q=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE COALESCE(stock,0)<=0",db))
-       metrics.Add(Tuple.Create("ESTOQUE BAIXO",Convert.ToString(q.ExecuteScalar())));
+       metrics.Add(Tuple.Create("PRODUTOS SEM ESTOQUE",Convert.ToString(q.ExecuteScalar())));
       using(var q=new SQLiteCommand("SELECT COALESCE(SUM(net_profit),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",db)){
        q.Parameters.AddWithValue("@day",DateTime.Today.ToString("yyyy-MM-dd"));
        metrics.Add(Tuple.Create("LUCRO DO DIA","R$ "+Convert.ToDecimal(q.ExecuteScalar()).ToString("N2")));
