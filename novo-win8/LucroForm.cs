@@ -15,7 +15,7 @@ namespace ArmazemGratidao {
   public LucroForm(string database){
    db=database;Text="Armazém Gratidão | Lucro";Width=1200;Height=740;BackColor=Color.FromArgb(229,242,255);
    var tabs=new TabControl {Dock=DockStyle.Fill};
-   var products=new TabPage("Lucro por produto"),history=new TabPage("Devoluções dos 10%");
+   var products=new TabPage("Lucro por produto");var history=new TabPage("Devoluções dos 10%");
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(220,95,105),Padding=new Padding(8)};
    bar.Controls.Add(new Label {Text="Pesquisar produto / código:",AutoSize=true,Padding=new Padding(0,8,0,0),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",10,FontStyle.Bold)});
    bar.Controls.Add(search);
