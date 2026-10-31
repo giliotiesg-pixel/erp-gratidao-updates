@@ -5,6 +5,8 @@ using System.Data.SQLite;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Linq;
+using System.Drawing.Printing;
+using QRCoder;
 namespace ArmazemGratidao {
  public sealed class ProdutosForm:Form {
   readonly string db;
@@ -42,6 +44,7 @@ namespace ArmazemGratidao {
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
+   var qrButton=new Button {Text="QR Code produto",Width=145,Height=33};qrButton.Click+=(s,e)=>ShowProductQr();bar.Controls.Add(qrButton);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();currentPage=0;LoadProducts();search.Focus();};bar.Controls.Add(clear);
    var metricsButton=new Button {Text="Calcular indicadores",Width=175,Height=33};metricsButton.Click+=(s,e)=>{calculateMetrics=true;LoadProducts();};bar.Controls.Add(metricsButton);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
@@ -348,6 +351,56 @@ namespace ArmazemGratidao {
     };
     if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
+  }
+  // Etiqueta gerada em memória, sem modificar cadastro ou estoque.
+  void ShowProductQr(){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione o produto para ver seu QR Code.");return;}
+   long id;if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Selecione um produto válido.");return;}
+   try{
+    string name;
+    using(var c=Open(true))
+    using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE id=@id",c)){
+     cmd.Parameters.AddWithValue("@id",id);
+     object value=cmd.ExecuteScalar();
+     if(value==null)throw new Exception("Produto não encontrado.");
+     name=Convert.ToString(value);
+    }
+    string payload="AMZG-PRODUTO:"+id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    using(var gen=new QRCodeGenerator())
+    using(var data=gen.CreateQrCode(payload,QRCodeGenerator.ECCLevel.Q))
+    using(var qr=new QRCode(data))
+    using(var graphic=qr.GetGraphic(9))
+    using(var form=new Form{Text="Etiqueta QR Code - "+name,Width=540,Height=580,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var title=new Label{Text=name,TextAlign=ContentAlignment.MiddleCenter,Dock=DockStyle.Top,Height=64,Font=new Font("Segoe UI",13,FontStyle.Bold)};
+     var idLabel=new Label{Text="Identificador permanente: "+id+" (não muda na ordem alfabética)",TextAlign=ContentAlignment.MiddleCenter,Dock=DockStyle.Top,Height=39};
+     var picture=new PictureBox{Image=(Bitmap)graphic.Clone(),Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.White};
+     var toolbar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=63,Padding=new Padding(7)};
+     var print=new Button{Text="Imprimir etiqueta",Width=180,Height=39};
+     print.Click+=(s,e)=>{
+      try{
+       using(var document=new PrintDocument()){
+        document.DocumentName="Armazém Gratidão - QR "+name;
+        document.PrintPage+=(sender,args)=>{
+         var bounds=args.MarginBounds;
+         using(var heading=new Font("Arial",12,FontStyle.Bold)){
+          var textBounds=new RectangleF(bounds.Left,bounds.Top,bounds.Width,52);
+          args.Graphics.DrawString(name,heading,Brushes.Black,textBounds);
+         }
+         int sz=Math.Min(bounds.Width,330),left=bounds.Left+(bounds.Width-sz)/2;
+         args.Graphics.DrawImage(graphic,new Rectangle(left,bounds.Top+66,sz,sz));
+         using(var font=new Font("Arial",10))args.Graphics.DrawString("Código interno: "+id,font,Brushes.Black,bounds.Left,bounds.Top+sz+76);
+         args.HasMorePages=false;
+        };
+        using(var dlg=new PrintDialog{Document=document,UseEXDialog=true})if(dlg.ShowDialog(form)==DialogResult.OK)document.Print();
+       }
+      }catch(Exception ex){MessageBox.Show("Falha ao imprimir: "+ex.Message,"QR Code");}
+     };
+     var close=new Button{Text="Fechar",Width=100,Height=39};close.Click+=(s,e)=>form.Close();
+     toolbar.Controls.Add(print);toolbar.Controls.Add(close);
+     form.Controls.Add(picture);form.Controls.Add(idLabel);form.Controls.Add(title);form.Controls.Add(toolbar);
+     form.FormClosed+=(s,e)=>{picture.Image=null;};form.ShowDialog(this);picture.Image.Dispose();
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível gerar a etiqueta QR: "+ex.Message,"Produtos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void ReactivateProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto inativo.");return;}
