@@ -72,17 +72,17 @@ namespace ArmazemGratidao {
    AddButton(bar,"Aplicar recuperação",ApplyRecovery);
    AddButton(bar,"Conferir valores",CheckSaleDifferences);
    AddSection(bar,"OPERAÇÃO");
-   AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var pdv=new PdvForm(dbPath))pdv.ShowDialog(this);});
+   AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Taxas dos pagamentos",(s,e)=>PaymentFees.ShowEditor(dbPath,this));
    AddButton(bar,"Integrar vendas 01 a 19/10",IntegrateHistoricalSales);
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
-   AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
-   AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);});
+   AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));});
+   AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));});
    AddButton(bar,"Estoque pelo celular",(s,e)=>OpenMobileStock());
-   AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new LucroForm(dbPath))form.ShowDialog(this);});
+   AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));});
    AddSection(bar,"GESTÃO");
-   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
+   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ModuloConsultaForm(dbPath,module));});
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
@@ -200,18 +200,18 @@ namespace ArmazemGratidao {
    home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
-    Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}using(var form=new PdvForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
-    Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);})),
-    Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
+    Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));})),
     Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
     Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
     Tuple.Create("Clientes",(EventHandler)((s,a)=>OpenHomeModule("Clientes"))),
     Tuple.Create("Compras",(EventHandler)((s,a)=>OpenHomeModule("Compras"))),
     Tuple.Create("Caixa",(EventHandler)((s,a)=>OpenHomeModule("Caixa"))),
     Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
-    Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new LucroForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));})),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
     Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
@@ -313,9 +313,16 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}MessageBox.Show("Não foi possível iniciar o estoque pelo celular: "+ex.Message+"\nConfira a porta "+MobileStockServer.Port+" e as permissões de firewall.","Armazém Gratidão",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  // Abrir os modulos sem bloquear a pagina inicial.
+  // Mantem as janelas abertas de forma independente; nao usar 'using' com Show().
+  void OpenModuleWindow(Form form){
+   if(form==null)return;
+   form.StartPosition=FormStartPosition.CenterScreen;
+   form.Show(this);
+  }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
-   using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);
+   OpenModuleWindow(new ModuloConsultaForm(dbPath,module));
   }
   void AddSection(Control parent,string title){parent.Controls.Add(new Label {Text=title,Width=175,Height=29,TextAlign=ContentAlignment.BottomLeft,ForeColor=Color.FromArgb(188,209,245),Font=new Font("Segoe UI",8,FontStyle.Bold),Padding=new Padding(7,0,0,4),Margin=new Padding(3,11,3,2)});}
   void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,Width=175,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,3,3,3)};b.FlatAppearance.BorderSize=0;b.Click+=click;parent.Controls.Add(b);}
@@ -763,7 +770,7 @@ namespace ArmazemGratidao {
     } catch(Exception ex) {MessageBox.Show(ex.Message,"Importacao nao concluida",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
   }
-  void OpenConsult(bool credit) {if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ConsultaForm(dbPath,credit))form.ShowDialog(this);}
+  void OpenConsult(bool credit) {if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ConsultaForm(dbPath,credit));}
   void ShowTable(string table,string sql) {
    if(!File.Exists(dbPath)) {MessageBox.Show("Importe primeiro o banco de dados.");return;}
    try {using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())) {conn.Open();var dt=new DataTable();using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);grid.DataSource=dt;var home=Controls["homePanel"];if(home!=null){Controls.Remove(home);home.Dispose();}grid.Visible=true;grid.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text=table+": "+dt.Rows.Count+" registros exibidos (somente leitura).";}}
