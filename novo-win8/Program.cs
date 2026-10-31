@@ -200,8 +200,26 @@ namespace ArmazemGratidao {
    home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
    var ranking=new Panel {Width=920,Height=270,BackColor=Color.White,Margin=new Padding(7,4,7,14),AutoScroll=true};
    RoundHomeControl(ranking,16);
-   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(18,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",11,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
-   ranking.Controls.Add(rankingText);home.Controls.Add(ranking);
+   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(14,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
+   var rankingGrid=new DataGridView {Dock=DockStyle.Fill,Visible=false,BackgroundColor=Color.White,BorderStyle=BorderStyle.None,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AllowUserToResizeRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Vertical,ColumnHeadersHeight=32,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing};
+   rankingGrid.Font=new Font("Segoe UI",10,FontStyle.Regular);
+   rankingGrid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   rankingGrid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(226,238,251);
+   rankingGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.EnableHeadersVisualStyles=false;
+   rankingGrid.DefaultCellStyle.BackColor=Color.White;
+   rankingGrid.DefaultCellStyle.ForeColor=Color.FromArgb(20,40,75);
+   rankingGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(230,239,250);
+   rankingGrid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(247,250,255);
+   rankingGrid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   rankingGrid.GridColor=Color.FromArgb(232,237,245);
+   rankingGrid.RowTemplate.Height=27;
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="posicao",HeaderText="Nº",Width=54,SortMode=DataGridViewColumnSortMode.NotSortable});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="produto",HeaderText="Produto",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=200,SortMode=DataGridViewColumnSortMode.NotSortable});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="quantidade",HeaderText="Quantidade",Width=125,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="N3"}});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="valor",HeaderText="Total vendido",Width=146,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="C2"}});
+   ranking.Controls.Add(rankingText);ranking.Controls.Add(rankingGrid);home.Controls.Add(ranking);
    if(File.Exists(dbPath)){
     try{using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
      conn.Open();
@@ -209,13 +227,12 @@ namespace ArmazemGratidao {
      using(var cmd=new SQLiteCommand(sql,conn)){
       cmd.Parameters.AddWithValue("@month",DateTime.Today.ToString("yyyy-MM"));
       using(var reader=cmd.ExecuteReader()){
-       var lines=new System.Collections.Generic.List<string>();
        int position=0;
        while(reader.Read()){
         position++;
-        lines.Add(position.ToString("00")+"º  "+Convert.ToString(reader["name"])+"     |     "+Convert.ToDecimal(reader["quantidade"]).ToString("N3")+" un./kg     |     R$ "+Convert.ToDecimal(reader["valor"]).ToString("N2"));
+        rankingGrid.Rows.Add(position.ToString("00"),Convert.ToString(reader["name"]),Convert.ToDecimal(reader["quantidade"]),Convert.ToDecimal(reader["valor"]));
        }
-       if(lines.Count>0)rankingText.Text=string.Join(Environment.NewLine+Environment.NewLine,lines);
+       if(position>0){rankingText.Visible=false;rankingGrid.Visible=true;rankingGrid.ClearSelection();}
       }
      }
     }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
