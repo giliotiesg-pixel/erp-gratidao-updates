@@ -265,7 +265,7 @@ namespace ArmazemGratidao {
    string description=Convert.ToString(grid.CurrentRow.Cells["descricao"].Value);
    using(var form=new Form {Text="Adicionar QTD ao estoque",Width=650,Height=345,MinimumSize=new Size(600,320),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(15)};
-    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var productLabel=new Label {Text=description,AutoSize=true,MaximumSize=new Size(420,75),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var quantity=new NumericUpDown {DecimalPlaces=3,Minimum=0.001M,Maximum=10000000M,Increment=1M,Value=1M,Width=180};
     var reason=new TextBox {Text="Entrada manual de estoque",Width=230,MaxLength=250};
@@ -614,9 +614,9 @@ namespace ArmazemGratidao {
       DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
       bool oldWeight=weightCol!=null&&r["saved_weight"]!=DBNull.Value&&Convert.ToString(r["saved_weight"])!="0";
       using(var form=new Form {Text="Editar produto #"+id,Width=930,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=4,RowCount=11,Padding=new Padding(15)};
-       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));
-       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Width=160,Height=78,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11,FontStyle.Regular)};
+       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
+       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
        var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
        var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=hasExpiry,Enabled=expiryCol!=null};
@@ -626,12 +626,12 @@ namespace ArmazemGratidao {
        var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Value=oldCost};
        var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Value=Math.Max(0,oldStock),ReadOnly=true};
        var addQty=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Minimum=0,Value=0};
-       var nameBox=new Panel {Width=160,Margin=new Padding(3),BackColor=Color.White,Dock=DockStyle.Fill};nameBox.Controls.Add(name);
-       Control[] fields={code,nameBox,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
-       for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
-       // A descrição usa exatamente a mesma largura dos outros campos de texto.
-       // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
-       code.Width=160;brand.Width=160;category.Width=160;nameBox.Width=160;
+       
+       Control[] fields={code,name,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
+       for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+       // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
+       
+       code.Width=160;brand.Width=160;category.Width=160;name.Dock=DockStyle.Fill;
        var save=new Button {Text="Salvar alterações",Width=165,Height=38,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White};
        save.Click+=(s,e)=>{
         if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -775,9 +775,9 @@ namespace ArmazemGratidao {
   }
   void InsertProduct(string initialInput=""){
    using(var form=new Form {Text="Inserir produto",Width=930,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=4,RowCount=12,Padding=new Padding(15)};
-    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));
-    var barcode=new TextBox();var name=new TextBox {Multiline=true,Width=160,Height=78,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11,FontStyle.Regular)};var brand=new TextBox();var category=new TextBox();
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var barcode=new TextBox();var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
     else name.Text=initial;
@@ -790,12 +790,12 @@ namespace ArmazemGratidao {
     expiry.Enabled=availableColumns.Contains("expiry_date")||availableColumns.Contains("expiration_date")||availableColumns.Contains("validade");
     byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
     var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
-    var nameBox=new Panel {Width=160,Margin=new Padding(3),BackColor=Color.White,Dock=DockStyle.Fill};nameBox.Controls.Add(name);
-    Control[] fields={barcode,nameBox,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
-    for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
-       // A descrição usa exatamente a mesma largura dos outros campos de texto.
-       // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
-       barcode.Width=160;brand.Width=160;category.Width=160;nameBox.Width=160;
+    
+    Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
+    for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+       // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
+       
+       barcode.Width=160;brand.Width=160;category.Width=160;name.Dock=DockStyle.Fill;
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
