@@ -10,6 +10,7 @@ namespace ArmazemGratidao {
   readonly string db;readonly string module;
   readonly TextBox stockSearch=new TextBox {Width=220,Font=new Font("Segoe UI",10)};
   readonly TextBox clientSearch=new TextBox {Width=205,Font=new Font("Segoe UI",10)};
+  readonly Label stockValuation=new Label {Dock=DockStyle.Top,Height=68,Padding=new Padding(12,9,8,4),BackColor=Color.FromArgb(227,240,255),ForeColor=Color.FromArgb(17,57,110),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Apuração financeira do estoque"};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label status=new Label {Dock=DockStyle.Bottom,Height=35,TextAlign=ContentAlignment.MiddleLeft};
   public ModuloConsultaForm(string path,string name) {
@@ -24,6 +25,8 @@ namespace ArmazemGratidao {
     var edit=new Button {Text="Editar / Salvar",Width=130,Height=34};edit.Click+=(s,e)=>StockEdit();top.Controls.Add(edit);
     var history=new Button {Text="Auditoria",Width=115,Height=34};history.Click+=(s,e)=>StockHistory();top.Controls.Add(history);
     var verify=new Button {Text="Conferir baixas",AutoSize=true,Height=34};verify.Click+=(s,e)=>CheckStockLosses();top.Controls.Add(verify);
+    var valuation=new Button {Text="Auditoria financeira",AutoSize=true,Height=34};valuation.Click+=(s,e)=>StockValuationAudit();top.Controls.Add(valuation);
+    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];StockProductDetails();}};
    }
    if(module=="Clientes"){
     top.Height=65;
@@ -42,7 +45,7 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(207,227,248);grid.DefaultCellStyle.SelectionForeColor=Color.Black;
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){string n=column.Name.ToLowerInvariant();if(n=="name"||n.Contains("descri")||n=="produto"||n=="cliente"){column.MinimumWidth=240;column.FillWeight=230;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;};
    Shown+=(s,e)=>{var bounds=Screen.FromControl(this).WorkingArea;Width=Math.Min(Width,Math.Max(360,bounds.Width-24));Height=Math.Min(Height,Math.Max(300,bounds.Height-24));};
-   Controls.Add(grid);Controls.Add(status);Controls.Add(top);LoadData();
+   Controls.Add(grid);Controls.Add(status);if(module=="Estoque")Controls.Add(stockValuation);Controls.Add(top);LoadData();
   }
   void LoadData() {
    if(!File.Exists(db)){status.Text="Importe o banco antes de consultar.";return;}
@@ -84,6 +87,99 @@ namespace ArmazemGratidao {
    using(var rd=cmd.ExecuteReader())while(rd.Read())map[Convert.ToInt64(rd[0])]=++n;
    return map;
   }
+
+  void UpdateStockValuation(SQLiteConnection conn){
+   var cols=Columns(conn,"products");
+   if(!cols.Contains("stock")||!cols.Contains("cost")||!cols.Contains("price")){
+    stockValuation.Text="Apuração indisponível: falta quantidade, custo ou preço de venda no cadastro.";
+    return;
+   }
+   string sql="SELECT COUNT(*),COALESCE(SUM(CASE WHEN COALESCE(stock,0)>0 THEN stock ELSE 0 END),0),"+
+    "COALESCE(SUM(CASE WHEN COALESCE(stock,0)>0 THEN stock*COALESCE(cost,0) ELSE 0 END),0),"+
+    "COALESCE(SUM(CASE WHEN COALESCE(stock,0)>0 THEN stock*COALESCE(price,0) ELSE 0 END),0),"+
+    "SUM(CASE WHEN COALESCE(stock,0)<0 THEN 1 ELSE 0 END),"+
+    "SUM(CASE WHEN COALESCE(stock,0)>0 AND COALESCE(cost,0)<=0 THEN 1 ELSE 0 END) FROM products";
+   using(var cmd=new SQLiteCommand(sql,conn))using(var reader=cmd.ExecuteReader()){
+    if(reader.Read()){
+     decimal units=Dec(reader.GetValue(1)),cost=Dec(reader.GetValue(2)),sale=Dec(reader.GetValue(3));
+     long missing=Convert.ToInt64(reader.GetValue(5)==DBNull.Value?0:reader.GetValue(5));
+     long negative=Convert.ToInt64(reader.GetValue(4)==DBNull.Value?0:reader.GetValue(4));
+     stockValuation.Text="ESTOQUE CADASTRADO  •  "+reader.GetValue(0)+" produtos  |  Quantidade: "+units.ToString("N3")+
+      "  |  CUSTO TOTAL: R$ "+cost.ToString("N2")+"  |  VENDA POTENCIAL: R$ "+sale.ToString("N2")+
+      Environment.NewLine+"Margem bruta potencial: R$ "+(sale-cost).ToString("N2")+
+      "  |  Sem custo informado: "+missing+"  |  Quantidades negativas: "+negative+
+      "  |  Dê duplo clique para detalhar.";
+    }
+   }
+  }
+  void StockValuationAudit(){
+   try{
+    using(var conn=StockOpen(true)){
+     var columns=Columns(conn,"products");
+     if(!columns.Contains("stock")||!columns.Contains("cost")||!columns.Contains("price"))throw new Exception("O banco não possui os campos necessários para avaliação.");
+     var data=new DataTable();
+     string sql="SELECT id AS 'ID interno',name AS 'Produto',COALESCE(stock,0) AS 'Quantidade',"+
+      "COALESCE(cost,0) AS 'Custo unitário',ROUND(COALESCE(stock,0)*COALESCE(cost,0),2) AS 'Valor em custo',"+
+      "COALESCE(price,0) AS 'Preço de venda',ROUND(COALESCE(stock,0)*COALESCE(price,0),2) AS 'Valor em venda' "+
+      "FROM products ORDER BY name COLLATE NOCASE,id";
+     using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
+     using(var form=new Form{Text="Auditoria financeira do estoque - todos os produtos",Width=1100,Height=660,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var summary=new Label{Dock=DockStyle.Top,Height=108,Padding=new Padding(12,8,8,6),ForeColor=Color.FromArgb(19,64,123),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+      decimal totalCost=0,totalSale=0;int missing=0,negative=0;decimal quantity=0;
+      foreach(DataRow row in data.Rows){
+       decimal q=Dec(row["Quantidade"]);if(q<0)negative++;else quantity+=q;
+       if(q>0&&Dec(row["Custo unitário"])<=0)missing++;
+       if(q>0){totalCost+=q*Dec(row["Custo unitário"]);totalSale+=q*Dec(row["Preço de venda"]);}
+      }
+      summary.Text="Produtos cadastrados: "+data.Rows.Count+"  |  Quantidade total: "+quantity.ToString("N3")+
+       Environment.NewLine+"Capital em mercadorias (custo): R$ "+totalCost.ToString("N2")+
+       "  |  Valor potencial de venda: R$ "+totalSale.ToString("N2")+
+       Environment.NewLine+"Diferença potencial: R$ "+(totalSale-totalCost).ToString("N2")+
+       "  |  Sem custo: "+missing+"  |  Estoque negativo: "+negative;
+      var note=new Label{Dock=DockStyle.Bottom,Height=47,Padding=new Padding(10,7,8,5),
+       Text="Apuração baseada no estoque e preços atuais de TODOS os cadastros (inclusive inativos). Não é saldo de caixa nem lucro realizado. Sem custo informado pode subestimar o capital.",Font=new Font("Segoe UI",9,FontStyle.Regular)};
+      var view=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+      form.Controls.Add(view);form.Controls.Add(note);form.Controls.Add(summary);form.ShowDialog(this);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Falha na auditoria financeira: "+ex.Message,"Estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void StockProductDetails(){
+   long id;try{id=SelectedStockId();}catch(Exception ex){MessageBox.Show(ex.Message);return;}
+   try{
+    using(var conn=StockOpen(true)){
+     var cols=Columns(conn,"products");
+     string barcode=cols.Contains("barcode")?"barcode":"' '";
+     string sql="SELECT name,"+barcode+" AS barcode,COALESCE(stock,0) AS stock,"+
+      (cols.Contains("cost")?"COALESCE(cost,0)":"0")+" AS cost,"+
+      (cols.Contains("price")?"COALESCE(price,0)":"0")+" AS price FROM products WHERE id=@id";
+     using(var cmd=new SQLiteCommand(sql,conn)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var reader=cmd.ExecuteReader()){
+       if(!reader.Read())throw new Exception("Produto não encontrado.");
+       string name=Convert.ToString(reader["name"]),bar=Convert.ToString(reader["barcode"]);
+       decimal q=Dec(reader["stock"]),cost=Dec(reader["cost"]),price=Dec(reader["price"]);
+       using(var form=new Form{Text="Estoque | Detalhes do produto",Width=630,Height=370,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+        var label=new Label{Dock=DockStyle.Fill,Padding=new Padding(18),ForeColor=Color.FromArgb(20,57,118),
+         Font=new Font("Segoe UI",12,FontStyle.Bold),Text="PRODUTO: "+name+
+         Environment.NewLine+"Código de barras: "+bar+
+         Environment.NewLine+"Quantidade atual: "+q.ToString("N3")+
+         Environment.NewLine+"Custo unitário: R$ "+cost.ToString("N2")+
+         Environment.NewLine+"Total em custo: R$ "+(q*cost).ToString("N2")+
+         Environment.NewLine+"Preço de venda: R$ "+price.ToString("N2")+
+         Environment.NewLine+"Total potencial de venda: R$ "+(q*price).ToString("N2")};
+        var barActions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=58,Padding=new Padding(10)};
+        var audit=new Button{Text="Ver histórico de auditoria",Width=205,Height=35};
+        audit.Click+=(s,e)=>{form.Close();StockHistory();};
+        var close=new Button{Text="Fechar",Width=105,Height=35};close.Click+=(s,e)=>form.Close();
+        barActions.Controls.Add(audit);barActions.Controls.Add(close);
+        form.Controls.Add(label);form.Controls.Add(barActions);form.ShowDialog(this);
+       }
+      }
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Falha ao abrir detalhes: "+ex.Message,"Estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   void LoadStock(){
    try{
     using(var conn=StockOpen(true)){
@@ -95,7 +191,9 @@ namespace ArmazemGratidao {
       StockField(cols,"min_stock","Estoque mínimo")+","+
       StockField(cols,"price","Preço de venda")+","+
       StockField(cols,"cost","Custo")+","+
-      StockField(cols,"status","Situação")+" FROM products WHERE (@term='' OR name LIKE @like OR "+
+      StockField(cols,"status","Situação")+","+
+      "ROUND(COALESCE(stock,0)*COALESCE(cost,0),2) AS \"Valor em custo\","+
+      "ROUND(COALESCE(stock,0)*COALESCE(price,0),2) AS \"Valor em venda\" FROM products WHERE (@term='' OR name LIKE @like OR "+
       (cols.Contains("barcode")?"barcode LIKE @like":"0")+
       " OR CAST(id AS TEXT)=@term) ORDER BY name COLLATE NOCASE,id LIMIT 500";
      using(var cmd=new SQLiteCommand(sql,conn)){
@@ -114,9 +212,10 @@ namespace ArmazemGratidao {
         else if(col.Name=="Código de barras")col.FillWeight=130;
         else col.FillWeight=95;
         if(col.Name=="Quantidade atual"||col.Name=="Estoque mínimo")col.DefaultCellStyle.Format="N3";
-        if(col.Name=="Preço de venda"||col.Name=="Custo")col.DefaultCellStyle.Format="N2";
+        if(col.Name=="Preço de venda"||col.Name=="Custo"||col.Name=="Valor em custo"||col.Name=="Valor em venda")col.DefaultCellStyle.Format="N2";
        }
-       status.Text="ESTOQUE  •  "+table.Rows.Count+" produtos exibidos (máximo 500 por consulta). Selecione um produto para inserir quantidade, editar ou consultar a auditoria.";
+       status.Text="ESTOQUE  •  "+table.Rows.Count+" produtos exibidos (máximo 500 por consulta). Duplo clique para detalhes e auditoria do produto.";
+       UpdateStockValuation(conn);
       }
      }
     }
