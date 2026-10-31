@@ -47,6 +47,7 @@ namespace ArmazemGratidao {
    customer.Text="Consumidor";
    var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>{LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
+   var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
    customer.Enter+=(s,e)=>LoadCustomerOptions();
    payment.SelectedIndexChanged+=(s,e)=>{if(Convert.ToString(payment.SelectedItem)=="FIADO")LoadCustomerOptions();};
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
@@ -74,12 +75,123 @@ namespace ArmazemGratidao {
    try{
     string typed=customer.Text;
     var names=new List<string>();
-    using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
-    using(var reader=cmd.ExecuteReader())while(reader.Read())names.Add(reader.GetString(0));
+    var existing=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    using(var connection=Open()){
+     using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
+     using(var reader=cmd.ExecuteReader())while(reader.Read()){
+      string name=reader.GetString(0);if(existing.Add(name))names.Add(name);
+     }
+     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection)){
+      if(Convert.ToInt32(check.ExecuteScalar())>0){
+       using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>'' ORDER BY TRIM(name) LIMIT 1000",connection))
+       using(var reader=cmd.ExecuteReader())while(reader.Read()){
+        string name=reader.GetString(0);if(existing.Add(name))names.Add(name);
+       }
+      }
+     }
+    }
+    names.Sort(StringComparer.CurrentCultureIgnoreCase);
     customer.BeginUpdate();customer.Items.Clear();customer.Items.AddRange(names.Cast<object>().ToArray());customer.EndUpdate();
     customer.Text=typed;customer.SelectionStart=customer.Text.Length;
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao buscar clientes");}
+  }
+  bool CustomerRegistered(string name){
+   if(string.IsNullOrWhiteSpace(name))return false;
+   using(var connection=Open()){
+    using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection)){
+     if(Convert.ToInt32(check.ExecuteScalar())>0){
+      using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(name))=LOWER(TRIM(@name))",connection)){
+       cmd.Parameters.AddWithValue("@name",name);
+       if(Convert.ToInt32(cmd.ExecuteScalar())>0)return true;
+      }
+     }
+    }
+    // Clientes históricos existentes no Fiado continuam válidos, sem cópias.
+    using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE LOWER(TRIM(COALESCE(customer_name,'')))=LOWER(TRIM(@name))",connection)){
+     cmd.Parameters.AddWithValue("@name",name);
+     return Convert.ToInt32(cmd.ExecuteScalar())>0;
+    }
+   }
+  }
+  static string CustomerDigits(string input){
+   return new string((input??"").Where(char.IsDigit).ToArray());
+  }
+  bool QuickRegisterCustomer(){
+   string initial=customer.Text.Trim();
+   if(string.Equals(initial,"Consumidor",StringComparison.OrdinalIgnoreCase))initial="";
+   using(var form=new Form{Text="PDV | Cadastro rápido de cliente",Width=550,Height=335,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var name=new TextBox{Left=165,Top=20,Width=335,Text=initial,MaxLength=180,Font=new Font("Segoe UI",11)};
+    var phone=new TextBox{Left=165,Top=70,Width=335,MaxLength=40,Font=new Font("Segoe UI",11)};
+    var doc=new TextBox{Left=165,Top=120,Width=335,MaxLength=20,Font=new Font("Segoe UI",11)};
+    var hint=new Label{Left=20,Top=165,Width=480,Height=42,Text="CPF/CNPJ e telefone opcionais. Informe o nome correto para vincular a venda ao Fiado."};
+    var save=new Button{Left=165,Top=220,Width=195,Height=38,Text="Salvar e selecionar",BackColor=Color.FromArgb(20,90,167),ForeColor=Color.White};
+    var cancel=new Button{Left=380,Top=220,Width=120,Height=38,Text="Cancelar"};
+    cancel.Click+=(s,e)=>form.Close();
+    form.Controls.AddRange(new Control[]{new Label{Text="Nome / Razão social",Left=20,Top=24,Width=135},
+     new Label{Text="Telefone",Left=20,Top=74,Width=135},
+     new Label{Text="CPF ou CNPJ",Left=20,Top=124,Width=135},name,phone,doc,hint,save,cancel});
+    save.Click+=(s,e)=>{
+     string newName=name.Text.Trim(),document=CustomerDigits(doc.Text);
+     if(newName.Length<2||string.Equals(newName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
+      MessageBox.Show("Informe o nome do cliente. Consumidor não pode ser utilizado no Fiado.");return;
+     }
+     if(document.Length>0&&document.Length!=11&&document.Length!=14){
+      MessageBox.Show("CPF/CNPJ deve conter 11 ou 14 dígitos. Confira ou deixe em branco.");return;
+     }
+     try{
+      using(var connection=Open()){
+       // O registro é feito uma vez. Se o nome já existir, apenas selecionar.
+       bool found=false;
+       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection))
+        found=Convert.ToInt32(check.ExecuteScalar())>0;
+       if(found){
+        using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(name))=LOW(TRIM(@name))",connection)){
+         cmd.Parameters.AddWithValue("@name",newName);
+         if(Convert.ToInt32(cmd.ExecuteScalar())>0){
+          customer.Text=newName;form.DialogResult=DialogResult.OK;return;
+         }
+        }
+       }
+       string backup=db+".antes-cadastro-rapido-cliente-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+        copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);
+       }
+       using(var tx=connection.BeginTransaction()){
+        using(var schema=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,document TEXT)",connection,tx))schema.ExecuteNonQuery();
+        var columns=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using(var cmd=new SQLiteCommand("PRAGMA table_info(customers)",connection,tx))
+        using(var reader=cmd.ExecuteReader())while(reader.Read())columns.Add(Convert.ToString(reader["name"]));
+        if(!columns.Contains("name")||!columns.Contains("id"))throw new Exception("Cadastro de clientes incompatível.");
+        if(!columns.Contains("phone"))using(var cmd=new SQLiteCommand("ALTER TABLE customers ADD COLUMN phone TEXT",connection,tx))cmd.ExecuteNonQuery();
+        if(!columns.Contains("document"))using(var cmd=new SQLiteCommand("ALTER TABLE customers ADD COLUMN document TEXT",connection,tx))cmd.ExecuteNonQuery();
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(name))=LOWER(TRIM(@name)) OR (@doc<>'' AND REPLACE(REPLACE(REPLACE(COALESCE(document,''),'.',''),'-',''),'/','')=@doc)",connection,tx)){
+         check.Parameters.AddWithValue("@name",newName);check.Parameters.AddWithValue("@doc",document);
+         if(Convert.ToInt32(check.ExecuteScalar())>0)throw new Exception("Cliente já cadastrado com este nome ou CPF/CNPJ. Escolha o cadastro existente.");
+        }
+        long id;
+        using(var insert=new SQLiteCommand("INSERT INTO customers(name,phone,document) VALUES(@name,@phone,@doc)",connection,tx)){
+         insert.Parameters.AddWithValue("@name",newName);
+         insert.Parameters.AddWithValue("@phone",phone.Text.Trim());
+         insert.Parameters.AddWithValue("@doc",document);
+         if(insert.ExecuteNonQuery()!=1)throw new Exception("Cliente não cadastrado.");
+        }
+        using(var cmd=new SQLiteCommand("SELECT last_insert_rowid()",connection,tx))id=Convert.ToInt64(cmd.ExecuteScalar());
+        using(var audit=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_registration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER,action TEXT NOT NULL,old_name TEXT,old_phone TEXT,old_document TEXT,new_name TEXT,new_phone TEXT,new_document TEXT,changed_at TEXT NOT NULL)",connection,tx))audit.ExecuteNonQuery();
+        using(var audit=new SQLiteCommand("INSERT INTO customer_registration_audit(customer_id,action,old_name,old_phone,old_document,new_name,new_phone,new_document,changed_at) VALUES(@id,'CADASTRO_RAPIDO_PDV','','','',@name,@phone,@doc,datetime('now','localtime'))",connection,tx)){
+         audit.Parameters.AddWithValue("@id",id);audit.Parameters.AddWithValue("@name",newName);
+         audit.Parameters.AddWithValue("@phone",phone.Text.Trim());audit.Parameters.AddWithValue("@doc",document);
+         audit.ExecuteNonQuery();
+        }
+        tx.Commit();
+       }
+      }
+      customer.Text=newName;form.DialogResult=DialogResult.OK;
+     }catch(Exception ex){MessageBox.Show("Cadastro não salvo: "+ex.Message,"Cadastro rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    bool ok=form.ShowDialog(this)==DialogResult.OK;
+    if(ok){LoadCustomerOptions();customer.Text=name.Text.Trim();}
+    return ok;
+   }
   }
   void FindSuggestions(){
    string term=code.Text.Trim();
@@ -360,7 +472,20 @@ namespace ArmazemGratidao {
    }
    var method=Convert.ToString(payment.SelectedItem);
    string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor":customer.Text.Trim();
-   if(method=="FIADO"&&(customerName=="Consumidor")){MessageBox.Show("Informe um cliente específico para a venda fiado.");return;}
+   if(method=="FIADO"){
+    if(string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
+     if(MessageBox.Show("Cliente não informado. Cadastrar cliente agora para finalizar a venda Fiado?","Cadastro rápido",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     if(!QuickRegisterCustomer())return;
+     customerName=customer.Text.Trim();
+    }
+    try{
+     if(!CustomerRegistered(customerName)){
+      if(MessageBox.Show("O cliente "+customerName+" não está cadastrado. Cadastrar agora?","Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+      if(!QuickRegisterCustomer())return;
+      customerName=customer.Text.Trim();
+     }
+    }catch(Exception ex){MessageBox.Show("Não foi possível verificar o cadastro do cliente: "+ex.Message,"Fiado");return;}
+   }
    var sum=cart.Sum(i=>i.Total);
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
