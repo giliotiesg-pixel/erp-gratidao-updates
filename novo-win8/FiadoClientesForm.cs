@@ -15,6 +15,8 @@ namespace ArmazemGratidao {
   readonly NumericUpDown amount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=130};
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   string customer="";
+  bool refreshingClientSales=false;
+  readonly Label receivedBalance=new Label {Text="Saldo selecionado: R$ 0,00",AutoSize=true,Padding=new Padding(5,9,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
   TabControl saleTabs;
   Panel clientHome;
   SplitContainer detailSplit;
@@ -50,7 +52,7 @@ namespace ArmazemGratidao {
    SetupSaleSelection(openSales,pendingSplit.Panel1,false);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
    SetupSaleSelection(paidSales,previousSplit.Panel1,true);previousSplit.Panel2.Controls.Add(previousDetailTabs);
    pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
-   openSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(openSales,pendingItems,pendingPayments);
+   openSales.SelectionChanged+=(s,e)=>{RefreshSelectedSaleDetails(openSales,pendingItems,pendingPayments);UpdatePaymentSelection(true);};
    paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(paidSales,previousItems,previousPayments);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
@@ -62,8 +64,10 @@ namespace ArmazemGratidao {
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"});method.SelectedIndex=0;bottom.Controls.Add(method);
    bottom.Controls.Add(new Label {Text="Valor R$:",AutoSize=true,Padding=new Padding(0,9,0,0)});bottom.Controls.Add(amount);
+   bottom.Controls.Add(receivedBalance);
+   var fillAll=new Button {Text="Preencher saldo de todas",AutoSize=true,Height=36};fillAll.Click+=(s,e)=>FillAllBalances();bottom.Controls.Add(fillAll);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
-   var settle=new Button {Text="Receber todas as vendas",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
+   var settle=new Button {Text="Receber nas vendas do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
    var fixDate=new Button {Text="Corrigir data do pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(95,64,145),ForeColor=Color.White};fixDate.Click+=(s,e)=>CorrectPaymentDate();bottom.Controls.Add(fixDate);
    var audit=new Button {Text="Conferir saldos",AutoSize=true,Height=36,BackColor=Color.FromArgb(145,73,32),ForeColor=Color.White};audit.Click+=(s,e)=>AuditBalances();bottom.Controls.Add(audit);
@@ -124,6 +128,7 @@ namespace ArmazemGratidao {
      if(v!=null&&v!=DBNull.Value)value+=Convert.ToDecimal(v);
     }
     total.Text="Total selecionado: R$ "+value.ToString("N2");
+    if(!paid&&grid==openSales)UpdatePaymentSelection(true);
    };
    all.CheckedChanged+=(s,e)=>{foreach(DataGridViewRow row in grid.Rows)if(!row.IsNewRow)row.Cells["marcar"].Value=all.Checked;sum();};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
@@ -170,6 +175,7 @@ namespace ArmazemGratidao {
   }
   void SelectClient(string name){
    customer=name;detailSplit.Panel1Collapsed=true;detailSplit.Panel2Collapsed=false;clientHome.Visible=false;selected.Text="FIADO | "+customer;
+   refreshingClientSales=true;
    try {
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name";
     openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY s.id DESC","@name",name);
@@ -178,6 +184,7 @@ namespace ArmazemGratidao {
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Saldo R$ "+total.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
+   finally{refreshingClientSales=false;UpdatePaymentSelection(true);}
   }
   void CorrectPaymentDate(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
