@@ -12,6 +12,7 @@ namespace ArmazemGratidao {
   readonly Label summary=new Label {Dock=DockStyle.Bottom,Height=36,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(229,242,255)};
   readonly DataGridView master=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly DataGridView details=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+  bool loadingMaster=false;
   readonly Label heading=new Label {Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",13,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft};
   public ConsultaForm(string path,bool fiado) {
    db=path;credit=fiado;Text=fiado?"Fiado - Clientes e Vendas":"Vendas - Itens por Venda";Width=1200;Height=780;BackColor=Color.FromArgb(229,242,255);
@@ -37,7 +38,7 @@ namespace ArmazemGratidao {
    heading.Text=fiado?"FIADO | Selecione um cliente":"VENDAS | Selecione uma venda para visualizar todos os itens";
    if(!fiado)Controls.Add(summary);
    foreach(var table in new[]{master,details}){table.Font=new Font("Segoe UI",11,FontStyle.Regular);table.RowTemplate.Height=38;table.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in table.Columns){string n=column.Name.ToLowerInvariant();if(n.Contains("descri")||n.Contains("produto")||n.Contains("cliente")||n=="name"){column.MinimumWidth=220;column.FillWeight=220;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};}
-   master.SelectionChanged+=(s,e)=>LoadDetails();
+   master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
    master.CellClick+=(s,e)=>{if(e.RowIndex>=0)LoadDetails();};
    dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
    LoadMaster();
@@ -52,6 +53,7 @@ namespace ArmazemGratidao {
    }return dt;
   }
   void LoadMaster() {
+   loadingMaster=true;
    try {
     master.DataSource=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
@@ -63,6 +65,7 @@ namespace ArmazemGratidao {
      summary.Text="  "+(selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  Total do período: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2")+"  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2");
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
+   finally{loadingMaster=false;LoadDetails();}
   }
 
   long SelectedSale(){
@@ -230,19 +233,31 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao exportar");}
   }
   void LoadDetails() {
-   if(master.CurrentRow==null||master.CurrentRow.IsNewRow)return;
+   if(loadingMaster)return;
+   // During WinForms grid re-binding CurrentRow may exist before columns are ready.
+   if(master.CurrentRow==null||master.CurrentRow.IsNewRow
+      ||!master.Columns.Contains(credit?"cliente":"venda")){
+    details.DataSource=null;
+    return;
+   }
+   object selected=master.CurrentRow.Cells[credit?"cliente":"venda"].Value;
+   if(selected==null||selected==DBNull.Value){
+    details.DataSource=null;
+    return;
+   }
    try {
     if(credit) {
-     var name=Convert.ToString(master.CurrentRow.Cells["cliente"].Value);
+     string name=Convert.ToString(selected);
      details.DataSource=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS valor,COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido,s.gross_total-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS saldo FROM sales s WHERE UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY s.id DESC","@name",name);
-     decimal balance=0;foreach(DataRow r in ((DataTable)details.DataSource).Rows)balance+=Convert.ToDecimal(r["saldo"]);
+     decimal balance=0;
+     var rows=details.DataSource as DataTable;
+     if(rows!=null)foreach(DataRow r in rows.Rows)balance+=Convert.ToDecimal(r["saldo"]);
      heading.Text="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
-    } else {
-     var id=master.CurrentRow.Cells["venda"].Value;
-     details.DataSource=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
-     heading.Text="VENDA #"+id+" | Todos os itens da venda";
+    }else{
+     details.DataSource=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
+     heading.Text="VENDA #"+selected+" | Todos os itens da venda";
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao consultar detalhes");}
+   }catch(Exception ex){details.DataSource=null;MessageBox.Show(ex.Message,"Erro ao consultar detalhes");}
   }
  }
 }
