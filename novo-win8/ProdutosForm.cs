@@ -548,6 +548,17 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Exclusão não concluída: "+ex.Message,"Produtos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  // Numeração de apresentação: IDs do SQLite permanecem imutáveis para preservar vendas e estoque.
+  Dictionary<long,int> ProductAlphabeticalNumbers(SQLiteConnection connection,string activeColumn){
+   var numbers=new Dictionary<long,int>();
+   string condition=activeColumn==null?"":" WHERE COALESCE(\""+activeColumn+"\",1)<>0";
+   using(var cmd=new SQLiteCommand("SELECT id FROM products"+condition+" ORDER BY name COLLATE NOCASE,id",connection))
+   using(var reader=cmd.ExecuteReader()){
+    int number=0;
+    while(reader.Read())numbers[reader.GetInt64(0)]=++number;
+   }
+   return numbers;
+  }
   void LoadProducts(){
    if(!listVisible){info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";return;}
    try{
@@ -588,7 +599,18 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      cmd.Parameters.AddWithValue("@limit",PageSize);
      cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
-     var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);grid.DataSource=dt;
+     var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);
+     // Código alfabético global: mantém o mesmo número mesmo durante pesquisas ou paginação.
+     var order=ProductAlphabeticalNumbers(c,activeColumn);
+     dt.Columns.Add("Código",typeof(int)).SetOrdinal(0);
+     foreach(DataRow row in dt.Rows){
+      long productId=Convert.ToInt64(row["codigo_interno"]);
+      int displayCode;if(order.TryGetValue(productId,out displayCode))row["Código"]=displayCode;
+      else row["Código"]=DBNull.Value; // Produtos inativos mantêm o ID histórico, sem interferir na sequência ativa.
+     }
+     grid.DataSource=dt;
+     if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Visible=false;
+     if(grid.Columns.Contains("Código")){grid.Columns["Código"].HeaderText="Código";grid.Columns["Código"].Width=80;grid.Columns["Código"].DisplayIndex=1;}
      info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
      // Indicadores completos somente sob demanda, evitando uma varredura extra a cada pesquisa.
      if(calculateMetrics)using(var totals=new SQLiteCommand("SELECT SUM(CASE WHEN COALESCE(stock,0)<=0 THEN 1 ELSE 0 END), COALESCE(SUM(COALESCE(stock,0)),0), COALESCE(SUM(COALESCE(stock,0)*COALESCE(cost,0)),0) FROM products WHERE ("+searchColumns+")"+filter,c)){
