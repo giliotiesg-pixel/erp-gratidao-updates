@@ -9,10 +9,11 @@ namespace ArmazemGratidao {
  public sealed class ModuloConsultaForm:Form {
   readonly string db;readonly string module;
   readonly TextBox stockSearch=new TextBox {Width=220,Font=new Font("Segoe UI",10)};
+  readonly TextBox clientSearch=new TextBox {Width=205,Font=new Font("Segoe UI",10)};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label status=new Label {Dock=DockStyle.Bottom,Height=35,TextAlign=ContentAlignment.MiddleLeft};
   public ModuloConsultaForm(string path,string name) {
-   db=path;module=name;Text="Armazem Gratidao | "+name+" (Consulta)";Width=1100;Height=700;BackColor=Color.FromArgb(229,242,255);
+   db=path;module=name;Text="Armazem Gratidao | "+name+(name=="Clientes"?" - Cadastro":" (Consulta)");Width=1100;Height=700;BackColor=Color.FromArgb(229,242,255);
    var top=new FlowLayoutPanel {Dock=DockStyle.Top,Height=55,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
    var reload=new Button {Text="Atualizar consulta",AutoSize=true,Height=33};reload.Click+=(s,e)=>LoadData();top.Controls.Add(reload);
    if(module=="Estoque"){
@@ -23,7 +24,15 @@ namespace ArmazemGratidao {
     var edit=new Button {Text="Editar / Salvar",Width=130,Height=34};edit.Click+=(s,e)=>StockEdit();top.Controls.Add(edit);
     var history=new Button {Text="Auditoria",Width=115,Height=34};history.Click+=(s,e)=>StockHistory();top.Controls.Add(history);
    }
-   if(module=="Clientes"){var import=new Button {Text="Importar clientes da versão 12.1.6",AutoSize=true,Height=33};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);}
+   if(module=="Clientes"){
+    top.Height=65;
+    top.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.White});
+    clientSearch.TextChanged+=(s,e)=>LoadClients();top.Controls.Add(clientSearch);
+    var add=new Button{Text="Cadastrar cliente",AutoSize=true,Height=34};add.Click+=(s,e)=>EditClient(false);top.Controls.Add(add);
+    var edit=new Button{Text="Editar cliente",AutoSize=true,Height=34};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
+    var import=new Button{Text="Importar 12.1.6",AutoSize=true,Height=34};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);
+    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditClient(true);};
+   }
    grid.Font=new Font("Segoe UI",10,FontStyle.Regular);grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;grid.RowTemplate.Height=29;
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;
    grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
@@ -273,17 +282,117 @@ namespace ArmazemGratidao {
    list.Sort((a,b)=>StringComparer.CurrentCultureIgnoreCase.Compare(a.Item1,b.Item1));
    return list;
   }
+
+  static string OnlyDigits(string value){
+   var sb=new System.Text.StringBuilder();foreach(char ch in value??"")if(ch>='0'&&ch<='9')sb.Append(ch);return sb.ToString();
+  }
+  static bool ValidCpfCnpj(string source){
+   string n=OnlyDigits(source);
+   if(n.Length!=11&&n.Length!=14)return false;
+   if(n==new string(n[0],n.Length))return false;
+   if(n.Length==11){
+    int sum=0;for(int i=0;i<9;i++)sum+=(n[i]-'0')*(10-i);
+    int d=sum*10%11;if(d==10)d=0;if(d!=n[9]-'0')return false;
+    sum=0;for(int i=0;i<10;i++)sum+=(n[i]-'0')*(11-i);
+    d=sum*10%11;if(d==10)d=0;return d==n[10]-'0';
+   }
+   int[] w1={5,4,3,2,9,8,7,6,5,4,3,2},w2={6,5,4,3,2,9,8,7,6,5,4,3,2};
+   int total=0;for(int i=0;i<12;i++)total+=(n[i]-'0')*w1[i];
+   int digit=total%11<2?0:11-total%11;if(digit!=n[12]-'0')return false;
+   total=0;for(int i=0;i<13;i++)total+=(n[i]-'0')*w2[i];
+   digit=total%11<2?0:11-total%11;return digit==n[13]-'0';
+  }
+  static void PrepareCustomerTable(SQLiteConnection conn,SQLiteTransaction tx){
+   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,document TEXT)");
+   var cols=Columns(conn,"customers");
+   if(!cols.Contains("id")||!cols.Contains("name"))throw new Exception("Tabela customers incompatível.");
+   if(!cols.Contains("phone"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN phone TEXT");
+   if(!cols.Contains("document"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN document TEXT");
+   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customer_registration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER,action TEXT NOT NULL,old_name TEXT,old_phone TEXT,old_document TEXT,new_name TEXT,new_phone TEXT,new_document TEXT,changed_at TEXT NOT NULL)");
+  }
   void LoadClients(){
    try{
-    using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
-     c.Open();
-     var list=ReadClients(c);
-     var dt=new DataTable();dt.Columns.Add("Cliente");dt.Columns.Add("Telefone");dt.Columns.Add("Documento");
-     foreach(var client in list)dt.Rows.Add(client.Item1,client.Item2,client.Item3);
+    using(var conn=StockOpen(true)){
+     var clients=ReadClients(conn);
+     var dt=new DataTable();dt.Columns.Add("Código",typeof(long));dt.Columns.Add("Cliente / Razão social");dt.Columns.Add("CPF / CNPJ");dt.Columns.Add("Telefone");dt.Columns.Add("Origem");
+     var ids=new Dictionary<string,long>(StringComparer.OrdinalIgnoreCase);
+     if(HasTable(conn,"customers")&&Columns(conn,"customers").Contains("id")){
+      using(var cmd=new SQLiteCommand("SELECT id,name FROM customers",conn))
+      using(var reader=cmd.ExecuteReader())while(reader.Read()){string name=Convert.ToString(reader["name"]).Trim();if(name.Length>0&&!ids.ContainsKey(name))ids.Add(name,Convert.ToInt64(reader["id"]));}
+     }
+     string term=clientSearch.Text.Trim(),number=OnlyDigits(term);
+     foreach(var client in clients){
+      if(term.Length>0&&client.Item1.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&client.Item2.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&(number.Length==0||OnlyDigits(client.Item3).IndexOf(number,StringComparison.Ordinal)<0))continue;
+      long id;bool registered=ids.TryGetValue(client.Item1,out id);
+      dt.Rows.Add(registered?(object)id:DBNull.Value,client.Item1,client.Item3,client.Item2,registered?"Cadastrado":"Vendas / Fiado");
+     }
      grid.DataSource=dt;
-     status.Text="Clientes: "+list.Count+" encontrados (cadastros e nomes das vendas/fiado). Somente consulta.";
+     if(grid.Columns.Contains("Cliente / Razão social")){grid.Columns["Cliente / Razão social"].MinimumWidth=240;grid.Columns["Cliente / Razão social"].FillWeight=220;}
+     status.Text="CLIENTES: "+dt.Rows.Count+" exibidos. Cadastrar, editar, importar CPF/CNPJ. Vendas e Fiado preservados.";
     }
-   }catch(Exception ex){grid.DataSource=null;status.Text="Erro ao consultar clientes: "+ex.Message;}
+   }catch(Exception ex){grid.DataSource=null;status.Text="Erro em Clientes: "+ex.Message;}
+  }
+  void EditClient(bool edit){
+   long id=0;string oldName="",oldPhone="",oldDoc="";
+   if(edit){
+    if(grid.CurrentRow==null){MessageBox.Show("Selecione um cliente.");return;}
+    oldName=Convert.ToString(grid.CurrentRow.Cells["Cliente / Razão social"].Value);
+    oldPhone=Convert.ToString(grid.CurrentRow.Cells["Telefone"].Value);
+    oldDoc=Convert.ToString(grid.CurrentRow.Cells["CPF / CNPJ"].Value);
+    object value=grid.CurrentRow.Cells["Código"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
+   }
+   using(var form=new Form{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=5,Padding=new Padding(18)};
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var name=new TextBox{Text=oldName,MaxLength=180,Dock=DockStyle.Top};
+    var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=190};
+    type.Items.AddRange(new object[]{"Pessoa física (CPF)","Pessoa jurídica (CNPJ)"});type.SelectedIndex=OnlyDigits(oldDoc).Length==14?1:0;
+    var document=new TextBox{Text=oldDoc,MaxLength=20,Width=230};
+    var phone=new TextBox{Text=oldPhone,MaxLength=40,Width=230};
+    Control[] fields={name,type,document,phone};string[] labels={"Nome / Razão social","Tipo de cliente","CPF ou CNPJ","Telefone"};
+    for(int i=0;i<fields.Length;i++){panel.RowStyles.Add(new RowStyle(SizeType.Absolute,54));panel.Controls.Add(new Label{Text=labels[i],AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},0,i);panel.Controls.Add(fields[i],1,i);}
+    var save=new Button{Text="Salvar cadastro",Width=190,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    save.Click+=(s,e)=>{
+     string newName=name.Text.Trim(),doc=OnlyDigits(document.Text);
+     if(newName.Length<2){MessageBox.Show("Informe nome ou razão social.");return;}
+     if(doc.Length>0&&(doc.Length!=(type.SelectedIndex==0?11:14)||!ValidCpfCnpj(doc))){MessageBox.Show("CPF ou CNPJ inválido.");return;}
+     try{
+      string backup;
+      using(var conn=StockOpen(false)){
+       backup=BackupStock(conn);
+       using(var tx=conn.BeginTransaction()){
+        PrepareCustomerTable(conn,tx);
+        long currentId=id;string beforeName="",beforePhone="",beforeDoc="";
+        if(currentId==0&&edit){
+         using(var lookup=new SQLiteCommand("SELECT id FROM customers WHERE LOWER(TRIM(name))=LOWER(TRIM(@name)) LIMIT 1",conn,tx)){
+          lookup.Parameters.AddWithValue("@name",oldName);object found=lookup.ExecuteScalar();if(found!=null)currentId=Convert.ToInt64(found);
+         }
+        }
+        if(currentId>0){
+         using(var old=new SQLiteCommand("SELECT name,phone,document FROM customers WHERE id=@id",conn,tx)){
+          old.Parameters.AddWithValue("@id",currentId);
+          using(var rd=old.ExecuteReader()){if(!rd.Read())throw new Exception("Cadastro não localizado; atualize a consulta.");beforeName=Convert.ToString(rd["name"]);beforePhone=Convert.ToString(rd["phone"]);beforeDoc=Convert.ToString(rd["document"]);}
+         }
+        }
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE id<>@id AND (LOWER(TRIM(name))=LOWER(TRIM(@name)) OR (@document<>'' AND REPLACE(REPLACE(REPLACE(COALESCE(document,''),'.',''),'-',''),'/','')=@document))",conn,tx)){
+         check.Parameters.AddWithValue("@id",currentId);check.Parameters.AddWithValue("@name",newName);check.Parameters.AddWithValue("@document",doc);
+         if(Convert.ToInt32(check.ExecuteScalar())>0)throw new Exception("Já existe um cliente com esse nome ou CPF/CNPJ.");
+        }
+        if(currentId>0)Execute(conn,tx,"UPDATE customers SET name=@name,phone=@phone,document=@doc WHERE id=@id",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc),P("@id",currentId));
+        else{
+         Execute(conn,tx,"INSERT INTO customers(name,phone,document) VALUES(@name,@phone,@doc)",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc));
+         using(var last=new SQLiteCommand("SELECT last_insert_rowid()",conn,tx))currentId=Convert.ToInt64(last.ExecuteScalar());
+        }
+        Execute(conn,tx,"INSERT INTO customer_registration_audit(customer_id,action,old_name,old_phone,old_document,new_name,new_phone,new_document,changed_at) VALUES(@id,@action,@oldName,@oldPhone,@oldDoc,@newName,@newPhone,@newDoc,@date)",
+          P("@id",currentId),P("@action",beforeName.Length==0?"CADASTRO":"EDICAO"),P("@oldName",beforeName),P("@oldPhone",beforePhone),P("@oldDoc",beforeDoc),P("@newName",newName),P("@newPhone",phone.Text.Trim()),P("@newDoc",doc),P("@date",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")));
+        tx.Commit();
+       }
+      }
+      form.DialogResult=DialogResult.OK;form.Close();LoadClients();MessageBox.Show("Cadastro salvo e auditado. Backup: "+backup,"Clientes");
+     }catch(Exception ex){MessageBox.Show("Não foi possível salvar: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,50));panel.Controls.Add(save,1,4);form.Controls.Add(panel);form.ShowDialog(this);
+   }
   }
   void ImportClients(){
    using(var dlg=new OpenFileDialog {Title="Selecionar banco da versão 12.1.6 (SQLite)",Filter="Bancos SQLite (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|Todos os arquivos (*.*)|*.*"}){
