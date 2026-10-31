@@ -12,7 +12,42 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>ButtonTextVisibility.CheckOpenForms(); Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms();}; Application.Run(new MainForm()); }
+ }
+ // Atalho centralizado: aparece somente nos formulários principais dos módulos.
+ // Não modifica diálogos de confirmação nem os dados de uma venda em andamento.
+ static class PdvShortcutButtons {
+  static readonly System.Collections.Generic.HashSet<Form> installed=new System.Collections.Generic.HashSet<Form>();
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms){
+    if(form==null || form.IsDisposed || installed.Contains(form))continue;
+    bool module=form is ConsultaForm || form is FiadoClientesForm ||
+     form is ProdutosForm || form is LucroForm || form is ModuloConsultaForm;
+    if(!module)continue;
+    installed.Add(form);
+    var shortcut=new Button {
+     Text="PDV - Nova Venda",Width=180,Height=38,
+     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+     Font=new Font("Segoe UI",10,FontStyle.Bold),
+     Margin=new Padding(6)
+    };
+    var strip=new FlowLayoutPanel {
+     Dock=DockStyle.Top,Height=48,WrapContents=false,
+     FlowDirection=FlowDirection.RightToLeft,
+     BackColor=Color.FromArgb(229,242,255)
+    };
+    shortcut.Click+=(sender,args)=>{
+     MainForm main=null;
+     foreach(Form open in Application.OpenForms)if(open is MainForm){main=(MainForm)open;break;}
+     if(main!=null)main.OpenPdvFromModule();
+     else MessageBox.Show("A janela principal não está disponível.","PDV");
+    };
+    strip.Controls.Add(shortcut);
+    form.Controls.Add(strip);
+    strip.BringToFront();
+    form.FormClosed+=(sender,args)=>installed.Remove(form);
+   }
+  }
  }
  static class ButtonTextVisibility {
   static readonly System.Collections.Generic.Dictionary<Button,string> inspected=new System.Collections.Generic.Dictionary<Button,string>();
@@ -88,6 +123,18 @@ namespace ArmazemGratidao {
    ShowHome(this,EventArgs.Empty);
    Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
    FormClosed+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
+  }
+  public void OpenPdvFromModule(){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.","PDV");return;}
+   // Evitar abrir vários PDVs sobrepostos; reutilizar a janela existente.
+   foreach(Form open in Application.OpenForms){
+    if(open is PdvForm && !open.IsDisposed){
+     if(open.WindowState==FormWindowState.Minimized)open.WindowState=FormWindowState.Normal;
+     open.BringToFront();open.Activate();
+     return;
+    }
+   }
+   OpenModuleWindow(new PdvForm(dbPath));
   }
   string CreateVerifiedPreUpdateBackup(){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
