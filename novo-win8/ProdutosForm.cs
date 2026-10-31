@@ -512,26 +512,41 @@ namespace ArmazemGratidao {
    }
   }
   void DeleteCheckedProducts(){
-   var ids=checkedProducts.ToArray();
-   if(ids.Length==0){MessageBox.Show("Marque os produtos que deseja excluir.");return;}
-   if(MessageBox.Show("Remover "+ids.Length+" produto(s) da lista de ativos? Os registros de vendas e o histórico serão preservados.","Confirmar exclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+   // A linha destacada também conta como seleção, sem exigir marcar a caixa.
+   var ids=new HashSet<long>(checkedProducts);
+   if(grid.CurrentRow!=null&&grid.Columns.Contains("codigo_interno")){
+    long selectedId;
+    if(long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out selectedId))ids.Add(selectedId);
+   }
+   if(ids.Count==0){MessageBox.Show("Selecione o produto que deseja excluir.");return;}
+   if(MessageBox.Show("Remover "+ids.Count+" produto(s) da lista de produtos? O histórico de vendas será preservado.","Confirmar exclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    try{
     using(var connection=Open(false)){
      var cols=ProductColumns(connection);
      string active=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
-     if(active==null){MessageBox.Show("Este banco não possui campo de inativação. Nenhum produto foi excluído.");return;}
+     // Um backup é obrigatório antes de qualquer alteração.
      string backup=db+".antes-excluir-produtos-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
      using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();connection.BackupDatabase(copy,"main","main",-1,null,0);}
+     int removed=0;
      using(var tx=connection.BeginTransaction()){
+      if(active==null){
+       using(var alter=new SQLiteCommand("ALTER TABLE products ADD COLUMN active INTEGER NOT NULL DEFAULT 1",connection,tx))alter.ExecuteNonQuery();
+       active="active";
+      }
       foreach(long id in ids){
-       using(var cmd=new SQLiteCommand("UPDATE products SET \""+active+"\"=0 WHERE id=@id",connection,tx)){cmd.Parameters.AddWithValue("@id",id);cmd.ExecuteNonQuery();}
+       using(var cmd=new SQLiteCommand("UPDATE products SET \""+active+"\"=0 WHERE id=@id AND COALESCE(\""+active+"\",1)<>0",connection,tx)){
+        cmd.Parameters.AddWithValue("@id",id);removed+=cmd.ExecuteNonQuery();
+       }
       }
       tx.Commit();
      }
+     checkedProducts.Clear();
+     if(selectAll.Checked)selectAll.Checked=false;
+     currentPage=0;
+     LoadProducts();
+     MessageBox.Show(removed+" produto(s) removido(s) da lista. Histórico de vendas preservado.","Produtos");
     }
-    checkedProducts.Clear();selectAll.Checked=false;LoadProducts();
-    MessageBox.Show("Produtos inativados. Histórico preservado.");
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Exclusão não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }catch(Exception ex){MessageBox.Show("Exclusão não concluída: "+ex.Message,"Produtos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void LoadProducts(){
    if(!listVisible){info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";return;}
@@ -542,7 +557,7 @@ namespace ArmazemGratidao {
     if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
     string filter="";
     int mode=statusFilter.SelectedIndex;
-    if(mode==1&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
+    if(activeColumn!=null&&mode!=2)filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
     if(mode==2&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=0";
     if(mode==3)filter=" AND COALESCE(stock,0)<=0";
     if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
