@@ -22,6 +22,8 @@ namespace ArmazemGratidao {
 
   const int PageSize=250;
   int currentPage=0;
+  bool listVisible=false;
+  readonly Button showList=new Button {Text="Mostrar lista de produtos",Width=210,Height=33};
   readonly Button previousPage=new Button {Text="Página anterior",Width=155,Height=33};
   readonly Button nextPage=new Button {Text="Próxima página",Width=155,Height=33};
   readonly ComboBox statusFilter=new ComboBox {Width=155,DropDownStyle=ComboBoxStyle.DropDownList};
@@ -35,6 +37,7 @@ namespace ArmazemGratidao {
    searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
    searchBar.Controls.Add(search);
    statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
+   showList.Click+=(s,e)=>{listVisible=!listVisible;grid.Visible=listVisible;showList.Text=listVisible?"Ocultar lista de produtos":"Mostrar lista de produtos";if(listVisible)LoadProducts();else{grid.DataSource=null;info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";metrics.Text="";}};bar.Controls.Add(showList);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
@@ -91,7 +94,7 @@ namespace ArmazemGratidao {
    metrics.BackColor=Color.FromArgb(229,242,255);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
-   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);LoadProducts();
+   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);grid.Visible=false;info.Text="  Lista de produtos oculta para abertura rápida. Clique em Mostrar lista de produtos.";previousPage.Enabled=false;nextPage.Enabled=false;
   }
   bool resizingProductsToolbar=false;
   void ResizeProductsToolbar(FlowLayoutPanel bar){
@@ -529,6 +532,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Exclusão não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void LoadProducts(){
+   if(!listVisible){info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";return;}
    try{
     using(var c=Open()){
     var cols=ProductColumns(c);
