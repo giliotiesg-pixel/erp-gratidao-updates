@@ -1,0 +1,24 @@
+name: Build ERP v1.2.12 barcode test EXE
+on:
+  pull_request:
+    paths:
+      - 'build/erp-v1.2.12/**'
+      - '.github/workflows/build-erp-1212-barcode.yml'
+  workflow_dispatch:
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Compile native Windows executable
+        shell: pwsh
+        run: |
+          go build -trimpath -ldflags="-H=windowsgui" -o ERP_Gratidao_v1.2.12_Busca_Codigo_Barras.exe ./build/erp-v1.2.12/CODIGO_FONTE_LAYOUT_MODERNO.go
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERP_Gratidao_v1.2.12_Busca_Codigo_Barras
+          path: ERP_Gratidao_v1.2.12_Busca_Codigo_Barras.exe
+          if-no-files-found: error
