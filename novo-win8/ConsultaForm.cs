@@ -38,25 +38,13 @@ namespace ArmazemGratidao {
    }
    heading.Text=fiado?"FIADO | Selecione um cliente":"VENDAS | Selecione uma venda para visualizar todos os itens";
    if(!fiado)Controls.Add(summary);
+   // Altura fixa: não alterar largura/altura das linhas dentro de DataBindingComplete.
+   // Evita exceções de DataGridViewBand durante vinculação e troca de seleção.
    foreach(var table in new[]{master,details}){
     table.Font=new Font("Segoe UI",11,FontStyle.Regular);
     table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
     table.RowTemplate.Height=38;
-    table.DataBindingComplete+=(s,e)=>{
-     if(table.IsDisposed || table.Disposing || table.DataSource==null)return;
-     table.SuspendLayout();
-     try{
-      foreach(DataGridViewColumn column in table.Columns){
-       if(column==null || column.IsDataBound==false)continue;
-       string n=(column.Name??"").ToLowerInvariant();
-       if(n.Contains("descri")||n.Contains("produto")||n.Contains("cliente")||n=="name"){
-        column.MinimumWidth=220;
-        column.FillWeight=220;
-        column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
-       }
-      }
-     }finally{table.ResumeLayout();}
-    };
+    table.AllowUserToResizeRows=false;
    }
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
    master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster)LoadDetails();};
