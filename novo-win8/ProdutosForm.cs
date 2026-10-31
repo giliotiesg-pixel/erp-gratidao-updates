@@ -398,7 +398,7 @@ namespace ArmazemGratidao {
      var close=new Button{Text="Fechar",Width=100,Height=39};close.Click+=(s,e)=>form.Close();
      toolbar.Controls.Add(print);toolbar.Controls.Add(close);
      form.Controls.Add(picture);form.Controls.Add(idLabel);form.Controls.Add(title);form.Controls.Add(toolbar);
-     form.FormClosed+=(s,e)=>{picture.Image=null;};form.ShowDialog(this);picture.Image.Dispose();
+     form.ShowDialog(this);picture.Image.Dispose();picture.Image=null;
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível gerar a etiqueta QR: "+ex.Message,"Produtos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
