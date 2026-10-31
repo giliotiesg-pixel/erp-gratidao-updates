@@ -514,7 +514,7 @@ namespace ArmazemGratidao {
   void DeleteCheckedProducts(){
    // A linha destacada também conta como seleção, sem exigir marcar a caixa.
    var ids=new HashSet<long>(checkedProducts);
-   if(grid.CurrentRow!=null&&grid.Columns.Contains("codigo_interno")){
+   if(ids.Count==0&&grid.CurrentRow!=null&&grid.Columns.Contains("codigo_interno")){
     long selectedId;
     if(long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out selectedId))ids.Add(selectedId);
    }
