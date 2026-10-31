@@ -631,7 +631,7 @@ namespace ArmazemGratidao {
        for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
-       code.Width=160;brand.Width=160;category.Width=160;name.Dock=DockStyle.Fill;
+       code.Width=160;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
        var save=new Button {Text="Salvar alterações",Width=165,Height=38,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White};
        save.Click+=(s,e)=>{
         if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -795,7 +795,7 @@ namespace ArmazemGratidao {
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
-       barcode.Width=160;brand.Width=160;category.Width=160;name.Dock=DockStyle.Fill;
+       barcode.Width=160;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
