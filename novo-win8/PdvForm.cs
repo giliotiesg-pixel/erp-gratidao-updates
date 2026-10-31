@@ -25,7 +25,6 @@ namespace ArmazemGratidao {
   readonly ListBox suggestions=new ListBox {Visible=false,Width=510,Height=190,Font=new Font("Segoe UI",10)};
   readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
   bool suppressLookup=false;
-  bool customerListRequested=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database) {
    db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;BackColor=Color.FromArgb(229,242,255);
@@ -44,17 +43,13 @@ namespace ArmazemGratidao {
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=126,Padding=new Padding(10),AutoScroll=true};
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
-   footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
+   // O nome do cliente fica no estado interno; so aparece na janela aberta pelo botao.
    customer.Text="Consumidor";
-   // A caixa mostra apenas Consumidor ou o cliente atualmente escolhido.
-   // A lista de clientes aparece somente ao clicar no botao CLIENTE.
-   customer.Width=205;
    var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-   chooseCustomer.Click+=(s,e)=>{customerListRequested=true;LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
+   chooseCustomer.Click+=(s,e)=>ChooseCustomerInWindow();footer.Controls.Add(chooseCustomer);
    var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
    registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
-   customer.DropDownClosed+=(s,e)=>{customerListRequested=false;customer.Items.Clear();};
-      footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
+   footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
@@ -75,29 +70,59 @@ namespace ArmazemGratidao {
   }
   SQLiteConnection Open() {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
   static decimal Dec(object o) {return Convert.ToDecimal(o,CultureInfo.InvariantCulture);}
-  void LoadCustomerOptions(){
-   try{
-    string typed=customer.Text;
-    var names=new List<string>();
-    var existing=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"Consumidor"};
-    using(var connection=Open()){
-     using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
-     using(var reader=cmd.ExecuteReader())while(reader.Read()){
-      string name=reader.GetString(0);if(existing.Add(name))names.Add(name);
-     }
-     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection)){
-      if(Convert.ToInt32(check.ExecuteScalar())>0){
-       using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>'' ORDER BY TRIM(name) LIMIT 1000",connection))
-       using(var reader=cmd.ExecuteReader())while(reader.Read()){
-        string name=reader.GetString(0);if(existing.Add(name))names.Add(name);
-       }
+  // A lista de clientes nao e carregada em caixa visivel do PDV.
+  List<string> GetCustomerNames(){
+   var names=new List<string>();
+   var existing=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"Consumidor"};
+   using(var connection=Open()){
+    using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
+    using(var reader=cmd.ExecuteReader())while(reader.Read()){
+     string name=Convert.ToString(reader[0]);
+     if(!string.IsNullOrWhiteSpace(name) && existing.Add(name))names.Add(name);
+    }
+    using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection)){
+     if(Convert.ToInt32(check.ExecuteScalar())>0){
+      using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>'' ORDER BY TRIM(name) LIMIT 1000",connection))
+      using(var reader=cmd.ExecuteReader())while(reader.Read()){
+       string name=Convert.ToString(reader[0]);
+       if(!string.IsNullOrWhiteSpace(name) && existing.Add(name))names.Add(name);
       }
      }
     }
-    names.Sort(StringComparer.CurrentCultureIgnoreCase);
-    customer.BeginUpdate();customer.Items.Clear();customer.Items.Add("Consumidor");customer.Items.AddRange(names.Cast<object>().ToArray());customer.EndUpdate();
-    customer.Text=typed;customer.SelectionStart=customer.Text.Length;
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao buscar clientes");}
+   }
+   names.Sort(StringComparer.CurrentCultureIgnoreCase);
+   names.Insert(0,"Consumidor");
+   return names;
+  }
+  void ChooseCustomerInWindow(){
+   try{
+    var names=GetCustomerNames();
+    using(var dialog=new Form{Text="PDV | Selecionar cliente",Width=535,Height=535,MinimumSize=new Size(430,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=36};
+     var hint=new Label{Text="Pesquisar cliente pelo nome:",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),IntegralHeight=false};
+     var select=new Button{Text="Selecionar cliente",Dock=DockStyle.Bottom,Height=43,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Dock=DockStyle.Bottom,Height=37};
+     Action fill=()=>{
+      string filter=search.Text.Trim();
+      list.BeginUpdate();
+      try{
+       list.Items.Clear();
+       foreach(string name in names)
+        if(filter.Length==0||name.IndexOf(filter,StringComparison.CurrentCultureIgnoreCase)>=0)
+         list.Items.Add(name);
+      }finally{list.EndUpdate();}
+      if(list.Items.Count>0)list.SelectedIndex=0;
+     };
+     search.TextChanged+=(sender,args)=>fill();
+     select.Click+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
+     list.DoubleClick+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
+     cancel.Click+=(sender,args)=>dialog.DialogResult=DialogResult.Cancel;
+     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(select);dialog.Controls.Add(cancel);
+     fill();
+     if(dialog.ShowDialog(this)==DialogResult.OK && dialog.Tag is string)customer.Text=(string)dialog.Tag;
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível listar os clientes: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   bool CustomerRegistered(string name){
    if(string.IsNullOrWhiteSpace(name))return false;
@@ -193,7 +218,7 @@ namespace ArmazemGratidao {
      }catch(Exception ex){MessageBox.Show("Cadastro não salvo: "+ex.Message,"Cadastro rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     };
     bool ok=form.ShowDialog(this)==DialogResult.OK;
-    if(ok){LoadCustomerOptions();customer.Text=name.Text.Trim();}
+    if(ok){customer.Text=name.Text.Trim();}
     return ok;
    }
   }
