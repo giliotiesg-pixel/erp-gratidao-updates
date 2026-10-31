@@ -120,7 +120,15 @@ namespace ArmazemGratidao {
       matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
      }
     }
-    if(matches.Count==0){MessageBox.Show("Produto não cadastrado.");return;}
+    if(matches.Count==0){
+     if(MessageBox.Show("Produto não cadastrado: "+search+"\\n\\nAbrir o cadastro de produto agora?","Produto não encontrado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)==DialogResult.Yes){
+      using(var products=new ProdutosForm(db))products.OpenNewProduct(search);
+      // Após o cadastro, mantenha a pesquisa e tente localizar o novo produto novamente.
+      code.Text=search;code.Focus();code.SelectAll();
+      MessageBox.Show("Se o produto foi salvo, pressione Enter para incluí-lo na venda.","Voltar ao PDV");
+     }
+     return;
+    }
     if(matches.Count>1 && matches.Count(x=>string.Equals((x.Barcode??"").Trim(),search,StringComparison.OrdinalIgnoreCase))>1){MessageBox.Show("Atenção: existem produtos diferentes cadastrados com o mesmo código de barras. Confira a descrição e o preço antes de selecionar.","Código de barras duplicado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     if(matches.Count>1 && matches.Count(x=>string.Equals((x.InternalCode??"").Trim(),search,StringComparison.OrdinalIgnoreCase))>1){MessageBox.Show("Atenção: existem produtos diferentes cadastrados com o mesmo código interno. Confira a descrição e o preço antes de selecionar.","Código interno duplicado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     if(matches.Count>100){matches.RemoveAt(100);MessageBox.Show("A pesquisa encontrou mais de 100 produtos. Exibindo os primeiros 100; refine a descrição ou informe o código para localizar o produto desejado.","Muitos resultados");}
