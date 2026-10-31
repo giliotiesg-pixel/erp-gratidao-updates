@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Drawing;
+using System.Drawing.Imaging;
+using QRCoder;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -128,6 +130,12 @@ namespace ArmazemGratidao {
       if(method=="POST"&&path=="/api/entrada"){
        Write(stream,200,"application/json; charset=utf-8",AddStock(json));return;
       }
+      if(method=="GET"&&path=="/api/qr-produto"){
+       Write(stream,200,"application/json; charset=utf-8",ProductQr(Param(query,"id")));return;
+      }
+      if(method=="GET"&&path=="/api/produto"){
+       Write(stream,200,"application/json; charset=utf-8",FindStockProduct(Param(query,"id")));return;
+      }
       if(method=="GET"&&path=="/api/codigo"){
        Write(stream,200,"application/json; charset=utf-8",FindBarcode(Param(query,"codigo")));return;
       }
@@ -199,10 +207,58 @@ namespace ArmazemGratidao {
      }
      if(result==null)return SafeJson(new{ok=false,erro="Código não localizado. Centralize as barras, deixe as linhas nítidas e tente outra foto."});
      string code=(result.Text??"").Trim();
+     if(code.StartsWith("AMZG-PRODUTO:",StringComparison.OrdinalIgnoreCase)){
+      long qrId;
+      if(!long.TryParse(code.Substring("AMZG-PRODUTO:".Length),out qrId)||qrId<=0)throw new Exception("QR Code de produto inválido.");
+      return SafeJson(new{ok=true,tipo="produto",id=qrId,formato="QR_CODE"});
+     }
      if(code.Length<5||code.Length>48)throw new Exception("Código reconhecido fora do formato esperado.");
-     return SafeJson(new{ok=true,codigo=code,formato=Convert.ToString(result.BarcodeFormat)});
+     return SafeJson(new{ok=true,tipo="barras",codigo=code,formato=Convert.ToString(result.BarcodeFormat)});
     }
    }catch(Exception ex){return SafeJson(new{ok=false,erro="Não foi possível ler a foto: "+ex.Message});}
+  }
+
+  // O QR contém o ID permanente do banco; o nome fica impresso junto à etiqueta.
+  // A geração é automática e sob demanda: não modifica IDs nem quantidades.
+  string ProductQr(string raw){
+   try{
+    long id;if(!long.TryParse(raw,out id)||id<=0)throw new Exception("Código interno inválido.");
+    using(var conn=Open(true)){
+     var cols=Columns(conn,"products");
+     string sql="SELECT id,name FROM products WHERE id=@id AND "+ActivePredicate(cols);
+     using(var cmd=new SQLiteCommand(sql,conn)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var r=cmd.ExecuteReader()){
+       if(!r.Read())throw new Exception("Produto não encontrado ou inativo.");
+       string name=Convert.ToString(r["name"]);
+       string value="AMZG-PRODUTO:"+id.ToString(CultureInfo.InvariantCulture);
+       using(var generator=new QRCodeGenerator())
+       using(var data=generator.CreateQrCode(value,QRCodeGenerator.ECCLevel.Q))
+       using(var qr=new QRCode(data))
+       using(var bitmap=qr.GetGraphic(7))
+       using(var stream=new MemoryStream()){
+        bitmap.Save(stream,ImageFormat.Png);
+        return SafeJson(new{ok=true,id=id,nome=name,conteudo=value,imagem="data:image/png;base64,"+Convert.ToBase64String(stream.ToArray())});
+       }
+      }
+     }
+    }
+   }catch(Exception ex){return SafeJson(new{ok=false,erro=ex.Message});}
+  }
+  string FindStockProduct(string raw){
+   try{
+    long id;if(!long.TryParse(raw,out id)||id<=0)throw new Exception("Identificador inválido.");
+    using(var conn=Open(true)){
+     var cols=Columns(conn,"products");
+     using(var cmd=new SQLiteCommand("SELECT id,name,COALESCE(barcode,'') AS barcode,COALESCE(stock,0) AS stock FROM products WHERE id=@id AND "+ActivePredicate(cols),conn)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var r=cmd.ExecuteReader()){
+       if(!r.Read())throw new Exception("Produto excluído ou não cadastrado.");
+       return SafeJson(new{ok=true,produto=new{id=id,nome=Convert.ToString(r["name"]),codigo=Convert.ToString(r["barcode"]),quantidade=DecimalValue(r["stock"])}});
+      }
+     }
+    }
+   }catch(Exception ex){return SafeJson(new{ok=false,erro=ex.Message});}
   }
   string FindBarcode(string raw){
    try{
@@ -268,7 +324,7 @@ namespace ArmazemGratidao {
        }
        tx.Commit();
       }
-      return SafeJson(new{ok=true,id=id,nome=name,codigo=barcode,quantidade=qty,mensagem="Produto cadastrado e integrado ao estoque."});
+      return SafeJson(new{ok=true,id=id,nome=name,codigo=barcode,quantidade=qty,qrDisponivel=true,mensagem="Produto cadastrado e integrado ao estoque. QR Code já disponível."});
      }
     }
    }catch(Exception ex){return SafeJson(new{ok=false,erro=ex.Message});}
