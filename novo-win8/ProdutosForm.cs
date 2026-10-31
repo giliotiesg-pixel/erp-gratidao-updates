@@ -824,7 +824,7 @@ namespace ArmazemGratidao {
        string extraCols=(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+(expiryCol!=null?",\""+expiryCol+"\"":"")+(weightCol!=null?",\""+weightCol+"\"":"");
        string extraParams=(cols.Contains("brand")?",@brand":"")+(cols.Contains("category")?",@category":"")+(expiryCol!=null?",@expiry":"")+(weightCol!=null?",@weight":"");
        using(var tx=c.BeginTransaction())using(var cmd=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock"+extraCols+") VALUES(@barcode,@name,@price,@cost,@stock"+extraParams+")",c,tx)){
-        cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());cmd.Parameters.AddWithValue("@name",name.Text.Trim());cmd.Parameters.AddWithValue("@price",price.Value);cmd.Parameters.AddWithValue("@cost",cost.Value);cmd.Parameters.AddWithValue("@stock",stock.Value);
+        cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());cmd.Parameters.AddWithValue("@name",name.Text.Trim());cmd.Parameters.AddWithValue("@price",price.Value);cmd.Parameters.AddWithValue("@cost",cost.Value);cmd.Parameters.AddWithValue("@stock",0M);
         if(cols.Contains("brand"))cmd.Parameters.AddWithValue("@brand",brand.Text.Trim());
         if(cols.Contains("category"))cmd.Parameters.AddWithValue("@category",category.Text.Trim());
         if(expiryCol!=null)cmd.Parameters.AddWithValue("@expiry",expiry.Checked?(object)expiry.Value.ToString("yyyy-MM-dd"):DBNull.Value);
@@ -832,6 +832,7 @@ namespace ArmazemGratidao {
         cmd.ExecuteNonQuery();tx.Commit();
        }
       }
+      if(stock.Value>0)MessageBox.Show("Produto cadastrado com estoque zero. Para registrar as "+stock.Value.ToString("N3")+" unidades informadas, selecione o produto e use Adicionar QTD. Essa operação gera o registro de movimentação autorizado.","Estoque inicial protegido");
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
