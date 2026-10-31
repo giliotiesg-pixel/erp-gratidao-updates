@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -111,7 +112,8 @@ namespace ArmazemGratidao {
        if(h.StartsWith("Content-Length:",StringComparison.OrdinalIgnoreCase))int.TryParse(h.Substring(15).Trim(),out length);
        if(h.StartsWith("X-AMZG-Token:",StringComparison.OrdinalIgnoreCase))suppliedToken=h.Substring(13).Trim();
       }
-      if(length<0||length>4096){Write(stream,413,"text/plain","Requisição muito grande.");return;}
+      int maxLength=path=="/api/ler-foto"?2500000:4096;
+      if(length<0||length>maxLength){Write(stream,413,"application/json; charset=utf-8",SafeJson(new{ok=false,erro="Foto muito grande. Aproxime o código ou reduza a foto."}));return;}
       byte[] payload=new byte[length];int count=0;
       while(count<length){int read=stream.Read(payload,count,length-count);if(read<=0)throw new IOException("Conexão interrompida.");count+=read;}
       string json=Encoding.UTF8.GetString(payload),path=target.Split('?')[0];
@@ -127,6 +129,9 @@ namespace ArmazemGratidao {
       }
       if(method=="GET"&&path=="/api/codigo"){
        Write(stream,200,"application/json; charset=utf-8",FindBarcode(Param(query,"codigo")));return;
+      }
+      if(method=="POST"&&path=="/api/ler-foto"){
+       Write(stream,200,"application/json; charset=utf-8",ReadBarcodePhoto(json));return;
       }
       if(method=="POST"&&path=="/api/cadastrar"){
        Write(stream,200,"application/json; charset=utf-8",RegisterProduct(json));return;
@@ -167,6 +172,36 @@ namespace ArmazemGratidao {
     }
     return SafeJson(new{produtos=result});
    }
+  }
+  // A imagem é decodificada localmente no desktop, sem rede externa nem camera HTTPS.
+  string ReadBarcodePhoto(string payload){
+   try{
+    var data=ParseObject(payload);
+    string image=Field(data,"foto");
+    int comma=image.IndexOf(',');
+    if(comma>=0)image=image.Substring(comma+1);
+    if(image.Length==0||image.Length>2200000)throw new Exception("Foto ausente ou muito grande.");
+    byte[] bytes=Convert.FromBase64String(image);
+    if(bytes.Length>1700000)throw new Exception("Foto ultrapassa o limite de 1,7 MB.");
+    using(var ms=new MemoryStream(bytes))
+    using(var bitmap=new Bitmap(ms)){
+     if(bitmap.Width<160||bitmap.Height<90||((long)bitmap.Width*bitmap.Height)>18000000)
+      throw new Exception("Foto com tamanho inválido.");
+     var reader=new ZXing.BarcodeReader {AutoRotate=true,Options=new ZXing.Common.DecodingOptions{TryHarder=true}};
+     var result=reader.Decode(bitmap);
+     if(result==null){
+      // Inversão da imagem pode auxiliar em embalagens com impressão invertida.
+      using(var reversed=(Bitmap)bitmap.Clone()){
+       reversed.RotateFlip(RotateFlipType.Rotate180FlipNone);
+       result=reader.Decode(reversed);
+      }
+     }
+     if(result==null)return SafeJson(new{ok=false,erro="Código não localizado. Centralize as barras, deixe as linhas nítidas e tente outra foto."});
+     string code=(result.Text??"").Trim();
+     if(code.Length<5||code.Length>48)throw new Exception("Código reconhecido fora do formato esperado.");
+     return SafeJson(new{ok=true,codigo=code,formato=Convert.ToString(result.BarcodeFormat)});
+    }
+   }catch(Exception ex){return SafeJson(new{ok=false,erro="Não foi possível ler a foto: "+ex.Message});}
   }
   string FindBarcode(string raw){
    try{
@@ -327,7 +362,7 @@ p{line-height:1.5}.hint{font-size:13px;color:#455a76}
 <label>Código de barras</label><input id='barcode' inputmode='numeric' autocomplete='off' placeholder='Leia com câmera ou digite'>
 <input id='photo' class='hidden' type='file' accept='image/*' capture='environment'>
 <button id='scan'>Bipar com a câmera</button>
-<p class='hint'>O celular abre a câmera para fotografar o código. Na primeira utilização, a leitura pode precisar de internet para carregar o leitor. Se não reconhecer, digite os números.</p>
+<p class='hint'>O celular abre a câmera para fotografar o código. O código é reconhecido pelo computador, sem biblioteca de internet. Aproxime as barras e tire uma foto nítida. Se necessário, digite os números.</p>
 <button id='check' class='secondary'>Conferir código no cadastro</button>
 <div id='barcodeStatus' class='info'>Aponte para o código antes de cadastrar.</div>
 <label>Descrição do produto</label><input id='productName' maxlength='180' placeholder='Ex.: Arroz Camil 5 kg'>
@@ -349,7 +384,7 @@ p{line-height:1.5}.hint{font-size:13px;color:#455a76}
 </section>
 <p class='hint'>O cadastro vai para a mesma tabela usada por Produtos e Estoque no computador. As quantidades existentes nunca serão substituídas por um novo cadastro.</p>
 </main>
-<script src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'></script>
+
 <script>
 (function(){
 const token=new URLSearchParams(location.search).get('chave')||'';
@@ -381,26 +416,28 @@ $('check').onclick=checkBarcode;
 $('scan').onclick=()=>{$('photo').value='';$('photo').click()};
 $('photo').addEventListener('change',async function(){
  const file=this.files&&this.files[0];if(!file)return;
- $('barcodeStatus').textContent='Analisando foto do código...';
+ $('barcodeStatus').textContent='Lendo a foto no computador...';
  const url=URL.createObjectURL(file);
  try{
- const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
- let decoded='';
- if(window.BarcodeDetector){
- try{
- const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','itf']});
- const hits=await detector.detect(img);if(hits.length)decoded=hits[0].rawValue;
- }catch(e){}
- }
- if(!decoded&&window.ZXing){
- const reader=new ZXing.BrowserMultiFormatReader();
- const result=await reader.decodeFromImageElement(img);decoded=result.getText();
- }
- if(!decoded)throw Error('Não foi possível ler o código nesta foto. Aproxime, ilumine e fotografe de novo.');
- $('barcode').value=decoded;notice('registerMsg','Código lido pela câmera: '+decoded,true);await checkBarcode();
+  const img=new Image();
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+  const max=1900,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const context=canvas.getContext('2d');
+  context.drawImage(img,0,0,canvas.width,canvas.height);
+  const photo=canvas.toDataURL('image/jpeg',0.86);
+  const response=await fetch('/api/ler-foto',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},
+    body:JSON.stringify({foto:photo})});
+  const data=await response.json();
+  if(!data.ok)throw Error(data.erro||'Não foi possível localizar o código de barras.');
+  $('barcode').value=data.codigo;
+  notice('registerMsg','Código reconhecido: '+data.codigo+' ('+data.formato+').',true);
+  await checkBarcode();
  }catch(e){
- $('barcodeStatus').textContent='Falha na leitura: '+e.message;
- notice('registerMsg','Tente outra foto ou informe o código manualmente. A câmera pode funcionar sem HTTPS, mas a leitura precisa que o leitor carregue.',false);
+  $('barcodeStatus').textContent='Leitura não concluída: '+e.message;
+  notice('registerMsg','Use boa iluminação, mantenha as barras completas e nítidas, e fotografe de perto. Também é possível digitar o código.',false);
  }finally{URL.revokeObjectURL(url)}
 });
 $('register').onclick=async function(){
