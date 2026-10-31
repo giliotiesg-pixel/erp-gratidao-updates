@@ -44,7 +44,7 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
-   customer.Text="Consumidor Constante";
+   customer.Text="Consumidor";
    var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>{LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
    customer.Enter+=(s,e)=>LoadCustomerOptions();
@@ -107,6 +107,72 @@ namespace ArmazemGratidao {
    suppressLookup=true;lookupDelay.Stop();suggestions.Visible=false;code.Text=selected;suppressLookup=false;
    AddProduct();
   }
+  // Conferência explícita do estoque real antes da venda. Não permite estoque negativo.
+  bool AdjustEmptyStock(Item item,decimal previous,decimal required){
+   using(var dlg=new Form{Text="PDV | Produto sem estoque - conferir quantidade",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var info=new Label{Left=15,Top=12,Width=565,Height=75,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(18,65,143),
+     Text=item.Name+"\nEstoque registrado: "+previous.ToString("N3")+"  |  Necessário para a venda: "+required.ToString("N3")};
+    var quantity=new NumericUpDown{Left=220,Top=100,Width=225,DecimalPlaces=3,Minimum=0,Maximum=10000000,Value=Math.Min(10000000,Math.Max(0,required))};
+    var reason=new TextBox{Left=220,Top=151,Width=340,MaxLength=250,Text="Conferência física de estoque no PDV"};
+    var save=new Button{Left=220,Top=210,Width=210,Height=40,Text="Confirmar estoque",BackColor=Color.FromArgb(25,96,174),ForeColor=Color.White};
+    var cancel=new Button{Left=445,Top=210,Width=115,Height=40,Text="Cancelar"};
+    cancel.Click+=(s,e)=>dlg.Close();
+    dlg.Controls.AddRange(new Control[]{info,quantity,reason,save,cancel,
+     new Label{Left=15,Top=103,AutoSize=true,Text="Quantidade REAL disponível:"},
+     new Label{Left=15,Top=154,AutoSize=true,Text="Motivo da conferência:"}});
+    save.Click+=(s,e)=>{
+     if(quantity.Value<required){MessageBox.Show("A quantidade real deve cobrir o item e as unidades já colocadas no carrinho.");return;}
+     if(string.IsNullOrWhiteSpace(reason.Text)){MessageBox.Show("Informe o motivo da conferência.");return;}
+     if(MessageBox.Show("Confirmar que existem "+quantity.Value.ToString("N3")+" unidades de "+item.Name+" fisicamente no estabelecimento?\nEsta operação ajustará o estoque cadastrado e ficará na auditoria.","Conferir estoque real",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     try{
+      string backup;
+      using(var connection=Open()){
+       using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('runtime_operation_context','stock_audit_log')",connection))
+        if(Convert.ToInt32(check.ExecuteScalar())!=2)throw new Exception("Banco sem proteção ou auditoria. Nenhuma quantidade alterada.");
+       backup=db+".antes-conferencia-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+        dest.Open();connection.BackupDatabase(dest,"main","main",-1,null,0);
+       }
+       using(var tx=connection.BeginTransaction()){
+        decimal before;
+        using(var q=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",connection,tx)){
+         q.Parameters.AddWithValue("@id",item.Id);
+         object value=q.ExecuteScalar();
+         if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado.");
+         before=Dec(value);
+        }
+        if(before!=previous)throw new Exception("O estoque foi alterado por outra operação. Pesquise o produto novamente.");
+        int oldAuthorized;string oldOperation;
+        using(var q=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",connection,tx))
+        using(var rd=q.ExecuteReader()){
+         if(!rd.Read())throw new Exception("Proteção do banco indisponível.");
+         oldAuthorized=Convert.ToInt32(rd["authorized"]);oldOperation=Convert.ToString(rd["operation"]);
+        }
+        using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='AJUSTE_MANUAL_PDV_AUDITADO' WHERE id=1",connection,tx))
+         if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na autorização de ajuste.");
+        using(var q=new SQLiteCommand("UPDATE products SET stock=@next WHERE id=@id AND stock=@previous",connection,tx)){
+         q.Parameters.AddWithValue("@next",quantity.Value);q.Parameters.AddWithValue("@id",item.Id);q.Parameters.AddWithValue("@previous",before);
+         if(q.ExecuteNonQuery()!=1)throw new Exception("Estoque alterado simultaneamente. Nada gravado.");
+        }
+        using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) VALUES(@id,@name,@barcode,'AJUSTE_MANUAL_PDV',@before,@after,@difference,'ESTOQUE',@reason)",connection,tx)){
+         q.Parameters.AddWithValue("@id",item.Id);q.Parameters.AddWithValue("@name",item.Name);q.Parameters.AddWithValue("@barcode",item.Barcode);
+         q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@after",quantity.Value);q.Parameters.AddWithValue("@difference",quantity.Value-before);
+         q.Parameters.AddWithValue("@reason",reason.Text.Trim());if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao auditar ajuste.");
+        }
+        using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",connection,tx)){
+         q.Parameters.AddWithValue("@auth",oldAuthorized);q.Parameters.AddWithValue("@operation",oldOperation);
+         if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar proteção.");
+        }
+        tx.Commit();
+       }
+      }
+      dlg.DialogResult=DialogResult.OK;
+      MessageBox.Show("Quantidade real conferida e registrada na auditoria. Backup criado: "+backup,"Estoque do PDV");
+     }catch(Exception ex){MessageBox.Show("Estoque não alterado: "+ex.Message,"PDV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    return dlg.ShowDialog(this)==DialogResult.OK;
+   }
+  }
   void AddProduct() {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
@@ -168,7 +234,17 @@ namespace ArmazemGratidao {
     decimal quantity=qty.Value;
     string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
     var existing=cart.FirstOrDefault(x=>x.Id==selected.Id&&x.Unit==unit);
-    if(stocks[selected.Id]<quantity+(existing==null?0:existing.Qty)){MessageBox.Show("Estoque insuficiente. Disponível: "+stocks[selected.Id].ToString("N3"));return;}
+    decimal required=quantity+(existing==null?0:existing.Qty);
+    if(stocks[selected.Id]<required){
+     // Para estoque zerado ou insuficiente, permitir conferência física autorizada.
+     if(!AdjustEmptyStock(selected,stocks[selected.Id],required))return;
+     using(var refreshed=Open())
+     using(var check=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",refreshed)){
+      check.Parameters.AddWithValue("@id",selected.Id);
+      stocks[selected.Id]=Dec(check.ExecuteScalar());
+     }
+     if(stocks[selected.Id]<required){MessageBox.Show("Quantidade ainda insuficiente para a venda.");return;}
+    }
     if(existing!=null)existing.Qty+=quantity;
     else {selected.Qty=quantity;selected.Unit=unit;cart.Add(selected);}
     suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;Render();code.Focus();
@@ -283,8 +359,8 @@ namespace ArmazemGratidao {
     }
    }
    var method=Convert.ToString(payment.SelectedItem);
-   string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor Constante":customer.Text.Trim();
-   if(method=="FIADO"&&(customerName=="Consumidor Constante")){MessageBox.Show("Informe um cliente específico para a venda fiado.");return;}
+   string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor":customer.Text.Trim();
+   if(method=="FIADO"&&(customerName=="Consumidor")){MessageBox.Show("Informe um cliente específico para a venda fiado.");return;}
    var sum=cart.Sum(i=>i.Total);
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
@@ -368,7 +444,7 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
-     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="Consumidor Constante";Render();code.Focus();
+     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="Consumidor";Render();code.Focus();
     }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
