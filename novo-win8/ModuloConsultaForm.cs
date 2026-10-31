@@ -74,6 +74,15 @@ namespace ArmazemGratidao {
   static string StockField(HashSet<string> columns,string column,string title){
    return columns.Contains(column)?("\""+column+"\" AS \""+title+"\""):"NULL AS \""+title+"\"";
   }
+  static Dictionary<long,int> SortedProductCodes(SQLiteConnection conn){
+   var map=new Dictionary<long,int>();int n=0;
+   var cols=Columns(conn,"products");
+   string active=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
+   string filter=active==null?"":" WHERE COALESCE(\""+active+"\",1)<>0";
+   using(var cmd=new SQLiteCommand("SELECT id FROM products"+filter+" ORDER BY name COLLATE NOCASE,id",conn))
+   using(var rd=cmd.ExecuteReader())while(rd.Read())map[Convert.ToInt64(rd[0])]=++n;
+   return map;
+  }
   void LoadStock(){
    try{
     using(var conn=StockOpen(true)){
@@ -92,7 +101,12 @@ namespace ArmazemGratidao {
       string term=stockSearch.Text.Trim();
       cmd.Parameters.AddWithValue("@term",term);cmd.Parameters.AddWithValue("@like","%"+term+"%");
       using(var adapter=new SQLiteDataAdapter(cmd)){
-       var table=new DataTable();adapter.Fill(table);grid.DataSource=table;
+       var table=new DataTable();adapter.Fill(table);
+       var codes=SortedProductCodes(conn);
+       table.Columns.Add("Código",typeof(int)).SetOrdinal(0);
+       foreach(DataRow row in table.Rows){int code;if(codes.TryGetValue(Convert.ToInt64(row["Código interno"]),out code))row["Código"]=code;else row["Código"]=DBNull.Value;}
+       grid.DataSource=table;
+       if(grid.Columns.Contains("Código interno"))grid.Columns["Código interno"].Visible=false;
        foreach(DataGridViewColumn col in grid.Columns){
         col.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
         if(col.Name=="Produto"){col.FillWeight=260;col.MinimumWidth=230;}
@@ -314,19 +328,22 @@ namespace ArmazemGratidao {
    try{
     using(var conn=StockOpen(true)){
      var clients=ReadClients(conn);
-     var dt=new DataTable();dt.Columns.Add("Código",typeof(long));dt.Columns.Add("Cliente / Razão social");dt.Columns.Add("CPF / CNPJ");dt.Columns.Add("Telefone");dt.Columns.Add("Origem");
+     var dt=new DataTable();dt.Columns.Add("Código",typeof(int));dt.Columns.Add("ID interno",typeof(long));dt.Columns.Add("Cliente / Razão social");dt.Columns.Add("CPF / CNPJ");dt.Columns.Add("Telefone");dt.Columns.Add("Origem");
      var ids=new Dictionary<string,long>(StringComparer.OrdinalIgnoreCase);
      if(HasTable(conn,"customers")&&Columns(conn,"customers").Contains("id")){
       using(var cmd=new SQLiteCommand("SELECT id,name FROM customers",conn))
       using(var reader=cmd.ExecuteReader())while(reader.Read()){string name=Convert.ToString(reader["name"]).Trim();if(name.Length>0&&!ids.ContainsKey(name))ids.Add(name,Convert.ToInt64(reader["id"]));}
      }
      string term=clientSearch.Text.Trim(),number=OnlyDigits(term);
+     int alphabeticalNumber=0;
      foreach(var client in clients){
+      alphabeticalNumber++;
       if(term.Length>0&&client.Item1.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&client.Item2.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&(number.Length==0||OnlyDigits(client.Item3).IndexOf(number,StringComparison.Ordinal)<0))continue;
       long id;bool registered=ids.TryGetValue(client.Item1,out id);
-      dt.Rows.Add(registered?(object)id:DBNull.Value,client.Item1,client.Item3,client.Item2,registered?"Cadastrado":"Vendas / Fiado");
+      dt.Rows.Add(alphabeticalNumber,registered?(object)id:DBNull.Value,client.Item1,client.Item3,client.Item2,registered?"Cadastrado":"Vendas / Fiado");
      }
      grid.DataSource=dt;
+     if(grid.Columns.Contains("ID interno"))grid.Columns["ID interno"].Visible=false;
      if(grid.Columns.Contains("Cliente / Razão social")){grid.Columns["Cliente / Razão social"].MinimumWidth=240;grid.Columns["Cliente / Razão social"].FillWeight=220;}
      status.Text="CLIENTES: "+dt.Rows.Count+" exibidos. Cadastrar, editar, importar CPF/CNPJ. Vendas e Fiado preservados.";
     }
@@ -339,7 +356,7 @@ namespace ArmazemGratidao {
     oldName=Convert.ToString(grid.CurrentRow.Cells["Cliente / Razão social"].Value);
     oldPhone=Convert.ToString(grid.CurrentRow.Cells["Telefone"].Value);
     oldDoc=Convert.ToString(grid.CurrentRow.Cells["CPF / CNPJ"].Value);
-    object value=grid.CurrentRow.Cells["Código"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
+    object value=grid.CurrentRow.Cells["ID interno"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
    }
    using(var form=new Form{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=5,Padding=new Padding(18)};
