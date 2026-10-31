@@ -305,63 +305,155 @@ namespace ArmazemGratidao {
    }catch(Exception ex){return SafeJson(new{ok=false,erro=ex.Message});}
   }
   static string MobilePage(){return @"<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>Armazém Gratidão - Estoque</title><style>
-*{box-sizing:border-box}body{margin:0;background:#e8f2ff;color:#17365f;font-family:Arial,sans-serif}.box{max-width:550px;margin:auto;padding:15px}
-h1{margin:12px 0;font-size:24px;color:#134e9f}.card{background:white;border-radius:15px;padding:18px;margin:12px 0;box-shadow:0 2px 9px #c8d6e7}
-label{display:block;font-weight:bold;margin:12px 0 6px}input,textarea,select,button{width:100%;font:inherit;font-size:18px;padding:13px;border-radius:9px;border:1px solid #a7b5c6}
-button{border:0;background:#1453a3;color:white;font-weight:bold;margin-top:13px}button.red{background:#bd243d}
-.item{padding:12px;border-bottom:1px solid #dbe5f1;cursor:pointer}.item b{display:block}.item small{display:block;margin-top:4px}.selected{background:#e1efff}
-.info{padding:12px;border-radius:8px;background:#f2f7fd;margin-top:10px}.warn{color:#9f1c31;font-weight:bold}.ok{color:#14613a;font-weight:bold}
-p{line-height:1.5}</style></head><body><main class='box'><h1>Armazém Gratidão</h1><p>Entrada de estoque pelo celular • mesma rede Wi-Fi</p>
-<section class='card'><label>Buscar nome ou código de barras</label><input id='search' placeholder='Digite ou use o microfone do teclado' autocomplete='off'>
-<button id='find'>Buscar produto</button><div id='results'></div></section>
-<section class='card'><h3>Registrar entrada</h3><div id='chosen' class='info'>Selecione um produto acima.</div>
+<title>Armazém Gratidão - Coletor</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#e8f2ff;color:#17365f;font-family:Arial,sans-serif}
+.box{max-width:600px;margin:auto;padding:13px}h1{font-size:24px;color:#134e9f;margin:12px 0}h2{font-size:20px}
+.card{background:white;border-radius:15px;padding:17px;margin:12px 0;box-shadow:0 2px 9px #c8d6e7}
+label{display:block;font-weight:bold;margin:12px 0 6px}
+input,textarea,button{width:100%;font:inherit;font-size:18px;padding:12px;border-radius:9px;border:1px solid #a7b5c6}
+button{border:0;background:#1453a3;color:white;font-weight:bold;margin-top:12px;cursor:pointer}
+button.red{background:#bd243d}button.secondary{background:#59738f}
+nav{display:flex;gap:8px}nav button{font-size:15px}
+.item{padding:12px;border-bottom:1px solid #dbe5f1;cursor:pointer}.item b,.item small{display:block}.item small{margin-top:4px}
+.info{padding:12px;border-radius:8px;background:#f2f7fd;margin-top:10px;white-space:pre-wrap}
+.warn{color:#9f1c31;font-weight:bold}.ok{color:#14613a;font-weight:bold}.hidden{display:none}
+p{line-height:1.5}.hint{font-size:13px;color:#455a76}
+</style></head><body><main class='box'>
+<h1>Armazém Gratidão</h1><p>Coletor de produtos pelo celular • mesma rede Wi-Fi</p>
+<nav><button id='tabRegister'>Cadastrar produto</button><button id='tabEntry' class='secondary'>Entrada de estoque</button></nav>
+<section class='card' id='registerPanel'>
+<h2>Cadastrar com código de barras</h2>
+<label>Código de barras</label><input id='barcode' inputmode='numeric' autocomplete='off' placeholder='Leia com câmera ou digite'>
+<input id='photo' class='hidden' type='file' accept='image/*' capture='environment'>
+<button id='scan'>Bipar com a câmera</button>
+<p class='hint'>O celular abre a câmera para fotografar o código. Na primeira utilização, a leitura pode precisar de internet para carregar o leitor. Se não reconhecer, digite os números.</p>
+<button id='check' class='secondary'>Conferir código no cadastro</button>
+<div id='barcodeStatus' class='info'>Aponte para o código antes de cadastrar.</div>
+<label>Descrição do produto</label><input id='productName' maxlength='180' placeholder='Ex.: Arroz Camil 5 kg'>
+<label>Custo de compra (R$)</label><input id='cost' type='number' inputmode='decimal' step='0.01' min='0' placeholder='Ex.: 19.50'>
+<label>Preço de venda (R$)</label><input id='price' type='number' inputmode='decimal' step='0.01' min='0' placeholder='Ex.: 24.99'>
+<label>Quantidade inicial</label><input id='initialQty' type='number' inputmode='decimal' step='0.001' min='0' value='0'>
+<button id='register' class='red'>Conferir e salvar produto</button><p id='registerMsg'></p>
+</section>
+<section class='card hidden' id='entryPanel'>
+<h2>Entrada de produto existente</h2>
+<label>Buscar nome ou código</label><input id='search' placeholder='Digite o nome ou código'>
+<button id='find'>Buscar produto</button><div id='results'></div>
+<div id='chosen' class='info'>Selecione um produto acima.</div>
 <label>Data da entrada</label><input id='date' type='date'>
-<label>Quantidade a adicionar</label><input id='qty' type='number' min='0.001' step='0.001' inputmode='decimal' placeholder='Ex.: 12'>
+<label>Quantidade a adicionar</label><input id='qty' type='number' min='0.001' step='0.001' inputmode='decimal'>
 <label>Descrição do recebimento</label><textarea id='reason' rows='3' placeholder='Ex.: Mercadoria recebida do fornecedor'></textarea>
 <div id='after' class='info'>Quantidade após entrada: —</div>
 <button id='save' class='red'>Conferir e salvar entrada</button><p id='msg'></p>
-</section><p><small>Use o microfone do teclado Android para ditar nomes e quantidades. Não é necessário microfone no computador. O estoque somente será gravado após confirmação.</small></p></main>
+</section>
+<p class='hint'>O cadastro vai para a mesma tabela usada por Produtos e Estoque no computador. As quantidades existentes nunca serão substituídas por um novo cadastro.</p>
+</main>
+<script src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'></script>
 <script>
 (function(){
 const token=new URLSearchParams(location.search).get('chave')||'';
 const $=id=>document.getElementById(id);
-let selected=null,locked=false;
-$('date').value=new Date().toLocaleDateString('sv-SE');
 const fmt=n=>Number(n).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3});
-function err(message,ok){$('msg').textContent=message;$('msg').className=ok?'ok':'warn'}
-function preview(){if(selected){const q=parseFloat($('qty').value)||0;$('after').textContent='Quantidade após entrada: '+fmt(Number(selected.quantidade)+q)}}
+let selected=null,locked=false,barcodeChecked='';
+$('date').value=new Date().toLocaleDateString('sv-SE');
+function notice(id,message,ok){$(id).textContent=message;$(id).className=ok?'ok':'warn'}
+function tab(registered){$('registerPanel').classList.toggle('hidden',!registered);$('entryPanel').classList.toggle('hidden',registered)}
+$('tabRegister').onclick=()=>tab(true);$('tabEntry').onclick=()=>tab(false);
+function preview(){if(selected){let qty=parseFloat($('qty').value)||0;$('after').textContent='Quantidade após entrada: '+fmt(Number(selected.quantidade)+qty)}}
 $('qty').addEventListener('input',preview);
+function requestId(){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2)}
+async function checkBarcode(){
+ const code=$('barcode').value.trim();barcodeChecked='';
+ if(!code){$('barcodeStatus').textContent='Leia ou informe um código.';return}
+ try{
+ const response=await fetch('/api/codigo?chave='+encodeURIComponent(token)+'&codigo='+encodeURIComponent(code),{cache:'no-store'});
+ const d=await response.json();if(d.erro)throw Error(d.erro);
+ barcodeChecked=code;
+ if(d.existe){
+ $('barcodeStatus').textContent='JÁ CADASTRADO: '+d.nome+' | Estoque: '+fmt(d.quantidade)+'. Use Entrada de estoque, não cadastre novamente.';
+ notice('registerMsg','O código já existe. Nenhum produto foi criado.',false);
+ }else{$('barcodeStatus').textContent='Código disponível para novo cadastro: '+code;notice('registerMsg','',false)}
+ }catch(e){$('barcodeStatus').textContent='Não foi possível conferir: '+e.message}
+}
+$('barcode').addEventListener('input',()=>{barcodeChecked='';$('barcodeStatus').textContent='Confira o código antes de salvar.'});
+$('check').onclick=checkBarcode;
+$('scan').onclick=()=>{$('photo').value='';$('photo').click()};
+$('photo').addEventListener('change',async function(){
+ const file=this.files&&this.files[0];if(!file)return;
+ $('barcodeStatus').textContent='Analisando foto do código...';
+ const url=URL.createObjectURL(file);
+ try{
+ const img=new Image();img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+ let decoded='';
+ if(window.BarcodeDetector){
+ try{
+ const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','itf']});
+ const hits=await detector.detect(img);if(hits.length)decoded=hits[0].rawValue;
+ }catch(e){}
+ }
+ if(!decoded&&window.ZXing){
+ const reader=new ZXing.BrowserMultiFormatReader();
+ const result=await reader.decodeFromImageElement(img);decoded=result.getText();
+ }
+ if(!decoded)throw Error('Não foi possível ler o código nesta foto. Aproxime, ilumine e fotografe de novo.');
+ $('barcode').value=decoded;notice('registerMsg','Código lido pela câmera: '+decoded,true);await checkBarcode();
+ }catch(e){
+ $('barcodeStatus').textContent='Falha na leitura: '+e.message;
+ notice('registerMsg','Tente outra foto ou informe o código manualmente. A câmera pode funcionar sem HTTPS, mas a leitura precisa que o leitor carregue.',false);
+ }finally{URL.revokeObjectURL(url)}
+});
+$('register').onclick=async function(){
+ if(locked)return;
+ const code=$('barcode').value.trim(),name=$('productName').value.trim();
+ const cost=Number($('cost').value),price=Number($('price').value),qty=Number($('initialQty').value);
+ if(!/^[0-9]{8,32}$/.test(code)){notice('registerMsg','Informe um código numérico válido (8 a 32 dígitos).',false);return}
+ if(!name||name.length<3||!$('cost').value||!$('price').value||!$('initialQty').value||![cost,price,qty].every(Number.isFinite)||Math.min(cost,price,qty)<0){
+ notice('registerMsg','Confira descrição, custo, preço e quantidade inicial.',false);return}
+ if(barcodeChecked!==code){notice('registerMsg','Clique em Conferir código no cadastro antes de salvar.',false);return}
+ if($('barcodeStatus').textContent.startsWith('JÁ CADASTRADO')){notice('registerMsg','Produto existente. Use Entrada de estoque.',false);return}
+ if(!confirm('Cadastrar '+name+'?\nCódigo: '+code+'\nCusto: R$ '+cost.toFixed(2)+'\nPreço: R$ '+price.toFixed(2)+'\nQuantidade inicial: '+fmt(qty)))return;
+ locked=true;$('register').disabled=true;
+ try{
+ const response=await fetch('/api/cadastrar',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},body:JSON.stringify({codigo:code,nome:name,custo:String(cost),preco:String(price),quantidade:String(qty),operacao:requestId()})});
+ const data=await response.json();
+ if(!data.ok)throw Error(data.erro||'Erro ao salvar cadastro.');
+ notice('registerMsg','CADASTRADO! '+data.nome+' • Código: '+data.codigo+' • Quantidade: '+fmt(data.quantidade),true);
+ $('barcode').value='';$('productName').value='';$('cost').value='';$('price').value='';$('initialQty').value='0';barcodeChecked='';
+ $('barcodeStatus').textContent='Pronto para bipar o próximo produto.';
+ }catch(e){notice('registerMsg','Cadastro não concluído: '+e.message,false)}
+ finally{locked=false;$('register').disabled=false}
+};
 $('find').onclick=async function(){
  const q=$('search').value.trim();if(!q)return;
- try{const r=await fetch('/api/buscar?chave='+encodeURIComponent(token)+'&q='+encodeURIComponent(q),{cache:'no-store'});const d=await r.json();
- $('results').textContent='';
- if(!d.produtos||!d.produtos.length){$('results').textContent='Produto não encontrado.';return;}
- for(const p of d.produtos){
- const el=document.createElement('div');el.className='item';
- const name=document.createElement('b');name.textContent=p.nome;el.appendChild(name);
+ try{
+ const response=await fetch('/api/buscar?chave='+encodeURIComponent(token)+'&q='+encodeURIComponent(q),{cache:'no-store'});
+ const data=await response.json();$('results').textContent='';
+ if(!data.produtos||!data.produtos.length){$('results').textContent='Produto não encontrado.';return}
+ for(const p of data.produtos){
+ const el=document.createElement('div');el.className='item';const name=document.createElement('b');name.textContent=p.nome;el.appendChild(name);
  const info=document.createElement('small');info.textContent='Código: '+p.codigo+' • Estoque: '+fmt(p.quantidade);el.appendChild(info);
- el.onclick=function(){selected=p;$('chosen').textContent=p.nome+' • Estoque atual: '+fmt(p.quantidade);preview();err('',false);};
+ el.onclick=()=>{selected=p;$('chosen').textContent=p.nome+' • Estoque atual: '+fmt(p.quantidade);preview();notice('msg','',false)};
  $('results').appendChild(el);
  }
- }catch(e){err('Falha de conexão com o computador. '+e.message,false);}
+ }catch(e){notice('msg','Falha na conexão: '+e.message,false)}
 };
 $('search').addEventListener('keydown',e=>{if(e.key==='Enter')$('find').click()});
 $('save').onclick=async function(){
- if(locked)return;
- if(!selected){err('Selecione o produto.',false);return;}
- const q=parseFloat($('qty').value),description=$('reason').value.trim(),date=$('date').value;
- if(!isFinite(q)||q<=0||!description||!date){err('Informe data, quantidade positiva e descrição.',false);return;}
- if(!confirm('Confirmar a entrada de '+fmt(q)+' de '+selected.nome+'?\nEstoque atual: '+fmt(selected.quantidade)+'\nNovo: '+fmt(Number(selected.quantidade)+q)))return;
- locked=true;$('save').disabled=true;err('Salvando e registrando auditoria...',false);
- const id=(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2));
- try{const response=await fetch('/api/entrada',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},body:JSON.stringify({produto:selected.id,quantidade:String(q),descricao:description,data:date,operacao:id})});
- const d=await response.json();if(!d.ok){err(d.erro||'Não foi possível salvar.',false);return;}
- selected.quantidade=d.atual;preview();$('qty').value='';$('reason').value='';
- err('Salvo! '+d.produto+' | Anterior: '+fmt(d.anterior)+' + Entrada: '+fmt(d.adicionado)+' = '+fmt(d.atual),true);
+ if(locked)return;if(!selected){notice('msg','Selecione o produto.',false);return}
+ const qty=parseFloat($('qty').value),description=$('reason').value.trim(),date=$('date').value;
+ if(!isFinite(qty)||qty<=0||!description||!date){notice('msg','Informe data, quantidade e descrição.',false);return}
+ if(!confirm('Entrada de '+fmt(qty)+' de '+selected.nome+'?\nAnterior: '+fmt(selected.quantidade)+'\nNovo: '+fmt(Number(selected.quantidade)+qty)))return;
+ locked=true;$('save').disabled=true;notice('msg','Salvando com auditoria...',false);
+ try{
+ const response=await fetch('/api/entrada',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},
+ body:JSON.stringify({produto:selected.id,quantidade:String(qty),descricao:description,data:date,operacao:requestId()})});
+ const data=await response.json();if(!data.ok)throw Error(data.erro||'Erro ao salvar.');
+ selected.quantidade=data.atual;$('qty').value='';$('reason').value='';preview();
  $('chosen').textContent=selected.nome+' • Estoque atual: '+fmt(selected.quantidade);
- }catch(e){err('Conexão interrompida. Antes de tentar novamente confira no computador se a entrada foi gravada, para evitar duplicação.',false)}
- finally{locked=false;$('save').disabled=false;}
+ notice('msg','Salvo! '+data.produto+' | Anterior: '+fmt(data.anterior)+' + Entrada: '+fmt(data.adicionado)+' = '+fmt(data.atual),true);
+ }catch(e){notice('msg','Verifique no computador antes de repetir: '+e.message,false)}
+ finally{locked=false;$('save').disabled=false}
 };
 })();
 </script></body></html>";}
