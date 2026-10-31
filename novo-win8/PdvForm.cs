@@ -295,6 +295,21 @@ namespace ArmazemGratidao {
     using(var c=Open()){
      ValidateSaleSchema(c,method);
      using(var tx=c.BeginTransaction()) {
+     // Autorizar somente a baixa da venda, dentro da mesma transação dos itens e da auditoria.
+     // A proteção original do estoque é restaurada antes do COMMIT.
+     bool hasStockContext=false;int previousAuthorization=0;string previousOperation="";
+     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='runtime_operation_context'",c,tx))
+      hasStockContext=Convert.ToInt32(check.ExecuteScalar())>0;
+     if(hasStockContext){
+      using(var get=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",c,tx))
+      using(var reader=get.ExecuteReader()){
+       if(!reader.Read())throw new Exception("Proteção de estoque inconsistente: contexto de autorização ausente. Venda não gravada.");
+       previousAuthorization=Convert.ToInt32(reader["authorized"]);
+       previousOperation=Convert.ToString(reader["operation"]);
+      }
+      using(var authorize=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='VENDA_PDV_AUDITADA' WHERE id=1",c,tx))
+       if(authorize.ExecuteNonQuery()!=1)throw new Exception("Não foi possível autorizar a baixa de estoque da venda.");
+     }
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,datetime('now','localtime')); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
@@ -316,6 +331,13 @@ namespace ArmazemGratidao {
       var payments=method=="DIVIDIDO"?split:new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
       foreach(var part in payments)using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){
        q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",part.Key);q.Parameters.AddWithValue("@total",part.Value);q.ExecuteNonQuery();
+      }
+     }
+     if(hasStockContext){
+      using(var restore=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",c,tx)){
+       restore.Parameters.AddWithValue("@auth",previousAuthorization);
+       restore.Parameters.AddWithValue("@operation",previousOperation);
+       if(restore.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar a proteção do estoque. Venda revertida.");
       }
      }
      tx.Commit();
