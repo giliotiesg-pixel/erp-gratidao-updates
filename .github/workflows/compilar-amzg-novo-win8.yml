@@ -80,6 +80,38 @@ jobs:
           if (!$dll) { throw "SQLite.Interop.dll x64 nao encontrado" }
           New-Item -ItemType Directory -Force novo-win8/bin/x64/Release/x64 | Out-Null
           Copy-Item $dll.FullName novo-win8/bin/x64/Release/x64/SQLite.Interop.dll
+      - name: Testar backup automatico antes do instalador
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "teste-backup-amzg"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item "novo-win8/bin/x64/Release/System.Data.SQLite.dll" $dir
+          Copy-Item "novo-win8/bin/x64/Release/x64/SQLite.Interop.dll" $dir
+          Copy-Item "novo-win8/backup-antes-instalacao.ps1" $dir
+          $db = Join-Path $dir "armazem-gratidao.db"
+          Add-Type -Path (Join-Path $dir "System.Data.SQLite.dll")
+          $source = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db")
+          try {
+            $source.Open()
+            $command = $source.CreateCommand()
+            $command.CommandText = "CREATE TABLE products(id INTEGER PRIMARY KEY,name TEXT); INSERT INTO products(name) VALUES('TESTE PROTECAO');"
+            $command.ExecuteNonQuery() | Out-Null
+            $command.Dispose()
+          } finally {
+            $source.Dispose()
+          }
+          & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $dir "backup-antes-instalacao.ps1") -Database $db -TargetDirectory $dir
+          if ($LASTEXITCODE -ne 0) { throw "O backup previo da instalacao falhou" }
+          $copies = @(Get-ChildItem -Path $dir -Filter "armazem-gratidao-antes-atualizacao-*.db")
+          if ($copies.Count -ne 1 -or $copies[0].Length -le 0) { throw "Backup nao encontrado ou vazio" }
+          $test = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$($copies[0].FullName);Read Only=True;FailIfMissing=True")
+          try {
+            $test.Open()
+            $check = $test.CreateCommand()
+            $check.CommandText = "SELECT name FROM products WHERE id=1"
+            if ($check.ExecuteScalar() -ne "TESTE PROTECAO") { throw "O backup nao preservou os dados" }
+            $check.Dispose()
+          } finally { $test.Dispose() }
       - name: Instalar Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
@@ -107,5 +139,5 @@ jobs:
           if ($files.Count -eq 0) { throw "Nenhum instalador EXE foi gerado" }
           $tag = "amzg-novo-win8-build-${{ github.run_number }}"
           $paths = @($files | ForEach-Object { $_.FullName })
-          gh release create $tag @paths --title "Armazem Gratidao Novo - compilacao ${{ github.run_number }}" --notes "Instalador Windows x64 gerado automaticamente. Antes de instalar, faca backup do banco de dados. Importacao sobre banco existente bloqueada para proteger vendas e fiado." --target "${{ github.sha }}" --latest
+          gh release create $tag @paths --title "Armazem Gratidao Novo - compilacao ${{ github.run_number }}" --notes "Instalador Windows x64 gerado automaticamente. O instalador executa backup SQLite automatico antes de atualizar e bloqueia a instalacao se a copia nao for validada. Os dados de vendas, produtos, estoque e fiado sao preservados." --target "${{ github.sha }}" --latest
           if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador no Releases" }
