@@ -507,70 +507,151 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Nao foi possivel gerar o cupom");}
   }
-  void PayAll(){
-   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
-   if(customer=="SEM CLIENTE"){MessageBox.Show("Identifique o cliente antes de receber todas as vendas.");return;}
+  // A venda marcada prevalece sobre a linha destacada; sem marcação, vale a linha clicada.
+  System.Collections.Generic.List<long> SelectedPendingSaleIds(){
+   var ids=new System.Collections.Generic.List<long>();
+   foreach(DataGridViewRow row in openSales.Rows){
+    if(row.IsNewRow||row.Cells["venda"].Value==null||row.Cells["venda"].Value==DBNull.Value)continue;
+    if(Convert.ToBoolean(row.Cells["marcar"].Value??false))ids.Add(Convert.ToInt64(row.Cells["venda"].Value));
+   }
+   if(ids.Count==0&&openSales.CurrentRow!=null&&!openSales.CurrentRow.IsNewRow&&openSales.Columns.Contains("venda")){
+    object value=openSales.CurrentRow.Cells["venda"].Value;
+    if(value!=null&&value!=DBNull.Value)ids.Add(Convert.ToInt64(value));
+   }
+   return ids;
+  }
+  decimal VisibleOpenBalance(){
+   decimal total=0;
+   foreach(DataGridViewRow row in openSales.Rows)
+    if(!row.IsNewRow&&row.Cells["saldo"].Value!=null&&row.Cells["saldo"].Value!=DBNull.Value)
+     total+=Math.Max(0,Convert.ToDecimal(row.Cells["saldo"].Value));
+   return total;
+  }
+  void SetPaymentAmount(decimal value){
+   value=Math.Max(0,Math.Min(amount.Maximum,value));
+   amount.Value=value;
+  }
+  void UpdatePaymentSelection(bool fill){
+   if(refreshingClientSales)return;
+   if(saleTabs!=null&&saleTabs.SelectedIndex!=0)return;
    try{
-    DataTable sales=Query("SELECT s.id AS venda,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.id","@name",customer);
-    if(sales.Rows.Count==0){MessageBox.Show("Este cliente não possui vendas em aberto.");return;}
-    decimal total=0;foreach(DataRow row in sales.Rows)total+=Convert.ToDecimal(row["saldo"]);
-    string paymentMethod=Convert.ToString(method.SelectedItem);
-    if(MessageBox.Show("Cliente: "+customer+"\\nVendas em aberto: "+sales.Rows.Count+"\\nTotal a receber: R$ "+total.ToString("N2")+"\\nForma: "+paymentMethod+"\\n\\nConfirmar recebimento integral?","Conferir baixa de fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-    using(var c=Open(false)){
-     // Backup antes da transação. Nenhuma venda ou estoque será reescrito.
-     string backup=db+".antes-fiado-total-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
-     using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){copy.Open();c.BackupDatabase(copy,"main","main",-1,null,0);}
-     using(var tx=c.BeginTransaction()){
-      using(var q=new SQLiteCommand("SELECT s.id,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.id",c,tx)){
-       q.Parameters.AddWithValue("@name",customer);
-       var pending=new DataTable();using(var adapter=new SQLiteDataAdapter(q))adapter.Fill(pending);
-       if(pending.Rows.Count!=sales.Rows.Count)throw new Exception("As vendas foram alteradas. Atualize a tela.");
-       decimal actualTotal=0;foreach(DataRow row in pending.Rows)actualTotal+=Convert.ToDecimal(row["saldo"]);
-       if(Math.Abs(actualTotal-total)>0.005M)throw new Exception("O saldo mudou. Atualize a tela.");
-       using(var insert=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),'Quitação integral por cliente no novo Fiado')",c,tx)){
-        foreach(DataRow row in pending.Rows){
-         insert.Parameters.Clear();insert.Parameters.AddWithValue("@sale",Convert.ToInt64(row["id"]));
-         insert.Parameters.AddWithValue("@amount",Convert.ToDecimal(row["saldo"]));
-         insert.Parameters.AddWithValue("@method",paymentMethod);
-         insert.ExecuteNonQuery();
-        }
+    var ids=SelectedPendingSaleIds();
+    decimal selectedTotal=0;
+    foreach(DataGridViewRow row in openSales.Rows){
+     if(row.IsNewRow||row.Cells["venda"].Value==null||row.Cells["saldo"].Value==null)continue;
+     if(ids.Contains(Convert.ToInt64(row.Cells["venda"].Value)))selectedTotal+=Math.Max(0,Convert.ToDecimal(row.Cells["saldo"].Value));
+    }
+    receivedBalance.Text="Saldo selecionado: R$ "+selectedTotal.ToString("N2")+"  |  Total em aberto: R$ "+VisibleOpenBalance().ToString("N2");
+    if(fill)SetPaymentAmount(selectedTotal);
+   }catch(Exception ex){receivedBalance.Text="Selecione uma venda para receber. "+ex.Message;}
+  }
+  void FillAllBalances(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   if(saleTabs!=null&&saleTabs.SelectedIndex!=0){MessageBox.Show("Abra Fiado atual - em aberto.");return;}
+   SetPaymentAmount(VisibleOpenBalance());
+   receivedBalance.Text="Todas as vendas: R$ "+VisibleOpenBalance().ToString("N2")+" (pode diminuir o valor)";
+   amount.Focus();
+   amount.Select(0,amount.Text.Length);
+  }
+  // Baixa parcial distribuída pelas vendas mais antigas. Tudo na mesma transação,
+  // sem modificar os itens da venda, valores originais ou o estoque.
+  void ReceivePayments(System.Collections.Generic.List<long> ids,decimal requested,string scope){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   if(ids==null||ids.Count==0){MessageBox.Show("Selecione uma venda em aberto.");return;}
+   if(requested<=0){MessageBox.Show("Informe um valor recebido maior que zero.");return;}
+   string payMethod=Convert.ToString(method.SelectedItem);
+   if(string.IsNullOrWhiteSpace(payMethod)){MessageBox.Show("Selecione a forma de pagamento.");return;}
+   try{
+    var balances=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<long,decimal>>();
+    using(var conn=Open(true)){
+     foreach(long id in ids){
+      using(var cmd=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer",conn)){
+       cmd.Parameters.AddWithValue("@id",id);cmd.Parameters.AddWithValue("@customer",customer);
+       object value=cmd.ExecuteScalar();
+       if(value==null||value==DBNull.Value)throw new Exception("Venda #"+id+" não pertence ao cliente ou foi removida.");
+       decimal saldo=Convert.ToDecimal(value);
+       if(saldo>0.005M)balances.Add(new System.Collections.Generic.KeyValuePair<long,decimal>(id,saldo));
+      }
+     }
+    }
+    if(balances.Count==0){MessageBox.Show("Nenhuma venda em aberto para dar baixa.");return;}
+    decimal due=0;
+    foreach(var row in balances)due+=row.Value;
+    if(requested>due+0.005M){MessageBox.Show("O recebido não pode ultrapassar o saldo em aberto de R$ "+due.ToString("N2")+".");return;}
+    decimal planned=0;int affected=0;
+    foreach(var row in balances){
+     decimal toPay=Math.Min(row.Value,Math.Max(0,requested-planned));
+     if(toPay<=0)break;
+     planned+=toPay;affected++;
+    }
+    string left="R$ "+Math.Max(0,due-requested).ToString("N2");
+    string message="Cliente: "+customer+Environment.NewLine+"Vendas consideradas: "+balances.Count+
+     Environment.NewLine+"Saldo em aberto: R$ "+due.ToString("N2")+
+     Environment.NewLine+"Receber agora: R$ "+requested.ToString("N2")+
+     Environment.NewLine+"Forma: "+payMethod+
+     Environment.NewLine+"Saldo que ficará em aberto: "+left+
+     Environment.NewLine+"Vendas com baixa neste recebimento: "+affected+
+     Environment.NewLine+Environment.NewLine+"Confirmar recebimento "+scope+"?";
+    if(MessageBox.Show(message,"Conferir pagamento do Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+    using(var conn=Open(false)){
+     string backup=db+".antes-receber-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+      copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);
+     }
+     using(var tx=conn.BeginTransaction()){
+      decimal remaining=requested;
+      foreach(var row in balances){
+       using(var check=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer",conn,tx)){
+        check.Parameters.AddWithValue("@id",row.Key);check.Parameters.AddWithValue("@customer",customer);
+        object value=check.ExecuteScalar();
+        if(value==null||value==DBNull.Value||Math.Abs(Convert.ToDecimal(value)-row.Value)>0.005M)
+         throw new Exception("O saldo da venda #"+row.Key+" mudou. Atualize e confira antes de receber.");
        }
       }
+      foreach(var row in balances){
+       if(remaining<=0.005M)break;
+       decimal received=Math.Min(row.Value,remaining);
+       using(var insert=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),@note)",conn,tx)){
+        insert.Parameters.AddWithValue("@sale",row.Key);
+        insert.Parameters.AddWithValue("@amount",received);
+        insert.Parameters.AddWithValue("@method",payMethod);
+        insert.Parameters.AddWithValue("@note","Recebimento "+scope+" - baixa parcial ou total auditada no Fiado");
+        if(insert.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar pagamento da venda #"+row.Key);
+       }
+       remaining-=received;
+      }
+      if(Math.Abs(remaining)>0.005M)throw new Exception("Diferença no valor distribuído. Recebimento cancelado.");
       tx.Commit();
      }
     }
-    amount.Value=0;LoadClients();SelectClient(customer);
-    MessageBox.Show("Recebimento confirmado: R$ "+total.ToString("N2")+"\\nVendas quitadas: "+sales.Rows.Count);
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Recebimento não realizado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    SetPaymentAmount(0);
+    LoadClients();
+    SelectClient(customer);
+    MessageBox.Show("Recebido: R$ "+requested.ToString("N2")+" ("+payMethod+")."+
+     Environment.NewLine+"Saldo restante nas vendas consideradas: "+left+
+     Environment.NewLine+"Pagamentos registrados por venda no histórico.","Fiado");
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Baixa não realizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void PayAll(){
+   if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
+   if(saleTabs!=null&&saleTabs.SelectedIndex!=0){MessageBox.Show("Abra Fiado atual - em aberto.");return;}
+   var rows=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<long,DateTime>>();
+   foreach(DataGridViewRow row in openSales.Rows){
+    if(row.IsNewRow||row.Cells["venda"].Value==null)continue;
+    DateTime time;
+    if(!DateTime.TryParse(Convert.ToString(row.Cells["data"].Value),out time))time=DateTime.MinValue;
+    rows.Add(new System.Collections.Generic.KeyValuePair<long,DateTime>(Convert.ToInt64(row.Cells["venda"].Value),time));
+   }
+   rows.Sort((a,b)=>{int cmp=a.Value.CompareTo(b.Value);return cmp!=0?cmp:a.Key.CompareTo(b.Key);});
+   var ids=new System.Collections.Generic.List<long>();
+   foreach(var row in rows)ids.Add(row.Key);
+   ReceivePayments(ids,amount.Value,"de todas as vendas (mais antigas primeiro)");
   }
   void Pay(){
-   if(saleTabs!=null && saleTabs.SelectedIndex!=0){MessageBox.Show("Selecione uma venda na aba Fiado atual - em aberto.");return;}
-   if(openSales.CurrentRow==null){MessageBox.Show("Selecione uma venda em aberto.");return;}
-   if(amount.Value<=0){MessageBox.Show("Informe o valor recebido.");return;}
-   long saleId=Convert.ToInt64(openSales.CurrentRow.Cells["venda"].Value);
-   decimal balance=Convert.ToDecimal(openSales.CurrentRow.Cells["saldo"].Value);
-   if(amount.Value>balance+0.005M){MessageBox.Show("O pagamento nao pode ultrapassar o saldo da venda.");return;}
-   if(MessageBox.Show("Registrar recebimento de R$ "+amount.Value.ToString("N2")+" na venda #"+saleId+"?","Confirmar baixa",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
-   try {
-    var backup=db+".antes-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
-    using(var source=Open(true))using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup,FailIfMissing=false}.ToString())){copy.Open();source.BackupDatabase(copy,"main","main",-1,null,0);}
-    using(var c=Open())using(var tx=c.BeginTransaction()) {
-     decimal actual;
-     using(var q=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name",c,tx)) {
-      q.Parameters.AddWithValue("@id",saleId);q.Parameters.AddWithValue("@name",customer);
-      var obj=q.ExecuteScalar();if(obj==null||obj==DBNull.Value)throw new Exception("Venda ou cliente nao encontrado.");
-      actual=Convert.ToDecimal(obj);
-     }
-     if(amount.Value>actual+0.005M||actual<=0)throw new Exception("Saldo alterado. Atualize a tela antes de pagar.");
-     using(var q=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),'Recebimento registrado no novo Fiado')",c,tx)) {
-      q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@amount",amount.Value);q.Parameters.AddWithValue("@method",Convert.ToString(method.SelectedItem));q.ExecuteNonQuery();
-     }
-     // No banco original 12.1.6, a quitacao e calculada pelos registros
-     // de credit_payments. Nao alterar colunas inexistentes em sales.
-     tx.Commit();
-    }
-    amount.Value=0;SelectClient(customer);MessageBox.Show("Pagamento registrado. Saldo atualizado.");LoadClients();
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Baixa nao realizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   if(saleTabs!=null&&saleTabs.SelectedIndex!=0){MessageBox.Show("Selecione Fiado atual - em aberto.");return;}
+   var ids=SelectedPendingSaleIds();
+   ReceivePayments(ids,amount.Value,ids.Count>1?"das vendas selecionadas":"da venda selecionada");
   }
+
  }
 }
