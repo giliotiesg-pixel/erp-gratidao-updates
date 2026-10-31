@@ -45,12 +45,14 @@ namespace ArmazemGratidao {
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
    customer.Text="Consumidor";
-   var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-   chooseCustomer.Click+=(s,e)=>{LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
-   var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
+   // Uma unica caixa para Consumidor ou cliente cadastrado.
+   // Permite digitar o nome para manter o cadastro rapido na finalizacao do Fiado.
+   customer.Width=265;
    customer.Enter+=(s,e)=>LoadCustomerOptions();
+   customer.DropDown+=(s,e)=>LoadCustomerOptions();
    payment.SelectedIndexChanged+=(s,e)=>{if(Convert.ToString(payment.SelectedItem)=="FIADO")LoadCustomerOptions();};
-   footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
+   LoadCustomerOptions();
+      footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
@@ -75,7 +77,7 @@ namespace ArmazemGratidao {
    try{
     string typed=customer.Text;
     var names=new List<string>();
-    var existing=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var existing=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"Consumidor"};
     using(var connection=Open()){
      using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(customer_name) FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>'' ORDER BY TRIM(customer_name) LIMIT 500",connection))
      using(var reader=cmd.ExecuteReader())while(reader.Read()){
@@ -91,7 +93,7 @@ namespace ArmazemGratidao {
      }
     }
     names.Sort(StringComparer.CurrentCultureIgnoreCase);
-    customer.BeginUpdate();customer.Items.Clear();customer.Items.AddRange(names.Cast<object>().ToArray());customer.EndUpdate();
+    customer.BeginUpdate();customer.Items.Clear();customer.Items.Add("Consumidor");customer.Items.AddRange(names.Cast<object>().ToArray());customer.EndUpdate();
     customer.Text=typed;customer.SelectionStart=customer.Text.Length;
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao buscar clientes");}
   }
