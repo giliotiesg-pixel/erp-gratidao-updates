@@ -595,7 +595,7 @@ namespace ArmazemGratidao {
     if(currentPage>=pages)currentPage=pages-1;
     previousPage.Enabled=currentPage>0;
     nextPage.Enabled=currentPage<pages-1;
-    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name,id LIMIT @limit OFFSET @offset",c)){
+    using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name COLLATE NOCASE,id LIMIT @limit OFFSET @offset",c)){
      cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
      cmd.Parameters.AddWithValue("@limit",PageSize);
      cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
