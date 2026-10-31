@@ -99,8 +99,19 @@ namespace ArmazemGratidao {
   const string Balance="COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0)";
   void SetupSaleSelection(DataGridView grid, SplitterPanel panel, bool paid) {
    var mark=new DataGridViewCheckBoxColumn();
-   mark.Name="marcar";mark.HeaderText="Selecionar";mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
+   mark.Name="marcar";mark.HeaderText="Selecionar";mark.ReadOnly=false;mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
    grid.Columns.Add(mark);
+   // Apenas a coluna de seleção é editável; as informações das vendas permanecem protegidas.
+   grid.ReadOnly=false;
+   grid.MultiSelect=true;
+   grid.CellClick+=(s,e)=>{
+    if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name=="marcar")return;
+    var cell=grid.Rows[e.RowIndex].Cells["marcar"];
+    cell.Value=!Convert.ToBoolean(cell.Value??false);
+   };
+   grid.DataBindingComplete+=(s,e)=>{
+    foreach(DataGridViewColumn col in grid.Columns)col.ReadOnly=col.Name!="marcar";
+   };
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=40,WrapContents=false};
    var all=new CheckBox {Text="Selecionar todas",AutoSize=true,Margin=new Padding(8,10,15,0)};
    var total=new Label {Text="Total selecionado: R$ 0,00",AutoSize=true,Margin=new Padding(5,10,0,0)};
