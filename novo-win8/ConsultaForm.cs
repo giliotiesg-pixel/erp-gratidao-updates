@@ -15,8 +15,8 @@ namespace ArmazemGratidao {
   bool loadingMaster=false;
   readonly Label heading=new Label {Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",13,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft};
   public ConsultaForm(string path,bool fiado) {
-   db=path;credit=fiado;Text=fiado?"Fiado - Clientes e Vendas":"Vendas - Itens por Venda";Width=1200;Height=780;BackColor=Color.FromArgb(229,242,255);
-   var split=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=340};
+   db=path;credit=fiado;Text=fiado?"Fiado - Clientes e Vendas":"Vendas - Itens por Venda";Width=1360;Height=850;MinimumSize=new Size(1050,680);BackColor=Color.FromArgb(229,242,255);
+   var split=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=465};
    split.Panel1.Controls.Add(master);split.Panel2.Controls.Add(details);Controls.Add(split);Controls.Add(heading);
    if(!fiado){
     var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=92,Padding=new Padding(5),WrapContents=true,BackColor=Color.FromArgb(190,225,250)};
@@ -41,10 +41,25 @@ namespace ArmazemGratidao {
    // Altura fixa: não alterar largura/altura das linhas dentro de DataBindingComplete.
    // Evita exceções de DataGridViewBand durante vinculação e troca de seleção.
    foreach(var table in new[]{master,details}){
-    table.Font=new Font("Segoe UI",11,FontStyle.Regular);
+    table.Font=new Font("Segoe UI",10,FontStyle.Regular);
+    table.BackgroundColor=Color.White;
+    table.BorderStyle=BorderStyle.None;
+    table.RowHeadersVisible=false;
+    table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
+    table.MultiSelect=false;
     table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
-    table.RowTemplate.Height=38;
+    table.RowTemplate.Height=32;
     table.AllowUserToResizeRows=false;
+    table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+    table.ColumnHeadersHeight=40;
+    table.EnableHeadersVisualStyles=false;
+    table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+    table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+    table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
+    table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(40,100,170);
+    table.DefaultCellStyle.SelectionForeColor=Color.White;
+    table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
+    table.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    }
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
    master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster)LoadDetails();};
@@ -97,6 +112,14 @@ namespace ArmazemGratidao {
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
      Query(SalesWithDailyTotalsSql()+" WHERE s.created_at "+(selectedDate?">= @date AND created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND created_at < date('now','localtime','+1 day')")+" ORDER BY s.id DESC LIMIT 3000",selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
     if(!credit){
+     // Colunas de vendas ajustadas depois da vinculação, fora de DataBindingComplete.
+     // Mantém a grade compacta e evita o erro anterior de espessura de linhas.
+     if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
+     if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
+     if(master.Columns.Contains("cliente")){master.Columns["cliente"].HeaderText="Cliente";master.Columns["cliente"].FillWeight=230;}
+     if(master.Columns.Contains("pagamento")){master.Columns["pagamento"].HeaderText="Pagamento";master.Columns["pagamento"].FillWeight=134;}
+     if(master.Columns.Contains("total")){master.Columns["total"].HeaderText="Valor (R$)";master.Columns["total"].FillWeight=120;master.Columns["total"].DefaultCellStyle.Format="N2";master.Columns["total"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
+     if(master.Columns.Contains("Total do dia")){master.Columns["Total do dia"].HeaderText="Total do dia (R$)";master.Columns["Total do dia"].FillWeight=150;master.Columns["Total do dia"].DefaultCellStyle.Format="N2";master.Columns["Total do dia"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
      heading.Text=selectedDate?"VENDAS DE "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"VENDAS ANTERIORES | Selecione uma venda":"VENDAS DO DIA | Selecione uma venda";
      var dt=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE created_at "+(selectedDate?">= @date AND created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND created_at < date('now','localtime','+1 day')"),selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
      var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE date(created_at) >= date(\'now\',\'localtime\',\'start of month\') AND date(created_at) < date(\'now\',\'localtime\',\'start of month\',\'+1 month\')");
