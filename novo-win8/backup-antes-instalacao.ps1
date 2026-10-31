@@ -10,6 +10,14 @@ try {
  }
  $provider=Join-Path $PSScriptRoot "System.Data.SQLite.dll"
  if (!(Test-Path -LiteralPath $provider)) { throw "Biblioteca SQLite para backup ausente." }
+ Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class BackupNativeDll {
+ [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+ public static extern bool SetDllDirectory(string path);
+}
+'@
+ [BackupNativeDll]::SetDllDirectory($PSScriptRoot) | Out-Null
  Add-Type -Path $provider
  $name="armazem-gratidao-antes-atualizacao-"+(Get-Date -Format "yyyyMMdd-HHmmssfff")+"-"+[guid]::NewGuid().ToString("N").Substring(0,6)+".db"
  $out=Join-Path $TargetDirectory $name
