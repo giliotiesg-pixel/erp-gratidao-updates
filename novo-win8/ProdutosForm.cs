@@ -56,7 +56,7 @@ namespace ArmazemGratidao {
    searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
    search.TextChanged+=(s,e)=>{searchDelay.Stop();searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
-   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar")EditProduct();};
+   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];EditProduct();}};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty&&grid.CurrentCell!=null&&grid.Columns[grid.CurrentCell.ColumnIndex].Name=="selecionar")grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
    grid.CellValueChanged+=(s,e)=>{if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name!="selecionar")return;long id;if(long.TryParse(Convert.ToString(grid.Rows[e.RowIndex].Cells["codigo_interno"].Value),out id)){if(Convert.ToBoolean(grid.Rows[e.RowIndex].Cells["selecionar"].Value))checkedProducts.Add(id);else checkedProducts.Remove(id);}};
 
@@ -315,6 +315,35 @@ namespace ArmazemGratidao {
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();MessageBox.Show("Quantidade adicionada e movimentação registrada.");}
    }
   }
+  void AddQuantityForProduct(long id,string description,decimal suggested){
+   using(var form=new Form {Text="Registrar QTD do produto",Width=460,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog}){
+    var label=new Label {Text=description,Left=15,Top=15,Width=410,Height=45};
+    var quantity=new NumericUpDown {Left=15,Top=72,Width=180,DecimalPlaces=3,Maximum=10000000,Minimum=0.001M,Value=Math.Max(0.001M,suggested)};
+    var save=new Button {Text="Confirmar entrada de QTD",Left=15,Top=125,Width=225,Height=36};
+    form.Controls.AddRange(new Control[]{label,quantity,save});
+    save.Click+=(s,e)=>{
+     try{
+      using(var conn=Open(false)){
+       string backup=db+".antes-entrada-qtd-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);}
+       using(var tx=conn.BeginTransaction()){
+        decimal before;
+        using(var q=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",conn,tx)){q.Parameters.AddWithValue("@id",id);object val=q.ExecuteScalar();if(val==null)throw new Exception("Produto não encontrado.");before=Convert.ToDecimal(val==DBNull.Value?0:val);}
+        decimal after=checked(before+quantity.Value);
+        using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_quantity_movements (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,movement_at TEXT NOT NULL,quantity_before NUMERIC NOT NULL,quantity_added NUMERIC NOT NULL,quantity_after NUMERIC NOT NULL,reason TEXT NOT NULL)",conn,tx))q.ExecuteNonQuery();
+        using(var q=new SQLiteCommand("UPDATE products SET stock=@stock WHERE id=@id",conn,tx)){q.Parameters.AddWithValue("@stock",after);q.Parameters.AddWithValue("@id",id);if(q.ExecuteNonQuery()!=1)throw new Exception("Estoque não atualizado.");}
+        using(var q=new SQLiteCommand("INSERT INTO product_quantity_movements(product_id,movement_at,quantity_before,quantity_added,quantity_after,reason) VALUES(@id,@time,@before,@added,@after,@reason)",conn,tx)){
+         q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@time",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@added",quantity.Value);q.Parameters.AddWithValue("@after",after);q.Parameters.AddWithValue("@reason","Entrada de QTD pelo cadastro de produto");q.ExecuteNonQuery();
+        }
+        tx.Commit();
+       }
+      }
+      form.DialogResult=DialogResult.OK;form.Close();
+     }catch(Exception ex){MessageBox.Show(ex.Message,"Entrada de QTD não realizada");}
+    };
+    if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
+   }
+  }
   void ReactivateProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto inativo.");return;}
    long id;
@@ -564,14 +593,14 @@ namespace ArmazemGratidao {
     string expiryCol=columns.Contains("expiry_date")?"expiry_date":columns.Contains("expiration_date")?"expiration_date":columns.Contains("validade")?"validade":null;
     string weightCol=columns.Contains("sold_by_weight")?"sold_by_weight":columns.Contains("is_weighted")?"is_weighted":columns.Contains("por_peso")?"por_peso":null;
     string extra=(columns.Contains("brand")?",brand":"")+(columns.Contains("category")?",category":"")+(expiryCol!=null?",\""+expiryCol+"\" AS saved_expiry":"")+(weightCol!=null?",\""+weightCol+"\" AS saved_weight":"");
-    using(var q=new SQLiteCommand("SELECT barcode,name,price,cost"+extra+" FROM products WHERE id=@id",c)){
+    using(var q=new SQLiteCommand("SELECT barcode,name,price,cost,stock"+extra+" FROM products WHERE id=@id",c)){
      q.Parameters.AddWithValue("@id",id);
      using(var r=q.ExecuteReader()){
       if(!r.Read()){MessageBox.Show("Produto não encontrado.");return;}
       string oldCode=Convert.ToString(r["barcode"]);
       string oldName=Convert.ToString(r["name"]);
       decimal oldPrice=Convert.ToDecimal(r["price"]);
-      decimal oldCost=Convert.ToDecimal(r["cost"]);
+      decimal oldCost=Convert.ToDecimal(r["cost"]);decimal oldStock=Convert.ToDecimal(r["stock"]==DBNull.Value?0:r["stock"]);
       string oldBrand=columns.Contains("brand")?Convert.ToString(r["brand"]):"";
       string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
       DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
@@ -587,7 +616,9 @@ namespace ArmazemGratidao {
        var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true,Checked=oldWeight,Enabled=weightCol!=null};
        var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Value=oldPrice};
        var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Value=oldCost};
-       Control[] fields={code,name,brand,category,price,cost,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Validade","Tipo de venda"};
+       var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Value=Math.Max(0,oldStock),ReadOnly=true};
+       var addQty=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Minimum=0,Value=0};
+       Control[] fields={code,name,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
        for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        var save=new Button {Text="Salvar alterações",Width=165,Height=38,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White};
        save.Click+=(s,e)=>{
@@ -616,8 +647,8 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       panel.Controls.Add(save,1,8);StyleDialog(form,panel);form.Controls.Add(panel);
-       if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
+       panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
+       if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
     }
@@ -837,7 +868,7 @@ namespace ArmazemGratidao {
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
     panel.Controls.Add(save,1,11);StyleDialog(form,panel);form.Controls.Add(panel);
-    if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
+    if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
   }
  }
