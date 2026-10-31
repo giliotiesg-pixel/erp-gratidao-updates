@@ -727,11 +727,17 @@ namespace ArmazemGratidao {
    }
    return null;
   }
-  void InsertProduct(){
+  public void OpenNewProduct(string initialInput){
+   InsertProduct(initialInput);
+  }
+  void InsertProduct(string initialInput=""){
    using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
+    string initial=(initialInput??"").Trim();
+    if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
+    else name.Text=initial;
     HashSet<string> availableColumns;
     using(var checkConnection=Open())availableColumns=ProductColumns(checkConnection);
     brand.Enabled=availableColumns.Contains("brand");
