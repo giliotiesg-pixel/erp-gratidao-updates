@@ -89,6 +89,29 @@ namespace ArmazemGratidao {
    Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
    FormClosed+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
+  string CreateVerifiedPreUpdateBackup(){
+   if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
+   Directory.CreateDirectory(dataDir);
+   string backup=Path.Combine(dataDir,"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   try{
+    using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
+    using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
+     source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
+    }
+    using(var check=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,ReadOnly=true,FailIfMissing=true}.ToString())){
+     check.Open();
+     using(var cmd=new SQLiteCommand("PRAGMA integrity_check",check)){
+      if(!string.Equals(Convert.ToString(cmd.ExecuteScalar()),"ok",StringComparison.OrdinalIgnoreCase))
+       throw new Exception("Cópia gerada com erro de integridade.");
+     }
+    }
+    if(new FileInfo(backup).Length<=0)throw new Exception("O backup foi gerado vazio.");
+    return backup;
+   }catch{
+    try{if(File.Exists(backup))File.Delete(backup);}catch{}
+    throw;
+   }
+  }
   async Task CheckUpdates(){
    try{
     status.Text="Consultando versão publicada...";
@@ -126,13 +149,10 @@ namespace ArmazemGratidao {
     string actual;
     using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
     if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase)){File.Delete(installer);throw new Exception("SHA-256 inválido. Instalador rejeitado.");}
-    if(File.Exists(dbPath)){
-     string backup=Path.Combine(dataDir,"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db");
-     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
-     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=backup}.ToString())){
-      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
-     }
-    }
+    // A instalação EXE também cria seu próprio backup, para cobrir atualizações manuais.
+    // Um backup validado agora é obrigatório antes de iniciar o instalador pelo programa.
+    string backupPath=CreateVerifiedPreUpdateBackup();
+    status.Text="Backup confirmado: "+backupPath;
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     Close();
    }catch(Exception ex){status.Text="Não foi possível atualizar.";MessageBox.Show(ex.Message,"Atualização não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
