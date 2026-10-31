@@ -23,6 +23,7 @@ namespace ArmazemGratidao {
     var entry=new Button {Text="Inserir QTD",Width=115,Height=34};entry.Click+=(s,e)=>StockEntry();top.Controls.Add(entry);
     var edit=new Button {Text="Editar / Salvar",Width=130,Height=34};edit.Click+=(s,e)=>StockEdit();top.Controls.Add(edit);
     var history=new Button {Text="Auditoria",Width=115,Height=34};history.Click+=(s,e)=>StockHistory();top.Controls.Add(history);
+    var verify=new Button {Text="Conferir baixas",AutoSize=true,Height=34};verify.Click+=(s,e)=>CheckStockLosses();top.Controls.Add(verify);
    }
    if(module=="Clientes"){
     top.Height=65;
@@ -233,6 +234,37 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void CheckStockLosses(){
+   try{
+    using(var conn=StockOpen(true)){
+     if(!HasTable(conn,"stock_audit_log")){
+      MessageBox.Show("O banco não possui registro de auditoria de estoque. Não é possível confirmar as baixas neste banco.","Conferência de estoque");return;
+     }
+     var dt=new DataTable();
+     dt.Columns.Add("Data e hora");dt.Columns.Add("Produto");dt.Columns.Add("Código interno");
+     dt.Columns.Add("Estoque anterior");dt.Columns.Add("Estoque novo");dt.Columns.Add("Quantidade baixada");
+     dt.Columns.Add("Evento");dt.Columns.Add("Venda vinculada");dt.Columns.Add("Situação");
+     // Relatório somente de leitura: nunca ajusta quantidade nem apaga lançamentos.
+     string sql="SELECT a.created_at,a.product_name,a.product_id,a.quantity_before,a.quantity_after,a.quantity_delta,a.event_type,a.reference_id,"+
+       " CASE WHEN UPPER(COALESCE(a.event_type,''))='VENDA' AND EXISTS(SELECT 1 FROM sales s JOIN sale_items si ON si.sale_id=s.id WHERE s.id=a.reference_id AND si.product_id=a.product_id) THEN 'Venda encontrada' "+
+       " WHEN UPPER(COALESCE(a.event_type,''))='VENDA' THEN 'VERIFICAR: venda ou item não encontrado' "+
+       " ELSE 'VERIFICAR: baixa sem evento de venda' END AS situacao "+
+       "FROM stock_audit_log a WHERE COALESCE(a.quantity_delta,0)<-0.000001 ORDER BY a.id DESC LIMIT 1000";
+     using(var cmd=new SQLiteCommand(sql,conn))using(var reader=cmd.ExecuteReader()){
+      while(reader.Read()){
+       var row=dt.NewRow();
+       for(int i=0;i<9;i++)row[i]=reader.IsDBNull(i)?"":Convert.ToString(reader.GetValue(i));
+       dt.Rows.Add(row);
+      }
+     }
+     using(var form=new Form {Text="Conferência de baixas de estoque - somente leitura",Width=1180,Height=650,StartPosition=FormStartPosition.CenterParent}){
+      var explanation=new Label {Dock=DockStyle.Top,Height=70,Padding=new Padding(12),Text="Lista das últimas 1.000 baixas registradas. Uma baixa marcada VERIFICAR não é prova de perda: pode ser cancelamento, ajuste ou registro antigo. Confira as informações antes de qualquer correção.",ForeColor=Color.FromArgb(20,52,95),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+      var view=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White,DataSource=dt};
+      form.Controls.Add(view);form.Controls.Add(explanation);form.ShowDialog(this);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível verificar as baixas: "+ex.Message,"Conferência de estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void StockHistory(){
    long id;try{id=SelectedStockId();}catch(Exception ex){MessageBox.Show(ex.Message);return;}
