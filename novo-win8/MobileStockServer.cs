@@ -384,7 +384,7 @@ $('photo').addEventListener('change',async function(){
  $('barcodeStatus').textContent='Analisando foto do código...';
  const url=URL.createObjectURL(file);
  try{
- const img=new Image();img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+ const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
  let decoded='';
  if(window.BarcodeDetector){
  try{
