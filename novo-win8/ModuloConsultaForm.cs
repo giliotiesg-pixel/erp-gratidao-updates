@@ -23,10 +23,11 @@ namespace ArmazemGratidao {
     stockSearch.TextChanged+=(s,e)=>LoadStock();top.Controls.Add(stockSearch);
     var entry=new Button {Text="Inserir QTD",Width=115,Height=34};entry.Click+=(s,e)=>StockEntry();top.Controls.Add(entry);
     var edit=new Button {Text="Editar / Salvar",Width=130,Height=34};edit.Click+=(s,e)=>StockEdit();top.Controls.Add(edit);
+    var minimum=new Button {Text="Estoque mínimo",AutoSize=true,Height=34};minimum.Click+=(s,e)=>StockEditMinimum();top.Controls.Add(minimum);
     var history=new Button {Text="Auditoria",Width=115,Height=34};history.Click+=(s,e)=>StockHistory();top.Controls.Add(history);
     var verify=new Button {Text="Conferir baixas",AutoSize=true,Height=34};verify.Click+=(s,e)=>CheckStockLosses();top.Controls.Add(verify);
     var valuation=new Button {Text="Auditoria financeira",AutoSize=true,Height=34};valuation.Click+=(s,e)=>StockValuationAudit();top.Controls.Add(valuation);
-    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];StockProductDetails();}};
+    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];StockEdit();}};
    }
    if(module=="Clientes"){
     top.Height=65;
@@ -239,24 +240,51 @@ namespace ArmazemGratidao {
    }
    return file;
   }
+  // O duplo clique e o botão Editar / Salvar abrem a mesma janela de entrada auditada.
+  void StockEdit(){StockEntry();}
   void StockEntry(){
    long id;try{id=SelectedStockId();}catch(Exception ex){MessageBox.Show(ex.Message);return;}
-   using(var form=new Form {Text="Estoque | Inserir quantidade",Width=500,Height=280,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var quantity=new NumericUpDown{Left=180,Top=27,Width=200,DecimalPlaces=3,Minimum=0.001M,Maximum=10000000M,Value=1M};
-    var reason=new TextBox{Left=180,Top=80,Width=255,MaxLength=250};
-    var save=new Button{Left=180,Top=147,Width=180,Height=38,Text="Salvar entrada"};
-    form.Controls.Add(new Label{Text="Quantidade a inserir",Left=15,Top=30,AutoSize=true});
-    form.Controls.Add(new Label{Text="Motivo da entrada",Left=15,Top=84,AutoSize=true});
-    form.Controls.AddRange(new Control[]{quantity,reason,save});
+   string productName;decimal initialStock;
+   try{
+    using(var check=StockOpen(true))
+    using(var q=new SQLiteCommand("SELECT name,stock FROM products WHERE id=@id",check)){
+     q.Parameters.AddWithValue("@id",id);
+     using(var reader=q.ExecuteReader()){
+      if(!reader.Read())throw new Exception("Produto não encontrado.");
+      productName=Convert.ToString(reader["name"]);initialStock=Dec(reader["stock"]);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Estoque");return;}
+   using(var form=new Form {Text="Estoque | Editar e Salvar - Entrada de Produto",Width=670,Height=445,MinimumSize=new Size(610,415),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var title=new Label{Left=17,Top=14,Width=610,Height=48,Text="PRODUTO: "+productName,ForeColor=Color.FromArgb(12,59,137),Font=new Font("Segoe UI",12,FontStyle.Bold)};
+    var current=new Label{Left=17,Top=63,Width=605,Height=27,Text="Quantidade atual em estoque: "+initialStock.ToString("N3"),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var date=new DateTimePicker{Left=195,Top=105,Width=205,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy",Value=DateTime.Today};
+    var quantity=new NumericUpDown{Left=195,Top=147,Width=205,DecimalPlaces=3,Minimum=0.001M,Maximum=10000000M,Value=1M};
+    var description=new TextBox{Left=195,Top=190,Width=410,Height=90,Multiline=true,ScrollBars=ScrollBars.Vertical,MaxLength=400};
+    var projected=new Label{Left=195,Top=295,Width=405,Height=27,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(12,59,137)};
+    Action refresh=()=>projected.Text="Quantidade após salvar: "+(initialStock+quantity.Value).ToString("N3");
+    quantity.ValueChanged+=(s,e)=>refresh();refresh();
+    var save=new Button{Left=195,Top=330,Width=193,Height=40,Text="Salvar entrada",BackColor=Color.FromArgb(19,92,169),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var cancel=new Button{Left=402,Top=330,Width=120,Height=40,Text="Cancelar"};
+    cancel.Click+=(s,e)=>form.Close();
+    form.Controls.AddRange(new Control[]{
+     title,current,
+     new Label{Text="Data da entrada",Left=17,Top=110,AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},
+     new Label{Text="Quantidade a adicionar",Left=17,Top=152,AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},
+     new Label{Text="Descrição da entrada",Left=17,Top=194,AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},
+     date,quantity,description,projected,save,cancel
+    });
     save.Click+=(s,e)=>{
-     if(string.IsNullOrWhiteSpace(reason.Text)){MessageBox.Show("Informe o motivo da entrada.");return;}
+     if(string.IsNullOrWhiteSpace(description.Text)){MessageBox.Show("Informe a descrição da entrada do produto.");return;}
      try{
       string backup;
+      decimal before,after;
       using(var conn=StockOpen(false)){
-       if(!HasTable(conn,"runtime_operation_context")||!HasTable(conn,"stock_audit_log"))throw new Exception("Banco sem as tabelas de proteção e auditoria. Nenhum estoque foi alterado.");
+       if(!HasTable(conn,"runtime_operation_context")||!HasTable(conn,"stock_audit_log"))
+        throw new Exception("Banco sem proteção e auditoria de estoque. A entrada não será gravada.");
        backup=BackupStock(conn);
        using(var tx=conn.BeginTransaction()){
-        decimal before;string name,barcode;
+        string name,barcode;
         using(var q=new SQLiteCommand("SELECT name,barcode,stock FROM products WHERE id=@id",conn,tx)){
          q.Parameters.AddWithValue("@id",id);
          using(var rd=q.ExecuteReader()){
@@ -264,32 +292,35 @@ namespace ArmazemGratidao {
           name=Convert.ToString(rd["name"]);barcode=Convert.ToString(rd["barcode"]);before=Dec(rd["stock"]);
          }
         }
-        decimal after=checked(before+quantity.Value);
+        if(before!=initialStock)throw new Exception("A quantidade foi alterada após abrir a janela. Atualize e tente novamente.");
+        after=checked(before+quantity.Value);
         int oldAuthorization;string oldOperation;
         using(var q=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",conn,tx))
         using(var rd=q.ExecuteReader()){
-         if(!rd.Read())throw new Exception("Contexto de proteção do estoque não encontrado.");
+         if(!rd.Read())throw new Exception("Proteção de estoque não configurada.");
          oldAuthorization=Convert.ToInt32(rd["authorized"]);oldOperation=Convert.ToString(rd["operation"]);
         }
         Execute(conn,tx,"UPDATE runtime_operation_context SET authorized=1,operation='ENTRADA_MANUAL_AUDITADA' WHERE id=1");
         using(var q=new SQLiteCommand("UPDATE products SET stock=@after WHERE id=@id AND stock=@before",conn,tx)){
          q.Parameters.AddWithValue("@after",after);q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@before",before);
-         if(q.ExecuteNonQuery()!=1)throw new Exception("Estoque mudou durante a operação. Atualize e tente novamente.");
+         if(q.ExecuteNonQuery()!=1)throw new Exception("A quantidade mudou durante a gravação. Nenhuma entrada foi concluída.");
         }
+        string note="Data da entrada: "+date.Value.ToString("dd/MM/yyyy")+" | "+description.Text.Trim();
         Execute(conn,tx,"INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) VALUES(@id,@name,@barcode,'ENTRADA_MANUAL',@before,@after,@delta,'ESTOQUE',@reason)",
-         P("@id",id),P("@name",name),P("@barcode",barcode),P("@before",before),P("@after",after),P("@delta",quantity.Value),P("@reason",reason.Text.Trim()));
+         P("@id",id),P("@name",name),P("@barcode",barcode),P("@before",before),P("@after",after),P("@delta",quantity.Value),P("@reason",note));
         Execute(conn,tx,"UPDATE runtime_operation_context SET authorized=@authorized,operation=@operation WHERE id=1",P("@authorized",oldAuthorization),P("@operation",oldOperation));
         tx.Commit();
        }
       }
       form.DialogResult=DialogResult.OK;form.Close();
-      LoadStock();MessageBox.Show("Entrada registrada com auditoria. Backup: "+backup,"Estoque");
-     }catch(Exception ex){MessageBox.Show("Nenhuma entrada concluída: "+ex.Message,"Estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+      LoadStock();
+      MessageBox.Show("Entrada salva em "+date.Value.ToString("dd/MM/yyyy")+".\nAnterior: "+before.ToString("N3")+"\nAdicionada: "+quantity.Value.ToString("N3")+"\nAtual: "+after.ToString("N3")+"\nBackup: "+backup,"Estoque");
+     }catch(Exception ex){MessageBox.Show("Entrada não salva: "+ex.Message,"Estoque",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     };
     form.ShowDialog(this);
    }
   }
-  void StockEdit(){
+  void StockEditMinimum(){
    long id;try{id=SelectedStockId();}catch(Exception ex){MessageBox.Show(ex.Message);return;}
    try{
     using(var conn=StockOpen(true)){
