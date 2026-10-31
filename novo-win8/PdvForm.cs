@@ -145,7 +145,7 @@ namespace ArmazemGratidao {
        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",connection))
         found=Convert.ToInt32(check.ExecuteScalar())>0;
        if(found){
-        using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(name))=LOW(TRIM(@name))",connection)){
+        using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(name))=LOWER(TRIM(@name))",connection)){
          cmd.Parameters.AddWithValue("@name",newName);
          if(Convert.ToInt32(cmd.ExecuteScalar())>0){
           customer.Text=newName;form.DialogResult=DialogResult.OK;return;
