@@ -134,9 +134,9 @@ namespace ArmazemGratidao {
   }
   static bool ConstantEquals(string a,string b){
    byte[] x=Encoding.UTF8.GetBytes(a??""),y=Encoding.UTF8.GetBytes(b??"");
-   int difference=x.Length^y.Length;
-   for(int i=0;i<Math.Max(x.Length,y.Length);i++)difference|=x[i%x.Length==0?0:i%x.Length]^y[i%y.Length==0?0:i%y.Length];
-   return difference==0;
+   if(x.Length!=y.Length)return false;
+   int diff=0;for(int i=0;i<x.Length;i++)diff|=x[i]^y[i];
+   return diff==0;
   }
   static void Write(NetworkStream stream,int code,string type,string body){
    byte[] data=Encoding.UTF8.GetBytes(body);
