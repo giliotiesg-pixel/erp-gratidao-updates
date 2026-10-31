@@ -44,6 +44,7 @@ namespace ArmazemGratidao {
  public sealed class MainForm : Form {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
+  MobileStockServer mobileStock;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=245,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(8),BackColor=Color.FromArgb(190,225,250)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=55,BackColor=Color.FromArgb(220,224,230)};
@@ -76,6 +77,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Itens",(s,e)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"));
    AddButton(bar,"Fiado",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);});
    AddButton(bar,"Produtos",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);});
+   AddButton(bar,"Estoque pelo celular",(s,e)=>OpenMobileStock());
    AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new LucroForm(dbPath))form.ShowDialog(this);});
    AddSection(bar,"GESTÃO");
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ModuloConsultaForm(dbPath,module))form.ShowDialog(this);});
@@ -83,6 +85,7 @@ namespace ArmazemGratidao {
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
    Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
+   FormClosed+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   async Task CheckUpdates(){
    try{
@@ -180,6 +183,7 @@ namespace ArmazemGratidao {
     Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new FiadoClientesForm(dbPath))form.ShowDialog(this);})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}using(var form=new ProdutosForm(dbPath))form.ShowDialog(this);})),
+    Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
     Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
     Tuple.Create("Clientes",(EventHandler)((s,a)=>OpenHomeModule("Clientes"))),
     Tuple.Create("Compras",(EventHandler)((s,a)=>OpenHomeModule("Compras"))),
@@ -253,6 +257,27 @@ namespace ArmazemGratidao {
     }
    };
    control.Resize+=(s,e)=>apply();apply();
+  }
+  void OpenMobileStock(){
+   if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco de dados.");return;}
+   try{
+    if(mobileStock==null){mobileStock=new MobileStockServer(dbPath);mobileStock.Start();}
+    string ip=MobileStockServer.LanAddress();
+    if(string.IsNullOrWhiteSpace(ip)){MessageBox.Show("Não foi encontrada uma rede Wi-Fi local. Conecte o computador e o celular à mesma rede.","Estoque pelo celular");return;}
+    string address="http://"+ip+":"+MobileStockServer.Port+"/?chave="+mobileStock.Token;
+    using(var dialog=new Form{Text="Estoque pelo celular - Armazém Gratidão",Width=700,Height=405,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+     var title=new Label{Text="Conexão com o estoque pelo celular",Left=16,Top=15,Width=640,Height=35,Font=new Font("Segoe UI",14,FontStyle.Bold),ForeColor=Color.FromArgb(15,65,141)};
+     var instructions=new Label{Text="1. Conecte o celular e o computador à mesma rede Wi-Fi.\n2. Abra no navegador do celular o endereço abaixo.\n3. Busque o produto, use o microfone do teclado para ditar a quantidade e confirme a entrada.\n\nO acesso funciona enquanto o programa estiver aberto e o serviço estiver ligado.",Left=16,Top=58,Width=635,Height=116,Font=new Font("Segoe UI",10,FontStyle.Regular)};
+     var input=new TextBox{Text=address,Left=16,Top=187,Width=635,ReadOnly=true,Font=new Font("Segoe UI",10,FontStyle.Regular)};
+     var note=new Label{Text="Atenção: a rede deve ser particular e confiável. Se o Windows solicitar permissão de firewall, autorize somente redes privadas. Não compartilhe o link com terceiros.",Left=16,Top=225,Width=635,Height=58,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(152,31,45)};
+     var stop=new Button{Text="Desligar acesso pelo celular",Left=16,Top=296,Width=300,Height=36};
+     stop.Click+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}dialog.Close();MessageBox.Show("Acesso do celular encerrado.","Armazém Gratidão");};
+     var close=new Button{Text="Manter ligado e fechar janela",Left=335,Top=296,Width=310,Height=36};
+     close.Click+=(s,e)=>dialog.Close();
+     dialog.Controls.AddRange(new Control[]{title,instructions,input,note,stop,close});
+     dialog.ShowDialog(this);
+    }
+   }catch(Exception ex){if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}MessageBox.Show("Não foi possível iniciar o estoque pelo celular: "+ex.Message+"\nConfira a porta "+MobileStockServer.Port+" e as permissões de firewall.","Armazém Gratidão",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
