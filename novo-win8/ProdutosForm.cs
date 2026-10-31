@@ -616,7 +616,7 @@ namespace ArmazemGratidao {
       using(var form=new Form {Text="Editar produto #"+id,Width=760,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Width=120,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Top};
+       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Width=160,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Top};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
        var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
        var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=hasExpiry,Enabled=expiryCol!=null};
@@ -629,7 +629,8 @@ namespace ArmazemGratidao {
        Control[] fields={code,name,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
        for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // A descrição usa exatamente a mesma largura dos outros campos de texto.
-       name.Width=brand.Width;name.MinimumSize=new Size(brand.Width,78);name.MaximumSize=new Size(brand.Width,78);
+       // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
+       code.Width=160;brand.Width=160;category.Width=160;name.Width=160;name.Height=78;
        var save=new Button {Text="Salvar alterações",Width=165,Height=38,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White};
        save.Click+=(s,e)=>{
         if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
@@ -775,7 +776,7 @@ namespace ArmazemGratidao {
    using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var name=new TextBox {Multiline=true,Width=120,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
+    var barcode=new TextBox();var name=new TextBox {Multiline=true,Width=160,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
     else name.Text=initial;
@@ -791,7 +792,8 @@ namespace ArmazemGratidao {
     Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // A descrição usa exatamente a mesma largura dos outros campos de texto.
-       name.Width=brand.Width;name.MinimumSize=new Size(brand.Width,78);name.MaximumSize=new Size(brand.Width,78);
+       // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
+       code.Width=160;brand.Width=160;category.Width=160;name.Width=160;name.Height=78;
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
