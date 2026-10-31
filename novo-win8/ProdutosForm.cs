@@ -612,7 +612,7 @@ namespace ArmazemGratidao {
       using(var form=new Form {Text="Editar produto #"+id,Width=760,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};
+       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
        var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
        var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=hasExpiry,Enabled=expiryCol!=null};
@@ -769,7 +769,7 @@ namespace ArmazemGratidao {
    using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var name=new TextBox {Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
+    var barcode=new TextBox();var name=new TextBox {Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
     else name.Text=initial;
