@@ -221,11 +221,11 @@ namespace ArmazemGratidao {
   }
   // Conferência explícita do estoque real antes da venda. Não permite estoque negativo.
   bool AdjustEmptyStock(Item item,decimal previous,decimal required){
-   using(var dlg=new Form{Text="PDV | Produto sem estoque - conferir quantidade",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var dlg=new Form{Text="PDV | Estoque insuficiente - ajustar quantidade",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var info=new Label{Left=15,Top=12,Width=565,Height=75,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(18,65,143),
      Text=item.Name+"\nEstoque registrado: "+previous.ToString("N3")+"  |  Necessário para a venda: "+required.ToString("N3")};
     var quantity=new NumericUpDown{Left=220,Top=100,Width=225,DecimalPlaces=3,Minimum=0,Maximum=10000000,Value=Math.Min(10000000,Math.Max(0,required))};
-    var reason=new TextBox{Left=220,Top=151,Width=340,MaxLength=250,Text="Conferência física de estoque no PDV"};
+    var reason=new TextBox{Left=220,Top=151,Width=340,MaxLength=250,Text="Correção de quantidade após conferência física"};
     var save=new Button{Left=220,Top=210,Width=210,Height=40,Text="Confirmar estoque",BackColor=Color.FromArgb(25,96,174),ForeColor=Color.White};
     var cancel=new Button{Left=445,Top=210,Width=115,Height=40,Text="Cancelar"};
     cancel.Click+=(s,e)=>dlg.Close();
@@ -399,7 +399,17 @@ namespace ArmazemGratidao {
       var value=cmd.ExecuteScalar();if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado no estoque.");
       available=Dec(value);
      }
-     if(quantityInput.Value>available){MessageBox.Show("Estoque insuficiente. Disponível: "+available.ToString("N3"));return;}
+     if(quantityInput.Value>available){
+      if(!AdjustEmptyStock(item,available,quantityInput.Value))return;
+      using(var refreshed=Open())
+      using(var check=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",refreshed)){
+       check.Parameters.AddWithValue("@id",item.Id);
+       var refreshedValue=check.ExecuteScalar();
+       if(refreshedValue==null||refreshedValue==DBNull.Value)throw new Exception("Produto não encontrado após conferência.");
+       available=Dec(refreshedValue);
+      }
+      if(quantityInput.Value>available){MessageBox.Show("Estoque ainda insuficiente. Disponível: "+available.ToString("N3"));return;}
+     }
      item.Qty=quantityInput.Value;item.Price=priceInput.Value;
      Render();
     }
