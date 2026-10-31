@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Web.Script.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
   [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>ButtonTextVisibility.CheckOpenForms(); Application.Run(new MainForm()); }
@@ -265,14 +266,26 @@ namespace ArmazemGratidao {
     string ip=MobileStockServer.LanAddress();
     if(string.IsNullOrWhiteSpace(ip)){MessageBox.Show("Não foi encontrada uma rede Wi-Fi local. Conecte o computador e o celular à mesma rede.","Estoque pelo celular");return;}
     string address="http://"+ip+":"+MobileStockServer.Port+"/?chave="+mobileStock.Token;
-    using(var dialog=new Form{Text="Estoque pelo celular - Armazém Gratidão",Width=700,Height=405,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
-     var title=new Label{Text="Conexão com o estoque pelo celular",Left=16,Top=15,Width=640,Height=35,Font=new Font("Segoe UI",14,FontStyle.Bold),ForeColor=Color.FromArgb(15,65,141)};
-     var instructions=new Label{Text="1. Conecte o celular e o computador à mesma rede Wi-Fi.\n2. Abra no navegador do celular o endereço abaixo.\n3. Busque o produto, use o microfone do teclado para ditar a quantidade e confirme a entrada.\n\nO acesso funciona enquanto o programa estiver aberto e o serviço estiver ligado.",Left=16,Top=58,Width=635,Height=116,Font=new Font("Segoe UI",10,FontStyle.Regular)};
-     var input=new TextBox{Text=address,Left=16,Top=187,Width=635,ReadOnly=true,Font=new Font("Segoe UI",10,FontStyle.Regular)};
-     var note=new Label{Text="Atenção: a rede deve ser particular e confiável. Se o Windows solicitar permissão de firewall, autorize somente redes privadas. Não compartilhe o link com terceiros.",Left=16,Top=225,Width=635,Height=58,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(152,31,45)};
-     var stop=new Button{Text="Desligar acesso pelo celular",Left=16,Top=296,Width=300,Height=36};
+    using(var dialog=new Form{Text="Estoque pelo celular - QR Code",Width=760,Height=510,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+     var title=new Label{Text="Conecte o celular pelo QR Code",Left=20,Top=13,Width=710,Height=42,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,65,141)};
+     var instructions=new Label{Text="1. Conecte o celular e o computador à mesma rede Wi-Fi."+Environment.NewLine+
+      "2. Abra a câmera do celular e aponte para o QR Code."+Environment.NewLine+
+      "3. Toque no endereço exibido no celular."+Environment.NewLine+
+      "4. Identifique o produto, informe a quantidade e confirme.",Left=300,Top=73,Width=410,Height=132,Font=new Font("Segoe UI",11,FontStyle.Regular)};
+     var input=new TextBox{Text=address,Left=300,Top=220,Width=415,Height=30,ReadOnly=true,Font=new Font("Segoe UI",9,FontStyle.Regular)};
+     var note=new Label{Text="Acesso exclusivo à rede local. Use somente Wi-Fi privado e não compartilhe o QR Code: ele contém a chave temporária do estoque.",Left=300,Top=267,Width=405,Height=74,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(152,31,45)};
+     using(var qrGenerator=new QRCodeGenerator())
+     using(var qrData=qrGenerator.CreateQrCode(address,QRCodeGenerator.ECCLevel.Q))
+     using(var qr=new QRCode(qrData))
+     using(var bitmap=qr.GetGraphic(7)){
+      var display=new PictureBox{Left=17,Top=75,Width=265,Height=265,BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.Zoom};
+      display.Image=new Bitmap(bitmap);
+      dialog.Controls.Add(display);
+      dialog.FormClosed+=(s,e)=>{if(display.Image!=null){display.Image.Dispose();display.Image=null;}};
+     }
+     var stop=new Button{Text="Desligar acesso pelo celular",Left=18,Top=380,Width=320,Height=40};
      stop.Click+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}dialog.Close();MessageBox.Show("Acesso do celular encerrado.","Armazém Gratidão");};
-     var close=new Button{Text="Manter ligado e fechar janela",Left=335,Top=296,Width=310,Height=36};
+     var close=new Button{Text="Manter ligado e fechar janela",Left=353,Top=380,Width=359,Height=40};
      close.Click+=(s,e)=>dialog.Close();
      dialog.Controls.AddRange(new Control[]{title,instructions,input,note,stop,close});
      dialog.ShowDialog(this);
