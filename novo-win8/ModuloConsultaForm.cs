@@ -79,6 +79,11 @@ namespace ArmazemGratidao {
   static string StockField(HashSet<string> columns,string column,string title){
    return columns.Contains(column)?("\""+column+"\" AS \""+title+"\""):"NULL AS \""+title+"\"";
   }
+  // Cadastro de Produtos e Estoque compartilham o mesmo filtro de atividade.
+  static string ActiveProductsWhere(HashSet<string> cols){
+   string active=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
+   return active==null?"1=1":"COALESCE(\""+active+"\",1)<>0";
+  }
   static Dictionary<long,int> SortedProductCodes(SQLiteConnection conn){
    var map=new Dictionary<long,int>();int n=0;
    var cols=Columns(conn,"products");
@@ -99,13 +104,13 @@ namespace ArmazemGratidao {
     "COALESCE(SUM(CASE WHEN COALESCE(stock,0)>0 THEN stock*COALESCE(cost,0) ELSE 0 END),0),"+
     "COALESCE(SUM(CASE WHEN COALESCE(stock,0)>0 THEN stock*COALESCE(price,0) ELSE 0 END),0),"+
     "SUM(CASE WHEN COALESCE(stock,0)<0 THEN 1 ELSE 0 END),"+
-    "SUM(CASE WHEN COALESCE(stock,0)>0 AND COALESCE(cost,0)<=0 THEN 1 ELSE 0 END) FROM products";
+    "SUM(CASE WHEN COALESCE(stock,0)>0 AND COALESCE(cost,0)<=0 THEN 1 ELSE 0 END) FROM products WHERE "+ActiveProductsWhere(cols);
    using(var cmd=new SQLiteCommand(sql,conn))using(var reader=cmd.ExecuteReader()){
     if(reader.Read()){
      decimal units=Dec(reader.GetValue(1)),cost=Dec(reader.GetValue(2)),sale=Dec(reader.GetValue(3));
      long missing=Convert.ToInt64(reader.GetValue(5)==DBNull.Value?0:reader.GetValue(5));
      long negative=Convert.ToInt64(reader.GetValue(4)==DBNull.Value?0:reader.GetValue(4));
-     stockValuation.Text="ESTOQUE CADASTRADO  •  "+reader.GetValue(0)+" produtos  |  Quantidade: "+units.ToString("N3")+
+     stockValuation.Text="ESTOQUE ATIVO CADASTRADO  •  "+reader.GetValue(0)+" produtos  |  Quantidade: "+units.ToString("N3")+
       "  |  CUSTO TOTAL: R$ "+cost.ToString("N2")+"  |  VENDA POTENCIAL: R$ "+sale.ToString("N2")+
       Environment.NewLine+"Margem bruta potencial: R$ "+(sale-cost).ToString("N2")+
       "  |  Sem custo informado: "+missing+"  |  Quantidades negativas: "+negative+
@@ -122,9 +127,9 @@ namespace ArmazemGratidao {
      string sql="SELECT id AS 'ID interno',name AS 'Produto',COALESCE(stock,0) AS 'Quantidade',"+
       "COALESCE(cost,0) AS 'Custo unitário',ROUND(COALESCE(stock,0)*COALESCE(cost,0),2) AS 'Valor em custo',"+
       "COALESCE(price,0) AS 'Preço de venda',ROUND(COALESCE(stock,0)*COALESCE(price,0),2) AS 'Valor em venda' "+
-      "FROM products ORDER BY name COLLATE NOCASE,id";
+      "FROM products WHERE "+ActiveProductsWhere(columns)+" ORDER BY name COLLATE NOCASE,id";
      using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
-     using(var form=new Form{Text="Auditoria financeira do estoque - todos os produtos",Width=1100,Height=660,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var form=new Form{Text="Auditoria financeira do estoque - produtos ativos",Width=1100,Height=660,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var summary=new Label{Dock=DockStyle.Top,Height=108,Padding=new Padding(12,8,8,6),ForeColor=Color.FromArgb(19,64,123),Font=new Font("Segoe UI",11,FontStyle.Bold)};
       decimal totalCost=0,totalSale=0;int missing=0,negative=0;decimal quantity=0;
       foreach(DataRow row in data.Rows){
@@ -138,7 +143,7 @@ namespace ArmazemGratidao {
        Environment.NewLine+"Diferença potencial: R$ "+(totalSale-totalCost).ToString("N2")+
        "  |  Sem custo: "+missing+"  |  Estoque negativo: "+negative;
       var note=new Label{Dock=DockStyle.Bottom,Height=47,Padding=new Padding(10,7,8,5),
-       Text="Apuração baseada no estoque e preços atuais de TODOS os cadastros (inclusive inativos). Não é saldo de caixa nem lucro realizado. Sem custo informado pode subestimar o capital.",Font=new Font("Segoe UI",9,FontStyle.Regular)};
+       Text="Apuração baseada nos produtos ativos, igual à lista do cadastro. Produtos excluídos ficam no histórico, mas não entram no valor operacional. Não é lucro realizado.",Font=new Font("Segoe UI",9,FontStyle.Regular)};
       var view=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
       form.Controls.Add(view);form.Controls.Add(note);form.Controls.Add(summary);form.ShowDialog(this);
      }
@@ -196,7 +201,7 @@ namespace ArmazemGratidao {
       "ROUND(COALESCE(stock,0)*COALESCE(cost,0),2) AS \"Valor em custo\","+
       "ROUND(COALESCE(stock,0)*COALESCE(price,0),2) AS \"Valor em venda\" FROM products WHERE (@term='' OR name LIKE @like OR "+
       (cols.Contains("barcode")?"barcode LIKE @like":"0")+
-      " OR CAST(id AS TEXT)=@term) ORDER BY name COLLATE NOCASE,id LIMIT 500";
+      " OR CAST(id AS TEXT)=@term) AND "+ActiveProductsWhere(cols)+" ORDER BY name COLLATE NOCASE,id LIMIT 500";
      using(var cmd=new SQLiteCommand(sql,conn)){
       string term=stockSearch.Text.Trim();
       cmd.Parameters.AddWithValue("@term",term);cmd.Parameters.AddWithValue("@like","%"+term+"%");
