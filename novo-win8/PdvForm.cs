@@ -250,12 +250,12 @@ namespace ArmazemGratidao {
   }
   // Conferência explícita do estoque real antes da venda. Não permite estoque negativo.
   bool AdjustEmptyStock(Item item,decimal previous,decimal required){
-   using(var dlg=new Form{Text="PDV | Estoque insuficiente - ajustar quantidade",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var dlg=new Form{Text="PDV | Ajustar estoque para continuar a venda",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var info=new Label{Left=15,Top=12,Width=565,Height=75,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(18,65,143),
      Text=item.Name+"\nEstoque registrado: "+previous.ToString("N3")+"  |  Necessário para a venda: "+required.ToString("N3")};
     var quantity=new NumericUpDown{Left=220,Top=100,Width=225,DecimalPlaces=3,Minimum=0,Maximum=10000000,Value=Math.Min(10000000,Math.Max(0,required))};
     var reason=new TextBox{Left=220,Top=151,Width=340,MaxLength=250,Text="Correção de quantidade após conferência física"};
-    var save=new Button{Left=220,Top=210,Width=210,Height=40,Text="Confirmar estoque",BackColor=Color.FromArgb(25,96,174),ForeColor=Color.White};
+    var save=new Button{Left=220,Top=210,Width=210,Height=40,Text="Salvar quantidade real",BackColor=Color.FromArgb(25,96,174),ForeColor=Color.White};
     var cancel=new Button{Left=445,Top=210,Width=115,Height=40,Text="Cancelar"};
     cancel.Click+=(s,e)=>dlg.Close();
     dlg.Controls.AddRange(new Control[]{info,quantity,reason,save,cancel,
@@ -375,7 +375,7 @@ namespace ArmazemGratidao {
     decimal quantity=qty.Value;
     string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
     var existing=cart.FirstOrDefault(x=>x.Id==selected.Id&&x.Unit==unit);
-    decimal required=quantity+(existing==null?0:existing.Qty);
+    decimal required=quantity+cart.Where(x=>x.Id==selected.Id).Sum(x=>x.Qty);
     if(stocks[selected.Id]<required){
      // Para estoque zerado ou insuficiente, permitir conferência física autorizada.
      if(!AdjustEmptyStock(selected,stocks[selected.Id],required))return;
@@ -428,8 +428,9 @@ namespace ArmazemGratidao {
       var value=cmd.ExecuteScalar();if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado no estoque.");
       available=Dec(value);
      }
-     if(quantityInput.Value>available){
-      if(!AdjustEmptyStock(item,available,quantityInput.Value))return;
+     decimal required=quantityInput.Value+cart.Where(x=>x.Id==item.Id && !object.ReferenceEquals(x,item)).Sum(x=>x.Qty);
+     if(required>available){
+      if(!AdjustEmptyStock(item,available,required))return;
       using(var refreshed=Open())
       using(var check=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",refreshed)){
        check.Parameters.AddWithValue("@id",item.Id);
@@ -437,7 +438,7 @@ namespace ArmazemGratidao {
        if(refreshedValue==null||refreshedValue==DBNull.Value)throw new Exception("Produto não encontrado após conferência.");
        available=Dec(refreshedValue);
       }
-      if(quantityInput.Value>available){MessageBox.Show("Estoque ainda insuficiente. Disponível: "+available.ToString("N3"));return;}
+      if(required>available){MessageBox.Show("Estoque ainda insuficiente. Disponível: "+available.ToString("N3"));return;}
      }
      item.Qty=quantityInput.Value;item.Price=priceInput.Value;
      Render();
@@ -509,6 +510,30 @@ namespace ArmazemGratidao {
      return;
     }
    }
+   // Nova conferência: a quantidade real também pode ser corrigida antes do pagamento.
+   // Somar todas as linhas do mesmo produto e nunca permitir estoque negativo.
+   try{
+    var requirements=cart.GroupBy(x=>x.Id).Select(g=>new {Product=g.First(),Required=g.Sum(x=>x.Qty)}).ToList();
+    foreach(var requirement in requirements){
+     decimal available;
+     using(var connection=Open())
+     using(var check=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",connection)){
+      check.Parameters.AddWithValue("@id",requirement.Product.Id);
+      var value=check.ExecuteScalar();
+      if(value==null || value==DBNull.Value)throw new Exception("Produto não encontrado: "+requirement.Product.Name);
+      available=Dec(value);
+     }
+     if(available<requirement.Required){
+      if(!AdjustEmptyStock(requirement.Product,available,requirement.Required))return;
+      using(var connection=Open())
+      using(var check=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",connection)){
+       check.Parameters.AddWithValue("@id",requirement.Product.Id);
+       available=Dec(check.ExecuteScalar());
+      }
+      if(available<requirement.Required){MessageBox.Show("Estoque ainda insuficiente para "+requirement.Product.Name);return;}
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Conferência de estoque não concluída: "+ex.Message,"PDV",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    var method=Convert.ToString(payment.SelectedItem);
    string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor":customer.Text.Trim();
    if(method=="FIADO"){
