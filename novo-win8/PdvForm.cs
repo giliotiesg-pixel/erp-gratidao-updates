@@ -25,6 +25,7 @@ namespace ArmazemGratidao {
   readonly ListBox suggestions=new ListBox {Visible=false,Width=510,Height=190,Font=new Font("Segoe UI",10)};
   readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
   bool suppressLookup=false;
+  bool customerListRequested=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database) {
    db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;BackColor=Color.FromArgb(229,242,255);
@@ -45,13 +46,14 @@ namespace ArmazemGratidao {
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
    customer.Text="Consumidor";
-   // Uma unica caixa para Consumidor ou cliente cadastrado.
-   // Permite digitar o nome para manter o cadastro rapido na finalizacao do Fiado.
-   customer.Width=265;
-   customer.Enter+=(s,e)=>LoadCustomerOptions();
-   customer.DropDown+=(s,e)=>LoadCustomerOptions();
-   payment.SelectedIndexChanged+=(s,e)=>{if(Convert.ToString(payment.SelectedItem)=="FIADO")LoadCustomerOptions();};
-   LoadCustomerOptions();
+   // A caixa mostra apenas Consumidor ou o cliente atualmente escolhido.
+   // A lista de clientes aparece somente ao clicar no botao CLIENTE.
+   customer.Width=205;
+   var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   chooseCustomer.Click+=(s,e)=>{customerListRequested=true;LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
+   var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
+   registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
+   customer.DropDownClosed+=(s,e)=>{customerListRequested=false;customer.Items.Clear();};
       footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
