@@ -112,11 +112,12 @@ namespace ArmazemGratidao {
        if(h.StartsWith("Content-Length:",StringComparison.OrdinalIgnoreCase))int.TryParse(h.Substring(15).Trim(),out length);
        if(h.StartsWith("X-AMZG-Token:",StringComparison.OrdinalIgnoreCase))suppliedToken=h.Substring(13).Trim();
       }
+      string path=target.Split('?')[0];
       int maxLength=path=="/api/ler-foto"?2500000:4096;
       if(length<0||length>maxLength){Write(stream,413,"application/json; charset=utf-8",SafeJson(new{ok=false,erro="Foto muito grande. Aproxime o código ou reduza a foto."}));return;}
       byte[] payload=new byte[length];int count=0;
       while(count<length){int read=stream.Read(payload,count,length-count);if(read<=0)throw new IOException("Conexão interrompida.");count+=read;}
-      string json=Encoding.UTF8.GetString(payload),path=target.Split('?')[0];
+      string json=Encoding.UTF8.GetString(payload);
       string query=target.Contains("?")?target.Substring(target.IndexOf('?')+1):"";
       string presented=method=="POST"?suppliedToken:Param(query,"chave");
       if(!ConstantEquals(presented,secret)){Write(stream,403,"application/json; charset=utf-8",SafeJson(new{erro="Acesso não autorizado. Confira o endereço e a chave."}));return;}
