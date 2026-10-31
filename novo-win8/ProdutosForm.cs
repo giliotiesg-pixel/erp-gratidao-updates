@@ -628,7 +628,7 @@ namespace ArmazemGratidao {
        var addQty=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Minimum=0,Value=0};
        var nameBox=new Panel {Width=160,Margin=new Padding(3),BackColor=Color.White,Dock=DockStyle.Fill};nameBox.Controls.Add(name);
        Control[] fields={code,nameBox,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
-       for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length+1);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+       for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // A descrição usa exatamente a mesma largura dos outros campos de texto.
        // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
        code.Width=160;brand.Width=160;category.Width=160;nameBox.Width=160;
@@ -792,7 +792,7 @@ namespace ArmazemGratidao {
     var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     var nameBox=new Panel {Width=160,Margin=new Padding(3),BackColor=Color.White,Dock=DockStyle.Fill};nameBox.Controls.Add(name);
     Control[] fields={barcode,nameBox,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
-    for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length+1);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+    for(int i=0;i<fields.Length;i++){if(i==1){panel.Controls.Add(new Label {Text="Descrição",AutoSize=true},2,1);panel.Controls.Add(nameBox,3,1);panel.SetRowSpan(nameBox,fields.Length);continue;}panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // A descrição usa exatamente a mesma largura dos outros campos de texto.
        // Larguras fixas e iguais: evita campo invisível antes da primeira diagramação.
        barcode.Width=160;brand.Width=160;category.Width=160;nameBox.Width=160;
