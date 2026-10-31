@@ -96,7 +96,7 @@ namespace ArmazemGratidao {
   }
   void Handle(TcpClient socket){
    using(socket){
-    socket.ReceiveTimeout=12000;socket.SendTimeout=12000;
+    socket.ReceiveTimeout=30000;socket.SendTimeout=30000;
     try{
      using(var stream=socket.GetStream()){
       var header=new MemoryStream();int prev=0,ch;
@@ -115,8 +115,13 @@ namespace ArmazemGratidao {
        if(h.StartsWith("X-AMZG-Token:",StringComparison.OrdinalIgnoreCase))suppliedToken=h.Substring(13).Trim();
       }
       string path=target.Split('?')[0];
-      int maxLength=path=="/api/ler-foto"?2500000:4096;
-      if(length<0||length>maxLength){Write(stream,413,"application/json; charset=utf-8",SafeJson(new{ok=false,erro="Foto muito grande. Aproxime o código ou reduza a foto."}));return;}
+      int maxLength=path=="/api/ler-foto"?4200000:4096;
+      if(length<0||length>maxLength){
+       // Consumir o corpo antes de responder evita o TCP RST que o Chrome apresenta como "Failed to fetch".
+       int remaining=Math.Max(0,length);byte[] discard=new byte[8192];
+       while(remaining>0){int nr=stream.Read(discard,0,Math.Min(discard.Length,remaining));if(nr<=0)break;remaining-=nr;}
+       Write(stream,413,"application/json; charset=utf-8",SafeJson(new{ok=false,erro="Imagem muito grande. Tente uma foto mais próxima e nítida."}));return;
+      }
       byte[] payload=new byte[length];int count=0;
       while(count<length){int read=stream.Read(payload,count,length-count);if(read<=0)throw new IOException("Conexão interrompida.");count+=read;}
       string json=Encoding.UTF8.GetString(payload);
@@ -147,8 +152,9 @@ namespace ArmazemGratidao {
       }
       Write(stream,404,"application/json; charset=utf-8",SafeJson(new{erro="Rota não encontrada."}));
      }
-    }catch(Exception){
-     // Falhas de rede sao encerradas sem afetar o PDV.
+    }catch(Exception ex){
+     // Responder explicitamente torna falhas de comunicação visíveis no celular.
+     try{if(socket.Connected)Write(socket.GetStream(),400,"application/json; charset=utf-8",SafeJson(new{ok=false,erro="Falha na comunicação com o computador: "+ex.Message}));}catch{}
     }
    }
   }
@@ -189,9 +195,9 @@ namespace ArmazemGratidao {
     string image=Field(data,"foto");
     int comma=image.IndexOf(',');
     if(comma>=0)image=image.Substring(comma+1);
-    if(image.Length==0||image.Length>2200000)throw new Exception("Foto ausente ou muito grande.");
+    if(image.Length==0||image.Length>3700000)throw new Exception("Foto ausente ou muito grande.");
     byte[] bytes=Convert.FromBase64String(image);
-    if(bytes.Length>1700000)throw new Exception("Foto ultrapassa o limite de 1,7 MB.");
+    if(bytes.Length>2600000)throw new Exception("Foto ultrapassa o limite de 2,6 MB.");
     using(var ms=new MemoryStream(bytes))
     using(var bitmap=new Bitmap(ms)){
      if(bitmap.Width<160||bitmap.Height<90||((long)bitmap.Width*bitmap.Height)>18000000)
@@ -483,12 +489,17 @@ async function decodePhoto(file){
  try{
   const img=new Image();
   await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
-  const max=1900,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+  const max=1280,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
   const canvas=document.createElement('canvas');
   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
   canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
   canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-  const response=await fetch('/api/ler-foto',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},body:JSON.stringify({foto:canvas.toDataURL('image/jpeg',0.86)})});
+  const controller=new AbortController();
+  const watchdog=setTimeout(()=>controller.abort(),45000);
+  let response;
+  try{response=await fetch('/api/ler-foto',{method:'POST',cache:'no-store',signal:controller.signal,headers:{'Content-Type':'application/json','X-AMZG-Token':token},body:JSON.stringify({foto:canvas.toDataURL('image/jpeg',0.68)})});}
+  catch(e){throw Error('Não foi possível enviar a foto. Confira o Wi-Fi, mantenha o programa aberto e atualize a página do coletor. '+e.message)}
+  finally{clearTimeout(watchdog)}
   const data=await response.json();
   if(!data.ok)throw Error(data.erro||'Não foi possível ler o código.');
   return data;
