@@ -133,7 +133,12 @@ namespace ArmazemGratidao {
       "Os totais de cada dia serão recalculados; itens, pagamentos e estoque não mudam.",
       "Confirmar correção de data e hora",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
      using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,FailIfMissing=true}.ToString())){
-      conn.Open();using(var tx=conn.BeginTransaction()){
+      conn.Open();
+      string backup=db+".antes-correcao-data-hora-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+      using(var saved=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+       saved.Open();conn.BackupDatabase(saved,"main","main",-1,null,0);
+      }
+      using(var tx=conn.BeginTransaction()){
        using(var cmd=new SQLiteCommand("UPDATE sales SET created_at=@date WHERE id=@id",conn,tx)){
         cmd.Parameters.AddWithValue("@date",after);cmd.Parameters.AddWithValue("@id",id);
         if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não atualizada.");
