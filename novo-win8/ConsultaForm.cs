@@ -40,7 +40,7 @@ namespace ArmazemGratidao {
    if(!fiado)Controls.Add(summary);
    foreach(var table in new[]{master,details}){table.Font=new Font("Segoe UI",11,FontStyle.Regular);table.RowTemplate.Height=38;table.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in table.Columns){string n=column.Name.ToLowerInvariant();if(n.Contains("descri")||n.Contains("produto")||n.Contains("cliente")||n=="name"){column.MinimumWidth=220;column.FillWeight=220;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};}
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
-   master.CellClick+=(s,e)=>{if(e.RowIndex>=0)LoadDetails();};
+   master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster)LoadDetails();};
    dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
    LoadMaster();
   }
@@ -281,32 +281,43 @@ namespace ArmazemGratidao {
     MessageBox.Show("Itens exportados. Nenhum dado do banco foi alterado.");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao exportar");}
   }
-  void LoadDetails() {
-   if(loadingMaster)return;
-   // During WinForms grid re-binding CurrentRow may exist before columns are ready.
-   if(master.CurrentRow==null||master.CurrentRow.IsNewRow
-      ||!master.Columns.Contains(credit?"cliente":"venda")){
-    details.DataSource=null;
-    return;
-   }
-   object selected=master.CurrentRow.Cells[credit?"cliente":"venda"].Value;
-   if(selected==null||selected==DBNull.Value){
-    details.DataSource=null;
-    return;
-   }
-   try {
-    if(credit) {
-     string name=Convert.ToString(selected);
-     details.DataSource=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS valor,COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido,s.gross_total-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS saldo FROM sales s WHERE UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY s.id DESC","@name",name);
-     decimal balance=0;
-     var rows=details.DataSource as DataTable;
-     if(rows!=null)foreach(DataRow r in rows.Rows)balance+=Convert.ToDecimal(r["saldo"]);
-     heading.Text="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
-    }else{
-     details.DataSource=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
-     heading.Text="VENDA #"+selected+" | Todos os itens da venda";
+  bool loadingDetails=false;
+  void LoadDetails(){
+   if(loadingMaster||loadingDetails||IsDisposed||Disposing)return;
+   loadingDetails=true;
+   try{
+    string key=credit?"cliente":"venda";
+    // A seleção do WinForms pode mudar enquanto o DataSource é substituído.
+    DataRowView view=master.CurrentRow==null?null:master.CurrentRow.DataBoundItem as DataRowView;
+    if(view==null||view.Row==null||!view.Row.Table.Columns.Contains(key)){
+     details.DataSource=null;
+     return;
     }
-   }catch(Exception ex){details.DataSource=null;MessageBox.Show(ex.Message,"Erro ao consultar detalhes");}
+    object selected=view.Row[key];
+    if(selected==null||selected==DBNull.Value){details.DataSource=null;return;}
+    DataTable result;
+    string title;
+    if(credit){
+     string name=Convert.ToString(selected);
+     result=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS valor,COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido,s.gross_total-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS saldo FROM sales s WHERE UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY s.id DESC","@name",name);
+     decimal balance=0;
+     foreach(DataRow r in result.Rows){
+      if(r["saldo"]!=null&&r["saldo"]!=DBNull.Value)balance+=Convert.ToDecimal(r["saldo"]);
+     }
+     title="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
+    }else{
+     result=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
+     title="VENDA #"+selected+" | Todos os itens da venda";
+    }
+    if(!IsDisposed&&!details.IsDisposed){
+     details.DataSource=result;
+     heading.Text=title;
+    }
+   }catch(Exception ex){
+    if(!details.IsDisposed)details.DataSource=null;
+    // Mostrar a origem do erro, se ainda houver outra condição não prevista.
+    MessageBox.Show("Não foi possível consultar os detalhes."+Environment.NewLine+ex.ToString(),"Erro ao consultar detalhes",MessageBoxButtons.OK,MessageBoxIcon.Error);
+   }finally{loadingDetails=false;}
   }
  }
 }
