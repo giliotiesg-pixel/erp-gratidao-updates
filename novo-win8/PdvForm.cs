@@ -111,13 +111,23 @@ namespace ArmazemGratidao {
    try {
     var matches=new List<Item>();
     var stocks=new Dictionary<long,decimal>();
-    using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code OR TRIM(COALESCE(internal_code,''))=@code OR (name LIKE @name AND NOT EXISTS (SELECT 1 FROM products AS exact WHERE TRIM(COALESCE(exact.barcode,''))=@code OR TRIM(COALESCE(exact.internal_code,''))=@code)) ORDER BY CASE WHEN TRIM(COALESCE(barcode,''))=@code THEN 0 WHEN TRIM(COALESCE(internal_code,''))=@code THEN 1 ELSE 2 END,name LIMIT 101",connection)){
-     cmd.Parameters.AddWithValue("@code",search);
-     cmd.Parameters.AddWithValue("@name","%"+search+"%");
-     using(var reader=cmd.ExecuteReader())while(reader.Read()){
-      var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
-      matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
+    using(var connection=Open()){
+     // Priorizar a busca exata por código; pesquisar descrição apenas se não houver código correspondente.
+     using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code ORDER BY name,id LIMIT 101",connection)){
+      cmd.Parameters.AddWithValue("@code",search);
+      using(var reader=cmd.ExecuteReader())while(reader.Read()){
+       var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+       matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
+      }
+     }
+     if(matches.Count==0){
+      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE name LIKE @name ORDER BY name,id LIMIT 101",connection)){
+       cmd.Parameters.AddWithValue("@name","%"+search+"%");
+       using(var reader=cmd.ExecuteReader())while(reader.Read()){
+        var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+        matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
+       }
+      }
      }
     }
     if(matches.Count==0){
