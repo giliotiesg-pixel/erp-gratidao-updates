@@ -44,6 +44,7 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(customer);
+   customer.Text="Consumidor Constante";
    var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>{LoadCustomerOptions();customer.Focus();customer.DroppedDown=true;};footer.Controls.Add(chooseCustomer);
    customer.Enter+=(s,e)=>LoadCustomerOptions();
@@ -237,7 +238,7 @@ namespace ArmazemGratidao {
    if(method!="FIADO")RequireColumns(conn,"sale_payments","sale_id","payment_method","amount");
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
-   var methods=new[]{"DINHEIRO","PIX","DEBITO","CREDITO","ALIMENTACAO"};
+   var methods=PaymentFees.Methods;
    using(var dialog=new Form {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var combos=new ComboBox[3];var values=new NumericUpDown[3];
     var info=new Label {Left=18,Top=15,Width=440,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
@@ -281,7 +282,9 @@ namespace ArmazemGratidao {
      return;
     }
    }
-   var method=Convert.ToString(payment.SelectedItem);if(method=="FIADO"&&string.IsNullOrWhiteSpace(customer.Text)){MessageBox.Show("Informe o cliente para venda fiado.");return;}
+   var method=Convert.ToString(payment.SelectedItem);
+   string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor Constante":customer.Text.Trim();
+   if(method=="FIADO"&&(customerName=="Consumidor Constante")){MessageBox.Show("Informe um cliente específico para a venda fiado.");return;}
    var sum=cart.Sum(i=>i.Total);
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
@@ -289,6 +292,15 @@ namespace ArmazemGratidao {
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
    string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
    if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
+   // A taxa é custo do estabelecimento e nunca aumenta o valor pago pelo cliente.
+   Dictionary<string,decimal> feeRates;
+   try{using(var read=Open())feeRates=PaymentFees.Load(read);}
+   catch(Exception ex){MessageBox.Show("Não foi possível consultar as taxas: "+ex.Message,"Venda não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Error);return;}
+   var paymentParts=method=="FIADO"?new List<KeyValuePair<string,decimal>>():method=="DIVIDIDO"?split:new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
+   decimal estimatedFee=paymentParts.Sum(p=>PaymentFees.Fee(feeRates,p.Key,p.Value));
+   details+=Environment.NewLine+"Cliente: "+customerName;
+   if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
+
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
    try {
@@ -313,7 +325,7 @@ namespace ArmazemGratidao {
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,datetime('now','localtime')); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
-      cmd.Parameters.AddWithValue("@customer",customer.Text.Trim());cmd.Parameters.AddWithValue("@method",method);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
+      cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",method);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
      foreach(var i in cart) {
       decimal before;
@@ -328,9 +340,24 @@ namespace ArmazemGratidao {
       }
      }
      if(method!="FIADO"){
-      var payments=method=="DIVIDIDO"?split:new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
+      var payments=paymentParts;
       foreach(var part in payments)using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){
        q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",part.Key);q.Parameters.AddWithValue("@total",part.Value);q.ExecuteNonQuery();
+      }
+     }
+     // Auditoria financeira separada: preserva sales.net_profit histórico e registra
+     // a taxa real calculada no instante da venda e por forma de pagamento.
+     using(var setup=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_payment_fees (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,payment_method TEXT NOT NULL,base_amount NUMERIC NOT NULL,fee_percent NUMERIC NOT NULL,fee_amount NUMERIC NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",c,tx))setup.ExecuteNonQuery();
+     foreach(var part in paymentParts){
+      decimal rate=feeRates.ContainsKey(part.Key)?feeRates[part.Key]:0m;
+      decimal fee=PaymentFees.Fee(feeRates,part.Key,part.Value);
+      using(var insertFee=new SQLiteCommand("INSERT INTO sale_payment_fees(sale_id,payment_method,base_amount,fee_percent,fee_amount) VALUES(@id,@method,@base,@percent,@fee)",c,tx)){
+       insertFee.Parameters.AddWithValue("@id",saleId);
+       insertFee.Parameters.AddWithValue("@method",part.Key);
+       insertFee.Parameters.AddWithValue("@base",part.Value);
+       insertFee.Parameters.AddWithValue("@percent",rate);
+       insertFee.Parameters.AddWithValue("@fee",fee);
+       insertFee.ExecuteNonQuery();
       }
      }
      if(hasStockContext){
@@ -341,7 +368,7 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
-     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="";Render();code.Focus();
+     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="Consumidor Constante";Render();code.Focus();
     }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
