@@ -867,7 +867,7 @@ namespace ArmazemGratidao {
    using(var form=new Form {Text="Inserir produto",Width=930,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
+    var barcode=new TextBox();var ownCode=new CheckBox {Text="Código próprio da empresa (sem consulta online)",AutoSize=true};var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
     else name.Text=initial;
@@ -885,7 +885,8 @@ namespace ArmazemGratidao {
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
-       barcode.Width=160;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
+       barcode.Width=240;barcode.MaxLength=64;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
+    panel.Controls.Add(ownCode,1,11);
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
@@ -894,6 +895,7 @@ namespace ArmazemGratidao {
     Func<System.Threading.Tasks.Task> fetchProduct=async ()=>{
      string code=barcode.Text.Trim();
      if(lookingUp||code==lastLookupCode)return;
+     if(ownCode.Checked){lookupStatus.Text="Código interno próprio: consulta online desativada.";return;}
      if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){lookupStatus.Text="Informe um código numérico de 8 a 14 dígitos.";return;}
      int thisLookup=++lookupGeneration;
      string initialName=name.Text,initialBrand=brand.Text,initialCategory=category.Text;
@@ -927,12 +929,13 @@ namespace ArmazemGratidao {
      finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";if(!form.IsDisposed&&barcode.Text.Trim()!=code)lookupStatus.Text="Código alterado. Pressione Enter para pesquisar o novo código.";}}
     };
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
-    barcode.Leave+=async (s,e)=>{if(System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
+    barcode.Leave+=async (s,e)=>{if(!ownCode.Checked&&System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
     barcode.TextChanged+=(s,e)=>{lookupGeneration++;if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
-    barcode.MaxLength=14;
+    barcode.MaxLength=64;
     barcode.ShortcutsEnabled=true;
     barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
+    ownCode.CheckedChanged+=(s,e)=>{lookup.Enabled=!ownCode.Checked;lookupStatus.Text=ownCode.Checked?"Código próprio: digite o identificador desejado.":"Código comercial: consulta online disponível.";};
     for(int row=0;row<12;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
     panel.Controls.Add(lookupStatus,1,9);
     panel.Controls.Add(lookup,1,10);
@@ -940,8 +943,9 @@ namespace ArmazemGratidao {
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      barcode.Text=barcode.Text.Trim();
-     if(!string.IsNullOrWhiteSpace(barcode.Text)&&!System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$")){MessageBox.Show("Código de barras inválido. Informe 8 a 14 dígitos.","Cadastro de produto");return;}
-     if(!string.IsNullOrWhiteSpace(barcode.Text)&&barcode.Text.Length>=12&&!ValidBarcodeCheckDigit(barcode.Text)){if(MessageBox.Show("O dígito verificador do código de barras não confere. Deseja revisar o código antes de salvar?","Conferir código",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){barcode.Focus();return;}}
+     if(!string.IsNullOrWhiteSpace(barcode.Text)&&!ownCode.Checked&&!System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$")){MessageBox.Show("Para código próprio, marque a opção Código próprio da empresa.","Cadastro de produto");return;}
+     if(ownCode.Checked&&barcode.Text.Length==0){MessageBox.Show("Informe seu código interno para o produto.");return;}
+     if(!ownCode.Checked&&!string.IsNullOrWhiteSpace(barcode.Text)&&barcode.Text.Length>=12&&!ValidBarcodeCheckDigit(barcode.Text)){if(MessageBox.Show("O dígito verificador do código de barras não confere. Deseja revisar o código antes de salvar?","Conferir código",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){barcode.Focus();return;}}
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
      try{
       using(var c=Open(false)){
