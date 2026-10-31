@@ -608,7 +608,7 @@ namespace ArmazemGratidao {
       using(var form=new Form {Text="Editar produto #"+id,Width=760,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=9,Padding=new Padding(15)};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName};
+       var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
        var category=new TextBox {Text=oldCategory,Enabled=columns.Contains("category")};
        var expiry=new DateTimePicker {Format=DateTimePickerFormat.Short,ShowCheckBox=true,Checked=hasExpiry,Enabled=expiryCol!=null};
@@ -647,7 +647,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
+       panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,94));panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
@@ -765,7 +765,7 @@ namespace ArmazemGratidao {
    using(var form=new Form {Text="Inserir produto",Width=760,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var name=new TextBox();var brand=new TextBox();var category=new TextBox();
+    var barcode=new TextBox();var name=new TextBox {Multiline=true,Height=78,ScrollBars=ScrollBars.Vertical,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{8,14}$"))barcode.Text=initial;
     else name.Text=initial;
@@ -827,6 +827,7 @@ namespace ArmazemGratidao {
     barcode.ShortcutsEnabled=true;
     barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,94));
     panel.Controls.Add(lookupStatus,1,9);
     panel.Controls.Add(lookup,1,10);
 
