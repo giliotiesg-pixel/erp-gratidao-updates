@@ -125,6 +125,12 @@ namespace ArmazemGratidao {
       if(method=="POST"&&path=="/api/entrada"){
        Write(stream,200,"application/json; charset=utf-8",AddStock(json));return;
       }
+      if(method=="GET"&&path=="/api/codigo"){
+       Write(stream,200,"application/json; charset=utf-8",FindBarcode(Param(query,"codigo")));return;
+      }
+      if(method=="POST"&&path=="/api/cadastrar"){
+       Write(stream,200,"application/json; charset=utf-8",RegisterProduct(json));return;
+      }
       Write(stream,404,"application/json; charset=utf-8",SafeJson(new{erro="Rota não encontrada."}));
      }
     }catch(Exception){
@@ -161,6 +167,75 @@ namespace ArmazemGratidao {
     }
     return SafeJson(new{produtos=result});
    }
+  }
+  string FindBarcode(string raw){
+   try{
+    string code=(raw??"").Trim();
+    if(code.Length<5||code.Length>48)throw new Exception("Código de barras inválido.");
+    using(var conn=Open(true)){
+     using(var q=new SQLiteCommand("SELECT id,name,COALESCE(stock,0) AS stock FROM products WHERE TRIM(COALESCE(barcode,''))=@code LIMIT 1",conn)){
+      q.Parameters.AddWithValue("@code",code);
+      using(var rd=q.ExecuteReader()){
+       if(rd.Read())return SafeJson(new{existe=true,id=Convert.ToInt64(rd["id"]),nome=Convert.ToString(rd["name"]),quantidade=DecimalValue(rd["stock"])});
+      }
+     }
+    }
+    return SafeJson(new{existe=false});
+   }catch(Exception ex){return SafeJson(new{erro=ex.Message});}
+  }
+  string RegisterProduct(string json){
+   try{
+    var data=ParseObject(json);
+    string barcode=Field(data,"codigo").Trim(),name=Field(data,"nome").Trim();
+    string op=Field(data,"operacao").Trim();
+    if(barcode.Length<8||barcode.Length>32)throw new Exception("Código de barras precisa ter de 8 a 32 caracteres.");
+    foreach(char ch in barcode)if(!(ch>='0'&&ch<='9'))throw new Exception("Código de barras deve conter somente números.");
+    if(name.Length<3||name.Length>180)throw new Exception("Informe a descrição do produto, de 3 a 180 caracteres.");
+    decimal cost,price,qty;
+    if(!decimal.TryParse(Field(data,"custo"),NumberStyles.Number,CultureInfo.InvariantCulture,out cost)||cost<0||cost>9999999)throw new Exception("Custo inválido.");
+    if(!decimal.TryParse(Field(data,"preco"),NumberStyles.Number,CultureInfo.InvariantCulture,out price)||price<0||price>9999999)throw new Exception("Preço inválido.");
+    if(!decimal.TryParse(Field(data,"quantidade"),NumberStyles.Number,CultureInfo.InvariantCulture,out qty)||qty<0||qty>10000000)throw new Exception("Quantidade inicial inválida.");
+    if(op.Length<10||op.Length>90)throw new Exception("Identificador da operação inválido.");
+    lock(writeLock){
+     // Não altera produto existente. O operador deve usar Entrada de estoque para somar quantidades.
+     using(var conn=Open(false)){
+      if(!Table(conn,"products")||!Table(conn,"stock_audit_log"))throw new Exception("O banco não possui as tabelas de produtos e auditoria exigidas.");
+      using(var check=new SQLiteCommand("SELECT id FROM products WHERE TRIM(COALESCE(barcode,''))=@code LIMIT 1",conn)){
+       check.Parameters.AddWithValue("@code",barcode);
+       object existing=check.ExecuteScalar();if(existing!=null)throw new Exception("Este código de barras já está cadastrado. Use Entrada de estoque; nenhum cadastro foi duplicado.");
+      }
+      var cols=Columns(conn,"products");
+      foreach(string column in new[]{"id","barcode","name","price","cost","stock"})if(!cols.Contains(column))throw new Exception("Estrutura de produtos incompatível: falta "+column+".");
+      string directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidao","backups");
+      Directory.CreateDirectory(directory);
+      string backup=Path.Combine(directory,"cadastro-celular-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
+       dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);
+      }
+      long id;
+      using(var tx=conn.BeginTransaction()){
+       using(var insert=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock) VALUES(@code,@name,@price,@cost,@stock)",conn,tx)){
+        insert.Parameters.AddWithValue("@code",barcode);
+        insert.Parameters.AddWithValue("@name",name);
+        insert.Parameters.AddWithValue("@price",price);
+        insert.Parameters.AddWithValue("@cost",cost);
+        insert.Parameters.AddWithValue("@stock",qty);
+        if(insert.ExecuteNonQuery()!=1)throw new Exception("Não foi possível inserir o cadastro.");
+       }
+       using(var last=new SQLiteCommand("SELECT last_insert_rowid()",conn,tx))id=Convert.ToInt64(last.ExecuteScalar());
+       if(qty>0){
+        using(var audit=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reference_id,reason) VALUES(@id,@name,@code,'CADASTRO_INICIAL',0,@qty,@qty,'PRODUTO',@id,@reason)",conn,tx)){
+         audit.Parameters.AddWithValue("@id",id);audit.Parameters.AddWithValue("@name",name);audit.Parameters.AddWithValue("@code",barcode);audit.Parameters.AddWithValue("@qty",qty);
+         audit.Parameters.AddWithValue("@reason","Cadastro inicial pelo celular; operação "+op);
+         if(audit.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria da quantidade inicial.");
+        }
+       }
+       tx.Commit();
+      }
+      return SafeJson(new{ok=true,id=id,nome=name,codigo=barcode,quantidade=qty,mensagem="Produto cadastrado e integrado ao estoque."});
+     }
+    }
+   }catch(Exception ex){return SafeJson(new{ok=false,erro=ex.Message});}
   }
   string AddStock(string json){
    try{
