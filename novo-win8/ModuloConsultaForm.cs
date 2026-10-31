@@ -96,7 +96,7 @@ namespace ArmazemGratidao {
       StockField(cols,"cost","Custo")+","+
       StockField(cols,"status","Situação")+" FROM products WHERE (@term='' OR name LIKE @like OR "+
       (cols.Contains("barcode")?"barcode LIKE @like":"0")+
-      " OR CAST(id AS TEXT)=@term) ORDER BY name,id LIMIT 500";
+      " OR CAST(id AS TEXT)=@term) ORDER BY name COLLATE NOCASE,id LIMIT 500";
      using(var cmd=new SQLiteCommand(sql,conn)){
       string term=stockSearch.Text.Trim();
       cmd.Parameters.AddWithValue("@term",term);cmd.Parameters.AddWithValue("@like","%"+term+"%");
