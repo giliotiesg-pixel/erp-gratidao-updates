@@ -17,6 +17,22 @@ jobs:
       - name: Restaurar SQLite
         shell: pwsh
         run: nuget install System.Data.SQLite.Core -Version 1.0.118 -OutputDirectory novo-win8/packages -NonInteractive -DependencyVersion Highest
+      - name: Restaurar biblioteca QR Code
+        shell: pwsh
+        run: nuget install QRCoder -Version 1.4.3 -OutputDirectory novo-win8/packages -NonInteractive
+      - name: Ajustar referencia QR Code para o caminho real do pacote
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem novo-win8/packages/QRCoder.1.4.3 -Recurse -Filter QRCoder.dll | Where-Object { $_.FullName -match 'net4' } | Select-Object -First 1
+          if (!$dll) { throw "Biblioteca QRCoder.dll nao encontrada" }
+          $proj = "novo-win8/ArmazemGratidao.csproj"
+          [xml]$xml = Get-Content $proj
+          $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+          $ns.AddNamespace("m","http://schemas.microsoft.com/developer/msbuild/2003")
+          $ref = $xml.SelectSingleNode("//m:Reference[@Include='QRCoder']/m:HintPath",$ns)
+          if (!$ref) { throw "Referencia QR ausente do projeto" }
+          $ref.InnerText = $dll.FullName
+          $xml.Save((Resolve-Path $proj).Path)
       - name: Ajustar referencia SQLite para o caminho real do pacote
         shell: pwsh
         run: |
