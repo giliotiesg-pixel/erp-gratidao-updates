@@ -427,12 +427,17 @@ p{line-height:1.5}.hint{font-size:13px;color:#455a76}
 <label>Preço de venda (R$)</label><input id='price' type='number' inputmode='decimal' step='0.01' min='0' placeholder='Ex.: 24.99'>
 <label>Quantidade inicial</label><input id='initialQty' type='number' inputmode='decimal' step='0.001' min='0' value='0'>
 <button id='register' class='red'>Conferir e salvar produto</button><p id='registerMsg'></p>
+<div id='newQrArea' class='card hidden'><strong id='newQrName'></strong><img id='newQrImage' alt='QR Code do novo produto' style='display:block;width:210px;max-width:100%;margin:12px auto'><p class='hint'>QR Code criado automaticamente. Use-o nas próximas entradas de estoque.</p></div>
 </section>
 <section class='card hidden' id='entryPanel'>
 <h2>Entrada de produto existente</h2>
 <label>Buscar nome ou código</label><input id='search' placeholder='Digite o nome ou código'>
 <button id='find'>Buscar produto</button><div id='results'></div>
+<button id='entryScan' class='secondary'>Ler QR Code ou código de barras pela câmera</button>
+<input id='entryPhoto' class='hidden' type='file' accept='image/*' capture='environment'>
 <div id='chosen' class='info'>Selecione um produto acima.</div>
+<button id='showQr' class='secondary'>Mostrar QR Code do produto selecionado</button>
+<div id='qrArea' class='card hidden'><strong id='qrName'></strong><img id='qrImage' alt='QR Code do produto' style='display:block;width:210px;max-width:100%;margin:12px auto'><div class='hint'>Etiqueta do produto. O QR identifica o cadastro e não altera estoque. Guarde ou imprima esta etiqueta.</div></div>
 <label>Data da entrada</label><input id='date' type='date'>
 <label>Quantidade a adicionar</label><input id='qty' type='number' min='0.001' step='0.001' inputmode='decimal'>
 <label>Descrição do recebimento</label><textarea id='reason' rows='3' placeholder='Ex.: Mercadoria recebida do fornecedor'></textarea>
@@ -455,6 +460,41 @@ $('tabRegister').onclick=()=>tab(true);$('tabEntry').onclick=()=>tab(false);
 function preview(){if(selected){let qty=parseFloat($('qty').value)||0;$('after').textContent='Quantidade após entrada: '+fmt(Number(selected.quantidade)+qty)}}
 $('qty').addEventListener('input',preview);
 function requestId(){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2)}
+
+async function qrForProduct(id,prefix){
+ const response=await fetch('/api/qr-produto?chave='+encodeURIComponent(token)+'&id='+encodeURIComponent(id),{cache:'no-store'});
+ const data=await response.json();
+ if(!data.ok)throw Error(data.erro||'Erro ao gerar QR Code.');
+ $(prefix+'QrName').textContent=data.nome+' • Produto #'+data.id;
+ $(prefix+'QrImage').src=data.imagem;
+ $(prefix+'QrArea').classList.remove('hidden');
+}
+async function setEntryFromQr(id){
+ const response=await fetch('/api/produto?chave='+encodeURIComponent(token)+'&id='+encodeURIComponent(id),{cache:'no-store'});
+ const data=await response.json();
+ if(!data.ok)throw Error(data.erro||'Produto não encontrado.');
+ selected=data.produto;
+ $('chosen').textContent=selected.nome+' • Estoque atual: '+fmt(selected.quantidade);
+ $('qrArea').classList.add('hidden');
+ preview();notice('msg','Produto identificado por QR Code. Informe a quantidade que está entrando.',true);
+}
+async function decodePhoto(file){
+ const url=URL.createObjectURL(file);
+ try{
+  const img=new Image();
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+  const max=1900,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+  const response=await fetch('/api/ler-foto',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},body:JSON.stringify({foto:canvas.toDataURL('image/jpeg',0.86)})});
+  const data=await response.json();
+  if(!data.ok)throw Error(data.erro||'Não foi possível ler o código.');
+  return data;
+ }finally{URL.revokeObjectURL(url)}
+}
+
 async function checkBarcode(){
  const code=$('barcode').value.trim();barcodeChecked='';
  if(!code){$('barcodeStatus').textContent='Leia ou informe um código.';return}
@@ -473,30 +513,36 @@ $('check').onclick=checkBarcode;
 $('scan').onclick=()=>{$('photo').value='';$('photo').click()};
 $('photo').addEventListener('change',async function(){
  const file=this.files&&this.files[0];if(!file)return;
- $('barcodeStatus').textContent='Lendo a foto no computador...';
- const url=URL.createObjectURL(file);
+ $('barcodeStatus').textContent='Lendo código no computador...';
  try{
-  const img=new Image();
-  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
-  const max=1900,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
-  const canvas=document.createElement('canvas');
-  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
-  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
-  const context=canvas.getContext('2d');
-  context.drawImage(img,0,0,canvas.width,canvas.height);
-  const photo=canvas.toDataURL('image/jpeg',0.86);
-  const response=await fetch('/api/ler-foto',{method:'POST',headers:{'Content-Type':'application/json','X-AMZG-Token':token},
-    body:JSON.stringify({foto:photo})});
-  const data=await response.json();
-  if(!data.ok)throw Error(data.erro||'Não foi possível localizar o código de barras.');
+  const data=await decodePhoto(file);
+  if(data.tipo==='produto'){
+   tab(false);await setEntryFromQr(data.id);return;
+  }
   $('barcode').value=data.codigo;
   notice('registerMsg','Código reconhecido: '+data.codigo+' ('+data.formato+').',true);
   await checkBarcode();
  }catch(e){
   $('barcodeStatus').textContent='Leitura não concluída: '+e.message;
-  notice('registerMsg','Use boa iluminação, mantenha as barras completas e nítidas, e fotografe de perto. Também é possível digitar o código.',false);
- }finally{URL.revokeObjectURL(url)}
+  notice('registerMsg','Fotografe o código nítido, sem reflexo, ou digite os números.',false);
+ }
 });
+$('entryScan').onclick=()=>{$('entryPhoto').value='';$('entryPhoto').click()};
+$('entryPhoto').addEventListener('change',async function(){
+ const file=this.files&&this.files[0];if(!file)return;
+ notice('msg','Lendo o QR Code ou barras pelo computador...',false);
+ try{
+  const data=await decodePhoto(file);
+  if(data.tipo==='produto'){await setEntryFromQr(data.id);return;}
+  $('search').value=data.codigo;
+  await $('find').onclick();
+  notice('msg','Código de barras reconhecido. Selecione o produto na lista.',true);
+ }catch(e){notice('msg','Não foi possível ler: '+e.message,false)}
+});
+$('showQr').onclick=async function(){
+ if(!selected){notice('msg','Selecione primeiro um produto.',false);return}
+ try{await qrForProduct(selected.id,'');}catch(e){notice('msg',e.message,false)}
+};
 $('register').onclick=async function(){
  if(locked)return;
  const code=$('barcode').value.trim(),name=$('productName').value.trim();
@@ -513,6 +559,7 @@ $('register').onclick=async function(){
  const data=await response.json();
  if(!data.ok)throw Error(data.erro||'Erro ao salvar cadastro.');
  notice('registerMsg','CADASTRADO! '+data.nome+' • Código: '+data.codigo+' • Quantidade: '+fmt(data.quantidade),true);
+ try{await qrForProduct(data.id,'new');}catch(e){notice('registerMsg','Produto salvo, mas não foi possível mostrar o QR: '+e.message,false)}
  $('barcode').value='';$('productName').value='';$('cost').value='';$('price').value='';$('initialQty').value='0';barcodeChecked='';
  $('barcodeStatus').textContent='Pronto para bipar o próximo produto.';
  }catch(e){notice('registerMsg','Cadastro não concluído: '+e.message,false)}
@@ -527,7 +574,7 @@ $('find').onclick=async function(){
  for(const p of data.produtos){
  const el=document.createElement('div');el.className='item';const name=document.createElement('b');name.textContent=p.nome;el.appendChild(name);
  const info=document.createElement('small');info.textContent='Código: '+p.codigo+' • Estoque: '+fmt(p.quantidade);el.appendChild(info);
- el.onclick=()=>{selected=p;$('chosen').textContent=p.nome+' • Estoque atual: '+fmt(p.quantidade);preview();notice('msg','',false)};
+ el.onclick=()=>{selected=p;$('chosen').textContent=p.nome+' • Estoque atual: '+fmt(p.quantidade);$('qrArea').classList.add('hidden');preview();notice('msg','',false)};
  $('results').appendChild(el);
  }
  }catch(e){notice('msg','Falha na conexão: '+e.message,false)}
