@@ -52,7 +52,7 @@ namespace ArmazemGratidao {
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();suggestions.Visible=false;AddProduct();}};
-   code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=2)lookupDelay.Start();else suggestions.Visible=false;};
+   code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
@@ -83,7 +83,9 @@ namespace ArmazemGratidao {
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&e.Value!=null){string name=grid.Columns[e.ColumnIndex].Name.ToLowerInvariant();if(name.Contains("descri")||name.Contains("nome")||name.Contains("name")){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}}};
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){if(column.Name.ToLowerInvariant().Contains("descri")||column.Name.ToLowerInvariant().Contains("nome")||column.Name.ToLowerInvariant().Contains("name")){column.MinimumWidth=260;column.FillWeight=240;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
    Controls.Add(grid);Controls.Add(footer);Controls.Add(header);
-   suggestions.Parent=this;suggestions.Left=header.Left+130;suggestions.Top=header.Bottom;suggestions.BringToFront();
+   suggestions.Parent=this;
+   if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
+   PositionSuggestions();
    Render();code.Focus();
   }
   SQLiteConnection Open() {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
@@ -253,9 +255,16 @@ namespace ArmazemGratidao {
    foreach(char c in normalized)if(CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark)result.Append(c);
    return result.ToString().Normalize(NormalizationForm.FormC);
   }
+  void PositionSuggestions(){
+   if(code.Parent==null||IsDisposed||!IsHandleCreated)return;
+   Point location=PointToClient(code.Parent.PointToScreen(new Point(code.Left,code.Bottom)));
+   suggestions.Left=Math.Max(0,Math.Min(location.X,ClientSize.Width-suggestions.Width));
+   suggestions.Top=Math.Max(0,location.Y+3);
+   suggestions.BringToFront();
+  }
   void FindSuggestions(){
    string term=code.Text.Trim();
-   if(term.Length<2)return;
+   if(term.Length<(manualEntry?1:2)){suggestions.Visible=false;return;}
    try{
     suggestions.Items.Clear();suggestionCodes.Clear();
     using(var connection=Open())
@@ -270,7 +279,7 @@ namespace ArmazemGratidao {
      }
     }
     suggestions.Visible=suggestions.Items.Count>0;
-    if(suggestions.Visible)suggestions.BringToFront();
+    if(suggestions.Visible){PositionSuggestions();suggestions.BringToFront();}
    }catch{suggestions.Visible=false;}
   }
   void ChooseSuggestion(){
