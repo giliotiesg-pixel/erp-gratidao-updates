@@ -552,6 +552,9 @@ namespace ArmazemGratidao {
    lines.Add(new string('-',70));
    lines.Add("Obrigado pela preferencia!");
    lines.Add("Documento de controle interno - nao fiscal.");
+   return WriteComprovantePdf(lines,"Venda-"+saleId+".pdf");
+  }
+  string WriteComprovantePdf(List<string> lines,string filename){
    // PDF escrito em objetos padrao; cada pagina suporta 55 linhas.
    var objects=new List<string>();
    objects.Add(""); // catalogo
@@ -588,23 +591,85 @@ namespace ArmazemGratidao {
    pdf.Append("trailer\n<< /Size ").Append(objects.Count+1).Append(" /Root 1 0 R >>\nstartxref\n").Append(xref).Append("\n%%EOF");
    string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Armazem Gratidao","Comprovantes");
    Directory.CreateDirectory(folder);
-   string destination=Path.Combine(folder,"Venda-"+saleId+".pdf");
+   string destination=Path.Combine(folder,filename);
    File.WriteAllBytes(destination,Encoding.ASCII.GetBytes(pdf.ToString()));
    return destination;
   }
+  string CreateOpenBalancePdf(string clientName){
+   var lines=new List<string>{"ARMAZEM GRATIDAO","EXTRATO DE VALORES EM ABERTO - NAO FISCAL","Cliente: "+clientName,"Emitido em: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm"),new string('-',65)};
+   decimal sum=0;int count=0;
+   using(var conn=Open())using(var cmd=new SQLiteCommand("SELECT s.id,s.created_at,s.gross_total,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS paid FROM sales s WHERE LOWER(TRIM(COALESCE(s.customer_name,'')))=LOWER(TRIM(@client)) AND (UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%') ORDER BY s.created_at,s.id",conn)){
+    cmd.Parameters.AddWithValue("@client",clientName);
+    using(var rd=cmd.ExecuteReader())while(rd.Read()){
+     decimal due=Dec(rd["gross_total"])-Dec(rd["paid"]);
+     if(due<=0)continue;
+     count++;sum+=due;
+     lines.Add("Venda #"+rd["id"]+"   "+rd["created_at"]+"   Em aberto: R$ "+due.ToString("N2"));
+    }
+   }
+   if(count==0)lines.Add("Nenhuma venda fiado em aberto encontrada.");
+   lines.Add(new string('-',65));lines.Add("TOTAL EM ABERTO: R$ "+sum.ToString("N2"));
+   lines.Add("Extrato informativo. Nao substitui nota fiscal.");
+   return WriteComprovantePdf(lines,"Fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".pdf");
+  }
+  string CreateReceiptText(long saleId){
+   var lines=new List<string>{"ARMAZEM GRATIDAO","CUPOM DE VENDA - NAO FISCAL",new string('-',38)};
+   using(var conn=Open()){
+    using(var cmd=new SQLiteCommand("SELECT created_at,customer_name,payment_method,gross_total FROM sales WHERE id=@id",conn)){
+     cmd.Parameters.AddWithValue("@id",saleId);
+     using(var rd=cmd.ExecuteReader()){
+      if(!rd.Read())throw new Exception("Venda não encontrada.");
+      lines.Add("Venda #"+saleId+"   "+rd["created_at"]);
+      lines.Add("Cliente: "+rd["customer_name"]);lines.Add("Pagamento: "+rd["payment_method"]);
+      lines.Add("TOTAL R$ "+Dec(rd["gross_total"]).ToString("N2"));
+     }
+    }
+    using(var cmd=new SQLiteCommand("SELECT name,quantity,unit_price,total FROM sale_items WHERE sale_id=@id ORDER BY id",conn)){
+     cmd.Parameters.AddWithValue("@id",saleId);
+     using(var rd=cmd.ExecuteReader())while(rd.Read()){
+      lines.Add(Convert.ToString(rd["name"]));
+      lines.Add(Dec(rd["quantity"]).ToString("0.###")+" x R$ "+Dec(rd["unit_price"]).ToString("N2")+" = R$ "+Dec(rd["total"]).ToString("N2"));
+     }
+    }
+   }
+   lines.Add(new string('-',38));lines.Add("Comprovante nao fiscal.");
+   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Armazem Gratidao","Comprovantes");
+   Directory.CreateDirectory(folder);
+   string file=Path.Combine(folder,"Cupom-Venda-"+saleId+".txt");
+   File.WriteAllLines(file,lines.ToArray(),Encoding.UTF8);return file;
+  }
   void OfferSaleReceipt(long saleId,string clientName,decimal saleTotal){
    try{
-    var choice=MessageBox.Show("Venda #"+saleId+" concluida.\n\nSIM: gerar comprovante PDF e abrir WhatsApp.\nNAO: gerar e abrir somente o PDF.\nCANCELAR: voltar ao PDV sem gerar agora.","Comprovante da venda",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Information);
-    if(choice==DialogResult.Cancel)return;
-    string pdf=CreateSaleReceiptPdf(saleId);
-    if(choice==DialogResult.No){Process.Start(new ProcessStartInfo(pdf){UseShellExecute=true});return;}
-    string message="Armazem Gratidao - comprovante da venda #"+saleId+" - R$ "+saleTotal.ToString("N2")+". Segue o comprovante PDF. ";
-    string whatsapp="https://wa.me/?text="+Uri.EscapeDataString(message);
-    Process.Start(new ProcessStartInfo(whatsapp){UseShellExecute=true});
-    MessageBox.Show("PDF salvo em:\n"+pdf+"\n\nNo WhatsApp, selecione o contato e ANEXE o arquivo PDF. A mensagem foi preparada, mas o programa nao envia anexos automaticamente.","Enviar comprovante por WhatsApp");
-   }catch(Exception ex){MessageBox.Show("A venda foi concluida, mas o comprovante nao foi gerado: "+ex.Message,"Comprovante",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+    using(var dialog=new Form{Text="Comprovantes e WhatsApp - Venda #"+saleId,Width=660,Height=330,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var title=new Label{Text="Escolha o documento para o cliente:",Left=16,Top=18,Width=610,Height=30,Font=new Font("Segoe UI",12,FontStyle.Bold)};
+     var option=new ComboBox{Left=16,Top=58,Width=600,DropDownStyle=ComboBoxStyle.DropDownList};
+     option.Items.AddRange(new object[]{"Cupom de venda (TXT - não fiscal)","Comprovante da venda (PDF - não fiscal)","Total em aberto do cliente (PDF - não fiscal)"});
+     option.SelectedIndex=0;
+     var send=new Button{Text="Preparar envio WhatsApp",Left=16,Top=120,Width=230,Height=43};
+     var save=new Button{Text="Gerar e abrir arquivo",Left=258,Top=120,Width=210,Height=43};
+     var close=new Button{Text="Fechar",Left=480,Top=120,Width=135,Height=43};
+     var note=new Label{Text="O arquivo fica salvo em Documentos / Armazem Gratidao / Comprovantes.\nNo WhatsApp comum, o anexo deve ser selecionado manualmente.\nCupom não fiscal não substitui NFC-e autorizada.",Left=16,Top=182,Width=610,Height=80};
+     Func<string> generate=()=>{
+      if(option.SelectedIndex==0)return CreateReceiptText(saleId);
+      if(option.SelectedIndex==1)return CreateSaleReceiptPdf(saleId);
+      if(string.IsNullOrWhiteSpace(clientName)||string.Equals(clientName,"Consumidor",StringComparison.OrdinalIgnoreCase))throw new Exception("Selecione um cliente identificado para consultar o saldo em aberto.");
+      return CreateOpenBalancePdf(clientName);
+     };
+     save.Click+=(sender,args)=>{try{string file=generate();Process.Start(new ProcessStartInfo(file){UseShellExecute=true});}catch(Exception ex){MessageBox.Show(ex.Message,"Comprovante");}};
+     send.Click+=(sender,args)=>{
+      try{
+       string file=generate();
+       string label=option.SelectedIndex==2?"extrato de valores em aberto":"comprovante da venda #"+saleId;
+       string url="https://wa.me/?text="+Uri.EscapeDataString("Armazém Gratidão: segue "+label+".");
+       Process.Start(new ProcessStartInfo(url){UseShellExecute=true});
+       MessageBox.Show("Documento salvo:\n"+file+"\n\nSelecione o contato e anexe este arquivo na conversa do WhatsApp. O envio não é automático.","WhatsApp");
+      }catch(Exception ex){MessageBox.Show(ex.Message,"WhatsApp");}
+     };
+     close.Click+=(sender,args)=>dialog.Close();
+     dialog.Controls.AddRange(new Control[]{title,option,send,save,close,note});dialog.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Venda salva, mas erro no comprovante: "+ex.Message,"Comprovante");}
   }
-
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
