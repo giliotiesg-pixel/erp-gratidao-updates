@@ -15,6 +15,9 @@ namespace ArmazemGratidao {
   sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
+  readonly bool manualEntry;
+  readonly DateTimePicker manualDate=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm",ShowUpDown=true,Width=175};
+
   readonly List<Item> cart=new List<Item>();
   readonly TextBox code=new TextBox {Width=260,Font=new Font("Segoe UI",14,FontStyle.Bold)};
   readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Increment=1M,Value=1,Width=95};
@@ -29,11 +32,19 @@ namespace ArmazemGratidao {
   readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
   bool suppressLookup=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
-  public PdvForm(string database) {
+  public PdvForm(string database):this(database,false){}
+  public PdvForm(string database,bool manualMode) {
+   manualEntry=manualMode;
    db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(1000,650);BackColor=Color.FromArgb(246,249,253);
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
    var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
+   if(manualEntry){
+    Text="Armazem Gratidao - Lançamento rápido de vendas anotadas";
+    header.Controls.Add(new Label{Text="DATA DA VENDA:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)});
+    manualDate.Value=DateTime.Now;
+    header.Controls.Add(manualDate);
+   }
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
    saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;
@@ -750,6 +761,7 @@ namespace ArmazemGratidao {
    details+=Environment.NewLine+"Cliente: "+customerName;
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
 
+   if(manualEntry && manualDate.Value>DateTime.Now.AddMinutes(2)){MessageBox.Show("A data da venda anotada não pode estar no futuro.");return;}
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
    try {
@@ -772,9 +784,9 @@ namespace ArmazemGratidao {
        if(authorize.ExecuteNonQuery()!=1)throw new Exception("Não foi possível autorizar a baixa de estoque da venda.");
      }
      long saleId;
-     using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,datetime('now','localtime')); SELECT last_insert_rowid();",c,tx)){
+     using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@saleDate); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
-      cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",method);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
+      cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",method);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
      foreach(var i in cart) {
       decimal before;
