@@ -695,6 +695,29 @@ namespace ArmazemGratidao {
     }
    }}catch(Exception ex){MessageBox.Show(ex.Message,"Consulta de produtos");}
   }
+  // Simulador independente: só aplica o preço quando o operador clicar.
+  static Control ProfitCalculator(NumericUpDown cost,NumericUpDown price,NumericUpDown quantity){
+   var panel=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true};
+   var percent=new NumericUpDown{DecimalPlaces=2,Minimum=0,Maximum=10000,Width=94,Increment=1};
+   var preview=new Label{AutoSize=true,Padding=new Padding(6,9,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   var apply=new Button{Text="Aplicar preço",Width=130,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   Action update=()=>{
+    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
+    decimal profit=suggested-cost.Value;
+    preview.Text="Preço sugerido R$ "+suggested.ToString("N2")+" | Lucro/un. R$ "+profit.ToString("N2")+" | Total R$ "+(profit*quantity.Value).ToString("N2");
+   };
+   percent.ValueChanged+=(sender,args)=>update();
+   cost.ValueChanged+=(sender,args)=>update();
+   quantity.ValueChanged+=(sender,args)=>update();
+   apply.Click+=(sender,args)=>{
+    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
+    if(suggested>price.Maximum){MessageBox.Show("Preço calculado ultrapassa o limite do campo.");return;}
+    price.Value=suggested;
+   };
+   panel.Controls.Add(new Label{Text="% sobre custo:",AutoSize=true,Padding=new Padding(0,9,0,0)});
+   panel.Controls.Add(percent);panel.Controls.Add(apply);panel.Controls.Add(preview);
+   update();return panel;
+  }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
    long id;
@@ -716,7 +739,7 @@ namespace ArmazemGratidao {
       string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
       DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
       bool oldWeight=weightCol!=null&&r["saved_weight"]!=DBNull.Value&&Convert.ToString(r["saved_weight"])!="0";
-      using(var form=new Form {Text="Editar produto #"+id,Width=930,Height=600,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+      using(var form=new Form {Text="Editar produto #"+id,Width=1100,Height=680,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
        var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};
@@ -762,7 +785,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.Controls.Add(save,1,10);StyleDialog(form,panel);form.Controls.Add(panel);
+       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,12);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,12);panel.Controls.Add(save,1,13);StyleDialog(form,panel);form.Controls.Add(panel);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
@@ -904,7 +927,7 @@ namespace ArmazemGratidao {
    InsertProduct(initialInput);
   }
   void InsertProduct(string initialInput=""){
-   using(var form=new Form {Text="Inserir produto",Width=930,Height=630,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+   using(var form=new Form {Text="Inserir produto",Width=1100,Height=720,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var ownCode=new CheckBox {Text="Código próprio da empresa (sem consulta online)",AutoSize=true};var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
