@@ -255,6 +255,7 @@ namespace ArmazemGratidao {
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));})),
+    Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de lançar vendas.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
