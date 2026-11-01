@@ -612,6 +612,19 @@ namespace ArmazemGratidao {
    }
    return numbers;
   }
+  static string SearchFoldSql(string column){
+   string expression="LOWER(COALESCE("+column+",''))";
+   string accented="áàâãäéèêëíìîïóòôõöúùûüç";
+   string plain="aaaaaeeeeiiiiooooouuuuc";
+   for(int i=0;i<accented.Length;i++)expression="REPLACE("+expression+",'"+accented[i]+"','"+plain[i]+"')";
+   return expression;
+  }
+  static string SearchFold(string term){
+   string normalized=(term??"").ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+   var result=new System.Text.StringBuilder();
+   foreach(char c in normalized)if(System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)!=System.Globalization.UnicodeCategory.NonSpacingMark)result.Append(c);
+   return result.ToString().Normalize(System.Text.NormalizationForm.FormC);
+  }
   void LoadProducts(){
    if(!listVisible){info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";return;}
    try{
@@ -626,10 +639,10 @@ namespace ArmazemGratidao {
     if(mode==3)filter=" AND COALESCE(stock,0)<=0";
     if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
     if((mode==1||mode==2)&&activeColumn==null){info.Text="  Este banco não possui campo de status; filtro indisponível.";return;}
-    string searchColumns=string.IsNullOrWhiteSpace(search.Text)?"1=1":"name LIKE @q OR TRIM(COALESCE(barcode,'')) LIKE @q";
+    string searchColumns=string.IsNullOrWhiteSpace(search.Text)?"1=1":SearchFoldSql("name")+" LIKE @q OR TRIM(COALESCE(barcode,'')) LIKE @q";
     if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("internal_code"))searchColumns+=" OR TRIM(COALESCE(internal_code,'')) LIKE @q";
-    if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("brand"))searchColumns+=" OR brand LIKE @q";
-    if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("category"))searchColumns+=" OR category LIKE @q";
+    if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("brand"))searchColumns+=" OR "+SearchFoldSql("brand")+" LIKE @q";
+    if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("category"))searchColumns+=" OR "+SearchFoldSql("category")+" LIKE @q";
     string extraSelect=(cols.Contains("brand")?",brand AS marca":"")+(cols.Contains("category")?",category AS categoria":"");
     string expiryColumn=cols.Contains("expiry_date")?"expiry_date":cols.Contains("expiration_date")?"expiration_date":cols.Contains("validade")?"validade":null;
     if((mode==5||mode==6)&&expiryColumn==null){info.Text="  Este banco não possui campo de validade; filtro indisponível.";grid.DataSource=null;metrics.Text="";return;}
@@ -641,7 +654,7 @@ namespace ArmazemGratidao {
     if(weightColumn!=null)extraSelect+=",\""+weightColumn+"\" AS venda_por_peso";
     long total;
     using(var count=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE ("+searchColumns+")"+filter,c)){
-     count.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+     count.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
      total=Convert.ToInt64(count.ExecuteScalar());
     }
     int pages=(int)Math.Max(1,(total+PageSize-1)/PageSize);
@@ -649,7 +662,7 @@ namespace ArmazemGratidao {
     previousPage.Enabled=currentPage>0;
     nextPage.Enabled=currentPage<pages-1;
     using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name COLLATE NOCASE,id LIMIT @limit OFFSET @offset",c)){
-     cmd.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+     cmd.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
      cmd.Parameters.AddWithValue("@limit",PageSize);
      cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);
@@ -667,7 +680,7 @@ namespace ArmazemGratidao {
      info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
      // Indicadores completos somente sob demanda, evitando uma varredura extra a cada pesquisa.
      if(calculateMetrics)using(var totals=new SQLiteCommand("SELECT SUM(CASE WHEN COALESCE(stock,0)<=0 THEN 1 ELSE 0 END), COALESCE(SUM(COALESCE(stock,0)),0), COALESCE(SUM(COALESCE(stock,0)*COALESCE(cost,0)),0) FROM products WHERE ("+searchColumns+")"+filter,c)){
-      totals.Parameters.AddWithValue("@q","%"+search.Text.Trim()+"%");
+      totals.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
       using(var result=totals.ExecuteReader()){
        if(result.Read()){
         long zeroStock=result.IsDBNull(0)?0:Convert.ToInt64(result.GetValue(0));
@@ -822,7 +835,32 @@ namespace ArmazemGratidao {
     return request;
    }
   }
+  static string CatalogCachePath{get{return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo","catalogo-produtos-offline.db");}}
+  static BarcodeProductData CachedBarcode(string code){
+   if(!System.IO.File.Exists(CatalogCachePath))return null;
+   using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=CatalogCachePath,ReadOnly=true,FailIfMissing=true}.ToString())){
+    c.Open();
+    using(var cmd=new SQLiteCommand("SELECT name,brand,category FROM catalog WHERE barcode=@barcode LIMIT 1",c)){
+     cmd.Parameters.AddWithValue("@barcode",code);
+     using(var reader=cmd.ExecuteReader())if(reader.Read())return new BarcodeProductData{Name=Convert.ToString(reader[0]),Brand=Convert.ToString(reader[1]),Category=Convert.ToString(reader[2])};
+    }
+   }
+   return null;
+  }
+  static void RememberBarcode(string code,BarcodeProductData product){
+   if(product==null||string.IsNullOrWhiteSpace(product.Name))return;
+   System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CatalogCachePath));
+   using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=CatalogCachePath}.ToString())){
+    c.Open();
+    using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS catalog(barcode TEXT PRIMARY KEY,name TEXT NOT NULL,brand TEXT,category TEXT,updated_at TEXT)",c))create.ExecuteNonQuery();
+    using(var insert=new SQLiteCommand("INSERT OR REPLACE INTO catalog(barcode,name,brand,category,updated_at) VALUES(@code,@name,@brand,@category,datetime('now'))",c)){
+     insert.Parameters.AddWithValue("@code",code);insert.Parameters.AddWithValue("@name",product.Name);
+     insert.Parameters.AddWithValue("@brand",product.Brand??"");insert.Parameters.AddWithValue("@category",product.Category??"");insert.ExecuteNonQuery();
+    }
+   }
+  }
   static BarcodeProductData LookupBarcodeProduct(string barcode){
+   try{var cached=CachedBarcode(barcode);if(cached!=null)return cached;}catch{}
    System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
    string url="https://world.openfoodfacts.org/api/v2/product/"+barcode+".json?fields=product_name_pt,product_name,brands,categories,status";
    using(var client=new ProductLookupWebClient()){
@@ -840,7 +878,9 @@ namespace ArmazemGratidao {
     name=System.Text.RegularExpressions.Regex.Replace(name,@"\s+"," ").Trim();
     brand=System.Text.RegularExpressions.Regex.Replace(brand,@"\s+"," ").Trim();
     category=System.Text.RegularExpressions.Regex.Replace(category,@"\s+"," ").Trim();
-    return new BarcodeProductData {Name=name,Brand=brand,Category=category};
+    var found=new BarcodeProductData {Name=name,Brand=brand,Category=category};
+    try{RememberBarcode(barcode,found);}catch{} // Consulta online nunca falha por problema no cache.
+    return found;
    }
   }
   static string LookupBarcodeName(string barcode){
