@@ -513,6 +513,8 @@ namespace ArmazemGratidao {
    RequireColumns(conn,"products","id","stock");
    RequireColumns(conn,"stock_audit_log","product_id","product_name","barcode","event_type","quantity_before","quantity_after","quantity_delta","reference_type","reference_id","reason");
    if(method!="FIADO")RequireColumns(conn,"sale_payments","sale_id","payment_method","amount");
+   // O saldo parcial depende desta tabela; não iniciar a gravação se ela não existir.
+   if(method=="FIADO")RequireColumns(conn,"credit_payments","sale_id","amount","payment_method","paid_at","note");
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
    var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
@@ -807,6 +809,7 @@ namespace ArmazemGratidao {
    try {
     using(var c=Open()){
      ValidateSaleSchema(c,recordedMethod);
+     if(splitFiado)RequireColumns(c,"sale_payments","sale_id","payment_method","amount");
      using(var tx=c.BeginTransaction()) {
      // Autorizar somente a baixa da venda, dentro da mesma transação dos itens e da auditoria.
      // A proteção original do estoque é restaurada antes do COMMIT.
