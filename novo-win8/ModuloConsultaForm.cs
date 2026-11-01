@@ -15,6 +15,7 @@ namespace ArmazemGratidao {
   readonly Label status=new Label {Dock=DockStyle.Bottom,Height=35,TextAlign=ContentAlignment.MiddleLeft};
   public ModuloConsultaForm(string path,string name) {
    db=path;module=name;Text="Armazem Gratidao | "+name+(name=="Clientes"?" - Cadastro":" (Consulta)");Width=1100;Height=700;BackColor=Color.FromArgb(229,242,255);
+   var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
    var top=new FlowLayoutPanel {Dock=DockStyle.Top,Height=55,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
    var reload=new Button {Text="Atualizar consulta",AutoSize=true,Height=33};reload.Click+=(s,e)=>LoadData();top.Controls.Add(reload);
    if(module=="Estoque"){
