@@ -119,8 +119,8 @@ namespace ArmazemGratidao {
    grid.DataBindingComplete+=(s,e)=>{
     foreach(DataGridViewColumn col in grid.Columns)col.ReadOnly=col.Name!="marcar";
    };
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=40,WrapContents=false};
-   var all=new CheckBox {Text="Selecionar todas",AutoSize=true,Margin=new Padding(8,10,15,0)};
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,WrapContents=false,AutoScroll=true,BackColor=Color.FromArgb(246,249,253)};
+   var all=new CheckBox {Text="Selecionar todas as vendas",AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),Margin=new Padding(12,10,16,0)};
    var total=new Label {Text="Total selecionado: R$ 0,00",AutoSize=true,Margin=new Padding(5,10,0,0)};
    bar.Controls.Add(all);bar.Controls.Add(total);
    Action sum=()=>{
