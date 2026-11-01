@@ -7,7 +7,7 @@ using System.IO;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
  public static class PaymentFees {
-  public static readonly string[] Methods={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"};
+  public static readonly string[] Methods={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","DEBITO_VISA","DEBITO_MASTERCARD","DEBITO_ELO","CREDITO","CREDITO_VISA","CREDITO_MASTERCARD","CREDITO_ELO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"};
   static SQLiteConnection Open(string db){var c=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
   public static void Prepare(SQLiteConnection c){
    using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS payment_fee_rates (payment_method TEXT PRIMARY KEY,percent NUMERIC NOT NULL DEFAULT 0 CHECK(percent>=0 AND percent<=100),updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",c))q.ExecuteNonQuery();
@@ -34,16 +34,19 @@ namespace ArmazemGratidao {
     using(var c=Open(db)){Prepare(c);}
     using(var c=Open(db)){
      var rates=Load(c);
-     using(var dlg=new Form{Text="Configurar Taxas de Cartões e Pagamentos",Width=560,Height=660,MinimumSize=new Size(510,570),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
-      var intro=new Label{Dock=DockStyle.Top,Height=77,Padding=new Padding(15,10,15,0),Text="Configure o percentual cobrado pela operadora para cada forma.\n0,00% significa sem taxa. A taxa é descontada do valor líquido esperado, não do valor pago pelo cliente.",Font=new Font("Segoe UI",10,FontStyle.Bold)};
-      var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=Methods.Length,AutoScroll=true,Padding=new Padding(15),BackColor=Color.White};
-      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));
+     using(var dlg=new Form{Text="Configurar Taxas de Cartões e Pagamentos",Width=680,Height=780,MinimumSize=new Size(590,630),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var intro=new Label{Dock=DockStyle.Top,Height=100,Padding=new Padding(15,10,15,0),Text="Configure o percentual cobrado pela operadora para cada forma.\n0,00% significa sem taxa. Cada bandeira pode ter taxa própria. A taxa reduz o valor líquido da loja; o cliente paga o mesmo total.",Font=new Font("Segoe UI",10,FontStyle.Bold)};
+      var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=Methods.Length,AutoScroll=true,Padding=new Padding(15),BackColor=Color.White};
+      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,36));
       var fields=new Dictionary<string,NumericUpDown>();
       foreach(string name in Methods){
        var label=new Label{Text=name,AutoSize=true,Anchor=AnchorStyles.Left,Font=new Font("Segoe UI",10,FontStyle.Bold)};
        var number=new NumericUpDown{DecimalPlaces=3,Increment=.1m,Minimum=0,Maximum=100,Width=155,Value=Math.Min(100,Math.Max(0,rates[name]))};
        fields[name]=number;
-       panel.Controls.Add(label);panel.Controls.Add(number);
+       var preview=new Label{AutoSize=true,Anchor=AnchorStyles.Left,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(22,75,160)};
+       Action refresh=()=>preview.Text="R$ 100,00 → taxa R$ "+(Math.Round(number.Value,2,MidpointRounding.AwayFromZero)).ToString("N2");
+       number.ValueChanged+=(sender,args)=>refresh();refresh();
+       panel.Controls.Add(label);panel.Controls.Add(number);panel.Controls.Add(preview);
       }
       var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=64,Padding=new Padding(12),FlowDirection=FlowDirection.RightToLeft};
       var save=new Button{Text="Salvar taxas",Width=180,Height=39,BackColor=Color.FromArgb(24,86,169),ForeColor=Color.White};
