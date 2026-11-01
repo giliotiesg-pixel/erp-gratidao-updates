@@ -515,7 +515,7 @@ namespace ArmazemGratidao {
    if(method!="FIADO")RequireColumns(conn,"sale_payments","sale_id","payment_method","amount");
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
-   var methods=PaymentFees.Methods;
+   var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
    using(var dialog=new Form {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var combos=new ComboBox[3];var values=new NumericUpDown[3];
     var info=new Label {Left=18,Top=15,Width=440,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
@@ -525,12 +525,12 @@ namespace ArmazemGratidao {
      combos[i]=new ComboBox {Left=85,Top=53+i*53,Width=165,DropDownStyle=ComboBoxStyle.DropDownList};
      combos[i].Items.AddRange(methods);combos[i].SelectedIndex=i==0?0:-1;
      values[i]=new NumericUpDown {Left=265,Top=53+i*53,Width=175,DecimalPlaces=2,Maximum=99999999};
-     if(i==0)values[i].Value=Math.Min(amount,values[i].Maximum);
+     // Começa em zero para inserir cada pagamento sem precisar apagar o total.
      dialog.Controls.AddRange(new Control[]{label,combos[i],values[i]});
     }
     var status=new Label {Left=18,Top=218,Width=430,Height=25};
-    Action update=()=>status.Text="Informado: R$ "+values.Sum(v=>v.Value).ToString("N2")+" / Total: R$ "+amount.ToString("N2");
-    foreach(var v in values)v.ValueChanged+=(s,e)=>update();update();
+    Action update=()=>{decimal paid=values.Sum(v=>v.Value);status.Text="Somado: R$ "+paid.ToString("N2")+"  |  Restante: R$ "+(amount-paid).ToString("N2");status.ForeColor=paid>amount?Color.DarkRed:Color.FromArgb(22,75,160);};
+    foreach(var v in values)v.ValueChanged+=(s,e)=>update();foreach(var combo in combos)combo.SelectedIndexChanged+=(s,e)=>update();update();
     var confirm=new Button {Text="Confirmar pagamentos",Left=240,Top=250,Width=200,Height=35};
     List<KeyValuePair<string,decimal>> selected=null;
     confirm.Click+=(s,e)=>{
@@ -782,6 +782,11 @@ namespace ArmazemGratidao {
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
    if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
+   if(method=="DIVIDIDO"&&split.Any(p=>p.Key=="FIADO")){
+    if(string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)||!CustomerRegistered(customerName)){
+     MessageBox.Show("Para dividir uma venda com Fiado, selecione ou cadastre um cliente antes de finalizar.","Cliente obrigatório");return;
+    }
+   }
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
    string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
    if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
@@ -789,7 +794,9 @@ namespace ArmazemGratidao {
    Dictionary<string,decimal> feeRates;
    try{using(var read=Open())feeRates=PaymentFees.Load(read);}
    catch(Exception ex){MessageBox.Show("Não foi possível consultar as taxas: "+ex.Message,"Venda não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Error);return;}
-   var paymentParts=method=="FIADO"?new List<KeyValuePair<string,decimal>>():method=="DIVIDIDO"?split:new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
+   bool splitFiado=method=="DIVIDIDO"&&split.Any(p=>p.Key=="FIADO");
+   string recordedMethod=splitFiado?"FIADO":method;
+   var paymentParts=method=="FIADO"?new List<KeyValuePair<string,decimal>>():method=="DIVIDIDO"?split.Where(p=>p.Key!="FIADO").ToList():new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
    decimal estimatedFee=paymentParts.Sum(p=>PaymentFees.Fee(feeRates,p.Key,p.Value));
    details+=Environment.NewLine+"Cliente: "+customerName;
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
@@ -799,7 +806,7 @@ namespace ArmazemGratidao {
    finishingSale=true;
    try {
     using(var c=Open()){
-     ValidateSaleSchema(c,method);
+     ValidateSaleSchema(c,recordedMethod);
      using(var tx=c.BeginTransaction()) {
      // Autorizar somente a baixa da venda, dentro da mesma transação dos itens e da auditoria.
      // A proteção original do estoque é restaurada antes do COMMIT.
@@ -819,7 +826,7 @@ namespace ArmazemGratidao {
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@saleDate); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
-      cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",method);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
+      cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",recordedMethod);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
      foreach(var i in cart) {
       decimal before;
@@ -833,10 +840,18 @@ namespace ArmazemGratidao {
        q.Parameters.AddWithValue("@id",i.Id);q.Parameters.AddWithValue("@name",i.Name);q.Parameters.AddWithValue("@barcode",i.Barcode);q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@after",before-i.Qty);q.Parameters.AddWithValue("@delta",-i.Qty);q.Parameters.AddWithValue("@sale",saleId);q.ExecuteNonQuery();
       }
      }
-     if(method!="FIADO"){
+     if(paymentParts.Count>0){
       var payments=paymentParts;
       foreach(var part in payments)using(var q=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@total)",c,tx)){
        q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@method",part.Key);q.Parameters.AddWithValue("@total",part.Value);q.ExecuteNonQuery();
+      }
+     }
+     // Pagamentos recebidos na venda parcialmente fiada reduzem somente o saldo pendente.
+     if(splitFiado){
+      foreach(var part in paymentParts)using(var q=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,@method,datetime('now','localtime'),@note)",c,tx)){
+       q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@amount",part.Value);
+       q.Parameters.AddWithValue("@method",part.Key);q.Parameters.AddWithValue("@note","Pagamento inicial de venda dividida com Fiado");
+       if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar pagamento inicial do Fiado.");
       }
      }
      // Auditoria financeira separada: preserva sales.net_profit histórico e registra
