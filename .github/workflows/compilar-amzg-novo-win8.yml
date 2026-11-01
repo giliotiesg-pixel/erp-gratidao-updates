@@ -72,7 +72,14 @@ jobs:
       - name: Compilar WinForms .NET Framework 4.8
         shell: pwsh
         run: |
-          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/ArmazemGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal
+          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/ArmazemGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal /fl "/flp:logfile=novo-win8/build-diagnostics.log;verbosity=normal"
+      - name: Guardar diagnostico de compilacao quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Diagnostico-Compilacao-AMZG
+          path: novo-win8/build-diagnostics.log
+          if-no-files-found: warn
       - name: Copiar SQLite nativo
         shell: pwsh
         run: |
