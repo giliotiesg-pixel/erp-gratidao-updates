@@ -17,7 +17,7 @@ namespace ArmazemGratidao {
   readonly CheckBox selectAll=new CheckBox {Text="Selecionar todos",AutoSize=true,Padding=new Padding(3,9,3,0)};
   bool applyingColumnWidths=false;
   readonly Dictionary<string,int> savedColumnWidths=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
-  readonly Timer searchDelay=new Timer {Interval=300};
+  readonly Timer searchDelay=new Timer {Interval=550};
   string WidthSettingsPath {get{return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidao","produtos-colunas.txt");}}
   void LoadColumnWidths(){try{if(!System.IO.File.Exists(WidthSettingsPath))return;foreach(string line in System.IO.File.ReadAllLines(WidthSettingsPath)){int sep=line.IndexOf('=');int width;if(sep>0&&int.TryParse(line.Substring(sep+1),out width)&&width>=55&&width<=2000)savedColumnWidths[line.Substring(0,sep)]=width;}}catch{}}
   void SaveColumnWidths(){try{string dir=System.IO.Path.GetDirectoryName(WidthSettingsPath);System.IO.Directory.CreateDirectory(dir);System.IO.File.WriteAllLines(WidthSettingsPath,savedColumnWidths.Select(x=>x.Key+"="+x.Value).ToArray());}catch{}}
@@ -62,7 +62,7 @@ namespace ArmazemGratidao {
    previousPage.Click+=(s,e)=>{if(currentPage>0){currentPage--;LoadProducts();}};bar.Controls.Add(previousPage);
    nextPage.Click+=(s,e)=>{currentPage++;LoadProducts();};bar.Controls.Add(nextPage);
    searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
-   search.TextChanged+=(s,e)=>{searchDelay.Stop();searchDelay.Start();};
+   search.TextChanged+=(s,e)=>{searchDelay.Stop();if(listVisible)searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];EditProduct();}};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty&&grid.CurrentCell!=null&&grid.Columns[grid.CurrentCell.ColumnIndex].Name=="selecionar")grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
