@@ -15,6 +15,8 @@ namespace ArmazemGratidao {
   sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
+  decimal discountValue=0m;
+  bool discountPercent=false;
   readonly bool manualEntry;
   readonly DateTimePicker manualDate=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",ShowUpDown=true,Width=220};
 
@@ -72,7 +74,9 @@ namespace ArmazemGratidao {
    var finish=new Button {Text="FINALIZAR VENDA",Height=46,Width=195,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var remove=new Button {Text="REMOVER ITEM",Width=145,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
-   var clear=new Button {Text="LIMPAR CARRINHO",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);footer.Controls.Add(total);
+   var clear=new Button {Text="LIMPAR CARRINHO",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
+   var discountButton=new Button {Text="DESCONTO R$ / %",Width=170,Height=40,BackColor=Color.FromArgb(175,25,45),ForeColor=Color.White};
+   discountButton.Click+=(sender,args)=>ConfigureDiscount();footer.Controls.Add(discountButton);footer.Controls.Add(total);
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditSelected();};
    grid.Font=new Font("Segoe UI",10,FontStyle.Regular);grid.RowTemplate.Height=36;
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
@@ -440,17 +444,37 @@ namespace ArmazemGratidao {
     suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;Render();code.Focus();
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao adicionar");}
   }
+  decimal DiscountAmount(){
+   decimal gross=cart.Sum(i=>i.Total);
+   return Math.Min(gross,discountPercent?Math.Round(gross*discountValue/100m,2,MidpointRounding.AwayFromZero):discountValue);
+  }
+  decimal FinalAmount(){return cart.Sum(i=>i.Total)-DiscountAmount();}
+  void ConfigureDiscount(){
+   using(var dlg=new Form{Text="Desconto na venda",Width=440,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    var mode=new ComboBox{Left=20,Top=28,Width=175,DropDownStyle=ComboBoxStyle.DropDownList};
+    mode.Items.AddRange(new object[]{"Valor em R$","Porcentagem %"});mode.SelectedIndex=discountPercent?1:0;
+    var value=new NumericUpDown{Left=210,Top=28,Width=175,Maximum=10000000,DecimalPlaces=2,Value=discountValue};
+    var preview=new Label{Left=20,Top=85,Width=390,Height=35,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    Action update=()=>{decimal gross=cart.Sum(i=>i.Total);decimal amount=mode.SelectedIndex==1?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;preview.Text="Desconto: R$ "+amount.ToString("N2")+" | Total: R$ "+(gross-amount).ToString("N2");preview.ForeColor=amount>=gross?Color.DarkRed:Color.DarkBlue;};
+    mode.SelectedIndexChanged+=(sender,args)=>{value.Maximum=mode.SelectedIndex==1?100:10000000;if(value.Value>value.Maximum)value.Value=value.Maximum;update();};
+    value.ValueChanged+=(sender,args)=>update();if(mode.SelectedIndex==1)value.Maximum=100;update();
+    var apply=new Button{Text="Aplicar desconto",Left=20,Top=145,Width=175,Height=38};
+    var cancel=new Button{Text="Cancelar",Left=210,Top=145,Width=175,Height=38};
+    apply.Click+=(sender,args)=>{decimal gross=cart.Sum(i=>i.Total);decimal amount=mode.SelectedIndex==1?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;if(amount>=gross&&gross>0){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}discountValue=value.Value;discountPercent=mode.SelectedIndex==1;Render();dlg.DialogResult=DialogResult.OK;};
+    cancel.Click+=(sender,args)=>dlg.Close();dlg.Controls.AddRange(new Control[]{mode,value,preview,apply,cancel});dlg.ShowDialog(this);
+   }
+  }
   void Render() {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Unidade");dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Unit,i.Price,i.Total);
-   grid.DataSource=dt;total.Text="TOTAL: R$ "+cart.Sum(i=>i.Total).ToString("N2");UpdateChange();
+   grid.DataSource=dt;total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
   }
   void UpdateChange(){
    bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
    changeLabel.Visible=cash;
    received.Enabled=cash;
    if(!cash)return;
-   decimal difference=received.Value-cart.Sum(i=>i.Total);
+   decimal difference=received.Value-FinalAmount();
    changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
    changeLabel.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
   }
@@ -497,7 +521,7 @@ namespace ArmazemGratidao {
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   cart.Clear();discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
@@ -780,7 +804,9 @@ namespace ArmazemGratidao {
      }
     }catch(Exception ex){MessageBox.Show("Não foi possível verificar o cadastro do cliente: "+ex.Message,"Fiado");return;}
    }
-   var sum=cart.Sum(i=>i.Total);
+   var gross=cart.Sum(i=>i.Total);
+   var discount=DiscountAmount();
+   var sum=gross-discount;
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
    if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
@@ -803,6 +829,7 @@ namespace ArmazemGratidao {
    details+=Environment.NewLine+"Cliente: "+customerName;
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
 
+   if(discount>0)details+=Environment.NewLine+"Subtotal: R$ "+gross.ToString("N2")+" | Desconto: R$ "+discount.ToString("N2");
    if(manualEntry && manualDate.Value>DateTime.Now.AddMinutes(2)){MessageBox.Show("A data da venda anotada não pode estar no futuro.");return;}
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
@@ -830,6 +857,12 @@ namespace ArmazemGratidao {
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@saleDate); SELECT last_insert_rowid();",c,tx)){
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
       cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",recordedMethod);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
+     }
+     if(discount>0){
+      using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discounts(sale_id INTEGER PRIMARY KEY,gross_before NUMERIC NOT NULL,discount_amount NUMERIC NOT NULL,discount_type TEXT NOT NULL,discount_value NUMERIC NOT NULL)",c,tx))create.ExecuteNonQuery();
+      using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
+       ins.Parameters.AddWithValue("@sale",saleId);ins.Parameters.AddWithValue("@gross",gross);ins.Parameters.AddWithValue("@amount",discount);ins.Parameters.AddWithValue("@type",discountPercent?"PERCENT":"AMOUNT");ins.Parameters.AddWithValue("@value",discountValue);ins.ExecuteNonQuery();
+      }
      }
      foreach(var i in cart) {
       decimal before;
@@ -880,7 +913,7 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
-     cart.Clear();received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     cart.Clear();discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
      OfferSaleReceipt(saleId,customerName,sum);
     }
     }
