@@ -227,14 +227,27 @@ namespace ArmazemGratidao {
     return ok;
    }
   }
+  static string SearchFoldSql(string column){
+   string expression="LOWER(COALESCE("+column+",''))";
+   string accented="áàâãäéèêëíìîïóòôõöúùûüç";
+   string plain="aaaaaeeeeiiiiooooouuuuc";
+   for(int i=0;i<accented.Length;i++)expression="REPLACE("+expression+",'"+accented[i]+"','"+plain[i]+"')";
+   return expression;
+  }
+  static string SearchFold(string term){
+   string normalized=(term??"").ToLowerInvariant().Normalize(NormalizationForm.FormD);
+   var result=new StringBuilder();
+   foreach(char c in normalized)if(CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark)result.Append(c);
+   return result.ToString().Normalize(NormalizationForm.FormC);
+  }
   void FindSuggestions(){
    string term=code.Text.Trim();
    if(term.Length<2)return;
    try{
     suggestions.Items.Clear();suggestionCodes.Clear();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products WHERE name LIKE @start OR name LIKE @term OR TRIM(COALESCE(barcode,'')) LIKE @start OR TRIM(COALESCE(internal_code,'')) LIKE @start ORDER BY CASE WHEN name LIKE @start THEN 0 ELSE 1 END,name LIMIT 30",connection)){
-     cmd.Parameters.AddWithValue("@start",term+"%");cmd.Parameters.AddWithValue("@term","%"+term+"%");
+    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products WHERE "+SearchFoldSql("name")+" LIKE @start OR "+SearchFoldSql("name")+" LIKE @term OR TRIM(COALESCE(barcode,'')) LIKE @start OR TRIM(COALESCE(internal_code,'')) LIKE @start ORDER BY CASE WHEN "+SearchFoldSql("name")+" LIKE @start THEN 0 ELSE 1 END,name LIMIT 30",connection)){
+     cmd.Parameters.AddWithValue("@start",SearchFold(term)+"%");cmd.Parameters.AddWithValue("@term","%"+SearchFold(term)+"%");
      using(var reader=cmd.ExecuteReader())while(reader.Read()){
       string barcode=Convert.ToString(reader["barcode"]);string internalCode=Convert.ToString(reader["internal_code"]);
       string key=!string.IsNullOrWhiteSpace(barcode)?barcode:internalCode;
@@ -334,8 +347,8 @@ namespace ArmazemGratidao {
       }
      }
      if(matches.Count==0){
-      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE name LIKE @name ORDER BY name,id LIMIT 101",connection)){
-       cmd.Parameters.AddWithValue("@name","%"+search+"%");
+      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE "+SearchFoldSql("name")+" LIKE @name ORDER BY name,id LIMIT 101",connection)){
+       cmd.Parameters.AddWithValue("@name","%"+SearchFold(search)+"%");
        using(var reader=cmd.ExecuteReader())while(reader.Read()){
         var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
         matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
