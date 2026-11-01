@@ -45,7 +45,7 @@ namespace ArmazemGratidao {
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=126,Padding=new Padding(10),AutoScroll=true};
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   payment.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"});payment.SelectedIndex=0;footer.Controls.Add(payment);
+   payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;footer.Controls.Add(payment);
    // O nome do cliente fica no estado interno; so aparece na janela aberta pelo botao.
    customer.Text="Consumidor";
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});
