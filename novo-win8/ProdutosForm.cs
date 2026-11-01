@@ -753,7 +753,7 @@ namespace ArmazemGratidao {
        var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Value=Math.Max(0,oldStock),ReadOnly=true};
        var addQty=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Minimum=0,Value=0};
        
-       Control[] fields={code,name,brand,category,price,cost,stock,addQty,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","QTD atual (consulta)","Adicionar QTD","Validade","Tipo de venda"};
+       Control[] fields={code,name,stock,addQty,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade atual","Adicionar quantidade","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
        for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
@@ -944,7 +944,7 @@ namespace ArmazemGratidao {
     byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
     var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     
-    Control[] fields={barcode,name,brand,category,price,cost,stock,expiry,byWeight};string[] labels={"Código de barras","Descrição","Marca","Categoria","Preço de venda","Custo","Estoque inicial","Validade","Tipo de venda"};
+    Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade inicial","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
