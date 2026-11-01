@@ -266,16 +266,24 @@ namespace ArmazemGratidao {
    if(term.Length<(manualEntry?1:2)){suggestions.Visible=false;return;}
    try{
     suggestions.Items.Clear();suggestionCodes.Clear();
+    string folded=SearchFold(term);
+    var matches=new List<Tuple<string,string,decimal,decimal,int>>();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products WHERE "+SearchFoldSql("name")+" LIKE @start OR "+SearchFoldSql("name")+" LIKE @term OR TRIM(COALESCE(barcode,'')) LIKE @start OR TRIM(COALESCE(internal_code,'')) LIKE @start ORDER BY CASE WHEN "+SearchFoldSql("name")+" LIKE @start THEN 0 ELSE 1 END,name LIMIT 30",connection)){
-     cmd.Parameters.AddWithValue("@start",SearchFold(term)+"%");cmd.Parameters.AddWithValue("@term","%"+SearchFold(term)+"%");
-     using(var reader=cmd.ExecuteReader())while(reader.Read()){
-      string barcode=Convert.ToString(reader["barcode"]);string internalCode=Convert.ToString(reader["internal_code"]);
-      string key=!string.IsNullOrWhiteSpace(barcode)?barcode:internalCode;
-      if(string.IsNullOrWhiteSpace(key))continue;
-      int index=suggestions.Items.Add(Convert.ToString(reader["name"])+"  |  R$ "+Dec(reader["price"]).ToString("N2")+"  |  QTD "+Dec(reader["stock"]).ToString("N3")+"  |  "+key);
-      suggestionCodes[index]=key;
-     }
+    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products",connection))
+    using(var reader=cmd.ExecuteReader())while(reader.Read()){
+     string name=Convert.ToString(reader["name"]);
+     string barcode=Convert.ToString(reader["barcode"]);
+     string internalCode=Convert.ToString(reader["internal_code"]);
+     string key=!string.IsNullOrWhiteSpace(barcode)?barcode:internalCode;
+     if(string.IsNullOrWhiteSpace(key))continue;
+     string normalized=SearchFold(name);
+     bool begins=normalized.StartsWith(folded,StringComparison.Ordinal);
+     if(!begins&&!normalized.Contains(folded)&&!barcode.StartsWith(term,StringComparison.OrdinalIgnoreCase)&&!internalCode.StartsWith(term,StringComparison.OrdinalIgnoreCase))continue;
+     matches.Add(Tuple.Create(name,key,Dec(reader["price"]),Dec(reader["stock"]),begins?0:1));
+    }
+    foreach(var item in matches.OrderBy(x=>x.Item5).ThenBy(x=>x.Item1,StringComparer.CurrentCultureIgnoreCase).Take(30)){
+     int index=suggestions.Items.Add(item.Item1+"  |  R$ "+item.Item3.ToString("N2")+"  |  QTD "+item.Item4.ToString("N3")+"  |  "+item.Item2);
+     suggestionCodes[index]=item.Item2;
     }
     suggestions.Visible=suggestions.Items.Count>0;
     if(suggestions.Visible){PositionSuggestions();suggestions.BringToFront();if(manualEntry&&suggestions.SelectedIndex<0)suggestions.SelectedIndex=0;}
@@ -369,9 +377,10 @@ namespace ArmazemGratidao {
       }
      }
      if(matches.Count==0){
-      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE "+SearchFoldSql("name")+" LIKE @name ORDER BY name,id LIMIT 101",connection)){
-       cmd.Parameters.AddWithValue("@name","%"+SearchFold(search)+"%");
+      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products ORDER BY name,id",connection)){
        using(var reader=cmd.ExecuteReader())while(reader.Read()){
+        if(!SearchFold(Convert.ToString(reader["name"])).Contains(SearchFold(search)))continue;
+        if(matches.Count>=101)break;
         var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
         matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
        }
