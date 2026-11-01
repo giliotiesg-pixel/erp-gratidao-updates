@@ -20,7 +20,7 @@ namespace ArmazemGratidao {
   readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Increment=1M,Value=1,Width=95};
   readonly ComboBox saleUnit=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=80};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
-  readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
+  readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",23,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
   readonly Label changeLabel=new Label {AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Padding=new Padding(0,9,0,0)};
   readonly ComboBox payment=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   readonly TextBox customer=new TextBox {Width=205,ReadOnly=true,TabStop=false,Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.White};
@@ -30,20 +30,20 @@ namespace ArmazemGratidao {
   bool suppressLookup=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database) {
-   db=database;Text="Armazem Gratidao - PDV";Width=1100;Height=730;BackColor=Color.FromArgb(229,242,255);
-   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=64,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
+   db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(1000,650);BackColor=Color.FromArgb(246,249,253);
+   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
    saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;
    saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
-   var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=36,Font=new Font("Segoe UI",10,FontStyle.Bold)};add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
+   var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();suggestions.Visible=false;AddProduct();}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=2)lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
-   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=126,Padding=new Padding(10),AutoScroll=true};
+   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=162,Padding=new Padding(12,14,12,12),BackColor=Color.White,AutoScroll=true};
    footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;footer.Controls.Add(payment);
    // O nome do cliente fica no estado interno; so aparece na janela aberta pelo botao.
@@ -57,12 +57,12 @@ namespace ArmazemGratidao {
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
-   var finish=new Button {Text="FINALIZAR VENDA",Height=43,Width=180,BackColor=Color.FromArgb(30,100,175),ForeColor=Color.White};finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
+   var finish=new Button {Text="FINALIZAR VENDA",Height=46,Width=195,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var remove=new Button {Text="REMOVER ITEM",Width=145,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="LIMPAR CARRINHO",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);footer.Controls.Add(total);
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditSelected();};
-   grid.Font=new Font("Segoe UI",11,FontStyle.Regular);grid.RowTemplate.Height=38;
+   grid.Font=new Font("Segoe UI",10,FontStyle.Regular);grid.RowTemplate.Height=36;
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.ColumnHeadersHeight=38;grid.RowHeadersVisible=false;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
