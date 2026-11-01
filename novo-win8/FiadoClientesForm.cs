@@ -60,6 +60,10 @@ namespace ArmazemGratidao {
    var switchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,Padding=new Padding(5),BackColor=Color.FromArgb(229,242,255)};
    var showOpen=new Button {Text="Fiado atual - em aberto",Width=190,Height=32,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
    var showPrevious=new Button {Text="Fiados anteriores - pagos",Width=210,Height=32,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
+   var backSmall=new Button{Text="← Voltar",Width=95,Height=32,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   backSmall.FlatAppearance.BorderSize=0;
+   backSmall.Click+=(sender,args)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();WindowState=FormWindowState.Normal;};
+   switchBar.Controls.Add(backSmall);
    tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
    var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=122,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
@@ -87,9 +91,7 @@ namespace ArmazemGratidao {
    clientHome.Controls.Add(new Label {Dock=DockStyle.Fill,Text="Clique no nome do cliente à esquerda para consultar vendas, itens, pagamentos e emitir cupom.",Font=new Font("Segoe UI",12),TextAlign=ContentAlignment.MiddleCenter});
    clientHome.Controls.Add(homeHeader);
    split.Panel2.Controls.Add(clientHome);clientHome.BringToFront();
-   var back=new Button {Text="←",Dock=DockStyle.Top,Height=37,Width=56,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",16,FontStyle.Bold),BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};
-   back.Click+=(s,e)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();WindowState=FormWindowState.Normal;};
-   split.Panel2.Controls.Add(back);back.BringToFront();
+
    split.Panel2Collapsed=true;
    LoadClients();
   }
