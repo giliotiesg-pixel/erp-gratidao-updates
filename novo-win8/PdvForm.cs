@@ -41,9 +41,8 @@ namespace ArmazemGratidao {
    var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
    if(manualEntry){
     Text="Armazem Gratidao - Lançamento rápido de vendas anotadas";
-    header.Controls.Add(new Label{Text="DATA DA VENDA:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)});
+    // A data será conferida somente depois que todos os produtos forem lançados.
     manualDate.Value=DateTime.Now;
-    header.Controls.Add(manualDate);
    }
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
@@ -706,9 +705,23 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show("Venda salva, mas erro no comprovante: "+ex.Message,"Comprovante");}
   }
   // Alerta de possível repetição; não bloqueia vendas legítimas do mesmo dia.
+  bool ConfirmManualSaleDate(){
+   if(!manualEntry)return true;
+   using(var dialog=new Form{Text="Conferir data da venda anotada",Width=500,Height=250,MinimumSize=new Size(460,220),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+    var title=new Label{Text="Produtos lançados. Confira a data e hora ORIGINAL desta venda:",Left=18,Top=17,Width=450,Height=42,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var picker=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",ShowUpDown=true,Left=18,Top=70,Width=255,Value=manualDate.Value};
+    var ok=new Button{Text="Confirmar data e continuar",Left=18,Top=128,Width=240,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,DialogResult=DialogResult.OK};
+    var cancel=new Button{Text="Voltar aos produtos",Left=272,Top=128,Width=175,Height=38,DialogResult=DialogResult.Cancel};
+    dialog.Controls.AddRange(new Control[]{title,picker,ok,cancel});dialog.AcceptButton=ok;dialog.CancelButton=cancel;
+    if(dialog.ShowDialog(this)!=DialogResult.OK)return false;
+    if(picker.Value>DateTime.Now.AddMinutes(2)){MessageBox.Show("A data da venda anotada não pode estar no futuro.");return false;}
+    manualDate.Value=picker.Value;return true;
+   }
+  }
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
+   if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
      MessageBox.Show("Item inválido no carrinho: "+item.Name+". Confira quantidade, preço e cadastro antes de finalizar.","Conferência dos itens",MessageBoxButtons.OK,MessageBoxIcon.Warning);
