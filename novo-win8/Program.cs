@@ -108,7 +108,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Aplicar recuperação",ApplyRecovery);
    AddButton(bar,"Conferir valores",CheckSaleDifferences);
    AddSection(bar,"OPERAÇÃO");
-   AddButton(bar,"WhatsApp Business",(sender,args)=>OpenModuleWindow(new WhatsAppBusinessForm()));
+   AddButton(bar,"WhatsApp",(sender,args)=>OpenModuleWindow(new WhatsAppNormalForm()));
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Taxas dos pagamentos",(s,e)=>PaymentFees.ShowEditor(dbPath,this));
@@ -826,112 +826,39 @@ namespace ArmazemGratidao {
    try {using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())) {conn.Open();var dt=new DataTable();using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);grid.DataSource=dt;var home=Controls["homePanel"];if(home!=null){Controls.Remove(home);home.Dispose();}grid.Visible=true;grid.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text=table+": "+dt.Rows.Count+" registros exibidos (somente leitura).";}}
    catch(Exception ex) {MessageBox.Show(ex.Message,"Erro na consulta",MessageBoxButtons.OK,MessageBoxI
  // Interface Windows Forms independente, sem navegador embutido e sem salvar o token no banco.
- public sealed class WhatsAppBusinessForm:Form {
-  readonly TextBox phoneId=new TextBox{Width=350};
-  readonly TextBox token=new TextBox{Width=350,UseSystemPasswordChar=true};
-  readonly TextBox version=new TextBox{Width=110,Text="v23.0"};
-  readonly TextBox recipient=new TextBox{Width=350};
-  readonly TextBox message=new TextBox{Multiline=true,ScrollBars=ScrollBars.Vertical,Height=125,Dock=DockStyle.Fill};
-  readonly TextBox template=new TextBox{Width=260};
-  readonly TextBox language=new TextBox{Width=110,Text="pt_BR"};
-  readonly Label result=new Label{Dock=DockStyle.Bottom,Height=48,AutoEllipsis=true,Text="Configuração local; token não é gravado."};
-  readonly Button send=new Button{Text="Enviar mensagem",Width=170,Height=38};
-  readonly Button sendTemplate=new Button{Text="Enviar modelo aprovado",Width=200,Height=38};
-  readonly Button sendPdf=new Button{Text="Enviar PDF",Width=140,Height=38};
-  public WhatsAppBusinessForm(){
-   Text="Armazém Gratidão | WhatsApp Business API";Width=770;Height=700;MinimumSize=new Size(620,590);
-   BackColor=Color.FromArgb(229,242,255);Font=new Font("Segoe UI",10);
-   var root=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(18),ColumnCount=2,RowCount=9,AutoScroll=true};
-   root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,210));root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   Control[] controls={phoneId,token,version,recipient,message,template,language};
-   string[] names={"ID do número Meta","Token de acesso (sessão)","Versão Graph API","Destino com DDI (55...)","Mensagem (janela de 24h)","Nome do modelo aprovado","Idioma do modelo"};
-   for(int i=0;i<controls.Length;i++){
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,i==4?140:52));
-    root.Controls.Add(new Label{Text=names[i],AutoSize=true,Margin=new Padding(0,10,3,0)},0,i);
-    root.Controls.Add(controls[i],1,i);
-   }
-   root.RowStyles.Add(new RowStyle(SizeType.Absolute,60));
-   var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};
-   actions.Controls.Add(send);actions.Controls.Add(sendTemplate);actions.Controls.Add(sendPdf);
-   root.Controls.Add(actions,1,7);
-   root.RowStyles.Add(new RowStyle(SizeType.Absolute,55));
-   root.Controls.Add(new Label{AutoSize=true,Text="Use apenas contatos autorizados. Fora das 24h, envie somente modelo aprovado.\nPara receber respostas e status, será necessário webhook HTTPS."},1,8);
-   Controls.Add(root);Controls.Add(result);
-   send.Click+=async (s,e)=>await Execute(async ()=>{
-    if(string.IsNullOrWhiteSpace(message.Text))throw new Exception("Informe a mensagem.");
-    await SendJson("messages",new {messaging_product="whatsapp",to=Destination(),type="text",text=new {body=message.Text}});
-   });
-   sendTemplate.Click+=async (s,e)=>await Execute(async ()=>{
-    if(string.IsNullOrWhiteSpace(template.Text))throw new Exception("Informe o nome exato do modelo aprovado.");
-    await SendJson("messages",new {messaging_product="whatsapp",to=Destination(),type="template",template=new {name=template.Text.Trim(),language=new {code=language.Text.Trim()}}});
-   });
-   sendPdf.Click+=async (s,e)=>await Execute(async ()=>{
-    using(var dialog=new OpenFileDialog{Title="Selecionar comprovante PDF",Filter="Documentos PDF|*.pdf"}){
-     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
-     var fi=new FileInfo(dialog.FileName);
-     if(fi.Length==0||fi.Length>100*1024*1024)throw new Exception("PDF vazio ou maior que 100 MB.");
-     string mediaId=await UploadPdf(dialog.FileName);
-     await SendJson("messages",new {messaging_product="whatsapp",to=Destination(),type="document",document=new {id=mediaId,filename=Path.GetFileName(dialog.FileName)}});
+ public sealed class WhatsAppNormalForm:Form {
+  readonly TextBox phone=new TextBox{Width=330};
+  readonly TextBox message=new TextBox{Multiline=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Text="Olá! Aqui é do Armazém Gratidão."};
+  readonly Label info=new Label{Dock=DockStyle.Bottom,Height=62,Text="WhatsApp comum: o envio é confirmado no WhatsApp Web ou aplicativo externo. PDFs precisam ser anexados manualmente.",Padding=new Padding(12)};
+  public WhatsAppNormalForm(){
+   Text="Armazém Gratidão | WhatsApp";Width=690;Height=480;MinimumSize=new Size(550,380);
+   Font=new Font("Segoe UI",10);BackColor=Color.FromArgb(229,242,255);
+   var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=55,Padding=new Padding(10)};
+   top.Controls.Add(new Label{Text="Número com DDI e DDD:",AutoSize=true,Padding=new Padding(0,9,0,0)});
+   top.Controls.Add(phone);
+   var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=62,Padding=new Padding(9)};
+   var open=new Button{Text="Abrir conversa",Width=155,Height=40};
+   var pdf=new Button{Text="Escolher PDF",Width=145,Height=40};
+   var whatsapp=new Button{Text="Abrir WhatsApp Web",Width=175,Height=40};
+   buttons.Controls.Add(open);buttons.Controls.Add(pdf);buttons.Controls.Add(whatsapp);
+   open.Click+=(s,e)=>{
+    string digits=new string(phone.Text.Where(char.IsDigit).ToArray());
+    if(digits.Length<10||digits.Length>15){MessageBox.Show("Digite um número com DDI e DDD, por exemplo 5514999999999.");return;}
+    OpenExternal("https://wa.me/"+digits+"?text="+Uri.EscapeDataString(message.Text));
+   };
+   pdf.Click+=(s,e)=>{
+    using(var dlg=new OpenFileDialog{Filter="Arquivo PDF|*.pdf",Title="Selecionar comprovante"}){
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     try{System.Windows.Forms.Clipboard.SetText(dlg.FileName);MessageBox.Show("Caminho do PDF copiado. Abra a conversa e anexe o arquivo pelo WhatsApp. O WhatsApp comum não permite anexação automática por link.","Comprovante");}
+     catch(Exception ex){MessageBox.Show(ex.Message,"Comprovante");}
     }
-   });
+   };
+   whatsapp.Click+=(s,e)=>OpenExternal("https://web.whatsapp.com/");
+   Controls.Add(message);Controls.Add(top);Controls.Add(buttons);Controls.Add(info);
   }
-  string Destination(){
-   string digits=new string(recipient.Text.Where(char.IsDigit).ToArray());
-   if(digits.Length<10||digits.Length>15)throw new Exception("Destino inválido. Informe DDI e DDD, por exemplo 5514999999999.");
-   return digits;
-  }
-  string Endpoint(string name){
-   if(string.IsNullOrWhiteSpace(phoneId.Text)||!phoneId.Text.All(char.IsDigit))throw new Exception("Informe o Phone Number ID da Meta.");
-   string v=version.Text.Trim();
-   if(!System.Text.RegularExpressions.Regex.IsMatch(v,@"^v\d+\.\d+$"))throw new Exception("Versão da API inválida.");
-   if(string.IsNullOrWhiteSpace(token.Text))throw new Exception("Informe o token da Meta.");
-   return "https://graph.facebook.com/"+v+"/"+phoneId.Text.Trim()+"/"+name;
-  }
-  async Task Execute(Func<Task> action){
-   send.Enabled=false;sendTemplate.Enabled=false;sendPdf.Enabled=false;
-   try{result.Text="Comunicando com a Meta...";await action();result.Text="Solicitação aceita pela API. Confirme o recebimento no WhatsApp."; }
-   catch(Exception ex){result.Text="Falha no envio: "+ex.Message;MessageBox.Show(ex.Message,"WhatsApp Business",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
-   finally{send.Enabled=true;sendTemplate.Enabled=true;sendPdf.Enabled=true;}
-  }
-  async Task<string> Request(string endpoint,byte[] body,string contentType){
-   string url=Endpoint(endpoint), bearer=token.Text.Trim();
-   return await Task.Run(()=>{
-    ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;
-    var req=(HttpWebRequest)WebRequest.Create(url);
-    req.Method="POST";req.ContentType=contentType;req.Headers[HttpRequestHeader.Authorization]="Bearer "+bearer;
-    req.Timeout=45000;req.ReadWriteTimeout=45000;
-    req.ContentLength=body.Length;
-    using(var stream=req.GetRequestStream())stream.Write(body,0,body.Length);
-    try{
-     using(var response=(HttpWebResponse)req.GetResponse())
-     using(var reader=new StreamReader(response.GetResponseStream()))return reader.ReadToEnd();
-    }catch(WebException ex){
-     string detail="";
-     if(ex.Response!=null)using(var reader=new StreamReader(ex.Response.GetResponseStream()))detail=reader.ReadToEnd();
-     throw new Exception("Meta recusou a requisição: "+(detail.Length>380?detail.Substring(0,380):detail),ex);
-    }
-   });
-  }
-  async Task SendJson(string endpoint,object payload){
-   string json=new JavaScriptSerializer().Serialize(payload);
-   string response=await Request(endpoint,System.Text.Encoding.UTF8.GetBytes(json),"application/json");
-   var parsed=new JavaScriptSerializer().DeserializeObject(response) as System.Collections.Generic.Dictionary<string,object>;
-   if(parsed==null||!parsed.ContainsKey("messages"))throw new Exception("API não confirmou o identificador da mensagem.");
-  }
-  async Task<string> UploadPdf(string file){
-   string boundary="----amzg"+Guid.NewGuid().ToString("N");
-   byte[] data=File.ReadAllBytes(file);
-   var prefix=System.Text.Encoding.UTF8.GetBytes("--"+boundary+"\r\nContent-Disposition: form-data; name=\"messaging_product\"\r\n\r\nwhatsapp\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\napplication/pdf\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"comprovante.pdf\"\r\nContent-Type: application/pdf\r\n\r\n");
-   var suffix=System.Text.Encoding.UTF8.GetBytes("\r\n--"+boundary+"--\r\n");
-   var body=new byte[prefix.Length+data.Length+suffix.Length];
-   Buffer.BlockCopy(prefix,0,body,0,prefix.Length);Buffer.BlockCopy(data,0,body,prefix.Length,data.Length);Buffer.BlockCopy(suffix,0,body,prefix.Length+data.Length,suffix.Length);
-   string response=await Request("media",body,"multipart/form-data; boundary="+boundary);
-   var parsed=new JavaScriptSerializer().DeserializeObject(response) as System.Collections.Generic.Dictionary<string,object>;
-   if(parsed==null||!parsed.ContainsKey("id"))throw new Exception("Upload do PDF não retornou identificação.");
-   return Convert.ToString(parsed["id"]);
-  }
- }
-con.Error);}
+  static void OpenExternal(string url){
+   try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}
+   catch(Exception ex){MessageBox.Show("Não foi possível abrir o WhatsApp: "+ex.Message);}
   }
  }
 }
