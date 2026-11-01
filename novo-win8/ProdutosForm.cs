@@ -680,6 +680,9 @@ namespace ArmazemGratidao {
      if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Visible=false;
      // Ordem visual igual ao cadastro; as demais colunas continuam disponíveis.
      string[] first={"codigo_barras","descricao","qtd","custo","preco"};
+     // Ao recriar as colunas, a grade pode manter congelamento de uma disposição anterior.
+     // Descongelar antes de alterar DisplayIndex evita InvalidOperationException no WinForms.
+     foreach(DataGridViewColumn column in grid.Columns)if(column.Frozen)column.Frozen=false;
      for(int i=0;i<first.Length;i++)if(grid.Columns.Contains(first[i]))grid.Columns[first[i]].DisplayIndex=i;
      if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].HeaderText="Código de barras";
      if(grid.Columns.Contains("descricao"))grid.Columns["descricao"].HeaderText="Descrição do produto";
