@@ -830,7 +830,9 @@ namespace ArmazemGratidao {
   void ShowTable(string table,string sql) {
    if(!File.Exists(dbPath)) {MessageBox.Show("Importe primeiro o banco de dados.");return;}
    try {using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true}.ToString())) {conn.Open();var dt=new DataTable();using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);grid.DataSource=dt;var home=Controls["homePanel"];if(home!=null){Controls.Remove(home);home.Dispose();}grid.Visible=true;grid.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text=table+": "+dt.Rows.Count+" registros exibidos (somente leitura).";}}
-   catch(Exception ex) {MessageBox.Show(ex.Message,"Erro na consulta",MessageBoxButtons.OK,MessageBoxI
+   catch(Exception ex) {MessageBox.Show(ex.Message,"Erro na consulta",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }
+  }
  // Interface Windows Forms independente, sem navegador embutido e sem salvar o token no banco.
  public sealed class WhatsAppNormalForm:Form {
   readonly TextBox phone=new TextBox{Width=330};
