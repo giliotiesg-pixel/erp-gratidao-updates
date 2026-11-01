@@ -697,36 +697,6 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show("Venda salva, mas erro no comprovante: "+ex.Message,"Comprovante");}
   }
   // Alerta de possível repetição; não bloqueia vendas legítimas do mesmo dia.
-  bool ConfirmPossibleDuplicate(string clientName,string method,decimal sum){
-   if(!manualEntry)return true;
-   var found=new List<string>();
-   using(var conn=Open())
-   using(var cmd=new SQLiteCommand("SELECT id,created_at FROM sales WHERE created_at = @moment AND UPPER(TRIM(COALESCE(customer_name,'')))=UPPER(TRIM(@customer)) AND payment_method=@method AND ABS(gross_total-@total)<0.01 ORDER BY id DESC LIMIT 40",conn)){
-    DateTime moment=manualDate.Value;
-    cmd.Parameters.AddWithValue("@moment",moment.ToString("yyyy-MM-dd HH:mm:ss"));
-    cmd.Parameters.AddWithValue("@customer",clientName);
-    cmd.Parameters.AddWithValue("@method",method);
-    cmd.Parameters.AddWithValue("@total",sum);
-    using(var rd=cmd.ExecuteReader())while(rd.Read())found.Add(Convert.ToString(rd["id"])+"|"+Convert.ToString(rd["created_at"]));
-   }
-   foreach(string entry in found){
-    var parts=entry.Split('|');
-    long saleId=long.Parse(parts[0]);
-    var existing=new Dictionary<long,decimal>();
-    using(var conn=Open())
-    using(var cmd=new SQLiteCommand("SELECT product_id,SUM(quantity) FROM sale_items WHERE sale_id=@sale GROUP BY product_id",conn)){
-     cmd.Parameters.AddWithValue("@sale",saleId);
-     using(var rd=cmd.ExecuteReader())while(rd.Read())existing[Convert.ToInt64(rd[0])]=Dec(rd[1]);
-    }
-    var incoming=cart.GroupBy(x=>x.Id).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.Qty));
-    if(existing.Count==incoming.Count&&incoming.All(x=>existing.ContainsKey(x.Key)&&existing[x.Key]==x.Value)){
-     return MessageBox.Show("Foi encontrada uma venda muito semelhante já registrada:\nVenda #"+saleId+" em "+parts[1]+
-      "\nMesmo segundo, cliente, pagamento, valor e produtos/quantidades.\n\nSIM: registrar mesmo assim (são duas vendas diferentes).\nNÃO: revisar sem gravar.",
-      "Possível venda duplicada",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes;
-    }
-   }
-   return true;
-  }
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
@@ -793,7 +763,6 @@ namespace ArmazemGratidao {
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
 
    if(manualEntry && manualDate.Value>DateTime.Now.AddMinutes(2)){MessageBox.Show("A data da venda anotada não pode estar no futuro.");return;}
-   try{if(!ConfirmPossibleDuplicate(customerName,method,sum))return;}catch(Exception ex){MessageBox.Show("Não foi possível conferir duplicidade. Venda não registrada: "+ex.Message,"Conferência",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
    try {
