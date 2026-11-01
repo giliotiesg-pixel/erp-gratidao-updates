@@ -229,8 +229,8 @@ namespace ArmazemGratidao {
   }
   static string SearchFoldSql(string column){
    string expression="LOWER(COALESCE("+column+",''))";
-   string accented="áàâãäéèêëíìîïóòôõöúùûüç";
-   string plain="aaaaaeeeeiiiiooooouuuuc";
+   string accented="áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ";
+   string plain="aaaaaeeeeiiiiooooouuuucaaaaaeeeeiiiiooooouuuuc";
    for(int i=0;i<accented.Length;i++)expression="REPLACE("+expression+",'"+accented[i]+"','"+plain[i]+"')";
    return expression;
   }
