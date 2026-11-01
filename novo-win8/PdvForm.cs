@@ -73,6 +73,7 @@ namespace ArmazemGratidao {
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=46,Width=195,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
+   var quickPrice=new Button {Text="ATUALIZAR PREÇO CADASTRADO",Width=230,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};quickPrice.Click+=(sender,args)=>UpdateRegisteredPrice();footer.Controls.Add(quickPrice);
    var remove=new Button {Text="REMOVER ITEM",Width=145,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="LIMPAR CARRINHO",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
    var discountButton=new Button {Text="DESCONTO R$ / %",Width=170,Height=40,BackColor=Color.FromArgb(175,25,45),ForeColor=Color.White};
@@ -477,6 +478,52 @@ namespace ArmazemGratidao {
    decimal difference=received.Value-FinalAmount();
    changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
    changeLabel.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
+  }
+  void UpdateRegisteredPrice(){
+   if(finishingSale){MessageBox.Show("Aguarde a finalização da venda.");return;}
+   Item chosen=null;
+   if(grid.CurrentRow!=null&&grid.CurrentRow.Index>=0&&grid.CurrentRow.Index<cart.Count)chosen=cart[grid.CurrentRow.Index];
+   if(chosen==null){MessageBox.Show("Selecione um produto no carrinho para atualizar seu preço cadastrado. Para mudar somente esta venda, use EDITAR QUANTIDADE / PREÇO.");return;}
+   try{
+    using(var conn=Open()){
+     decimal oldPrice;
+     using(var cmd=new SQLiteCommand("SELECT price FROM products WHERE id=@id",conn)){
+      cmd.Parameters.AddWithValue("@id",chosen.Id);
+      object stored=cmd.ExecuteScalar();if(stored==null||stored==DBNull.Value)throw new Exception("Produto não encontrado.");
+      oldPrice=Dec(stored);
+     }
+     using(var dialog=new Form{Text="Atualização rápida do preço cadastrado",Width=500,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+      var title=new Label{Text=chosen.Name,Left=16,Top=18,Width=450,Height=40,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+      var current=new Label{Text="Preço cadastrado: R$ "+oldPrice.ToString("N2"),Left=16,Top=65,Width=440,Height=28};
+      var next=new NumericUpDown{Left=170,Top=103,Width=185,DecimalPlaces=2,Minimum=0.01m,Maximum=99999999,Value=Math.Max(0.01m,oldPrice)};
+      var label=new Label{Text="Novo preço (R$):",Left=16,Top=108,Width=145};
+      var confirm=new Button{Text="Salvar novo preço",Left=170,Top=153,Width=185,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+      dialog.Controls.AddRange(new Control[]{title,current,label,next,confirm});
+      confirm.Click+=(sender,args)=>{
+       if(MessageBox.Show("Alterar o preço cadastrado de "+chosen.Name+" de R$ "+oldPrice.ToString("N2")+" para R$ "+next.Value.ToString("N2")+"?\nA venda atual não será alterada.","Confirmar preço",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       try{
+        string backup=db+".antes-alterar-preco-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+        using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);}
+        using(var tx=conn.BeginTransaction()){
+         using(var cmd=new SQLiteCommand("UPDATE products SET price=@price WHERE id=@id AND price=@previous",conn,tx)){
+          cmd.Parameters.AddWithValue("@price",next.Value);cmd.Parameters.AddWithValue("@id",chosen.Id);cmd.Parameters.AddWithValue("@previous",oldPrice);
+          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Preço alterado em outra janela. Reabra a atualização.");
+         }
+         using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_price_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_price NUMERIC NOT NULL,new_price NUMERIC NOT NULL,changed_at TEXT NOT NULL,origin TEXT NOT NULL)",conn,tx))cmd.ExecuteNonQuery();
+         using(var cmd=new SQLiteCommand("INSERT INTO product_price_audit(product_id,previous_price,new_price,changed_at,origin) VALUES(@id,@old,@new,@date,'PDV')",conn,tx)){
+          cmd.Parameters.AddWithValue("@id",chosen.Id);cmd.Parameters.AddWithValue("@old",oldPrice);cmd.Parameters.AddWithValue("@new",next.Value);
+          cmd.Parameters.AddWithValue("@date",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.ExecuteNonQuery();
+         }
+         tx.Commit();
+        }
+        dialog.DialogResult=DialogResult.OK;dialog.Close();
+        MessageBox.Show("Preço do cadastro atualizado. Os itens da venda atual não foram modificados.");
+       }catch(Exception ex){MessageBox.Show("Preço não atualizado: "+ex.Message);}
+      };
+      dialog.ShowDialog(this);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Falha ao consultar produto: "+ex.Message);}
   }
   void EditSelected(){
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
