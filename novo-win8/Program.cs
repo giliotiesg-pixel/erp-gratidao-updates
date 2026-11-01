@@ -871,10 +871,11 @@ namespace ArmazemGratidao {
   readonly TextBox code=new TextBox{Width=240,Font=new Font("Segoe UI",15,FontStyle.Bold)};
   readonly TextBox description=new TextBox{Width=450,ReadOnly=true,BackColor=Color.White,Font=new Font("Segoe UI",12)};
   readonly NumericUpDown count=new NumericUpDown{Width=155,DecimalPlaces=3,Maximum=10000000,Minimum=0,Font=new Font("Segoe UI",14)};
+  readonly Label entryDate=new Label{AutoSize=true,Padding=new Padding(12,8,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
   readonly Label status=new Label{Dock=DockStyle.Bottom,Height=48,Text="Bipe ou digite o código e pressione Enter.",Padding=new Padding(12,8,0,0)};
   long productId;decimal previous;string productBarcode;
   public StockCountQuickForm(string db){
-   database=db;Text="Armazém Gratidão | Conferência rápida de estoque";Width=930;Height=300;MinimumSize=new Size(740,260);
+   database=db;Text="Armazém Gratidão | Entrada rápida de quantidade";Width=930;Height=335;MinimumSize=new Size(740,260);
    Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
    var row=new FlowLayoutPanel{Dock=DockStyle.Top,Height=110,Padding=new Padding(14,16,10,8),AutoScroll=true,WrapContents=true};
    row.Controls.Add(new Label{Text="Código de barras",AutoSize=true,Padding=new Padding(0,9,0,0)});
@@ -882,19 +883,21 @@ namespace ArmazemGratidao {
    row.Controls.Add(new Label{Text="Descrição",AutoSize=true,Padding=new Padding(0,9,0,0)});
    row.Controls.Add(description);
    var actions=new FlowLayoutPanel{Dock=DockStyle.Top,Height=65,Padding=new Padding(14),AutoScroll=true};
-   actions.Controls.Add(new Label{Text="Qtd física",AutoSize=true,Padding=new Padding(0,9,0,0)});
+   actions.Controls.Add(new Label{Text="Quantidade de entrada",AutoSize=true,Padding=new Padding(0,9,0,0)});
    actions.Controls.Add(count);
-   var save=new Button{Text="Salvar quantidade física",Width=220,Height=37,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   var save=new Button{Text="Registrar entrada",Width=220,Height=37,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
    var clear=new Button{Text="Próximo produto",Width=150,Height=37};
    actions.Controls.Add(save);actions.Controls.Add(clear);
-   Controls.Add(status);Controls.Add(actions);Controls.Add(row);
+   var dateRow=new Panel{Dock=DockStyle.Top,Height=36};dateRow.Controls.Add(entryDate);
+   entryDate.Text="Data e hora da entrada: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
+   Controls.Add(status);Controls.Add(actions);Controls.Add(row);Controls.Add(dateRow);
    code.KeyDown+=(sender,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;Search();}};
    save.Click+=(sender,e)=>SaveCount();
    clear.Click+=(sender,e)=>Reset();
    Shown+=(sender,e)=>code.Focus();
   }
   SQLiteConnection Open(){var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=database,FailIfMissing=true}.ToString());conn.Open();return conn;}
-  void Reset(){productId=0;previous=0;productBarcode=null;code.Clear();description.Clear();count.Value=0;status.Text="Pronto para o próximo produto.";code.Focus();}
+  void Reset(){productId=0;previous=0;productBarcode=null;code.Clear();description.Clear();count.Value=0;entryDate.Text="Data e hora da entrada: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");status.Text="Pronto para o próximo produto.";code.Focus();}
   void Search(){
    productId=0;description.Clear();count.Value=0;
    string entered=code.Text.Trim();
@@ -909,7 +912,7 @@ namespace ArmazemGratidao {
       decimal recorded=Convert.ToDecimal(rd[3],System.Globalization.CultureInfo.InvariantCulture);
       if(rd.Read()){status.Text="Código ambíguo; confira o cadastro.";return;}
       productId=id;productBarcode=barcode;previous=recorded;description.Text=name;
-      count.Value=Math.Min(count.Maximum,Math.Max(0,recorded));status.Text="Estoque no sistema: "+recorded.ToString("N3")+". Informe a quantidade contada fisicamente.";
+      count.Value=0;status.Text="Estoque atual: "+recorded.ToString("N3")+". Informe apenas a quantidade que está entrando.";
       count.Focus();count.Select(0,count.Text.Length);
      }
     }
@@ -917,8 +920,12 @@ namespace ArmazemGratidao {
   }
   void SaveCount(){
    if(productId==0){MessageBox.Show("Pesquise um produto antes de salvar.");return;}
-   decimal physical=count.Value;
-   if(MessageBox.Show("Confirmar quantidade FÍSICA total de "+description.Text+"?\nRegistrado: "+previous.ToString("N3")+"\nContado: "+physical.ToString("N3")+"\nDiferença: "+(physical-previous).ToString("N3"),"Conferência de estoque",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+   decimal entered=count.Value;
+   if(entered<=0){MessageBox.Show("Informe a quantidade positiva que está entrando.");return;}
+   DateTime movementTime=DateTime.Now;
+   decimal next=previous+entered;
+   if(next>10000000){MessageBox.Show("Quantidade final acima do limite permitido.");return;}
+   if(MessageBox.Show("Registrar ENTRADA de "+entered.ToString("N3")+" unidades de "+description.Text+"?\nData: "+movementTime.ToString("dd/MM/yyyy HH:mm:ss")+"\nAnterior: "+previous.ToString("N3")+"\nApós entrada: "+next.ToString("N3"),"Entrada rápida de estoque",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    try{
     using(var conn=Open()){
      using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('runtime_operation_context','stock_audit_log')",conn))
@@ -932,16 +939,22 @@ namespace ArmazemGratidao {
       int oldAuth;string oldOp;
       using(var cmd=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",conn,tx))
       using(var reader=cmd.ExecuteReader()){if(!reader.Read())throw new Exception("Contexto de proteção ausente.");oldAuth=Convert.ToInt32(reader[0]);oldOp=Convert.ToString(reader[1]);}
-      using(var cmd=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='AJUSTE_MANUAL_PDV_AUDITADO' WHERE id=1",conn,tx))
+      using(var cmd=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='ENTRADA_QTD_AUDITADA' WHERE id=1",conn,tx))
        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Não foi possível autorizar conferência.");
-      using(var cmd=new SQLiteCommand("UPDATE products SET stock=@physical WHERE id=@id AND stock=@previous",conn,tx)){cmd.Parameters.AddWithValue("@physical",physical);cmd.Parameters.AddWithValue("@id",productId);cmd.Parameters.AddWithValue("@previous",previous);if(cmd.ExecuteNonQuery()!=1)throw new Exception("Estoque alterado durante a conferência.");}
-      using(var cmd=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) VALUES(@id,@name,@barcode,'CONFERENCIA_FISICA',@before,@after,@delta,'ESTOQUE','Conferência rápida de estoque físico')",conn,tx)){
-       cmd.Parameters.AddWithValue("@id",productId);cmd.Parameters.AddWithValue("@name",description.Text);cmd.Parameters.AddWithValue("@barcode",productBarcode??"");cmd.Parameters.AddWithValue("@before",previous);cmd.Parameters.AddWithValue("@after",physical);cmd.Parameters.AddWithValue("@delta",physical-previous);if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria.");}
+      using(var cmd=new SQLiteCommand("UPDATE products SET stock=@physical WHERE id=@id AND stock=@previous",conn,tx)){cmd.Parameters.AddWithValue("@physical",next);cmd.Parameters.AddWithValue("@id",productId);cmd.Parameters.AddWithValue("@previous",previous);if(cmd.ExecuteNonQuery()!=1)throw new Exception("Estoque alterado durante a conferência.");}
+      using(var cmd=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) VALUES(@id,@name,@barcode,'ENTRADA_QTD',@before,@after,@delta,'ESTOQUE',@reason)",conn,tx)){
+       cmd.Parameters.AddWithValue("@id",productId);cmd.Parameters.AddWithValue("@name",description.Text);cmd.Parameters.AddWithValue("@barcode",productBarcode??"");cmd.Parameters.AddWithValue("@before",previous);cmd.Parameters.AddWithValue("@after",next);cmd.Parameters.AddWithValue("@delta",entered);cmd.Parameters.AddWithValue("@reason","Entrada rápida de quantidade em "+movementTime.ToString("yyyy-MM-dd HH:mm:ss"));if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria.");}
+      using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_quantity_movements (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,movement_at TEXT NOT NULL,quantity_before NUMERIC NOT NULL,quantity_added NUMERIC NOT NULL,quantity_after NUMERIC NOT NULL,reason TEXT NOT NULL)",conn,tx))cmd.ExecuteNonQuery();
+      using(var cmd=new SQLiteCommand("INSERT INTO product_quantity_movements(product_id,movement_at,quantity_before,quantity_added,quantity_after,reason) VALUES(@id,@at,@before,@added,@after,@reason)",conn,tx)){
+       cmd.Parameters.AddWithValue("@id",productId);cmd.Parameters.AddWithValue("@at",movementTime.ToString("yyyy-MM-dd HH:mm:ss"));
+       cmd.Parameters.AddWithValue("@before",previous);cmd.Parameters.AddWithValue("@added",entered);cmd.Parameters.AddWithValue("@after",next);
+       cmd.Parameters.AddWithValue("@reason","Entrada rápida de estoque");if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar histórico da entrada.");
+      }
       using(var cmd=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",conn,tx)){cmd.Parameters.AddWithValue("@auth",oldAuth);cmd.Parameters.AddWithValue("@operation",oldOp);if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar proteção.");}
       tx.Commit();
      }
     }
-    Reset();status.Text="Quantidade física salva e auditada. Pronto para o próximo produto.";
+    Reset();status.Text="Entrada salva com data, hora e histórico. Pronto para o próximo produto.";
    }catch(Exception ex){MessageBox.Show("Quantidade não salva: "+ex.Message,"Conferência",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
   }
  }
