@@ -676,7 +676,15 @@ namespace ArmazemGratidao {
      }
      grid.DataSource=dt;
      if(grid.Columns.Contains("codigo_interno"))grid.Columns["codigo_interno"].Visible=false;
-     if(grid.Columns.Contains("Código")){grid.Columns["Código"].HeaderText="Código";grid.Columns["Código"].Width=80;grid.Columns["Código"].DisplayIndex=1;}
+     // Ordem visual igual ao cadastro; as demais colunas continuam disponíveis.
+     string[] first={"codigo_barras","descricao","qtd","custo","preco"};
+     for(int i=0;i<first.Length;i++)if(grid.Columns.Contains(first[i]))grid.Columns[first[i]].DisplayIndex=i;
+     if(grid.Columns.Contains("codigo_barras"))grid.Columns["codigo_barras"].HeaderText="Código de barras";
+     if(grid.Columns.Contains("descricao"))grid.Columns["descricao"].HeaderText="Descrição do produto";
+     if(grid.Columns.Contains("qtd"))grid.Columns["qtd"].HeaderText="Quantidade";
+     if(grid.Columns.Contains("custo")){grid.Columns["custo"].HeaderText="Custo (R$)";grid.Columns["custo"].DefaultCellStyle.Format="N2";}
+     if(grid.Columns.Contains("preco")){grid.Columns["preco"].HeaderText="Preço de venda (R$)";grid.Columns["preco"].DefaultCellStyle.Format="N2";}
+     if(grid.Columns.Contains("Código")){grid.Columns["Código"].HeaderText="Código interno";grid.Columns["Código"].Width=90;}
      info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
      // Indicadores completos somente sob demanda, evitando uma varredura extra a cada pesquisa.
      if(calculateMetrics)using(var totals=new SQLiteCommand("SELECT SUM(CASE WHEN COALESCE(stock,0)<=0 THEN 1 ELSE 0 END), COALESCE(SUM(COALESCE(stock,0)),0), COALESCE(SUM(COALESCE(stock,0)*COALESCE(cost,0)),0) FROM products WHERE ("+searchColumns+")"+filter,c)){
@@ -706,8 +714,13 @@ namespace ArmazemGratidao {
     decimal profit=suggested-cost.Value;
     preview.Text="Preço sugerido R$ "+suggested.ToString("N2")+" | Lucro/un. R$ "+profit.ToString("N2")+" | Total R$ "+(profit*quantity.Value).ToString("N2");
    };
-   percent.ValueChanged+=(sender,args)=>update();
-   cost.ValueChanged+=(sender,args)=>update();
+   Action calculatePrice=()=>{
+    if(percent.Value<=0)return; // Mantém o preço original até informar porcentagem.
+    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
+    if(suggested<=price.Maximum)price.Value=suggested;
+   };
+   percent.ValueChanged+=(sender,args)=>{calculatePrice();update();};
+   cost.ValueChanged+=(sender,args)=>{calculatePrice();update();};
    quantity.ValueChanged+=(sender,args)=>update();
    apply.Click+=(sender,args)=>{
     decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
