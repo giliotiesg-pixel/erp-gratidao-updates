@@ -36,7 +36,7 @@ namespace ArmazemGratidao {
    db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;BackColor=Color.FromArgb(229,242,255);
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=105,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=145,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(220,95,105)};
    var searchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=53,Padding=new Padding(9,7,9,5),BackColor=Color.FromArgb(229,242,255),WrapContents=false};
    search.Width=360;search.Font=new Font("Segoe UI",12,FontStyle.Regular);
    searchBar.Controls.Add(new Label {Text="Pesquisar por código de barras ou descrição:",AutoSize=true,Padding=new Padding(0,8,6,0),ForeColor=Color.FromArgb(20,40,75),Font=new Font("Segoe UI",10,FontStyle.Bold)});
