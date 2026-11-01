@@ -16,7 +16,7 @@ namespace ArmazemGratidao {
   readonly string db;
   bool finishingSale=false;
   readonly bool manualEntry;
-  readonly DateTimePicker manualDate=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm",ShowUpDown=true,Width=175};
+  readonly DateTimePicker manualDate=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",ShowUpDown=true,Width=220};
 
   readonly List<Item> cart=new List<Item>();
   readonly TextBox code=new TextBox {Width=260,Font=new Font("Segoe UI",14,FontStyle.Bold)};
@@ -701,10 +701,9 @@ namespace ArmazemGratidao {
    if(!manualEntry)return true;
    var found=new List<string>();
    using(var conn=Open())
-   using(var cmd=new SQLiteCommand("SELECT id,created_at FROM sales WHERE created_at BETWEEN @start AND @end AND UPPER(TRIM(COALESCE(customer_name,'')))=UPPER(TRIM(@customer)) AND payment_method=@method AND ABS(gross_total-@total)<0.01 ORDER BY id DESC LIMIT 40",conn)){
+   using(var cmd=new SQLiteCommand("SELECT id,created_at FROM sales WHERE created_at = @moment AND UPPER(TRIM(COALESCE(customer_name,'')))=UPPER(TRIM(@customer)) AND payment_method=@method AND ABS(gross_total-@total)<0.01 ORDER BY id DESC LIMIT 40",conn)){
     DateTime moment=manualDate.Value;
-    cmd.Parameters.AddWithValue("@start",moment.AddMinutes(-10).ToString("yyyy-MM-dd HH:mm:ss"));
-    cmd.Parameters.AddWithValue("@end",moment.AddMinutes(10).ToString("yyyy-MM-dd HH:mm:ss"));
+    cmd.Parameters.AddWithValue("@moment",moment.ToString("yyyy-MM-dd HH:mm:ss"));
     cmd.Parameters.AddWithValue("@customer",clientName);
     cmd.Parameters.AddWithValue("@method",method);
     cmd.Parameters.AddWithValue("@total",sum);
@@ -722,7 +721,7 @@ namespace ArmazemGratidao {
     var incoming=cart.GroupBy(x=>x.Id).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.Qty));
     if(existing.Count==incoming.Count&&incoming.All(x=>existing.ContainsKey(x.Key)&&existing[x.Key]==x.Value)){
      return MessageBox.Show("Foi encontrada uma venda muito semelhante já registrada:\nVenda #"+saleId+" em "+parts[1]+
-      "\nMesmo cliente, pagamento, valor e produtos/quantidades.\n\nSIM: registrar mesmo assim (são duas vendas diferentes).\nNÃO: revisar sem gravar.",
+      "\nMesmo segundo, cliente, pagamento, valor e produtos/quantidades.\n\nSIM: registrar mesmo assim (são duas vendas diferentes).\nNÃO: revisar sem gravar.",
       "Possível venda duplicada",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes;
     }
    }
