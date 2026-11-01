@@ -50,7 +50,7 @@ namespace ArmazemGratidao {
    saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
-   code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();suggestions.Visible=false;AddProduct();}};
+   code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
@@ -278,9 +278,10 @@ namespace ArmazemGratidao {
      }
     }
     suggestions.Visible=suggestions.Items.Count>0;
-    if(suggestions.Visible){PositionSuggestions();suggestions.BringToFront();}
-   }catch{suggestions.Visible=false;}
+    if(suggestions.Visible){PositionSuggestions();suggestions.BringToFront();if(manualEntry&&suggestions.SelectedIndex<0)suggestions.SelectedIndex=0;}
+   }catch(Exception ex){suggestions.Visible=false;if(manualEntry)statusLookupError(ex.Message);}
   }
+  void statusLookupError(string detail){if(!IsDisposed)Text="Lançamento rápido | Erro na busca: "+detail;}
   void ChooseSuggestion(){
    string selected;
    if(!suggestionCodes.TryGetValue(suggestions.SelectedIndex,out selected))return;
