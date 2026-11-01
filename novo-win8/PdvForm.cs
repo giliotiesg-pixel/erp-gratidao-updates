@@ -4,6 +4,9 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -503,6 +506,105 @@ namespace ArmazemGratidao {
     return dialog.ShowDialog(this)==DialogResult.OK?selected:null;
    }
   }
+
+  // Gera PDF local simples, sem serviços externos e sem identificar o recibo como NFC-e.
+  static string ReceiptAscii(string value){
+   string normalized=(value??"").Normalize(NormalizationForm.FormD);
+   var result=new StringBuilder();
+   foreach(char ch in normalized){
+    if(CharUnicodeInfo.GetUnicodeCategory(ch)==UnicodeCategory.NonSpacingMark)continue;
+    result.Append(ch>=32&&ch<=126?ch:' ');
+   }
+   return result.ToString();
+  }
+  static string PdfHex(string value){
+   byte[] data=Encoding.ASCII.GetBytes(ReceiptAscii(value));
+   return "<"+BitConverter.ToString(data).Replace("-","")+">";
+  }
+  string CreateSaleReceiptPdf(long saleId){
+   var lines=new List<string>();
+   lines.Add("ARMAZEM GRATIDAO");
+   lines.Add("COMPROVANTE DE VENDA - NAO FISCAL");
+   lines.Add("Este documento nao substitui nota fiscal ou NFC-e.");
+   lines.Add(new string('-',70));
+   using(var conn=Open()){
+    using(var cmd=new SQLiteCommand("SELECT id,created_at,customer_name,payment_method,gross_total FROM sales WHERE id=@id",conn)){
+     cmd.Parameters.AddWithValue("@id",saleId);
+     using(var rd=cmd.ExecuteReader()){
+      if(!rd.Read())throw new Exception("Venda nao encontrada para gerar comprovante.");
+      lines.Add("Venda: "+Convert.ToString(rd["id"])+"   Data: "+Convert.ToString(rd["created_at"]));
+      lines.Add("Cliente: "+Convert.ToString(rd["customer_name"]));
+      lines.Add("Pagamento: "+Convert.ToString(rd["payment_method"]));
+      lines.Add("TOTAL: R$ "+Dec(rd["gross_total"]).ToString("N2"));
+     }
+    }
+    lines.Add(new string('-',70));
+    lines.Add("PRODUTO                                 QTD      UNIT.       TOTAL");
+    using(var cmd=new SQLiteCommand("SELECT name,quantity,unit_price,total FROM sale_items WHERE sale_id=@id ORDER BY id",conn)){
+     cmd.Parameters.AddWithValue("@id",saleId);
+     using(var rd=cmd.ExecuteReader())while(rd.Read()){
+      string name=ReceiptAscii(Convert.ToString(rd["name"]));
+      if(name.Length>39)name=name.Substring(0,39);
+      lines.Add(name.PadRight(40)+Dec(rd["quantity"]).ToString("0.###").PadLeft(7)+" "+Dec(rd["unit_price"]).ToString("N2").PadLeft(10)+" "+Dec(rd["total"]).ToString("N2").PadLeft(10));
+     }
+    }
+   }
+   lines.Add(new string('-',70));
+   lines.Add("Obrigado pela preferencia!");
+   lines.Add("Documento de controle interno - nao fiscal.");
+   // PDF escrito em objetos padrao; cada pagina suporta 55 linhas.
+   var objects=new List<string>();
+   objects.Add(""); // catalogo
+   objects.Add(""); // paginas
+   objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
+   var pageIds=new List<int>();
+   for(int offset=0;offset<lines.Count;offset+=55){
+    var pageLines=lines.Skip(offset).Take(55).ToList();
+    var content=new StringBuilder();
+    int y=810;
+    foreach(string line in pageLines){
+     content.Append("BT /F1 9 Tf 36 ").Append(y).Append(" Td ").Append(PdfHex(line)).Append(" Tj ET\n");
+     y-=14;
+    }
+    int streamLen=Encoding.ASCII.GetByteCount(content.ToString());
+    int streamId=objects.Count+1;
+    objects.Add("<< /Length "+streamLen+" >>\nstream\n"+content+"endstream");
+    int pageId=objects.Count+1;
+    objects.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents "+streamId+" 0 R >>");
+    pageIds.Add(pageId);
+   }
+   objects[0]="<< /Type /Catalog /Pages 2 0 R >>";
+   objects[1]="<< /Type /Pages /Count "+pageIds.Count+" /Kids [ "+string.Join(" ",pageIds.Select(id=>id+" 0 R"))+" ] >>";
+   var pdf=new StringBuilder("%PDF-1.4\n");
+   var positions=new List<int>{0};
+   foreach(string obj in objects){
+    positions.Add(Encoding.ASCII.GetByteCount(pdf.ToString()));
+    int id=positions.Count-1;
+    pdf.Append(id).Append(" 0 obj\n").Append(obj).Append("\nendobj\n");
+   }
+   int xref=Encoding.ASCII.GetByteCount(pdf.ToString());
+   pdf.Append("xref\n0 ").Append(objects.Count+1).Append("\n0000000000 65535 f \n");
+   for(int i=1;i<positions.Count;i++)pdf.Append(positions[i].ToString("D10")).Append(" 00000 n \n");
+   pdf.Append("trailer\n<< /Size ").Append(objects.Count+1).Append(" /Root 1 0 R >>\nstartxref\n").Append(xref).Append("\n%%EOF");
+   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Armazem Gratidao","Comprovantes");
+   Directory.CreateDirectory(folder);
+   string destination=Path.Combine(folder,"Venda-"+saleId+".pdf");
+   File.WriteAllBytes(destination,Encoding.ASCII.GetBytes(pdf.ToString()));
+   return destination;
+  }
+  void OfferSaleReceipt(long saleId,string clientName,decimal saleTotal){
+   try{
+    var choice=MessageBox.Show("Venda #"+saleId+" concluida.\n\nSIM: gerar comprovante PDF e abrir WhatsApp.\nNAO: gerar e abrir somente o PDF.\nCANCELAR: voltar ao PDV sem gerar agora.","Comprovante da venda",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Information);
+    if(choice==DialogResult.Cancel)return;
+    string pdf=CreateSaleReceiptPdf(saleId);
+    if(choice==DialogResult.No){Process.Start(new ProcessStartInfo(pdf){UseShellExecute=true});return;}
+    string message="Armazem Gratidao - comprovante da venda #"+saleId+" - R$ "+saleTotal.ToString("N2")+". Segue o comprovante PDF. ";
+    string whatsapp="https://wa.me/?text="+Uri.EscapeDataString(message);
+    Process.Start(new ProcessStartInfo(whatsapp){UseShellExecute=true});
+    MessageBox.Show("PDF salvo em:\n"+pdf+"\n\nNo WhatsApp, selecione o contato e ANEXE o arquivo PDF. A mensagem foi preparada, mas o programa nao envia anexos automaticamente.","Enviar comprovante por WhatsApp");
+   }catch(Exception ex){MessageBox.Show("A venda foi concluida, mas o comprovante nao foi gerado: "+ex.Message,"Comprovante",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
@@ -635,7 +737,8 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
-     MessageBox.Show("Venda #"+saleId+" registrada. Estoque atualizado.");cart.Clear();received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     cart.Clear();received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     OfferSaleReceipt(saleId,customerName,sum);
     }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Venda nao finalizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
