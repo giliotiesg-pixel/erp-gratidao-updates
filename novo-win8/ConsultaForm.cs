@@ -52,10 +52,11 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
     table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
     table.MultiSelect=false;
     table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
-    table.RowTemplate.Height=32;
+    table.RowTemplate.Height=38;
     table.AllowUserToResizeRows=false;
     table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-    table.ColumnHeadersHeight=40;
+    table.ColumnHeadersHeight=46;
+    table.ColumnHeadersVisible=true;
     table.EnableHeadersVisualStyles=false;
     table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
     table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
@@ -66,7 +67,7 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
     table.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    }
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
-   master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster)LoadDetails();};
+   master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster){LoadDetails();if(!credit)ShowSaleItems();}};
    dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
    // Ao voltar à janela, conferir vendas registradas por PDV, lançamentos anotados ou outra janela.
    Activated+=(sender,args)=>{if(!credit&&!loadingMaster)LoadMaster();};
@@ -141,6 +142,30 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
    finally{loadingMaster=false;LoadDetails();}
   }
 
+  void ShowSaleItems(){
+   try{
+    long id=SelectedSale();
+    var sale=Query("SELECT created_at,customer_name,gross_total,payment_method FROM sales WHERE id=@id","@id",id);
+    if(sale.Rows.Count==0)throw new Exception("Venda não encontrada.");
+    var items=Query("SELECT barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',unit_price AS 'Preço (R$)',total AS 'Valor (R$)' FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
+    using(var dialog=new Form{Text="Produtos da venda #"+id,Width=850,Height=560,MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var header=new Label{Dock=DockStyle.Top,Height=92,Padding=new Padding(14,9,8,4),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),BackColor=Color.FromArgb(221,238,255)};
+     var row=sale.Rows[0];
+     header.Text="VENDA #"+id+"  |  "+Convert.ToString(row["created_at"])+Environment.NewLine+
+      "Cliente: "+Convert.ToString(row["customer_name"])+"  |  Pagamento: "+Convert.ToString(row["payment_method"])+
+      Environment.NewLine+"Total da venda: R$ "+Convert.ToDecimal(row["gross_total"]).ToString("N2")+"  |  "+items.Rows.Count+" produto(s)";
+     var list=new DataGridView{Dock=DockStyle.Fill,DataSource=items,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,
+      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowTemplate={Height=38},BackgroundColor=Color.White,
+      ColumnHeadersHeight=46,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+      EnableHeadersVisualStyles=false};
+     list.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+     list.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+     list.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
+     list.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
+     dialog.Controls.Add(list);dialog.Controls.Add(header);dialog.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível abrir os produtos: "+ex.Message,"Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   long SelectedSale(){
    if(master.CurrentRow==null||master.CurrentRow.IsNewRow||!master.Columns.Contains("venda"))throw new Exception("Selecione uma venda.");
    return Convert.ToInt64(master.CurrentRow.Cells["venda"].Value);
