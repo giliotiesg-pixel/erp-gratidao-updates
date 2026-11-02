@@ -13,7 +13,35 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms();}; Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms();}; Application.Run(new MainForm()); }
+ }
+ // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
+ static class WindowBoundsGuard {
+  static readonly System.Collections.Generic.HashSet<Form> initialized=new System.Collections.Generic.HashSet<Form>();
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms.Cast<Form>().ToArray()){
+    if(form==null||form.IsDisposed||form is MainForm)continue;
+    if(initialized.Add(form)){
+     form.ShowInTaskbar=true;
+     form.Resize+=(sender,args)=>{if(form.WindowState==FormWindowState.Normal)KeepVisible(form);};
+     form.Shown+=(sender,args)=>KeepVisible(form);
+    }
+    if(form.Visible&&form.WindowState==FormWindowState.Normal)KeepVisible(form);
+   }
+   initialized.RemoveWhere(f=>f.IsDisposed);
+  }
+  static void KeepVisible(Form f){
+   if(f.IsDisposed||f.WindowState!=FormWindowState.Normal)return;
+   Rectangle working=Screen.FromControl(f).WorkingArea;
+   if(working.Width<=0||working.Height<=0)return;
+   // Não ampliar janelas pequenas: reduzir somente as que ultrapassam a área útil.
+   int width=Math.Min(f.Width,Math.Max(300,working.Width-24));
+   int height=Math.Min(f.Height,Math.Max(220,working.Height-30));
+   if(f.Width!=width||f.Height!=height)f.Size=new Size(width,height);
+   int left=Math.Max(working.Left,Math.Min(f.Left,working.Right-f.Width));
+   int top=Math.Max(working.Top,Math.Min(f.Top,working.Bottom-f.Height));
+   if(f.Left!=left||f.Top!=top)f.Location=new Point(left,top);
+  }
  }
  // Atalho centralizado: aparece somente nos formulários principais dos módulos.
  // Não modifica diálogos de confirmação nem os dados de uma venda em andamento.
