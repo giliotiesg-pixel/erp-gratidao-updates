@@ -122,7 +122,7 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
   }
   static void PrepareSalesList(DataTable rows){
    var display=rows.Columns.Add("Venda para consultar",typeof(string));display.SetOrdinal(0);
-   foreach(DataRow item in rows.Rows)display.SetValue(item,"Venda nº "+item["venda"]+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2"));
+   foreach(DataRow item in rows.Rows)item[display]="Venda nº "+item["venda"]+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
   }
   void LoadMaster() {
    loadingMaster=true;
