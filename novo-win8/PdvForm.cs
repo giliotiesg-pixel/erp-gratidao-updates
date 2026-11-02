@@ -587,11 +587,22 @@ namespace ArmazemGratidao {
        table.Rows.Add(item.Id,item.Barcode,item.Name,cart.Where(x=>x.Id==item.Id).Sum(x=>x.Qty),Dec(value),Dec(value));
       }
      }
-     var list=new DataGridView{Dock=DockStyle.Fill,DataSource=table,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,ScrollBars=ScrollBars.Both};
-     foreach(DataGridViewColumn column in list.Columns)column.ReadOnly=column.Name!="Novo preço";
-     list.Columns["ID"].Visible=false;
-     list.Columns["Preço atual"].DefaultCellStyle.Format="N2";
-     list.Columns["Novo preço"].DefaultCellStyle.Format="N2";
+     // Criar as colunas antes de vincular o DataTable: em WinForms antigo
+     // AutoGenerateColumns pode ocorrer só quando o controle ganha BindingContext.
+     var list=new DataGridView{Dock=DockStyle.Fill,AutoGenerateColumns=false,
+      AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,
+      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,ScrollBars=ScrollBars.Both};
+     foreach(DataColumn dataColumn in table.Columns){
+      var col=new DataGridViewTextBoxColumn{
+       Name=dataColumn.ColumnName,HeaderText=dataColumn.ColumnName,
+       DataPropertyName=dataColumn.ColumnName,ReadOnly=dataColumn.ColumnName!="Novo preço"
+      };
+      if(dataColumn.ColumnName=="ID")col.Visible=false;
+      if(dataColumn.ColumnName=="Preço atual"||dataColumn.ColumnName=="Novo preço")col.DefaultCellStyle.Format="N2";
+      if(dataColumn.ColumnName=="Novo preço")col.DefaultCellStyle.BackColor=Color.FromArgb(255,250,220);
+      list.Columns.Add(col);
+     }
+     list.DataSource=table;
      var note=new Label{Text="Altere somente a coluna NOVO PREÇO. Os preços serão atualizados no cadastro e na venda atual, sem modificar vendas anteriores.",Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=60,Padding=new Padding(10)};
      var save=new Button{Text="Salvar preços alterados",Width=220,Height=37,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
