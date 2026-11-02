@@ -306,6 +306,14 @@ namespace ArmazemGratidao {
          current=value==DBNull.Value?0:Convert.ToDecimal(value,System.Globalization.CultureInfo.InvariantCulture);
         }
         if(current!=previous)throw new Exception("Estoque alterado durante a operação. Atualize a tela e tente novamente.");
+        int oldAuth;string oldOperation;
+        using(var q=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",c,tx))
+        using(var rd=q.ExecuteReader()){
+         if(!rd.Read())throw new Exception("Proteção de estoque não encontrada.");
+         oldAuth=Convert.ToInt32(rd[0]);oldOperation=Convert.ToString(rd[1]);
+        }
+        using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='ENTRADA_QTD_AUDITADA' WHERE id=1",c,tx))
+         if(q.ExecuteNonQuery()!=1)throw new Exception("Entrada não autorizada.");
         using(var update=new SQLiteCommand("UPDATE products SET stock=@stock WHERE id=@id",c,tx)){
          update.Parameters.AddWithValue("@stock",next);update.Parameters.AddWithValue("@id",id);
          if(update.ExecuteNonQuery()!=1)throw new Exception("Quantidade não atualizada.");
@@ -315,13 +323,11 @@ namespace ArmazemGratidao {
          log.Parameters.AddWithValue("@before",previous);log.Parameters.AddWithValue("@added",quantity.Value);log.Parameters.AddWithValue("@after",next);log.Parameters.AddWithValue("@reason",reason.Text.Trim());
          if(log.ExecuteNonQuery()!=1)throw new Exception("Movimentação não registrada.");
         }
-        using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) SELECT id,name,COALESCE(barcode,''),'ENTRADA_QTD',@before,@after,@added,'ESTOQUE','Entrada de QTD pelo cadastro de produto' FROM products WHERE id=@id",conn,tx)){
-         q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@after",after);q.Parameters.AddWithValue("@added",quantity.Value);q.Parameters.AddWithValue("@id",id);
-         if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria da entrada.");
+        using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) SELECT id,name,COALESCE(barcode,''),'ENTRADA_QTD',@before,@after,@added,'ESTOQUE',@reason FROM products WHERE id=@id",c,tx)){
+         q.Parameters.AddWithValue("@before",previous);q.Parameters.AddWithValue("@after",next);q.Parameters.AddWithValue("@added",quantity.Value);q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@reason",reason.Text.Trim());if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria.");
         }
-        using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",conn,tx)){
-         q.Parameters.AddWithValue("@auth",oldAuth);q.Parameters.AddWithValue("@operation",oldOperation);
-         if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar a proteção.");
+        using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",c,tx)){
+         q.Parameters.AddWithValue("@auth",oldAuth);q.Parameters.AddWithValue("@operation",oldOperation);if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar proteção.");
         }
         tx.Commit();
        }
