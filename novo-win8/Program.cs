@@ -373,8 +373,20 @@ namespace ArmazemGratidao {
   // Mantem as janelas abertas de forma independente; nao usar 'using' com Show().
   void OpenModuleWindow(Form form){
    if(form==null)return;
+   // Reutiliza a janela do mesmo módulo, mesmo se ela estiver minimizada.
+   Form existing=Application.OpenForms.Cast<Form>().FirstOrDefault(x=>!x.IsDisposed&&x.GetType()==form.GetType()&&
+    (!(x is ConsultaForm)||((ConsultaForm)x).IsCreditWindow==((ConsultaForm)form).IsCreditWindow)&&
+    (!(x is PdvForm)||((PdvForm)x).IsManualEntry==((PdvForm)form).IsManualEntry));
+   if(existing!=null){
+    form.Dispose();
+    if(existing.WindowState==FormWindowState.Minimized)existing.WindowState=FormWindowState.Normal;
+    existing.Show();existing.BringToFront();existing.Activate();
+    return;
+   }
    form.StartPosition=FormStartPosition.CenterScreen;
-   form.Show(this);
+   form.ShowInTaskbar=true;
+   // Janelas independentes: minimizar o programa principal não oculta o módulo.
+   form.Show();
   }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
