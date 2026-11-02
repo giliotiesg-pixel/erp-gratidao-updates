@@ -20,6 +20,8 @@ namespace ArmazemGratidao {
   decimal discountValue=0m;
   bool discountPercent=false;
   readonly bool manualEntry;
+  public bool IsManualEntry {get{return manualEntry;}}
+
   readonly DateTimePicker manualDate=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",ShowUpDown=true,Width=220};
 
   readonly List<Item> cart=new List<Item>();
