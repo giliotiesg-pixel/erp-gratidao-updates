@@ -69,6 +69,26 @@ jobs:
           $version = "1.0.${{ github.run_number }}.0"
           $assembly = "using System.Reflection;`n[assembly: AssemblyVersion(`"$version`")]`n[assembly: AssemblyFileVersion(`"$version`")]`n"
           Set-Content -Path novo-win8/BuildVersion.cs -Value $assembly -Encoding UTF8
+      - name: Validar rotinas criticas antes da compilacao
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $product = Get-Content 'novo-win8/ProdutosForm.cs' -Raw
+          $pdv = Get-Content 'novo-win8/PdvForm.cs' -Raw
+          $sales = Get-Content 'novo-win8/ConsultaForm.cs' -Raw
+          $required = @(
+            @{ Label = 'Entradas de estoque'; Text = $product; Pattern = 'void AddQuantityForProduct\(' },
+            @{ Label = 'Auditoria de estoque'; Text = $product; Pattern = 'INSERT INTO stock_audit_log' },
+            @{ Label = 'Restauracao da protecao de estoque'; Text = $product; Pattern = 'UPDATE runtime_operation_context SET authorized=@auth,operation=@operation' },
+            @{ Label = 'Preco do carrinho'; Text = $pdv; Pattern = 'void UpdateRegisteredPrice\(' },
+            @{ Label = 'Pagamentos divididos'; Text = $pdv; Pattern = 'SelectSplitPayments\(' },
+            @{ Label = 'Descontos'; Text = $pdv; Pattern = 'void ConfigureDiscount\(' },
+            @{ Label = 'Atualizacao das vendas'; Text = $sales; Pattern = 'RefreshAfterRecordedSale\(' }
+          )
+          foreach ($check in $required) {
+            if ($check.Text -notmatch $check.Pattern) { throw "Rotina critica ausente: $($check.Label)" }
+          }
+          Write-Host 'Rotinas criticas presentes. Compilacao obrigatoria na proxima etapa.'
       - name: Compilar WinForms .NET Framework 4.8
         shell: pwsh
         run: |
