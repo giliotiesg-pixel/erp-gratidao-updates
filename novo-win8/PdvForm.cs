@@ -516,10 +516,16 @@ namespace ArmazemGratidao {
          }
          tx.Commit();
         }
-        foreach(var item in cart.Where(item=>item.Id==chosen.Id))item.Price=next.Value;
-        Render();
+        // Aplicar imediatamente a todas as linhas do produto já presentes na venda.
+        int changed=0;
+        foreach(var cartItem in cart){
+         if(cartItem.Id!=chosen.Id)continue;
+         cartItem.Price=next.Value;
+         changed++;
+        }
+        Render(); // Atualiza preço unitário, subtotal, desconto, total e troco.
         dialog.DialogResult=DialogResult.OK;dialog.Close();
-        MessageBox.Show("Preço atualizado no cadastro e no carrinho.");
+        MessageBox.Show("Preço cadastrado atualizado. "+changed+" item(ns) do carrinho atualizado(s). Total atual: R$ "+FinalAmount().ToString("N2")+".","Preço atualizado");
        }catch(Exception ex){MessageBox.Show("Preço não atualizado: "+ex.Message);}
       };
       dialog.ShowDialog(this);
