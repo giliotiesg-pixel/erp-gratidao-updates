@@ -479,59 +479,72 @@ namespace ArmazemGratidao {
    changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
    changeLabel.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
   }
+
   void UpdateRegisteredPrice(){
-   if(finishingSale){MessageBox.Show("Aguarde a finalização da venda.");return;}
-   Item chosen=null;
-   if(grid.CurrentRow!=null&&grid.CurrentRow.Index>=0&&grid.CurrentRow.Index<cart.Count)chosen=cart[grid.CurrentRow.Index];
-   if(chosen==null){MessageBox.Show("Selecione um produto no carrinho para atualizar seu preço cadastrado. Para mudar somente esta venda, use EDITAR QUANTIDADE / PREÇO.");return;}
+   if(finishingSale){MessageBox.Show("Aguarde finalizar a venda.");return;}
+   if(cart.Count==0){MessageBox.Show("Adicione produtos ao carrinho.");return;}
    try{
-    using(var conn=Open()){
-     decimal oldPrice;
-     using(var cmd=new SQLiteCommand("SELECT price FROM products WHERE id=@id",conn)){
-      cmd.Parameters.AddWithValue("@id",chosen.Id);
-      object stored=cmd.ExecuteScalar();if(stored==null||stored==DBNull.Value)throw new Exception("Produto não encontrado.");
-      oldPrice=Dec(stored);
+    using(var conn=Open())
+    using(var dialog=new Form{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(650,400),StartPosition=FormStartPosition.CenterParent}){
+     var table=new DataTable();
+     table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");table.Columns.Add("Produto");
+     table.Columns.Add("Quantidade",typeof(decimal));table.Columns.Add("Preço atual",typeof(decimal));table.Columns.Add("Novo preço",typeof(decimal));
+     foreach(var item in cart.GroupBy(x=>x.Id).Select(g=>g.First())){
+      using(var query=new SQLiteCommand("SELECT price FROM products WHERE id=@id",conn)){
+       query.Parameters.AddWithValue("@id",item.Id);
+       var value=query.ExecuteScalar();if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado: "+item.Name);
+       table.Rows.Add(item.Id,item.Barcode,item.Name,cart.Where(x=>x.Id==item.Id).Sum(x=>x.Qty),Dec(value),Dec(value));
+      }
      }
-     using(var dialog=new Form{Text="Atualização rápida do preço cadastrado",Width=500,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-      var title=new Label{Text=chosen.Name,Left=16,Top=18,Width=450,Height=40,Font=new Font("Segoe UI",11,FontStyle.Bold)};
-      var current=new Label{Text="Preço cadastrado: R$ "+oldPrice.ToString("N2"),Left=16,Top=65,Width=440,Height=28};
-      var next=new NumericUpDown{Left=170,Top=103,Width=185,DecimalPlaces=2,Minimum=0.01m,Maximum=99999999,Value=Math.Max(0.01m,oldPrice)};
-      var label=new Label{Text="Novo preço (R$):",Left=16,Top=108,Width=145};
-      var confirm=new Button{Text="Salvar novo preço",Left=170,Top=153,Width=185,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
-      dialog.Controls.AddRange(new Control[]{title,current,label,next,confirm});
-      confirm.Click+=(sender,args)=>{
-       if(MessageBox.Show("Alterar o preço cadastrado de "+chosen.Name+" de R$ "+oldPrice.ToString("N2")+" para R$ "+next.Value.ToString("N2")+"?\nO carrinho também terá o preço atualizado.","Confirmar preço",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-       try{
-        string backup=db+".antes-alterar-preco-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
-        using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);}
-        using(var tx=conn.BeginTransaction()){
-         using(var cmd=new SQLiteCommand("UPDATE products SET price=@price WHERE id=@id AND price=@previous",conn,tx)){
-          cmd.Parameters.AddWithValue("@price",next.Value);cmd.Parameters.AddWithValue("@id",chosen.Id);cmd.Parameters.AddWithValue("@previous",oldPrice);
-          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Preço alterado em outra janela. Reabra a atualização.");
+     var list=new DataGridView{Dock=DockStyle.Fill,DataSource=table,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,ScrollBars=ScrollBars.Both};
+     foreach(DataGridViewColumn column in list.Columns)column.ReadOnly=column.Name!="Novo preço";
+     list.Columns["ID"].Visible=false;
+     list.Columns["Preço atual"].DefaultCellStyle.Format="N2";
+     list.Columns["Novo preço"].DefaultCellStyle.Format="N2";
+     var note=new Label{Text="Altere somente a coluna NOVO PREÇO. Os preços serão atualizados no cadastro e na venda atual, sem modificar vendas anteriores.",Dock=DockStyle.Top,Height=52,Padding=new Padding(12),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=60,Padding=new Padding(10)};
+     var save=new Button{Text="Salvar preços alterados",Width=220,Height=37,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Width=120,Height=37};
+     bar.Controls.Add(save);bar.Controls.Add(cancel);cancel.Click+=(sender,args)=>dialog.Close();
+     save.Click+=(sender,args)=>{
+      try{
+       list.EndEdit();
+       var changes=new List<Tuple<long,decimal,decimal>>();
+       foreach(DataRow row in table.Rows){
+        decimal previous=Convert.ToDecimal(row["Preço atual"]),next;
+        if(!decimal.TryParse(Convert.ToString(row["Novo preço"]),NumberStyles.Number,CultureInfo.CurrentCulture,out next)&&!decimal.TryParse(Convert.ToString(row["Novo preço"]),NumberStyles.Number,CultureInfo.InvariantCulture,out next))throw new Exception("Preço inválido: "+row["Produto"]);
+        if(next<=0||next>99999999)throw new Exception("Preço fora do limite: "+row["Produto"]);
+        if(next!=previous)changes.Add(Tuple.Create(Convert.ToInt64(row["ID"]),previous,next));
+       }
+       if(changes.Count==0){MessageBox.Show("Nenhum preço foi alterado.");return;}
+       if(MessageBox.Show("Confirmar alteração de "+changes.Count+" produto(s) no cadastro e no carrinho?","Confirmar preços",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       string backup=db+".antes-alterar-precos-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);}
+       using(var tx=conn.BeginTransaction()){
+        using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_price_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_price NUMERIC NOT NULL,new_price NUMERIC NOT NULL,changed_at TEXT NOT NULL,origin TEXT NOT NULL)",conn,tx))create.ExecuteNonQuery();
+        foreach(var change in changes){
+         using(var update=new SQLiteCommand("UPDATE products SET price=@new WHERE id=@id AND price=@old",conn,tx)){
+          update.Parameters.AddWithValue("@new",change.Item3);update.Parameters.AddWithValue("@id",change.Item1);update.Parameters.AddWithValue("@old",change.Item2);
+          if(update.ExecuteNonQuery()!=1)throw new Exception("Preço mudou em outra tela. Nenhum preço desta operação foi gravado.");
          }
-         using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_price_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_price NUMERIC NOT NULL,new_price NUMERIC NOT NULL,changed_at TEXT NOT NULL,origin TEXT NOT NULL)",conn,tx))cmd.ExecuteNonQuery();
-         using(var cmd=new SQLiteCommand("INSERT INTO product_price_audit(product_id,previous_price,new_price,changed_at,origin) VALUES(@id,@old,@new,@date,'PDV')",conn,tx)){
-          cmd.Parameters.AddWithValue("@id",chosen.Id);cmd.Parameters.AddWithValue("@old",oldPrice);cmd.Parameters.AddWithValue("@new",next.Value);
-          cmd.Parameters.AddWithValue("@date",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.ExecuteNonQuery();
+         using(var audit=new SQLiteCommand("INSERT INTO product_price_audit(product_id,previous_price,new_price,changed_at,origin) VALUES(@id,@old,@new,@date,'PDV')",conn,tx)){
+          audit.Parameters.AddWithValue("@id",change.Item1);audit.Parameters.AddWithValue("@old",change.Item2);audit.Parameters.AddWithValue("@new",change.Item3);
+          audit.Parameters.AddWithValue("@date",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));audit.ExecuteNonQuery();
          }
-         tx.Commit();
         }
-        // Aplicar imediatamente a todas as linhas do produto já presentes na venda.
-        int changed=0;
-        foreach(var cartItem in cart){
-         if(cartItem.Id!=chosen.Id)continue;
-         cartItem.Price=next.Value;
-         changed++;
-        }
-        Render(); // Atualiza preço unitário, subtotal, desconto, total e troco.
-        dialog.DialogResult=DialogResult.OK;dialog.Close();
-        MessageBox.Show("Preço cadastrado atualizado. "+changed+" item(ns) do carrinho atualizado(s). Total atual: R$ "+FinalAmount().ToString("N2")+".","Preço atualizado");
-       }catch(Exception ex){MessageBox.Show("Preço não atualizado: "+ex.Message);}
-      };
-      dialog.ShowDialog(this);
-     }
+        tx.Commit();
+       }
+       foreach(var item in cart){
+        var change=changes.FirstOrDefault(x=>x.Item1==item.Id);
+        if(change!=null)item.Price=change.Item3;
+       }
+       Render();dialog.DialogResult=DialogResult.OK;dialog.Close();
+       MessageBox.Show(changes.Count+" preço(s) atualizados no cadastro e no carrinho. Novo total: R$ "+FinalAmount().ToString("N2"));
+      }catch(Exception ex){MessageBox.Show("Preços não atualizados: "+ex.Message,"Atualização de preços",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+     };
+     dialog.Controls.Add(list);dialog.Controls.Add(note);dialog.Controls.Add(bar);dialog.ShowDialog(this);
     }
-   }catch(Exception ex){MessageBox.Show("Falha ao consultar produto: "+ex.Message);}
+   }catch(Exception ex){MessageBox.Show("Não foi possível abrir os preços do carrinho: "+ex.Message);}
   }
   void EditSelected(){
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
