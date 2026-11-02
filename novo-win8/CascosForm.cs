@@ -85,7 +85,7 @@ namespace ArmazemGratidao {
     using(var c=Open())using(var cmd=new SQLiteCommand("SELECT l.quantity-COALESCE((SELECT SUM(r.quantity) FROM bottle_returns r WHERE r.loan_id=l.id),0),l.paid_deposit,l.quantity FROM bottle_loans l WHERE l.id=@id",c)){
      cmd.Parameters.AddWithValue("@id",id);using(var rd=cmd.ExecuteReader()){if(!rd.Read()||count>Convert.ToInt32(rd[0]))throw new Exception("Quantidade maior que os cascos pendentes desta pessoa.");refund=Convert.ToDecimal(rd[1])*count/Convert.ToDecimal(rd[2]);}
     }
-    if(MessageBox.Show("Receber "+count+" casco(s) de "+name+" e devolver R$ "+refund.ToString("N2")+(refund>0?" em dinheiro?":" (sem caução paga)?")","Confirmar devolução",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+    if(MessageBox.Show("Receber "+count+" casco(s) de "+name+" e devolver R$ "+refund.ToString("N2")+(refund>0?" em dinheiro?":" (sem caução paga)?"),"Confirmar devolução",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
     Backup();
     using(var c=Open())using(var tx=c.BeginTransaction()){
      using(var cmd=new SQLiteCommand("INSERT INTO bottle_returns(loan_id,quantity,amount,returned_at,refund_method) SELECT id,@qty,@amount,@date,'DINHEIRO' FROM bottle_loans WHERE id=@id AND quantity-COALESCE((SELECT SUM(quantity) FROM bottle_returns WHERE loan_id=@id),0)>=@qty",c,tx)){
