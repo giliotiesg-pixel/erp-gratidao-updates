@@ -21,13 +21,14 @@ namespace ArmazemGratidao {
   Panel clientHome;
   SplitContainer detailSplit;
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
-  readonly Label overview=new Label {Dock=DockStyle.Top,Height=55,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft};
+  readonly Label overview=new Label {Dock=DockStyle.Top,Height=88,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,4,4,4)};
   public FiadoClientesForm(string database) {
    db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=new Size(640,480);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;}
    var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
+   split.Panel1.Controls.Add(overview);
    clients.ClientSizeChanged+=(s,e)=>ArrangeClientBoxes();
    clientSearch.TextChanged+=(s,e)=>LoadClients();
    split.Panel1.Controls.Add(clientSearch);
@@ -81,7 +82,7 @@ namespace ArmazemGratidao {
    var statement=new Button {Text="Extrato do cliente / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};statement.Click+=(s,e)=>SendCustomerStatement();bottom.Controls.Add(statement);
    var receipt=new Button {Text="Cupom / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};receipt.Click+=(s,e)=>SendReceipt();bottom.Controls.Add(receipt);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
-   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);split.Panel2.Controls.Add(overview);
+   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
    openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
    paidSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=1;ShowSaleDetails();}};
@@ -178,7 +179,7 @@ namespace ArmazemGratidao {
     }
     clients.ResumeLayout();
     ArrangeClientBoxes();
-    overview.Text="  FIADO  |  "+dt.Rows.Count+" CLIENTES  |  EM ABERTO (SEM INTERNOS): R$ "+allBalance.ToString("N2")+Environment.NewLine+"  FIADOS INTERNOS (FORA DO TOTAL): R$ "+internalBalance.ToString("N2");
+    overview.Text="TOTAL EM ABERTO\n(SEM INTERNOS): R$ "+allBalance.ToString("N2")+"\nInternos fora do total: R$ "+internalBalance.ToString("N2");
     if(customer.Length>0)SelectClient(customer);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
   }
