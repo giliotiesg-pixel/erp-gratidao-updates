@@ -157,7 +157,7 @@ jobs:
           path: novo-win8/installer/*.exe
           if-no-files-found: error
       - name: Publicar instalador EXE no Releases
-        if: success()
+        if: success() && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

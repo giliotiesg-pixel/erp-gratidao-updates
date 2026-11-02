@@ -30,6 +30,9 @@ namespace ArmazemGratidao {
   readonly ComboBox saleUnit=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=80};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",23,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
+  readonly Label discountLabel=new Label {AutoSize=true,Padding=new Padding(0,9,0,0)};
+  readonly ComboBox discountMode=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=58};
+  readonly NumericUpDown discountInput=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=92};
   readonly Label changeLabel=new Label {AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Padding=new Padding(0,9,0,0)};
   readonly ComboBox payment=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   readonly TextBox customer=new TextBox {Width=205,ReadOnly=true,TabStop=false,Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.White};
@@ -63,28 +66,31 @@ namespace ArmazemGratidao {
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
-   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=162,Padding=new Padding(12,14,12,12),BackColor=Color.White,AutoScroll=true};
-   footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;footer.Controls.Add(payment);
+   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=180,Padding=new Padding(12,10,12,10),BackColor=Color.White,AutoScroll=true,WrapContents=true};
+   // As formas permanecem disponíveis na janela de pagamento aberta ao finalizar.
+   // O seletor fica apenas como estado interno, sem caixa antecipada no PDV.
+   payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;
    // O nome do cliente fica no estado interno; so aparece na janela aberta pelo botao.
    customer.Text="Consumidor";
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    footer.Controls.Add(customer);
-   var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   var chooseCustomer=new Button {Text="CLIENTE / CADASTRAR",Width=170,Height=38,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>ChooseCustomerInWindow();footer.Controls.Add(chooseCustomer);
-   var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
-   registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
+   footer.SetFlowBreak(changeLabel,true);
    payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.ValueChanged+=(s,e)=>{UpdateChange();SaveDraft();};
    customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
-   var finish=new Button {Text="FINALIZAR VENDA",Height=46,Width=195,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
-   var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
-   var quickPrice=new Button {Text="ATUALIZAR PREÇO CADASTRADO",Width=230,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};quickPrice.Click+=(sender,args)=>UpdateRegisteredPrice();footer.Controls.Add(quickPrice);
-   var remove=new Button {Text="REMOVER ITEM",Width=145,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
-   var clear=new Button {Text="EXCLUIR TODOS",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
-   var discountButton=new Button {Text="DESCONTO R$ / %",Width=170,Height=40,BackColor=Color.FromArgb(175,25,45),ForeColor=Color.White};
-   discountButton.Click+=(sender,args)=>ConfigureDiscount();footer.Controls.Add(discountButton);footer.Controls.Add(total);
+   var finish=new Button {Text="FINALIZAR VENDA",Height=38,Width=165,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
+   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>ChooseEditAction();footer.Controls.Add(edit);
+   var remove=new Button {Text="REMOVER ITEM",Width=125,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
+   var clear=new Button {Text="EXCLUIR TODOS",Width=135,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
+   footer.SetFlowBreak(clear,true);
+   foreach(Control button in new Control[]{chooseCustomer,finish,edit,remove,clear})button.Margin=new Padding(4,3,4,3);
+   discountLabel.Text="Desconto:";discountMode.Items.AddRange(new object[]{"R$","%"});discountMode.SelectedIndex=0;
+   discountMode.SelectedIndexChanged+=(s,e)=>{discountPercent=discountMode.SelectedIndex==1;discountInput.Maximum=discountPercent?100:99999999;discountValue=discountInput.Value;Render();};
+   discountInput.ValueChanged+=(s,e)=>{discountValue=discountInput.Value;Render();};
+   footer.Controls.Add(discountLabel);footer.Controls.Add(discountMode);footer.Controls.Add(discountInput);footer.Controls.Add(total);
    var deleteColumn=new DataGridViewButtonColumn {Name="ExcluirItem",HeaderText="Cestinho",Text="🗑",UseColumnTextForButtonValue=true,Width=78,AutoSizeMode=DataGridViewAutoSizeColumnMode.None};
    grid.Columns.Add(deleteColumn);
    grid.CellContentClick+=(s,e)=>{
@@ -144,7 +150,9 @@ namespace ArmazemGratidao {
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=36};
      var hint=new Label{Text="Pesquisar cliente pelo nome:",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),IntegralHeight=false};
-     var select=new Button{Text="Selecionar cliente",Dock=DockStyle.Bottom,Height=43,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=50,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(8,4,8,4)};
+     var select=new Button{Text="Selecionar cliente",Width=160,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var register=new Button{Text="Cadastrar novo",Width=145,Height=38,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
      var cancel=new Button{Text="Cancelar",Dock=DockStyle.Bottom,Height=37};
      Action fill=()=>{
       string filter=search.Text.Trim();
@@ -159,9 +167,11 @@ namespace ArmazemGratidao {
      };
      search.TextChanged+=(sender,args)=>fill();
      select.Click+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
+     register.Click+=(sender,args)=>{if(QuickRegisterCustomer()){dialog.Tag=customer.Text;dialog.DialogResult=DialogResult.OK;}};
      list.DoubleClick+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
      cancel.Click+=(sender,args)=>dialog.DialogResult=DialogResult.Cancel;
-     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(select);dialog.Controls.Add(cancel);
+     actions.Controls.Add(select);actions.Controls.Add(register);
+     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.Controls.Add(cancel);
      fill();
      if(dialog.ShowDialog(this)==DialogResult.OK && dialog.Tag is string)customer.Text=(string)dialog.Tag;
     }
@@ -525,6 +535,8 @@ namespace ArmazemGratidao {
        Name=row.Name,Qty=row.Qty,Price=row.Price,Cost=row.Cost,Unit=row.Unit??"UN"});
      discountValue=saved.DiscountValue;
      discountPercent=saved.DiscountPercent;
+     discountMode.SelectedIndex=discountPercent?1:0;
+     discountInput.Value=Math.Max(discountInput.Minimum,Math.Min(discountInput.Maximum,discountValue));
      customer.Text=string.IsNullOrWhiteSpace(saved.Customer)?"Consumidor":saved.Customer;
      int paymentIndex=payment.Items.IndexOf(saved.Payment??"");
      if(paymentIndex>=0)payment.SelectedIndex=paymentIndex;
@@ -660,6 +672,16 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível abrir os preços do carrinho: "+ex.Message);}
   }
+  void ChooseEditAction(){
+   using(var dialog=new Form{Text="PDV | Editar produto",Width=430,Height=185,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+    var hint=new Label{Text="O que deseja alterar?",Left=18,Top=17,Width=380,Height=28,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    var item=new Button{Text="Quantidade / preço desta venda",Left=18,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    var registered=new Button{Text="Preço cadastrado do produto",Left=214,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
+    item.Click+=(s,e)=>{dialog.Close();EditSelected();};
+    registered.Click+=(s,e)=>{dialog.Close();UpdateRegisteredPrice();};
+    dialog.Controls.AddRange(new Control[]{hint,item,registered});dialog.ShowDialog(this);
+   }
+  }
   void EditSelected(){
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
    var item=cart[grid.CurrentRow.Index];
@@ -703,7 +725,7 @@ namespace ArmazemGratidao {
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
@@ -969,6 +991,7 @@ namespace ArmazemGratidao {
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
+   if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    if(!ShowPaymentChoice())return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
@@ -1131,7 +1154,7 @@ namespace ArmazemGratidao {
       var salesWindow=window as ConsultaForm;
       if(salesWindow!=null)try{salesWindow.RefreshAfterRecordedSale();}catch(Exception ex){System.Diagnostics.Debug.WriteLine("Atualização de Vendas: "+ex.Message);}
      }
-     cart.Clear();discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
      OfferSaleReceipt(saleId,customerName,sum);
     }
     }
