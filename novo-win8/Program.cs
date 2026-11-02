@@ -20,7 +20,7 @@ namespace ArmazemGratidao {
   static readonly System.Collections.Generic.HashSet<Form> initialized=new System.Collections.Generic.HashSet<Form>();
   public static void CheckOpenForms(){
    foreach(Form form in Application.OpenForms.Cast<Form>().ToArray()){
-    if(form==null||form.IsDisposed||form is MainForm)continue;
+    if(form==null||form.IsDisposed)continue;
     if(initialized.Add(form)){
      form.ShowInTaskbar=true;
      form.Resize+=(sender,args)=>{if(form.WindowState==FormWindowState.Normal)KeepVisible(form);};
