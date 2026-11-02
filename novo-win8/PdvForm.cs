@@ -994,7 +994,8 @@ namespace ArmazemGratidao {
    using(var dialog=new Form{Text="Cascos retornáveis — controle separado",Width=520,Height=285,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var title=new Label{Text="O cliente levou casco retornável junto com a bebida?",Left=18,Top=16,Width=475,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var qtyLabel=new Label{Text="Quantidade de cascos:",Left=18,Top=64,Width=195,Height=28};
-    var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=1,Left=215,Top=61,Width=90};
+    var suggestedQty=cart.Where(i=>i.Name.IndexOf("COCA",StringComparison.OrdinalIgnoreCase)>=0 || i.Name.IndexOf("RETORN",StringComparison.OrdinalIgnoreCase)>=0).Sum(i=>i.Qty);
+    var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=Math.Max(1m,Math.Min(999m,Math.Floor(suggestedQty))),Left=215,Top=61,Width=90};
     var deposit=new CheckBox{Text="Recebeu a caução de R$ 4 por casco",Left=18,Top=108,Width=445,Height=30,Checked=true};
     var note=new Label{Text="A caução não entra no valor da venda. O nome e a retirada entram no controle de cascos.",Left=18,Top=145,Width=475,Height=36};
     var yes=new Button{Text="Registrar casco",Left=18,Top=195,Width=150,Height=35,DialogResult=DialogResult.OK};
