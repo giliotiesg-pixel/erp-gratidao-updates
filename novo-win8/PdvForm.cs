@@ -988,6 +988,25 @@ namespace ArmazemGratidao {
     return dialog.ShowDialog(this)==DialogResult.OK;
    }
   }
+  bool SelectBottleLoan(out int count,out bool paid){
+   count=0;paid=false;
+   if(!cart.Any(i=>i.Name.IndexOf("COCA",StringComparison.OrdinalIgnoreCase)>=0 || i.Name.IndexOf("RETORN",StringComparison.OrdinalIgnoreCase)>=0))return true;
+   using(var dialog=new Form{Text="Cascos retornáveis — controle separado",Width=520,Height=285,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var title=new Label{Text="O cliente levou casco retornável junto com a bebida?",Left=18,Top=16,Width=475,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    var qtyLabel=new Label{Text="Quantidade de cascos:",Left=18,Top=64,Width=195,Height=28};
+    var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=1,Left=215,Top=61,Width=90};
+    var deposit=new CheckBox{Text="Recebeu a caução de R$ 4 por casco",Left=18,Top=108,Width=445,Height=30,Checked=true};
+    var note=new Label{Text="A caução não entra no valor da venda. O nome e a retirada entram no controle de cascos.",Left=18,Top=145,Width=475,Height=36};
+    var yes=new Button{Text="Registrar casco",Left=18,Top=195,Width=150,Height=35,DialogResult=DialogResult.OK};
+    var no=new Button{Text="Sem casco",Left=178,Top=195,Width=130,Height=35,DialogResult=DialogResult.Ignore};
+    var back=new Button{Text="Voltar",Left=318,Top=195,Width=100,Height=35,DialogResult=DialogResult.Cancel};
+    dialog.Controls.AddRange(new Control[]{title,qtyLabel,qty,deposit,note,yes,no,back});
+    var result=dialog.ShowDialog(this);
+    if(result==DialogResult.Cancel)return false;
+    if(result==DialogResult.OK){count=(int)qty.Value;paid=deposit.Checked;}
+    return true;
+   }
+  }
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
@@ -1040,6 +1059,12 @@ namespace ArmazemGratidao {
      }
     }catch(Exception ex){MessageBox.Show("Não foi possível verificar o cadastro do cliente: "+ex.Message,"Fiado");return;}
    }
+   int bottleCount;bool bottlePaid;
+   if(!SelectBottleLoan(out bottleCount,out bottlePaid))return;
+   if(bottleCount>0 && string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
+    ChooseCustomerInWindow();customerName=customer.Text.Trim();
+    if(customerName.Length<2 || string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){MessageBox.Show("Selecione um cliente para controlar os cascos.");return;}
+   }
    var gross=cart.Sum(i=>i.Total);
    var discount=DiscountAmount();
    var sum=gross-discount;
@@ -1063,6 +1088,7 @@ namespace ArmazemGratidao {
    var paymentParts=method=="FIADO"?new List<KeyValuePair<string,decimal>>():method=="DIVIDIDO"?split.Where(p=>p.Key!="FIADO").ToList():new List<KeyValuePair<string,decimal>>{new KeyValuePair<string,decimal>(method,sum)};
    decimal estimatedFee=paymentParts.Sum(p=>PaymentFees.Fee(feeRates,p.Key,p.Value));
    details+=Environment.NewLine+"Cliente: "+customerName;
+   if(bottleCount>0)details+=Environment.NewLine+"Cascos: "+bottleCount+" | Caução "+(bottlePaid?"recebida":"pendente")+" (fora da venda)";
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
 
    if(discount>0)details+=Environment.NewLine+"Subtotal: R$ "+gross.ToString("N2")+" | Desconto: R$ "+discount.ToString("N2");
@@ -1070,6 +1096,7 @@ namespace ArmazemGratidao {
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
    try {
+    if(bottleCount>0)CascosForm.EnsureSaleLink(db);
     using(var c=Open()){
      ValidateSaleSchema(c,recordedMethod);
      if(splitFiado)RequireColumns(c,"sale_payments","sale_id","payment_method","amount");
@@ -1094,6 +1121,7 @@ namespace ArmazemGratidao {
       var cost=cart.Sum(i=>i.Cost*i.Qty);var profit=sum-cost;
       cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",recordedMethod);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
+     if(bottleCount>0)CascosForm.RecordFromSale(c,tx,saleId,customerName,bottleCount,bottlePaid,manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
      if(discount>0){
       using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discounts(sale_id INTEGER PRIMARY KEY,gross_before NUMERIC NOT NULL,discount_amount NUMERIC NOT NULL,discount_type TEXT NOT NULL,discount_value NUMERIC NOT NULL)",c,tx))create.ExecuteNonQuery();
       using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
