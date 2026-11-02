@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Data.SQLite;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Text;
@@ -28,12 +29,13 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
     var older=new Button {Text="Vendas anteriores",Width=170,Height=33};older.Click+=(s,e)=>{previous=true;selectedDate=false;LoadMaster();};
     var refresh=new Button {Text="Atualizar",Width=110,Height=33};refresh.Click+=(s,e)=>LoadMaster();
     bar.Controls.Add(today);bar.Controls.Add(older);bar.Controls.Add(refresh);
+    var reorder=new Button {Text="Atualizar ordem por data",Width=190,Height=33};reorder.Click+=(s,e)=>LoadMaster();bar.Controls.Add(reorder);
     bar.Controls.Add(new Label {Text="Data:",AutoSize=true,Padding=new Padding(5,8,0,0)});bar.Controls.Add(dateFilter);
     var filter=new Button {Text="Ver data",Width=85,Height=33};filter.Click+=(s,e)=>{selectedDate=true;LoadMaster();};bar.Controls.Add(filter);
     var editDate=new Button {Text="Atualizar data / hora",Width=175,Height=33};editDate.Click+=(s,e)=>EditSaleDate();bar.Controls.Add(editDate);
     var changeProduct=new Button {Text="Alterar produto",Width=125,Height=33};changeProduct.Click+=(s,e)=>ChangeProduct();bar.Controls.Add(changeProduct);
     var remove=new Button {Text="Excluir venda",Width=115,Height=33};remove.Click+=(s,e)=>DeleteSale();bar.Controls.Add(remove);
-    bar.Controls.Add(new Label {Text="Numero da venda:",ForeColor=Color.White,AutoSize=true,Padding=new Padding(5,8,0,0)});
+    bar.Controls.Add(new Label {Text="Código interno da venda:",ForeColor=Color.White,AutoSize=true,Padding=new Padding(5,8,0,0)});
     bar.Controls.Add(saleSearch);
     var find=new Button {Text="Buscar venda",Width=120,Height=33};find.Click+=(s,e)=>SearchSale();bar.Controls.Add(find);
     var export=new Button {Text="Exportar itens CSV",Width=145,Height=33};export.Click+=(s,e)=>ExportSale();bar.Controls.Add(export);
@@ -96,6 +98,16 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
     "FROM sales s LEFT JOIN (SELECT date(created_at) AS dia,SUM(COALESCE(gross_total,0)) AS total "+
     "FROM sales GROUP BY date(created_at)) day ON day.dia=date(s.created_at)";
   }
+  // Número de exibição por data/hora; o ID interno não é renumerado, pois
+  // sale_items, pagamentos, Fiado e auditoria o utilizam como vínculo.
+  void AddChronologicalNumbers(DataTable sales){
+   if(sales==null||!sales.Columns.Contains("venda"))return;
+   var numbers=new Dictionary<long,long>();long next=0;
+   var ordered=Query("SELECT id FROM sales ORDER BY datetime(created_at),id");
+   foreach(DataRow row in ordered.Rows)numbers[Convert.ToInt64(row[0])]=++next;
+   var column=sales.Columns.Add("Nº por data",typeof(long));column.SetOrdinal(0);
+   foreach(DataRow row in sales.Rows){long number;if(numbers.TryGetValue(Convert.ToInt64(row["venda"]),out number))row[column]=number;}
+  }
   void ShowDailyTotals(){
    if(credit)return;
    try{
@@ -120,13 +132,16 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
   void LoadMaster() {
    loadingMaster=true;
    try {
-    master.DataSource=credit?
+    var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     Query(SalesWithDailyTotalsSql()+" WHERE s.created_at "+(selectedDate?">= @date AND created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND created_at < date('now','localtime','+1 day')")+" ORDER BY s.id DESC LIMIT 3000",selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
+     Query(SalesWithDailyTotalsSql()+" WHERE s.created_at "+(selectedDate?">= @date AND s.created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND s.created_at < date('now','localtime','+1 day')")+" ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000",selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
+    if(!credit)AddChronologicalNumbers(rows);
+    master.DataSource=rows;
     if(!credit){
      // Colunas de vendas ajustadas depois da vinculação, fora de DataBindingComplete.
      // Mantém a grade compacta e evita o erro anterior de espessura de linhas.
-     if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
+     if(master.Columns.Contains("Nº por data")){master.Columns["Nº por data"].FillWeight=90;}
+     if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Código interno";master.Columns["venda"].FillWeight=90;}
      if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
      if(master.Columns.Contains("cliente")){master.Columns["cliente"].HeaderText="Cliente";master.Columns["cliente"].FillWeight=230;}
      if(master.Columns.Contains("pagamento")){master.Columns["pagamento"].HeaderText="Pagamento";master.Columns["pagamento"].FillWeight=134;}
@@ -291,10 +306,10 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
   }
   void SearchSale(){
    long id;
-   if(!long.TryParse(saleSearch.Text.Trim(),out id)||id<=0){MessageBox.Show("Informe o numero da venda.");return;}
+   if(!long.TryParse(saleSearch.Text.Trim(),out id)||id<=0){MessageBox.Show("Informe o código interno da venda.");return;}
    try{
     loadingMaster=true;
-    try{master.DataSource=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);}finally{loadingMaster=false;}
+    try{var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);AddChronologicalNumbers(rows);master.DataSource=rows;}finally{loadingMaster=false;}
     LoadDetails();
     heading.Text=((DataTable)master.DataSource).Rows.Count==0?"Venda nao encontrada.":"VENDA #"+id+" | Resultado da busca";
     if(((DataTable)master.DataSource).Rows.Count==0)details.DataSource=null;
