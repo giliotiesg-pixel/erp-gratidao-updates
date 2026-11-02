@@ -368,6 +368,13 @@ namespace ArmazemGratidao {
         using(var q=new SQLiteCommand("INSERT INTO product_quantity_movements(product_id,movement_at,quantity_before,quantity_added,quantity_after,reason) VALUES(@id,@time,@before,@added,@after,@reason)",conn,tx)){
          q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@time",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@added",quantity.Value);q.Parameters.AddWithValue("@after",after);q.Parameters.AddWithValue("@reason","Entrada de QTD pelo cadastro de produto");q.ExecuteNonQuery();
         }
+        using(var audit=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) SELECT id,name,COALESCE(barcode,''),'ENTRADA_QTD',@before,@after,@added,'ESTOQUE','Entrada de QTD pelo cadastro' FROM products WHERE id=@id",conn,tx)){
+         audit.Parameters.AddWithValue("@before",before);audit.Parameters.AddWithValue("@after",after);audit.Parameters.AddWithValue("@added",quantity.Value);audit.Parameters.AddWithValue("@id",id);
+         if(audit.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria.");
+        }
+        using(var restore=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",conn,tx)){
+         restore.Parameters.AddWithValue("@auth",oldAuth);restore.Parameters.AddWithValue("@operation",oldOperation);if(restore.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar proteção.");
+        }
         tx.Commit();
        }
       }
