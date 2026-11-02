@@ -816,6 +816,13 @@ namespace ArmazemGratidao {
    for(int offset=0;offset<lines.Count;offset+=55){
     var pageLines=lines.Skip(offset).Take(55).ToList();
     var content=new StringBuilder();
+    // Ícone de cestinho desenhado no PDF (somente ilustrativo; exclusões são feitas no PDV).
+    if(offset==0&&filename.StartsWith("Venda-",StringComparison.OrdinalIgnoreCase)){
+     content.Append("q 0.12 0.30 0.62 RG 1.6 w ");
+     content.Append("510 791 m 548 791 l 544 773 l 514 773 l h S ");
+     content.Append("518 797 m 525 806 l 533 806 l 540 797 l S ");
+     content.Append("521 785 m 521 777 l 531 785 m 531 777 l 541 785 m 541 777 l S Q\n");
+    }
     int y=810;
     foreach(string line in pageLines){
      content.Append("BT /F1 9 Tf 36 ").Append(y).Append(" Td ").Append(PdfHex(line)).Append(" Tj ET\n");
