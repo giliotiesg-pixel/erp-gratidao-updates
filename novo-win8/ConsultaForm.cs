@@ -68,6 +68,12 @@ namespace ArmazemGratidao {
    dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
    LoadMaster();
   }
+  // Atualiza somente a lista de vendas aberta após uma venda ser gravada.
+  public void RefreshAfterRecordedSale(){
+   if(IsDisposed||credit)return;
+   if(InvokeRequired){BeginInvoke(new Action(RefreshAfterRecordedSale));return;}
+   LoadMaster();
+  }
   DataTable Query(string sql,string param=null,object value=null) {
    var dt=new DataTable();
    using(var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())) {
