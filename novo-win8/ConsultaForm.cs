@@ -7,7 +7,9 @@ using System.Text;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
  public sealed class ConsultaForm:Form {
-  readonly string db;readonly bool credit;bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=new DateTimePicker {Format=DateTimePickerFormat.Short,Width=115};
+  readonly string db;readonly bool credit;
+  public bool IsCreditWindow {get{return credit;}}
+bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=new DateTimePicker {Format=DateTimePickerFormat.Short,Width=115};
   readonly TextBox saleSearch=new TextBox {Width=110};
   readonly Label summary=new Label {Dock=DockStyle.Bottom,Height=36,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(229,242,255)};
   readonly DataGridView master=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
