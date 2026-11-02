@@ -500,7 +500,7 @@ namespace ArmazemGratidao {
       var confirm=new Button{Text="Salvar novo preço",Left=170,Top=153,Width=185,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
       dialog.Controls.AddRange(new Control[]{title,current,label,next,confirm});
       confirm.Click+=(sender,args)=>{
-       if(MessageBox.Show("Alterar o preço cadastrado de "+chosen.Name+" de R$ "+oldPrice.ToString("N2")+" para R$ "+next.Value.ToString("N2")+"?\nA venda atual não será alterada.","Confirmar preço",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+       if(MessageBox.Show("Alterar o preço cadastrado de "+chosen.Name+" de R$ "+oldPrice.ToString("N2")+" para R$ "+next.Value.ToString("N2")+"?\nO carrinho também terá o preço atualizado.","Confirmar preço",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
        try{
         string backup=db+".antes-alterar-preco-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
         using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);}
@@ -516,8 +516,10 @@ namespace ArmazemGratidao {
          }
          tx.Commit();
         }
+        foreach(var item in cart.Where(item=>item.Id==chosen.Id))item.Price=next.Value;
+        Render();
         dialog.DialogResult=DialogResult.OK;dialog.Close();
-        MessageBox.Show("Preço do cadastro atualizado. Os itens da venda atual não foram modificados.");
+        MessageBox.Show("Preço atualizado no cadastro e no carrinho.");
        }catch(Exception ex){MessageBox.Show("Preço não atualizado: "+ex.Message);}
       };
       dialog.ShowDialog(this);
