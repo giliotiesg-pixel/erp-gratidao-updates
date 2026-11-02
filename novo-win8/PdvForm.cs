@@ -978,6 +978,7 @@ namespace ArmazemGratidao {
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
+   if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    if(!ShowPaymentChoice())return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
