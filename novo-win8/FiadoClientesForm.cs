@@ -104,6 +104,12 @@ namespace ArmazemGratidao {
   }
   const string CreditFilter="(UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%')";
   const string Balance="COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0)";
+  static bool InternalFiado(string name){
+   string normalized=string.Join(" ",(name??"").Trim().ToUpperInvariant().Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries));
+   return normalized=="EMERSON SIMONETTI GILIOTI" || normalized=="EMERSON SIMONETTI GIGLIOTTI"
+    || normalized=="EMERSON SIMONE GILIOTI" || normalized=="EMERSON SIMONE GIGLIOTTI"
+    || normalized=="LUIZ PAULO GILIOTI" || normalized=="LUIZ PAULO GIGLIOTTI";
+  }
   void SetupSaleSelection(DataGridView grid, SplitterPanel panel, bool paid) {
    var mark=new DataGridViewCheckBoxColumn();
    mark.Name="marcar";mark.HeaderText="Selecionar";mark.ReadOnly=false;mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
@@ -161,10 +167,10 @@ namespace ArmazemGratidao {
    try {
     var dt=Query("SELECT COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) AS saldo FROM sales s WHERE "+CreditFilter+" GROUP BY COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') ORDER BY cliente");
     clients.SuspendLayout();clients.Controls.Clear();
-    decimal allBalance=0;int visibleClients=0;
+    decimal allBalance=0,internalBalance=0;int visibleClients=0;
     foreach(DataRow r in dt.Rows) {
      var name=Convert.ToString(r["cliente"]);var balance=Convert.ToDecimal(r["saldo"]);
-     allBalance+=balance;
+     if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      visibleClients++;
      var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(190,72),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
@@ -172,7 +178,7 @@ namespace ArmazemGratidao {
     }
     clients.ResumeLayout();
     ArrangeClientBoxes();
-    overview.Text="  FIADO  |  "+dt.Rows.Count+" CLIENTES  |  EM ABERTO: R$ "+allBalance.ToString("N2");
+    overview.Text="  FIADO  |  "+dt.Rows.Count+" CLIENTES  |  EM ABERTO (SEM INTERNOS): R$ "+allBalance.ToString("N2")+Environment.NewLine+"  FIADOS INTERNOS (FORA DO TOTAL): R$ "+internalBalance.ToString("N2");
     if(customer.Length>0)SelectClient(customer);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
   }
