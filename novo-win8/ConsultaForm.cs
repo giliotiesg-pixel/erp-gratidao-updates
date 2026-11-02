@@ -66,6 +66,8 @@ namespace ArmazemGratidao {
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
    master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster)LoadDetails();};
    dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
+   // Ao voltar à janela, conferir vendas registradas por PDV, lançamentos anotados ou outra janela.
+   Activated+=(sender,args)=>{if(!credit&&!loadingMaster)LoadMaster();};
    LoadMaster();
   }
   // Atualiza somente a lista de vendas aberta após uma venda ser gravada.
