@@ -9,6 +9,8 @@ using System.Text;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows.Forms;
+using System.Web.Script.Serialization;
+using System.Security.Cryptography;
 
 namespace ArmazemGratidao {
  public sealed class PdvForm : Form {
@@ -33,6 +35,8 @@ namespace ArmazemGratidao {
   readonly ListBox suggestions=new ListBox {Visible=false,Width=510,Height=190,Font=new Font("Segoe UI",10)};
   readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
   bool suppressLookup=false;
+  bool draftReady=false;
+  bool draftSaveWarned=false;
   readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
   public PdvForm(string database):this(database,false){}
   public PdvForm(string database,bool manualMode) {
@@ -69,7 +73,8 @@ namespace ArmazemGratidao {
    var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
    registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
-   payment.SelectedIndexChanged+=(s,e)=>UpdateChange();received.ValueChanged+=(s,e)=>UpdateChange();
+   payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.ValueChanged+=(s,e)=>{UpdateChange();SaveDraft();};
+   customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=46,Width=195,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
    var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
@@ -90,6 +95,8 @@ namespace ArmazemGratidao {
    suggestions.Parent=this;
    if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
    PositionSuggestions();
+   LoadDraft();
+   FormClosing+=(sender,args)=>SaveDraft();
    Render();code.Focus();
   }
   SQLiteConnection Open() {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
@@ -465,10 +472,92 @@ namespace ArmazemGratidao {
     cancel.Click+=(sender,args)=>dlg.Close();dlg.Controls.AddRange(new Control[]{mode,value,preview,apply,cancel});dlg.ShowDialog(this);
    }
   }
+  sealed class CartDraftLine {
+   public long Id {get;set;}
+   public string Barcode {get;set;}
+   public string InternalCode {get;set;}
+   public string Name {get;set;}
+   public decimal Qty {get;set;}
+   public decimal Price {get;set;}
+   public decimal Cost {get;set;}
+   public string Unit {get;set;}
+  }
+  sealed class CartDraft {
+   public List<CartDraftLine> Items {get;set;}
+   public string Customer {get;set;}
+   public string Payment {get;set;}
+   public decimal Received {get;set;}
+   public decimal DiscountValue {get;set;}
+   public bool DiscountPercent {get;set;}
+   public string SaleDate {get;set;}
+  }
+  string DraftPath(){
+   string key=Path.GetFullPath(db).ToUpperInvariant()+"|"+(manualEntry?"ANOTADAS":"PDV");
+   byte[] bytes=SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(key));
+   string hash=BitConverter.ToString(bytes).Replace("-","");
+   return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "ArmazemGratidaoNovo","Carrinhos",hash+".json");
+  }
+  void LoadDraft(){
+   try{
+    string path=DraftPath();
+    if(File.Exists(path)){
+     var saved=new JavaScriptSerializer().Deserialize<CartDraft>(File.ReadAllText(path,Encoding.UTF8));
+     if(saved==null||saved.Items==null)throw new Exception("Arquivo de carrinho incompleto.");
+     foreach(var row in saved.Items){
+      if(row.Id<=0||row.Qty<=0||row.Price<0||row.Cost<0||string.IsNullOrWhiteSpace(row.Name))
+       throw new Exception("Item inválido no carrinho salvo.");
+     }
+     cart.Clear();
+     foreach(var row in saved.Items)cart.Add(new Item{Id=row.Id,Barcode=row.Barcode,InternalCode=row.InternalCode,
+       Name=row.Name,Qty=row.Qty,Price=row.Price,Cost=row.Cost,Unit=row.Unit??"UN"});
+     discountValue=saved.DiscountValue;
+     discountPercent=saved.DiscountPercent;
+     customer.Text=string.IsNullOrWhiteSpace(saved.Customer)?"Consumidor":saved.Customer;
+     int paymentIndex=payment.Items.IndexOf(saved.Payment??"");
+     if(paymentIndex>=0)payment.SelectedIndex=paymentIndex;
+     if(saved.Received>=received.Minimum&&saved.Received<=received.Maximum)received.Value=saved.Received;
+     DateTime restoredDate;
+     if(manualEntry&&DateTime.TryParseExact(saved.SaleDate,"yyyy-MM-dd HH:mm:ss",CultureInfo.InvariantCulture,DateTimeStyles.None,out restoredDate)
+      &&restoredDate>=manualDate.MinDate&&restoredDate<=manualDate.MaxDate)manualDate.Value=restoredDate;
+     if(cart.Count>0)MessageBox.Show("Carrinho não finalizado recuperado: "+cart.Count+" linha(s). Confira os itens antes de finalizar.",
+       "Recuperação do carrinho",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+    draftReady=true;
+   }catch(Exception ex){
+    draftReady=false; // Nunca sobrescrever um arquivo anterior que não pôde ser recuperado.
+    MessageBox.Show("Não foi possível recuperar o carrinho salvo. O arquivo foi preservado e não será sobrescrito nesta janela.\n"+ex.Message,
+     "Proteção do carrinho",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+   }
+  }
+  void SaveDraft(){
+   if(!draftReady)return;
+   try{
+    var snapshot=new CartDraft{
+     Items=cart.Select(i=>new CartDraftLine{Id=i.Id,Barcode=i.Barcode,InternalCode=i.InternalCode,
+       Name=i.Name,Qty=i.Qty,Price=i.Price,Cost=i.Cost,Unit=i.Unit}).ToList(),
+     Customer=customer.Text,Payment=Convert.ToString(payment.SelectedItem),Received=received.Value,
+     DiscountValue=discountValue,DiscountPercent=discountPercent,
+     SaleDate=manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):""
+    };
+    string path=DraftPath(),folder=Path.GetDirectoryName(path);
+    Directory.CreateDirectory(folder);
+    string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+    try{
+     File.WriteAllText(temp,new JavaScriptSerializer().Serialize(snapshot),Encoding.UTF8);
+     if(File.Exists(path))File.Replace(temp,path,null);
+     else File.Move(temp,path);
+    }finally{if(File.Exists(temp))File.Delete(temp);}
+    draftSaveWarned=false;
+   }catch(Exception ex){
+    if(!draftSaveWarned){draftSaveWarned=true;MessageBox.Show("Não foi possível salvar automaticamente o carrinho. Não feche o PDV sem resolver o problema.\n"+ex.Message,
+      "Falha no salvamento do carrinho",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }
+  }
   void Render() {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Unidade");dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Unit,i.Price,i.Total);
-   grid.DataSource=dt;total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
+   grid.DataSource=dt;SaveDraft();total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
   }
   void UpdateChange(){
    bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
