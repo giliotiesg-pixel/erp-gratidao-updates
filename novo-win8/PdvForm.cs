@@ -74,20 +74,17 @@ namespace ArmazemGratidao {
    customer.Text="Consumidor";
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    footer.Controls.Add(customer);
-   var chooseCustomer=new Button {Text="CLIENTE",Width=110,Height=36,BackColor=Color.FromArgb(215,218,222),ForeColor=Color.Black,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   var chooseCustomer=new Button {Text="CLIENTE / CADASTRAR",Width=170,Height=38,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>ChooseCustomerInWindow();footer.Controls.Add(chooseCustomer);
-   var registerCustomer=new Button {Text="CADASTRAR CLIENTE",Width=165,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
-   registerCustomer.Click+=(s,e)=>QuickRegisterCustomer();footer.Controls.Add(registerCustomer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.ValueChanged+=(s,e)=>{UpdateChange();SaveDraft();};
    customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=38,Width=165,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
-   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=165,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
-   var quickPrice=new Button {Text="ATUALIZAR PREÇO",Width=150,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};quickPrice.Click+=(sender,args)=>UpdateRegisteredPrice();footer.Controls.Add(quickPrice);
+   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>ChooseEditAction();footer.Controls.Add(edit);
    var remove=new Button {Text="REMOVER ITEM",Width=125,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="EXCLUIR TODOS",Width=135,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
-   foreach(Control button in new Control[]{chooseCustomer,registerCustomer,finish,edit,quickPrice,remove,clear})button.Margin=new Padding(4,3,4,3);
+   foreach(Control button in new Control[]{chooseCustomer,finish,edit,remove,clear})button.Margin=new Padding(4,3,4,3);
    discountLabel.Text="Desconto:";discountMode.Items.AddRange(new object[]{"R$","%"});discountMode.SelectedIndex=0;
    discountMode.SelectedIndexChanged+=(s,e)=>{discountPercent=discountMode.SelectedIndex==1;discountInput.Maximum=discountPercent?100:99999999;discountValue=discountInput.Value;Render();};
    discountInput.ValueChanged+=(s,e)=>{discountValue=discountInput.Value;Render();};
@@ -151,7 +148,9 @@ namespace ArmazemGratidao {
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=36};
      var hint=new Label{Text="Pesquisar cliente pelo nome:",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),IntegralHeight=false};
-     var select=new Button{Text="Selecionar cliente",Dock=DockStyle.Bottom,Height=43,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=50,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(8,4,8,4)};
+     var select=new Button{Text="Selecionar cliente",Width=160,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var register=new Button{Text="Cadastrar novo",Width=145,Height=38,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
      var cancel=new Button{Text="Cancelar",Dock=DockStyle.Bottom,Height=37};
      Action fill=()=>{
       string filter=search.Text.Trim();
@@ -166,9 +165,11 @@ namespace ArmazemGratidao {
      };
      search.TextChanged+=(sender,args)=>fill();
      select.Click+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
+     register.Click+=(sender,args)=>{if(QuickRegisterCustomer()){dialog.Tag=customer.Text;dialog.DialogResult=DialogResult.OK;}};
      list.DoubleClick+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
      cancel.Click+=(sender,args)=>dialog.DialogResult=DialogResult.Cancel;
-     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(select);dialog.Controls.Add(cancel);
+     actions.Controls.Add(select);actions.Controls.Add(register);
+     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.Controls.Add(cancel);
      fill();
      if(dialog.ShowDialog(this)==DialogResult.OK && dialog.Tag is string)customer.Text=(string)dialog.Tag;
     }
@@ -668,6 +669,16 @@ namespace ArmazemGratidao {
      dialog.Controls.Add(list);dialog.Controls.Add(note);dialog.Controls.Add(bar);dialog.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível abrir os preços do carrinho: "+ex.Message);}
+  }
+  void ChooseEditAction(){
+   using(var dialog=new Form{Text="PDV | Editar produto",Width=430,Height=185,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+    var hint=new Label{Text="O que deseja alterar?",Left=18,Top=17,Width=380,Height=28,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    var item=new Button{Text="Quantidade / preço desta venda",Left=18,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    var registered=new Button{Text="Preço cadastrado do produto",Left=214,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
+    item.Click+=(s,e)=>{dialog.Close();EditSelected();};
+    registered.Click+=(s,e)=>{dialog.Close();UpdateRegisteredPrice();};
+    dialog.Controls.AddRange(new Control[]{hint,item,registered});dialog.ShowDialog(this);
+   }
   }
   void EditSelected(){
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
