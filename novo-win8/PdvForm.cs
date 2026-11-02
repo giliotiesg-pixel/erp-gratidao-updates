@@ -82,10 +82,20 @@ namespace ArmazemGratidao {
    var edit=new Button {Text="EDITAR QUANTIDADE / PREÇO",Width=235,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>EditSelected();footer.Controls.Add(edit);
    var quickPrice=new Button {Text="ATUALIZAR PREÇO CADASTRADO",Width=230,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};quickPrice.Click+=(sender,args)=>UpdateRegisteredPrice();footer.Controls.Add(quickPrice);
    var remove=new Button {Text="REMOVER ITEM",Width=145,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
-   var clear=new Button {Text="LIMPAR CARRINHO",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
+   var clear=new Button {Text="EXCLUIR TODOS",Width=155,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
    var discountButton=new Button {Text="DESCONTO R$ / %",Width=170,Height=40,BackColor=Color.FromArgb(175,25,45),ForeColor=Color.White};
    discountButton.Click+=(sender,args)=>ConfigureDiscount();footer.Controls.Add(discountButton);footer.Controls.Add(total);
-   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditSelected();};
+   var deleteColumn=new DataGridViewButtonColumn {Name="ExcluirItem",HeaderText="Cestinho",Text="🗑",UseColumnTextForButtonValue=true,Width=78,AutoSizeMode=DataGridViewAutoSizeColumnMode.None};
+   grid.Columns.Add(deleteColumn);
+   grid.CellContentClick+=(s,e)=>{
+    if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name!="ExcluirItem")return;
+    if(e.RowIndex>=cart.Count)return;
+    string itemName=cart[e.RowIndex].Name;
+    if(MessageBox.Show("Excluir do carrinho somente "+itemName+"?","Excluir produto",MessageBoxButtons.YesNo,MessageBoxIcon.Question)==DialogResult.Yes){
+     cart.RemoveAt(e.RowIndex);Render();
+    }
+   };
+   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="ExcluirItem")EditSelected();};
    grid.Font=new Font("Segoe UI",10,FontStyle.Regular);grid.RowTemplate.Height=36;
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
@@ -559,7 +569,9 @@ namespace ArmazemGratidao {
   void Render() {
    var dt=new DataTable();dt.Columns.Add("Codigo");dt.Columns.Add("Produto");dt.Columns.Add("Quantidade",typeof(decimal));dt.Columns.Add("Unidade");dt.Columns.Add("Preco",typeof(decimal));dt.Columns.Add("Total",typeof(decimal));
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Unit,i.Price,i.Total);
-   grid.DataSource=dt;SaveDraft();total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
+   grid.DataSource=dt;
+   if(grid.Columns.Contains("ExcluirItem"))grid.Columns["ExcluirItem"].DisplayIndex=grid.Columns.Count-1;
+   SaveDraft();total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
   }
   void UpdateChange(){
    bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
