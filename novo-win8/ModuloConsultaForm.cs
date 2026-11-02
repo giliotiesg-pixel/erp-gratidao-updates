@@ -18,6 +18,10 @@ namespace ArmazemGratidao {
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
    var top=new FlowLayoutPanel {Dock=DockStyle.Top,Height=55,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
    var reload=new Button {Text="Atualizar consulta",AutoSize=true,Height=33};reload.Click+=(s,e)=>LoadData();top.Controls.Add(reload);
+   if(module=="Caixa"){
+    var bottles=new Button{Text="Cascos retornáveis",Width=170,Height=33};
+    bottles.Click+=(s,e)=>{using(var dialog=new CascosForm(db))dialog.ShowDialog(this);LoadData();};top.Controls.Add(bottles);
+   }
    if(module=="Estoque"){
     top.Height=65;
     top.Controls.Add(new Label {Text="Buscar produto:",AutoSize=true,Padding=new Padding(3,8,1,0),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)});
@@ -67,6 +71,17 @@ namespace ArmazemGratidao {
      c.Open();
      using(var cmd=new SQLiteCommand(sql,c))using(var adapter=new SQLiteDataAdapter(cmd)){
       var dt=new DataTable();adapter.Fill(dt);grid.DataSource=dt;status.Text=module+": "+dt.Rows.Count+" registros (somente consulta, banco preservado).";
+     }
+     if(module=="Caixa"){
+      using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('bottle_loans','bottle_returns')",c)){
+       if(Convert.ToInt32(check.ExecuteScalar())==2){
+        using(var totals=new SQLiteCommand("SELECT COALESCE((SELECT SUM(quantity*unit_deposit) FROM bottle_loans WHERE date(delivered_at)=date('now','localtime')),0),COALESCE((SELECT SUM(amount) FROM bottle_returns WHERE date(returned_at)=date('now','localtime')),0)",c))
+        using(var reader=totals.ExecuteReader())if(reader.Read()){
+         decimal received=Convert.ToDecimal(reader[0]),refunded=Convert.ToDecimal(reader[1]);
+         status.Text="Caixa | Cascos hoje (separado das vendas): +R$ "+received.ToString("N2")+" / -R$ "+refunded.ToString("N2")+" | líquido R$ "+(received-refunded).ToString("N2")+". Confira com o dinheiro físico.";
+        }
+       }
+      }
      }
     }
    }catch(SQLiteException ex){grid.DataSource=null;status.Text="Tabela ou coluna nao disponivel no banco importado: "+ex.Message;}

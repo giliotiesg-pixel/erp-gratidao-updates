@@ -142,6 +142,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"WhatsApp",(sender,args)=>OpenModuleWindow(new WhatsAppNormalForm()));
    AddButton(bar,"Lançar vendas anotadas",(sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de lançar vendas.");return;}OpenModuleWindow(new PdvForm(dbPath,true));});
    AddButton(bar,"PDV - Nova Venda",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));});
+   AddButton(bar,"Cascos retornáveis",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));});
    AddButton(bar,"Vendas",(s,e)=>OpenConsult(false));
    AddButton(bar,"Taxas dos pagamentos",(s,e)=>PaymentFees.ShowEditor(dbPath,this));
    AddButton(bar,"Integrar vendas 01 a 19/10",IntegrateHistoricalSales);
@@ -285,6 +286,7 @@ namespace ArmazemGratidao {
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));})),
     Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de lançar vendas.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
+    Tuple.Create("Cascos retornáveis",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));})),
     Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));})),
