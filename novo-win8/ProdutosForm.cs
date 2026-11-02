@@ -727,30 +727,27 @@ namespace ArmazemGratidao {
   }
   // Simulador independente: só aplica o preço quando o operador clicar.
   static Control ProfitCalculator(NumericUpDown cost,NumericUpDown price,NumericUpDown quantity){
-   var panel=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true};
-   var percent=new NumericUpDown{DecimalPlaces=2,Minimum=0,Maximum=10000,Width=94,Increment=1};
-   var preview=new Label{AutoSize=true,Padding=new Padding(6,9,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold)};
-   var apply=new Button{Text="Aplicar preço",Width=130,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   var panel=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};
+   var desired=new NumericUpDown{DecimalPlaces=2,Minimum=0,Maximum=10000,Width=90,Increment=1};
+   var preview=new Label{AutoSize=true,Font=new Font("Segoe UI",9,FontStyle.Bold),Padding=new Padding(5,8,0,0),ForeColor=Color.FromArgb(22,75,160)};
+   var apply=new Button{Text="Aplicar preço sugerido",AutoSize=true,Height=32};
    Action update=()=>{
-    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
-    decimal profit=suggested-cost.Value;
-    preview.Text="Preço sugerido R$ "+suggested.ToString("N2")+" | Lucro/un. R$ "+profit.ToString("N2")+" | Total R$ "+(profit*quantity.Value).ToString("N2");
+    decimal actual=price.Value-cost.Value;
+    decimal actualPercent=cost.Value>0?actual/cost.Value*100m:0m;
+    decimal suggested=Math.Round(cost.Value*(1m+desired.Value/100m),2,MidpointRounding.AwayFromZero);
+    preview.Text="Lucro atual R$ "+actual.ToString("N2")+" ("+actualPercent.ToString("N2")+"% sobre custo) | Margem sobre venda "+(price.Value>0?(actual/price.Value*100m).ToString("N2"):"0,00")+"% | Lucro estoque R$ "+(actual*quantity.Value).ToString("N2")+" | Preço desejado R$ "+suggested.ToString("N2");
    };
-   Action calculatePrice=()=>{
-    if(percent.Value<=0)return; // Mantém o preço original até informar porcentagem.
-    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
-    if(suggested<=price.Maximum)price.Value=suggested;
-   };
-   percent.ValueChanged+=(sender,args)=>{calculatePrice();update();};
-   cost.ValueChanged+=(sender,args)=>{calculatePrice();update();};
+   desired.ValueChanged+=(sender,args)=>update();
+   cost.ValueChanged+=(sender,args)=>update();
+   price.ValueChanged+=(sender,args)=>update();
    quantity.ValueChanged+=(sender,args)=>update();
    apply.Click+=(sender,args)=>{
-    decimal suggested=Math.Round(cost.Value*(1+percent.Value/100),2,MidpointRounding.AwayFromZero);
-    if(suggested>price.Maximum){MessageBox.Show("Preço calculado ultrapassa o limite do campo.");return;}
+    decimal suggested=Math.Round(cost.Value*(1m+desired.Value/100m),2,MidpointRounding.AwayFromZero);
+    if(suggested>price.Maximum){MessageBox.Show("Preço sugerido acima do limite.");return;}
     price.Value=suggested;
    };
-   panel.Controls.Add(new Label{Text="% sobre custo:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   panel.Controls.Add(percent);panel.Controls.Add(apply);panel.Controls.Add(preview);
+   panel.Controls.Add(new Label{Text="Acréscimo desejado %",AutoSize=true,Padding=new Padding(0,9,0,0)});
+   panel.Controls.Add(desired);panel.Controls.Add(apply);panel.Controls.Add(preview);
    update();return panel;
   }
   void EditProduct(){
@@ -820,7 +817,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,12);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,12);panel.Controls.Add(save,1,13);StyleDialog(form,panel);form.Controls.Add(panel);
+       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Lucro e porcentagem",AutoSize=true},0,5);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,5);panel.Controls.Add(save,1,13);StyleDialog(form,panel);form.Controls.Add(panel);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
@@ -980,7 +977,7 @@ namespace ArmazemGratidao {
     var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
     
     Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade inicial","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
-    for(int i=0;i<fields.Length;i++){panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,i);panel.Controls.Add(fields[i],1,i);}
+    for(int i=0;i<fields.Length;i++){int row=i>=5?i+1:i;panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,row);panel.Controls.Add(fields[i],1,row);}
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
        barcode.Width=240;barcode.MaxLength=64;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
