@@ -959,7 +959,7 @@ namespace ArmazemGratidao {
    InsertProduct(initialInput);
   }
   void InsertProduct(string initialInput=""){
-   using(var form=new Form {Text="Inserir produto",Width=1100,Height=720,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+   using(var form=new Form {Text="Inserir produto",Width=1100,Height=780,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox();var ownCode=new CheckBox {Text="Código próprio da empresa (sem consulta online)",AutoSize=true};var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
@@ -981,7 +981,7 @@ namespace ArmazemGratidao {
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
        barcode.Width=240;barcode.MaxLength=64;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
-    panel.Controls.Add(ownCode,1,11);
+    panel.Controls.Add(ownCode,1,12);
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Bipe o código ou digite e pressione Enter para pesquisar.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
@@ -1031,9 +1031,9 @@ namespace ArmazemGratidao {
     barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
     ownCode.CheckedChanged+=(s,e)=>{lookup.Enabled=!ownCode.Checked;lookupStatus.Text=ownCode.Checked?"Código próprio: digite o identificador desejado.":"Código comercial: consulta online disponível.";};
-    for(int row=0;row<12;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
-    panel.Controls.Add(lookupStatus,1,9);
-    panel.Controls.Add(lookup,1,10);
+    for(int row=0;row<14;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==5?86:38));
+    panel.Controls.Add(lookupStatus,1,10);
+    panel.Controls.Add(lookup,1,11);
 
     var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
