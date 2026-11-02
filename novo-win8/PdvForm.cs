@@ -943,9 +943,33 @@ namespace ArmazemGratidao {
     manualDate.Value=picker.Value;return true;
    }
   }
+  bool ShowPaymentChoice(){
+   using(var dialog=new Form{Text="Escolha a forma de pagamento",Width=690,Height=530,
+    MinimumSize=new Size(570,450),StartPosition=FormStartPosition.CenterParent,
+    BackColor=Color.FromArgb(238,245,252)}){
+    var title=new Label{Text="TOTAL DA VENDA: R$ "+FinalAmount().ToString("N2"),Dock=DockStyle.Top,
+     Height=72,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160)};
+    var info=new Label{Text="Selecione a forma de pagamento. Para dividir em até 3 formas, escolha DIVIDIDO.",Dock=DockStyle.Top,Height=50,
+     TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var choices=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,Padding=new Padding(18)};
+    foreach(string name in payment.Items.Cast<object>().Select(x=>Convert.ToString(x))){
+     string selected=name;
+     var btn=new Button{Text=selected,Width=185,Height=58,Margin=new Padding(7),
+      Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=selected=="FIADO"?Color.FromArgb(175,35,48):Color.FromArgb(22,75,160),
+      ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+     btn.FlatAppearance.BorderSize=0;
+     btn.Click+=(sender,args)=>{payment.SelectedItem=selected;dialog.DialogResult=DialogResult.OK;dialog.Close();};
+     choices.Controls.Add(btn);
+    }
+    var cancel=new Button{Text="Voltar à venda",Dock=DockStyle.Bottom,Height=44,DialogResult=DialogResult.Cancel};
+    dialog.Controls.Add(choices);dialog.Controls.Add(info);dialog.Controls.Add(title);dialog.Controls.Add(cancel);
+    return dialog.ShowDialog(this)==DialogResult.OK;
+   }
+  }
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
+   if(!ShowPaymentChoice())return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
