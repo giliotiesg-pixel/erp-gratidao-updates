@@ -981,6 +981,11 @@ namespace ArmazemGratidao {
       }
      }
      tx.Commit();
+     // Notifica todas as janelas de Vendas abertas, inclusive lançamentos retroativos.
+     foreach(Form window in Application.OpenForms.Cast<Form>().ToArray()){
+      var salesWindow=window as ConsultaForm;
+      if(salesWindow!=null)try{salesWindow.RefreshAfterRecordedSale();}catch(Exception ex){System.Diagnostics.Debug.WriteLine("Atualização de Vendas: "+ex.Message);}
+     }
      cart.Clear();discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
      OfferSaleReceipt(saleId,customerName,sum);
     }
