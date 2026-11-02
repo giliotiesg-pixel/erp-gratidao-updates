@@ -64,8 +64,9 @@ namespace ArmazemGratidao {
    suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=162,Padding=new Padding(12,14,12,12),BackColor=Color.White,AutoScroll=true};
-   footer.Controls.Add(new Label {Text="Pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;footer.Controls.Add(payment);
+   // As formas permanecem disponíveis na janela de pagamento aberta ao finalizar.
+   // O seletor fica apenas como estado interno, sem caixa antecipada no PDV.
+   payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;
    // O nome do cliente fica no estado interno; so aparece na janela aberta pelo botao.
    customer.Text="Consumidor";
    footer.Controls.Add(new Label {Text="Cliente:",AutoSize=true,Padding=new Padding(0,9,0,0)});
