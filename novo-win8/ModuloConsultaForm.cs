@@ -601,7 +601,7 @@ namespace ArmazemGratidao {
   // Mantém os saldos associados ao mesmo cliente quando o nome é corrigido.
   // Executado apenas dentro da transação do cadastro, após backup validado.
   void RenameCustomerLinks(SQLiteConnection conn,SQLiteTransaction tx,string before,string after){
-   if(string.Equals(before,after,StringComparison.Ordinal))return;
+   if(string.Equals(before,after,StringComparison.OrdinalIgnoreCase))return;
    foreach(var link in new[]{
     Tuple.Create("sales","customer_name"),
     Tuple.Create("bottle_loans","customer_name"),
@@ -670,7 +670,7 @@ namespace ArmazemGratidao {
          check.Parameters.AddWithValue("@id",currentId);check.Parameters.AddWithValue("@name",newName);check.Parameters.AddWithValue("@document",doc);
          if(Convert.ToInt32(check.ExecuteScalar())>0)throw new Exception("Já existe um cliente com esse nome ou CPF/CNPJ.");
         }
-        if(edit&&!string.Equals(oldName,newName,StringComparison.Ordinal)){
+        if(edit&&!string.Equals(oldName,newName,StringComparison.OrdinalIgnoreCase)){
          // Confirma especificamente a alteração de nome antes de migrar as referências.
          if(MessageBox.Show("O nome do cliente foi alterado. Vendas, Fiado, crédito e cascos com o nome antigo precisam continuar vinculados ao mesmo cliente. Confirmar a correção dessas referências?","Corrigir nome do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)throw new Exception("Alteração de nome cancelada.");
          RenameCustomerLinks(conn,tx,oldName,newName);
