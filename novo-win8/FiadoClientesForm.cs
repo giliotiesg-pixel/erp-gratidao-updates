@@ -69,7 +69,7 @@ namespace ArmazemGratidao {
    tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
    var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=122,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
-   method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR"});method.SelectedIndex=0;bottom.Controls.Add(method);
+   method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","CREDITO DEPOSITADO"});method.SelectedIndex=0;bottom.Controls.Add(method);
    bottom.Controls.Add(new Label {Text="Valor R$:",AutoSize=true,Padding=new Padding(0,9,0,0)});bottom.Controls.Add(amount);
    bottom.Controls.Add(receivedBalance);
    var fillAll=new Button {Text="Preencher saldo de todas",AutoSize=true,Height=36};fillAll.Click+=(s,e)=>FillAllBalances();bottom.Controls.Add(fillAll);
@@ -92,8 +92,10 @@ namespace ArmazemGratidao {
    creditBar.Controls.Add(creditDepositAmount);
    var creditSaveTop=new Button{Text="Guardar credito",Width=140,Height=35,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};
    creditSaveTop.Click+=(sender,args)=>DepositCustomerCredit();creditBar.Controls.Add(creditSaveTop);
-   var limitTop=new Button{Text="Limite semanal / mensal",Width=180,Height=35,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};
+   var limitTop=new Button{Text="Definir / alterar limite",Width=180,Height=35,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};
    limitTop.Click+=(sender,args)=>ConfigureClientCreditLimit();creditBar.Controls.Add(limitTop);
+   var adjustTop=new Button{Text="Ajustar credito",Width=140,Height=35,BackColor=Color.FromArgb(133,74,20),ForeColor=Color.White};
+   adjustTop.Click+=(sender,args)=>AdjustCustomerCredit();creditBar.Controls.Add(adjustTop);
    var creditExtractTop=new Button{Text="Extrato do credito",Width=150,Height=35};
    creditExtractTop.Click+=(sender,args)=>ShowCustomerCreditHistory();creditBar.Controls.Add(creditExtractTop);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(creditBar);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
@@ -612,6 +614,19 @@ namespace ArmazemGratidao {
    if(requested<=0){MessageBox.Show("Informe um valor recebido maior que zero.");return;}
    string payMethod=Convert.ToString(method.SelectedItem);
    if(string.IsNullOrWhiteSpace(payMethod)){MessageBox.Show("Selecione a forma de pagamento.");return;}
+   bool useDepositedCredit=payMethod=="CREDITO DEPOSITADO";
+   if(useDepositedCredit){
+    try{
+     EnsureCustomerCredit(db);
+     using(var check=Open(true)){
+      decimal available=CustomerCreditBalance(check,null,customer);
+      if(requested>available+0.005m){
+       MessageBox.Show("Credito disponivel: R$ "+available.ToString("N2")+". Informe valor menor ou igual ao credito do cliente.","Saldo insuficiente");
+       return;
+      }
+     }
+    }catch(Exception ex){MessageBox.Show("Credito indisponivel: "+ex.Message,"Fiado");return;}
+   }
    try{
     var balances=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<long,decimal>>();
     using(var conn=Open(true)){
@@ -645,11 +660,16 @@ namespace ArmazemGratidao {
      Environment.NewLine+Environment.NewLine+"Confirmar recebimento "+scope+"?";
     if(MessageBox.Show(message,"Conferir pagamento do Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     using(var conn=Open(false)){
-     string backup=db+".antes-receber-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     string backup=CreditBackupPath(db,"antes-receber-fiado-");
      using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
       copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);
+      using(var integrity=new SQLiteCommand("PRAGMA integrity_check",copy))
+       if(Convert.ToString(integrity.ExecuteScalar())!="ok")throw new Exception("Backup do Fiado nao passou na verificacao. Pagamento cancelado.");
      }
+     if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio. Pagamento cancelado.");
      using(var tx=conn.BeginTransaction()){
+      if(useDepositedCredit && CustomerCreditBalance(conn,tx,customer)+0.005m<requested)
+       throw new Exception("Credito do cliente foi alterado. Atualize os saldos antes de receber.");
       decimal remaining=requested;
       foreach(var row in balances){
        using(var check=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer",conn,tx)){
@@ -668,6 +688,15 @@ namespace ArmazemGratidao {
         insert.Parameters.AddWithValue("@method",payMethod);
         insert.Parameters.AddWithValue("@note","Recebimento "+scope+" - baixa parcial ou total auditada no Fiado");
         if(insert.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar pagamento da venda #"+row.Key);
+       }
+       if(useDepositedCredit){
+        // A mesma transacao grava a baixa do fiado e retira o dinheiro da carteira.
+        using(var debit=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,sale_id,details) VALUES(@name,@amount,'UTILIZACAO_FIADO','CREDITO_CLIENTE',NULL,@note)",conn,tx)){
+         debit.Parameters.AddWithValue("@name",customer.Trim());
+         debit.Parameters.AddWithValue("@amount",-received);
+         debit.Parameters.AddWithValue("@note","Pagamento com credito antecipado - venda #"+row.Key);
+         if(debit.ExecuteNonQuery()!=1)throw new Exception("Falha ao debitar o credito do cliente.");
+        }
        }
        remaining-=received;
       }
@@ -736,6 +765,7 @@ namespace ArmazemGratidao {
    decimal value=creditDepositAmount.Value;
    if(value<=0){MessageBox.Show("Informe o valor antecipado no campo CREDITO DEPOSITADO R$.");return;}
    string payMethod=Convert.ToString(method.SelectedItem);
+   if(payMethod=="CREDITO DEPOSITADO"){MessageBox.Show("Escolha a forma realmente recebida (DINHEIRO, PIX etc.), nao CREDITO DEPOSITADO.");return;}
    if(MessageBox.Show("Cliente: "+customer+"\\nCredito recebido: R$ "+value.ToString("N2")+"\\nForma: "+payMethod+"\\n\\nEste valor sera guardado para abater compras fiadas futuras. Confirmar?","Credito do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    try{
     EnsureCustomerCredit(db);
@@ -757,6 +787,54 @@ namespace ArmazemGratidao {
     creditDepositAmount.Value=0;LoadClients();SelectClient(customer);
     MessageBox.Show("Credito registrado para "+customer+". O valor sera abatido automaticamente das proximas compras fiadas.","Fiado");
    }catch(Exception ex){MessageBox.Show("Credito nao registrado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  // Corrigir o saldo da carteira com lancamento auditavel; nunca reescrever historico.
+  void AdjustCustomerCredit(){
+   if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione o cliente.");return;}
+   try{
+    EnsureCustomerCredit(db);
+    decimal current;
+    using(var cn=Open(true))current=CustomerCreditBalance(cn,null,customer);
+    using(var dlg=new Form{Text="Ajustar credito depositado - "+customer,Width=500,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+     var old=new Label{Text="Credito atual: R$ "+current.ToString("N2"),Left=18,Top=17,Width=435,Height=32,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+     var label=new Label{Text="Novo saldo de credito (R$):",Left=18,Top=62,Width=420,Height=26};
+     var amountNew=new NumericUpDown{Left=18,Top=91,Width=220,DecimalPlaces=2,Maximum=100000000,Value=Math.Max(0,Math.Min(100000000,current))};
+     var reasonLabel=new Label{Text="Motivo da correcao (obrigatorio):",Left=18,Top=135,Width=430,Height=24};
+     var reason=new TextBox{Left=18,Top=160,Width=445,MaxLength=250};
+     var confirm=new Button{Text="Salvar ajuste auditado",Left=18,Top=216,Width=215,Height=36,DialogResult=DialogResult.OK};
+     var cancel=new Button{Text="Cancelar",Left=245,Top=216,Width=160,Height=36,DialogResult=DialogResult.Cancel};
+     dlg.Controls.AddRange(new Control[]{old,label,amountNew,reasonLabel,reason,confirm,cancel});
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     if(string.IsNullOrWhiteSpace(reason.Text)){MessageBox.Show("Informe o motivo do ajuste.");return;}
+     decimal desired=amountNew.Value;
+     if(desired==current){MessageBox.Show("O saldo nao foi alterado.");return;}
+     if(MessageBox.Show("Cliente: "+customer+"\\nSaldo anterior: R$ "+current.ToString("N2")+"\\nNovo saldo: R$ "+desired.ToString("N2")+"\\nMotivo: "+reason.Text.Trim()+"\\n\\nConfirmar correcao auditada?","Ajustar credito depositado",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+     string backup=CreditBackupPath(db,"antes-ajustar-credito-");
+     using(var cn=Open(false)){
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+       dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+       using(var integrity=new SQLiteCommand("PRAGMA integrity_check",dest))
+        if(Convert.ToString(integrity.ExecuteScalar())!="ok")throw new Exception("Falha ao validar backup. Alteracao cancelada.");
+      }
+      if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio. Alteracao cancelada.");
+      using(var tx=cn.BeginTransaction()){
+       decimal now=CustomerCreditBalance(cn,tx,customer);
+       if(Math.Abs(now-current)>0.005m)throw new Exception("Credito foi alterado por outro recebimento. Atualize a tela.");
+       decimal delta=desired-now;
+       if(delta==0)return;
+       using(var cmd=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,details) VALUES(@client,@delta,'AJUSTE_AUDITADO','CORRECAO',@details)",cn,tx)){
+        cmd.Parameters.AddWithValue("@client",customer.Trim());
+        cmd.Parameters.AddWithValue("@delta",delta);
+        cmd.Parameters.AddWithValue("@details","Ajuste de saldo. Anterior R$ "+now.ToString("N2")+", novo R$ "+desired.ToString("N2")+". Motivo: "+reason.Text.Trim());
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel gravar ajuste.");
+       }
+       tx.Commit();
+      }
+     }
+     LoadClients();SelectClient(customer);
+     MessageBox.Show("Saldo ajustado e registrado no historico do credito.","Fiado");
+    }
+   }catch(Exception ex){MessageBox.Show("Ajuste nao realizado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void ShowCustomerCreditHistory(){
    if(string.IsNullOrWhiteSpace(customer))return;
