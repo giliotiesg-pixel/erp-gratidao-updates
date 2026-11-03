@@ -64,7 +64,7 @@ namespace ArmazemGratidao {
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
-   suggestions.DoubleClick+=(s,e)=>ChooseSuggestion();
+   suggestions.MouseClick+=(s,e)=>{int index=suggestions.IndexFromPoint(e.Location);if(e.Button==MouseButtons.Left&&index>=0){suggestions.SelectedIndex=index;ChooseSuggestion();}};
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
    var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=180,Padding=new Padding(12,10,12,10),BackColor=Color.White,AutoScroll=true,WrapContents=true};
    // As formas permanecem disponíveis na janela de pagamento aberta ao finalizar.
@@ -328,7 +328,7 @@ namespace ArmazemGratidao {
    string selected;
    if(!suggestionCodes.TryGetValue(suggestions.SelectedIndex,out selected))return;
    suppressLookup=true;lookupDelay.Stop();suggestions.Visible=false;code.Text=selected;suppressLookup=false;
-   AddProduct();
+   AddProduct(true);
   }
   // Conferência explícita do estoque real antes da venda. Não permite estoque negativo.
   bool AdjustEmptyStock(Item item,decimal previous,decimal required){
@@ -396,7 +396,23 @@ namespace ArmazemGratidao {
     return dlg.ShowDialog(this)==DialogResult.OK;
    }
   }
-  void AddProduct() {
+  // Ao escolher um produto da lista, informar a quantidade antes de inserir no carrinho.
+  // Leitura direta por codigo de barras continua usando a quantidade do PDV, sem abrir popup.
+  decimal? AskProductQuantity(Item product,decimal defaultQuantity){
+   using(var dialog=new Form{Text="PDV | Quantidade do produto",Width=540,Height=290,MinimumSize=new Size(480,265),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255),KeyPreview=true}){
+    var name=new Label{Text=product.Name,Left=20,Top=19,Width=475,Height=54,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
+    bool byWeight=Convert.ToString(saleUnit.SelectedItem)=="KG";
+    var caption=new Label{Text=byWeight?"Quantidade (kg):":"Quantidade (unidades):",Left=20,Top=92,Width=210,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var amount=new NumericUpDown{Left=236,Top=86,Width=240,Height=37,DecimalPlaces=byWeight?3:0,Increment=byWeight?0.001m:1m,Minimum=byWeight?0.001m:1m,Maximum=999999m,Value=Math.Max(byWeight?0.001m:1m,Math.Min(999999m,byWeight?defaultQuantity:Math.Ceiling(defaultQuantity))),Font=new Font("Segoe UI",14,FontStyle.Bold)};
+    var add=new Button{Text="Adicionar ao carrinho",Left=20,Top=159,Width=245,Height=44,DialogResult=DialogResult.OK,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    var cancel=new Button{Text="Cancelar",Left=283,Top=159,Width=193,Height=44,DialogResult=DialogResult.Cancel};
+    dialog.Controls.AddRange(new Control[]{name,caption,amount,add,cancel});
+    dialog.AcceptButton=add;dialog.CancelButton=cancel;
+    dialog.Shown+=(sender,args)=>{amount.Focus();amount.Select(0,amount.Text.Length);};
+    return dialog.ShowDialog(this)==DialogResult.OK?(decimal?)amount.Value:null;
+   }
+  }
+  void AddProduct(bool askQuantity=false) {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
     var matches=new List<Item>();
@@ -456,6 +472,11 @@ namespace ArmazemGratidao {
      }
     }
     decimal quantity=qty.Value;
+    if(askQuantity){
+     decimal? entered=AskProductQuantity(selected,quantity);
+     if(!entered.HasValue)return;
+     quantity=entered.Value;
+    }
     string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
     var existing=cart.FirstOrDefault(x=>x.Id==selected.Id&&x.Unit==unit);
     decimal required=quantity+cart.Where(x=>x.Id==selected.Id).Sum(x=>x.Qty);
