@@ -169,7 +169,17 @@ namespace ArmazemGratidao {
   }
   void LoadClients(){
    try {
-    var dt=Query("SELECT names.cliente AS cliente,COALESCE((SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS vendas,COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS saldo FROM (SELECT DISTINCT TRIM(customer_name) AS cliente FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>\'\' UNION SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>\'\') names WHERE names.cliente<>\'Consumidor\' ORDER BY names.cliente");
+    // Clientes com cadastro, vendas antigas ou carteira de credito devem aparecer.
+    string names="SELECT DISTINCT TRIM(customer_name) AS cliente FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>''";
+    using(var cn=Open(true))using(var table=new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('customers','customer_credit_entries','customer_fiado_limits')",cn)){
+     using(var rd=table.ExecuteReader())while(rd.Read()){
+      string tableName=Convert.ToString(rd[0]);
+      if(tableName=="customers")names+=" UNION SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>''";
+      if(tableName=="customer_credit_entries")names+=" UNION SELECT DISTINCT TRIM(customer_name) FROM customer_credit_entries WHERE TRIM(customer_name)<>''";
+      if(tableName=="customer_fiado_limits")names+=" UNION SELECT DISTINCT TRIM(customer_name) FROM customer_fiado_limits WHERE TRIM(customer_name)<>''";
+     }
+    }
+    var dt=Query("SELECT names.cliente AS cliente,COALESCE((SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS vendas,COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS saldo FROM ("+names+") names WHERE UPPER(names.cliente)<>'CONSUMIDOR' AND names.cliente<>'SEM CLIENTE' ORDER BY names.cliente");
     clients.SuspendLayout();clients.Controls.Clear();
     decimal allBalance=0,internalBalance=0;int visibleClients=0;
     foreach(DataRow r in dt.Rows) {
@@ -663,13 +673,21 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show(ex.Message,"Baixa não realizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
 
+  static string CreditBackupPath(string database,string prefix){
+   string dir=System.IO.Path.GetDirectoryName(database);
+   string file=System.IO.Path.Combine(dir,"backup-location.txt");
+   string target=System.IO.File.Exists(file)?System.IO.File.ReadAllText(file).Trim():System.IO.Path.Combine(dir,"Backups");
+   if(string.IsNullOrWhiteSpace(target)||!System.IO.Path.IsPathRooted(target))throw new Exception("Pasta de backup nao configurada corretamente.");
+   System.IO.Directory.CreateDirectory(target);
+   return System.IO.Path.Combine(target,prefix+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+  }
   // Carteira de credito separada da divida, com movimentacoes imutaveis.
   public static void EnsureCustomerCredit(string database){
    using(var cn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=database,FailIfMissing=true}.ToString())){
     cn.Open();
     using(var check=new SQLiteCommand("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn))
      if(Convert.ToInt32(check.ExecuteScalar())>0)return;
-    string backup=database+".antes-credito-clientes-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+    string backup=CreditBackupPath(database,"antes-credito-clientes-");
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
      using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
@@ -711,7 +729,7 @@ namespace ArmazemGratidao {
    try{
     EnsureCustomerCredit(db);
     using(var cn=Open(false)){
-     string backup=db+".antes-credito-deposito-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     string backup=CreditBackupPath(db,"antes-credito-deposito-");
      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
       dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
       using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido. Credito nao gravado.");
@@ -753,7 +771,7 @@ namespace ArmazemGratidao {
     cn.Open();
     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_fiado_limits'",cn))
      if(Convert.ToInt32(check.ExecuteScalar())>0)return;
-    string backup=database+".antes-limites-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+    string backup=CreditBackupPath(database,"antes-limites-fiado-");
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
      using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
@@ -816,7 +834,7 @@ namespace ArmazemGratidao {
      decimal selectedLimit=value.Value;
      if(MessageBox.Show("Confirmar limite "+selectedPeriod+" de R$ "+selectedLimit.ToString("N2")+" para "+customer+"?","Limite do Fiado",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
      using(var cn=Open(false)){
-      string backup=db+".antes-mudar-limite-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+      string backup=CreditBackupPath(db,"antes-mudar-limite-");
       using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
        dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
        using(var integrity=new SQLiteCommand("PRAGMA integrity_check",dest))
