@@ -74,6 +74,7 @@ namespace ArmazemGratidao {
    var fillAll=new Button {Text="Preencher saldo de todas",AutoSize=true,Height=36};fillAll.Click+=(s,e)=>FillAllBalances();bottom.Controls.Add(fillAll);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
    var saveCredit=new Button {Text="Guardar credito do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};saveCredit.Click+=(s,e)=>DepositCustomerCredit();bottom.Controls.Add(saveCredit);
+   var creditLimit=new Button {Text="Definir limite semanal / mensal",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};creditLimit.Click+=(s,e)=>ConfigureClientCreditLimit();bottom.Controls.Add(creditLimit);
    var creditHistory=new Button {Text="Historico de credito",AutoSize=true,Height=36};creditHistory.Click+=(s,e)=>ShowCustomerCreditHistory();bottom.Controls.Add(creditHistory);
    var settle=new Button {Text="Receber nas vendas do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
@@ -168,7 +169,7 @@ namespace ArmazemGratidao {
   }
   void LoadClients(){
    try {
-    var dt=Query("SELECT COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) AS saldo FROM sales s WHERE "+CreditFilter+" GROUP BY COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') ORDER BY cliente");
+    var dt=Query("SELECT names.cliente AS cliente,COALESCE((SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS vendas,COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS saldo FROM (SELECT DISTINCT TRIM(customer_name) AS cliente FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>\'\' UNION SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>\'\') names WHERE names.cliente<>\'Consumidor\' ORDER BY names.cliente");
     clients.SuspendLayout();clients.Controls.Clear();
     decimal allBalance=0,internalBalance=0;int visibleClients=0;
     foreach(DataRow r in dt.Rows) {
@@ -198,7 +199,20 @@ namespace ArmazemGratidao {
     using(var cn=Open(true))using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn)){
      if(Convert.ToInt32(check.ExecuteScalar())>0)credit=CustomerCreditBalance(cn,null,name);
     }
-    selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Divida R$ "+total.ToString("N2")+" | Credito R$ "+credit.ToString("N2");
+    string limitText="Limite: nao configurado";
+    using(var cn=Open(true))using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_fiado_limits'",cn)){
+     if(Convert.ToInt32(exists.ExecuteScalar())>0){
+      using(var cmd=new SQLiteCommand("SELECT limit_amount,period FROM customer_fiado_limits WHERE customer_name=@client COLLATE NOCASE",cn)){
+       cmd.Parameters.AddWithValue("@client",name);
+       using(var rd=cmd.ExecuteReader())if(rd.Read()){
+        decimal limit=Convert.ToDecimal(rd[0]);string period=Convert.ToString(rd[1]);rd.Close();
+        decimal used=PeriodFiadoUsed(cn,null,name,period);
+        limitText="Limite "+period+": R$ "+limit.ToString("N2")+" | Disponivel R$ "+Math.Max(0,limit-used).ToString("N2");
+       }
+      }
+     }
+    }
+    selected.Text="FIADO | "+name+" | Divida R$ "+total.ToString("N2")+" | Credito R$ "+credit.ToString("N2")+" | "+limitText;
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
    finally{refreshingClientSales=false;UpdatePaymentSelection(true);}
   }
@@ -731,6 +745,97 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+
+  // Limite de novas compras fiadas por periodo (semanal ou mensal), separado do saldo pago antecipadamente.
+  public static void EnsureCreditLimits(string database){
+   using(var cn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=database,FailIfMissing=true}.ToString())){
+    cn.Open();
+    using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_fiado_limits'",cn))
+     if(Convert.ToInt32(check.ExecuteScalar())>0)return;
+    string backup=database+".antes-limites-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+    using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+     dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+     using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
+      if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup do Fiado nao passou na verificacao.");
+    }
+    if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio; operacao bloqueada.");
+    using(var tx=cn.BeginTransaction()){
+     using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_fiado_limits(customer_name TEXT PRIMARY KEY COLLATE NOCASE,limit_amount NUMERIC NOT NULL CHECK(limit_amount>=0),period TEXT NOT NULL CHECK(period IN ('SEMANAL','MENSAL')),changed_at TEXT NOT NULL)",cn,tx))create.ExecuteNonQuery();
+     using(var audit=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_fiado_limit_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,old_limit NUMERIC,old_period TEXT,new_limit NUMERIC NOT NULL,new_period TEXT NOT NULL,changed_at TEXT NOT NULL)",cn,tx))audit.ExecuteNonQuery();
+     tx.Commit();
+    }
+   }
+  }
+  public static decimal PeriodFiadoUsed(SQLiteConnection cn,SQLiteTransaction tx,string name,string period){
+   DateTime date=DateTime.Today;
+   if(period=="SEMANAL")date=date.AddDays(-(((int)date.DayOfWeek+6)%7));
+   else date=new DateTime(date.Year,date.Month,1);
+   string sql="SELECT COALESCE(SUM(CASE WHEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp WHERE sp.sale_id=s.id AND UPPER(COALESCE(sp.payment_method,''))<>'FIADO'),0)>0 THEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp WHERE sp.sale_id=s.id AND UPPER(COALESCE(sp.payment_method,''))<>'FIADO'),0) ELSE 0 END),0) FROM sales s WHERE s.customer_name=@client COLLATE NOCASE AND substr(s.created_at,1,10)>=@start AND (UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%') AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%'";
+   using(var cmd=new SQLiteCommand(sql,cn,tx)){
+    cmd.Parameters.AddWithValue("@client",name.Trim());
+    cmd.Parameters.AddWithValue("@start",date.ToString("yyyy-MM-dd"));
+    return Convert.ToDecimal(cmd.ExecuteScalar());
+   }
+  }
+  public static void EnforceCreditLimit(SQLiteConnection cn,SQLiteTransaction tx,string name,decimal newFiado){
+   if(newFiado<=0)return;
+   using(var cmd=new SQLiteCommand("SELECT limit_amount,period FROM customer_fiado_limits WHERE customer_name=@client COLLATE NOCASE",cn,tx)){
+    cmd.Parameters.AddWithValue("@client",name.Trim());
+    using(var rd=cmd.ExecuteReader()){
+     if(!rd.Read())return; // Clientes antigos sem limite configurado mantem comportamento anterior.
+     decimal limit=Convert.ToDecimal(rd[0]);string period=Convert.ToString(rd[1]);
+     rd.Close();
+     decimal used=PeriodFiadoUsed(cn,tx,name,period);
+     if(used+newFiado>limit+0.005m)
+      throw new Exception("Limite de Fiado "+period.ToLowerInvariant()+" excedido para "+name+". Limite R$ "+limit.ToString("N2")+", usado R$ "+used.ToString("N2")+", nova compra fiada R$ "+newFiado.ToString("N2")+". Venda nao registrada.");
+    }
+   }
+  }
+  void ConfigureClientCreditLimit(){
+   if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente.");return;}
+   try{
+    EnsureCreditLimits(db);
+    decimal existing=0m;string existingPeriod="MENSAL";
+    using(var cn=Open(true))using(var cmd=new SQLiteCommand("SELECT limit_amount,period FROM customer_fiado_limits WHERE customer_name=@client COLLATE NOCASE",cn)){
+     cmd.Parameters.AddWithValue("@client",customer);
+     using(var rd=cmd.ExecuteReader())if(rd.Read()){existing=Convert.ToDecimal(rd[0]);existingPeriod=Convert.ToString(rd[1]);}
+    }
+    using(var dialog=new Form{Text="Limite de Fiado - "+customer,Width=480,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+     var label=new Label{Text="Limite de compras fiadas (R$):",Left=16,Top=18,Width=290,Height=28};
+     var value=new NumericUpDown{Left=16,Top=51,Width=195,DecimalPlaces=2,Maximum=100000000,Value=Math.Max(0,Math.Min(existing,100000000))};
+     var periodLabel=new Label{Text="Renovacao do limite:",Left=235,Top=18,Width=190,Height=28};
+     var period=new ComboBox{Left=235,Top=51,Width=195,DropDownStyle=ComboBoxStyle.DropDownList};
+     period.Items.AddRange(new object[]{"SEMANAL","MENSAL"});period.SelectedItem=existingPeriod;
+     var hint=new Label{Text="Semanal: segunda a domingo. Mensal: do dia 1 ao ultimo dia. Limite 0 bloqueia novas vendas fiadas.",Left=16,Top=97,Width=420,Height=52};
+     var save=new Button{Text="Salvar limite do cliente",Left=16,Top=164,Width=220,Height=36,DialogResult=DialogResult.OK};
+     var cancel=new Button{Text="Cancelar",Left=250,Top=164,Width=140,Height=36,DialogResult=DialogResult.Cancel};
+     dialog.Controls.AddRange(new Control[]{label,value,periodLabel,period,hint,save,cancel});
+     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+     string selectedPeriod=Convert.ToString(period.SelectedItem);
+     decimal selectedLimit=value.Value;
+     if(MessageBox.Show("Confirmar limite "+selectedPeriod+" de R$ "+selectedLimit.ToString("N2")+" para "+customer+"?","Limite do Fiado",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+     using(var cn=Open(false)){
+      string backup=db+".antes-mudar-limite-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+       dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+       using(var integrity=new SQLiteCommand("PRAGMA integrity_check",dest))
+        if(Convert.ToString(integrity.ExecuteScalar())!="ok")throw new Exception("Falha na integridade do backup. Limite nao alterado.");
+      }
+      if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio; limite nao alterado.");
+      using(var tx=cn.BeginTransaction()){
+       using(var audit=new SQLiteCommand("INSERT INTO customer_fiado_limit_audit(customer_name,old_limit,old_period,new_limit,new_period,changed_at) VALUES(@c,@ol,@op,@nl,@np,datetime('now','localtime'))",cn,tx)){
+        audit.Parameters.AddWithValue("@c",customer);audit.Parameters.AddWithValue("@ol",existing);audit.Parameters.AddWithValue("@op",existingPeriod);audit.Parameters.AddWithValue("@nl",selectedLimit);audit.Parameters.AddWithValue("@np",selectedPeriod);audit.ExecuteNonQuery();
+       }
+       using(var update=new SQLiteCommand("INSERT OR REPLACE INTO customer_fiado_limits(customer_name,limit_amount,period,changed_at) VALUES(@c,@l,@p,datetime('now','localtime'))",cn,tx)){
+        update.Parameters.AddWithValue("@c",customer);update.Parameters.AddWithValue("@l",selectedLimit);update.Parameters.AddWithValue("@p",selectedPeriod);update.ExecuteNonQuery();
+       }
+       tx.Commit();
+      }
+     }
+    }
+    LoadClients();SelectClient(customer);
+   }catch(Exception ex){MessageBox.Show("Limite nao salvo: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void PayAll(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
