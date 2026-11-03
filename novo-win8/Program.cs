@@ -203,15 +203,34 @@ namespace ArmazemGratidao {
     using(var web=new WebClient()){
      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
      web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
-     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases/latest"));
+     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=100"));
     }
-    var release=new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string,object>;
-    if(release==null)throw new Exception("Resposta de atualização inválida.");
-    string tag=Convert.ToString(release["tag_name"]);
+    var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
+    if(releases==null)throw new Exception("Resposta do GitHub invalida.");
     const string prefix="amzg-novo-win8-build-";
-    int remoteBuild;
-    if(!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)||!int.TryParse(tag.Substring(prefix.Length),out remoteBuild))throw new Exception("Versão publicada não reconhecida.");
-    if(remoteBuild<=InstalledBuild){status.Text="Versão atualizada (build "+InstalledBuild+").";MessageBox.Show("Você já está na versão mais recente disponível.\\nVersão instalada: build "+InstalledBuild);return;}
+    System.Collections.Generic.Dictionary<string,object> release=null;
+    int remoteBuild=-1;
+    foreach(var obj in releases){
+     var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
+     if(candidate==null || !candidate.ContainsKey("tag_name"))continue;
+     if(candidate.ContainsKey("draft") && Convert.ToBoolean(candidate["draft"]))continue;
+     if(candidate.ContainsKey("prerelease") && Convert.ToBoolean(candidate["prerelease"]))continue;
+     string tag=Convert.ToString(candidate["tag_name"]);
+     int build;
+     if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase) && int.TryParse(tag.Substring(prefix.Length),out build) && build>remoteBuild){
+      remoteBuild=build;release=candidate;
+     }
+    }
+    if(release==null){
+     status.Text="Nenhuma versao Windows compativel publicada.";
+     MessageBox.Show("O GitHub nao possui uma atualizacao publicada para este tipo de Armazem Gratidao.\\nAlteracoes em desenvolvimento ainda nao sao atualizacoes instalaveis.","Verificar atualizacao",MessageBoxButtons.OK,MessageBoxIcon.Information);
+     return;
+    }
+    if(remoteBuild<=InstalledBuild){
+     status.Text="Instalado: build "+InstalledBuild+" | Publicado: build "+remoteBuild;
+     MessageBox.Show("Verificacao concluida.\\nBuild instalada: "+InstalledBuild+"\\nUltima build publicada: "+remoteBuild+"\\n\\nNao existe uma versao mais recente publicada para este aplicativo. Alteracoes ainda em testes no GitHub nao aparecem aqui.","Verificar atualizacao",MessageBoxButtons.OK,MessageBoxIcon.Information);
+     return;
+    }
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
