@@ -16,11 +16,20 @@ namespace ArmazemGratidao {
   readonly Label summary=new Label {Dock=DockStyle.Bottom,Height=48,Font=new Font("Segoe UI",10,FontStyle.Bold),Padding=new Padding(12,10,0,0)};
   public CascosForm(string database){
    db=database;Text="Cascos retornáveis — controle separado de vendas";Width=1050;Height=650;MinimumSize=new Size(760,480);
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=95,Padding=new Padding(10),BackColor=Color.FromArgb(229,242,255)};
+   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=135,Padding=new Padding(10),BackColor=Color.FromArgb(229,242,255)};
    bar.Controls.Add(new Label {Text="Pessoa:",AutoSize=true,Padding=new Padding(0,8,0,0)});bar.Controls.Add(customer);
    bar.Controls.Add(new Label {Text="Qtd.:",AutoSize=true,Padding=new Padding(0,8,0,0)});bar.Controls.Add(quantity);
    var deliver=new Button {Text="Entregar casco (+ R$ 4)",Width=190,Height=35};deliver.Click+=(s,e)=>Deliver();bar.Controls.Add(deliver);
    var returned=new Button {Text="Receber e devolver R$ 4",Width=210,Height=35};returned.Click+=(s,e)=>Return();bar.Controls.Add(returned);
+   var productCode=new TextBox {Width=145};
+   bar.Controls.Add(new Label {Text="Código retornável:",AutoSize=true,Padding=new Padding(0,8,0,0)});
+   bar.Controls.Add(productCode);
+   var linkProduct=new Button {Text="Vincular casco",Width=125,Height=35};
+   linkProduct.Click+=(s,e)=>LinkBottleProduct(productCode.Text);
+   bar.Controls.Add(linkProduct);
+   var unlinkProduct=new Button {Text="Remover vínculo",Width=135,Height=35};
+   unlinkProduct.Click+=(s,e)=>UnlinkBottleProduct(productCode.Text);
+   bar.Controls.Add(unlinkProduct);
    var history=new Button {Text="Histórico de devoluções",Width=175,Height=35};history.Click+=(s,e)=>ShowReturns();bar.Controls.Add(history);
    bar.Controls.Add(new Label {Text="Buscar pessoa:",AutoSize=true,Padding=new Padding(0,8,0,0)});bar.Controls.Add(filter);
    filter.TextChanged+=(s,e)=>RefreshRows();
@@ -44,7 +53,7 @@ namespace ArmazemGratidao {
     bool loans=false,returns=false,linked=false,paid=false;
     using(var check=new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('bottle_loans','bottle_returns')",c))using(var rd=check.ExecuteReader())while(rd.Read()){if(Convert.ToString(rd[0])=="bottle_loans")loans=true;else returns=true;}
     if(loans)using(var info=new SQLiteCommand("PRAGMA table_info(bottle_loans)",c))using(var rd=info.ExecuteReader())while(rd.Read()){if(Convert.ToString(rd["name"])=="sale_id")linked=true;if(Convert.ToString(rd["name"])=="paid_deposit")paid=true;}
-    if(loans&&returns&&linked&&paid)return;
+    if(loans&&returns&&linked&&paid){using(var checkLinks=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='bottle_product_links'",c))if(Convert.ToInt32(checkLinks.ExecuteScalar())>0)return;}
     string path=database+".antes-cascos-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=path}.ToString())){
      dest.Open();c.BackupDatabase(dest,"main","main",-1,null,0);
@@ -55,6 +64,7 @@ namespace ArmazemGratidao {
      using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS bottle_loans(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),unit_deposit NUMERIC NOT NULL,delivered_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS bottle_returns(id INTEGER PRIMARY KEY AUTOINCREMENT,loan_id INTEGER NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),amount NUMERIC NOT NULL,returned_at TEXT NOT NULL,refund_method TEXT NOT NULL,FOREIGN KEY(loan_id) REFERENCES bottle_loans(id));",c,tx))cmd.ExecuteNonQuery();
      if(!linked)using(var cmd=new SQLiteCommand("ALTER TABLE bottle_loans ADD COLUMN sale_id INTEGER",c,tx))cmd.ExecuteNonQuery();
      if(!paid){using(var cmd=new SQLiteCommand("ALTER TABLE bottle_loans ADD COLUMN paid_deposit NUMERIC NOT NULL DEFAULT 0",c,tx))cmd.ExecuteNonQuery();if(loans)using(var cmd=new SQLiteCommand("UPDATE bottle_loans SET paid_deposit=quantity*unit_deposit WHERE sale_id IS NULL",c,tx))cmd.ExecuteNonQuery();}
+     using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS bottle_product_links(product_id INTEGER PRIMARY KEY,bottle_units INTEGER NOT NULL CHECK(bottle_units>0))",c,tx))cmd.ExecuteNonQuery();
      tx.Commit();
     }
    }
@@ -67,6 +77,37 @@ namespace ArmazemGratidao {
   }
   void EnsureSchema(){
    EnsureSaleLink(db);
+  }
+  void LinkBottleProduct(string code){
+   if(string.IsNullOrWhiteSpace(code)){MessageBox.Show("Informe o código de barras ou código interno.");return;}
+   try{
+    using(var cn=Open()){
+     long id=0;string name=null;
+     using(var cmd=new SQLiteCommand("SELECT id,name FROM products WHERE barcode=@code OR internal_code=@code LIMIT 1",cn)){
+      cmd.Parameters.AddWithValue("@code",code.Trim());
+      using(var rd=cmd.ExecuteReader())if(rd.Read()){id=Convert.ToInt64(rd[0]);name=Convert.ToString(rd[1]);}
+     }
+     if(id==0){MessageBox.Show("Produto não encontrado.");return;}
+     if(MessageBox.Show("Vincular 1 casco por unidade de "+name+"?","Configurar retornável",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+    }
+    Backup();
+    using(var cn=Open())using(var cmd=new SQLiteCommand("INSERT OR REPLACE INTO bottle_product_links(product_id,bottle_units) SELECT id,1 FROM products WHERE id=(SELECT id FROM products WHERE barcode=@code OR internal_code=@code LIMIT 1)",cn)){
+     cmd.Parameters.AddWithValue("@code",code.Trim());
+     if(cmd.ExecuteNonQuery()!=1)throw new Exception("O produto não foi vinculado.");
+    }
+    MessageBox.Show("Produto configurado: o PDV reconhecerá automaticamente 1 casco por unidade.");
+   }catch(Exception ex){MessageBox.Show("Vínculo não realizado: "+ex.Message);}
+  }
+  void UnlinkBottleProduct(string code){
+   if(string.IsNullOrWhiteSpace(code))return;
+   if(MessageBox.Show("Remover o vínculo de casco deste produto?","Confirmar",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+   try{
+    Backup();
+    using(var cn=Open())using(var cmd=new SQLiteCommand("DELETE FROM bottle_product_links WHERE product_id IN (SELECT id FROM products WHERE barcode=@code OR internal_code=@code)",cn)){
+     cmd.Parameters.AddWithValue("@code",code.Trim());cmd.ExecuteNonQuery();
+    }
+    MessageBox.Show("Vínculo removido. Os movimentos anteriores permanecem registrados.");
+   }catch(Exception ex){MessageBox.Show("Não foi possível remover o vínculo: "+ex.Message);}
   }
   void Deliver(){
    string name=customer.Text.Trim();int count=(int)quantity.Value;

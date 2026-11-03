@@ -157,7 +157,7 @@ namespace ArmazemGratidao {
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
-   Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
+   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(true);}));
    FormClosed+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   public void OpenPdvFromModule(){
@@ -195,7 +195,7 @@ namespace ArmazemGratidao {
     throw;
    }
   }
-  async Task CheckUpdates(){
+  async Task CheckUpdates(bool automatic=false){
    try{
     status.Text="Consultando versão publicada...";
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
@@ -203,15 +203,25 @@ namespace ArmazemGratidao {
     using(var web=new WebClient()){
      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
      web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
-     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases/latest"));
+     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=50"));
     }
-    var release=new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string,object>;
-    if(release==null)throw new Exception("Resposta de atualização inválida.");
-    string tag=Convert.ToString(release["tag_name"]);
+    var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
+    if(releases==null)throw new Exception("Lista de versões inválida.");
     const string prefix="amzg-novo-win8-build-";
-    int remoteBuild;
-    if(!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)||!int.TryParse(tag.Substring(prefix.Length),out remoteBuild))throw new Exception("Versão publicada não reconhecida.");
-    if(remoteBuild<=InstalledBuild){status.Text="Versão atualizada (build "+InstalledBuild+").";MessageBox.Show("Você já está na versão mais recente disponível.\\nVersão instalada: build "+InstalledBuild);return;}
+    System.Collections.Generic.Dictionary<string,object> release=null;
+    int remoteBuild=-1;
+    foreach(object obj in releases){
+     var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
+     if(candidate==null || !candidate.ContainsKey("tag_name"))continue;
+     if(candidate.ContainsKey("draft") && Convert.ToBoolean(candidate["draft"]))continue;
+     if(candidate.ContainsKey("prerelease") && Convert.ToBoolean(candidate["prerelease"]))continue;
+     string candidateTag=Convert.ToString(candidate["tag_name"]);
+     int build;
+     if(!candidateTag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase) || !int.TryParse(candidateTag.Substring(prefix.Length),out build))continue;
+     if(build>remoteBuild){remoteBuild=build;release=candidate;}
+    }
+    if(release==null){status.Text="Nenhuma atualização Windows 8 publicada.";return;}
+    if(remoteBuild<=InstalledBuild){status.Text="Versão atualizada (build "+InstalledBuild+").";if(!automatic)MessageBox.Show("Você já está na versão mais recente disponível.\\nVersão instalada: build "+InstalledBuild);return;}
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -223,7 +233,7 @@ namespace ArmazemGratidao {
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
-    if(MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
+    if(!automatic && MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
     string dir=Path.Combine(Path.GetTempPath(),"ArmazemGratidaoNovo-Atualizacoes");
     Directory.CreateDirectory(dir);
     string installer=Path.Combine(dir,"Armazem-Gratidao-Novo-build-"+remoteBuild+"-Setup.exe");
@@ -238,7 +248,7 @@ namespace ArmazemGratidao {
     status.Text="Backup confirmado: "+backupPath;
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     Close();
-   }catch(Exception ex){status.Text="Não foi possível atualizar.";MessageBox.Show(ex.Message,"Atualização não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }catch(Exception ex){status.Text="Não foi possível atualizar: "+ex.Message;if(!automatic)MessageBox.Show(ex.Message,"Atualização não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
   }
   void ShowHome(object sender,EventArgs e){
    grid.Visible=false;
