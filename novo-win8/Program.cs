@@ -136,6 +136,7 @@ namespace ArmazemGratidao {
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
+   AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
@@ -177,10 +178,27 @@ namespace ArmazemGratidao {
    }
    OpenModuleWindow(new PdvForm(dbPath));
   }
+  string UpdateBackupDirectory(){
+   string file=Path.Combine(dataDir,"backup-location.txt");
+   string directory=File.Exists(file)?File.ReadAllText(file).Trim():Path.Combine(dataDir,"Backups");
+   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))throw new Exception("A pasta de backup configurada e invalida.");
+   Directory.CreateDirectory(directory);
+   return directory;
+  }
+  void ConfigureUpdateBackupFolder(object sender,EventArgs e){
+   try{
+    using(var dlg=new FolderBrowserDialog{Description="Selecione a pasta onde os backups antes de cada atualizacao serao salvos",SelectedPath=UpdateBackupDirectory()}){
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     Directory.CreateDirectory(dlg.SelectedPath);
+     File.WriteAllText(Path.Combine(dataDir,"backup-location.txt"),dlg.SelectedPath);
+     MessageBox.Show("Pasta de backup configurada: "+dlg.SelectedPath+"\\nAs atualizacoes serao bloqueadas se o backup falhar.","Armazem Gratidao");
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel configurar o backup: "+ex.Message,"Backup",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   string CreateVerifiedPreUpdateBackup(){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
-   string backup=Path.Combine(dataDir,"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   string backup=Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    try{
     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
