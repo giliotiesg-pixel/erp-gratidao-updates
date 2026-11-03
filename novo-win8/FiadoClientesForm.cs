@@ -13,6 +13,7 @@ namespace ArmazemGratidao {
   readonly DataGridView paidSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly Label selected=new Label {Dock=DockStyle.Top,Height=42,Font=new Font("Segoe UI",14,FontStyle.Bold)};
   readonly NumericUpDown amount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=130};
+  readonly NumericUpDown creditDepositAmount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=135};
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   string customer="";
   bool refreshingClientSales=false;
@@ -85,7 +86,17 @@ namespace ArmazemGratidao {
    var statement=new Button {Text="Extrato do cliente / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};statement.Click+=(s,e)=>SendCustomerStatement();bottom.Controls.Add(statement);
    var receipt=new Button {Text="Cupom / WhatsApp",AutoSize=true,Height=36,BackColor=Color.FromArgb(15,119,78),ForeColor=Color.White};receipt.Click+=(s,e)=>SendReceipt();bottom.Controls.Add(receipt);
    var refresh=new Button {Text="Atualizar",AutoSize=true,Height=36};refresh.Click+=(s,e)=>LoadClients();bottom.Controls.Add(refresh);
-   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
+   // A caixa de credito fica sempre visivel ao selecionar o cliente.
+   var creditBar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=87,WrapContents=true,AutoScroll=true,Padding=new Padding(7),BackColor=Color.FromArgb(214,233,250)};
+   creditBar.Controls.Add(new Label{Text="CREDITO DEPOSITADO R$:",AutoSize=true,Padding=new Padding(0,8,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold)});
+   creditBar.Controls.Add(creditDepositAmount);
+   var creditSaveTop=new Button{Text="Guardar credito",Width=140,Height=35,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};
+   creditSaveTop.Click+=(sender,args)=>DepositCustomerCredit();creditBar.Controls.Add(creditSaveTop);
+   var limitTop=new Button{Text="Limite semanal / mensal",Width=180,Height=35,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};
+   limitTop.Click+=(sender,args)=>ConfigureClientCreditLimit();creditBar.Controls.Add(limitTop);
+   var creditExtractTop=new Button{Text="Extrato do credito",Width=150,Height=35};
+   creditExtractTop.Click+=(sender,args)=>ShowCustomerCreditHistory();creditBar.Controls.Add(creditExtractTop);
+   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(creditBar);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
    openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
    paidSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=1;ShowSaleDetails();}};
@@ -722,8 +733,8 @@ namespace ArmazemGratidao {
   }
   void DepositCustomerCredit(){
    if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente cadastrado.");return;}
-   decimal value=amount.Value;
-   if(value<=0){MessageBox.Show("Informe um valor maior que zero no campo Valor R$.");return;}
+   decimal value=creditDepositAmount.Value;
+   if(value<=0){MessageBox.Show("Informe o valor antecipado no campo CREDITO DEPOSITADO R$.");return;}
    string payMethod=Convert.ToString(method.SelectedItem);
    if(MessageBox.Show("Cliente: "+customer+"\\nCredito recebido: R$ "+value.ToString("N2")+"\\nForma: "+payMethod+"\\n\\nEste valor sera guardado para abater compras fiadas futuras. Confirmar?","Credito do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    try{
@@ -743,7 +754,7 @@ namespace ArmazemGratidao {
       tx.Commit();
      }
     }
-    SetPaymentAmount(0);LoadClients();SelectClient(customer);
+    creditDepositAmount.Value=0;LoadClients();SelectClient(customer);
     MessageBox.Show("Credito registrado para "+customer+". O valor sera abatido automaticamente das proximas compras fiadas.","Fiado");
    }catch(Exception ex){MessageBox.Show("Credito nao registrado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
