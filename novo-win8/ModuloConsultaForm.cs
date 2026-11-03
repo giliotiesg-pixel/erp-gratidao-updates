@@ -38,8 +38,11 @@ namespace ArmazemGratidao {
     top.Height=65;
     top.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.White});
     clientSearch.TextChanged+=(s,e)=>LoadClients();top.Controls.Add(clientSearch);
+    var choose=new Button{Text="Escolher cliente",AutoSize=true,Height=34,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    choose.Click+=(sender,args)=>ChooseClient();
+    top.Controls.Add(choose);
     var add=new Button{Text="Cadastrar cliente",AutoSize=true,Height=34};add.Click+=(s,e)=>EditClient(false);top.Controls.Add(add);
-    var edit=new Button{Text="Editar cliente",AutoSize=true,Height=34};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
+    var edit=new Button{Text="Editar cliente selecionado",AutoSize=true,Height=34};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
     var import=new Button{Text="Importar 12.1.6",AutoSize=true,Height=34};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);
     grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditClient(true);};
    }
@@ -532,6 +535,92 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){grid.DataSource=null;status.Text="Erro em Clientes: "+ex.Message;}
   }
+  void ChooseClient(){
+   try{
+    using(var dlg=new Form{Text="Escolher Cliente",Width=750,Height=540,MinimumSize=new Size(550,390),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var title=new Label{Text="Pesquisar cliente por nome, telefone ou CPF/CNPJ",Dock=DockStyle.Top,Height=39,Padding=new Padding(9,8,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     var lookup=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
+     var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+     var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=55,Padding=new Padding(8)};
+     var choose=new Button{Text="Escolher",Width=140,Height=35};
+     var chooseEdit=new Button{Text="Escolher e editar",Width=170,Height=35};
+     var cancel=new Button{Text="Cancelar",Width=110,Height=35,DialogResult=DialogResult.Cancel};
+     bar.Controls.Add(choose);bar.Controls.Add(chooseEdit);bar.Controls.Add(cancel);
+     var data=new DataTable();data.Columns.Add("Cliente");data.Columns.Add("CPF / CNPJ");data.Columns.Add("Telefone");
+     using(var c=StockOpen(true))foreach(var entry in ReadClients(c))
+      if(!string.Equals(entry.Item1,"Consumidor",StringComparison.OrdinalIgnoreCase))
+       data.Rows.Add(entry.Item1,entry.Item3,entry.Item2);
+     var view=new DataView(data);list.DataSource=view;
+     lookup.TextChanged+=(sender,args)=>{
+      string term=lookup.Text.Trim().Replace("'","''").Replace("[","[[]").Replace("%","[%]").Replace("*","[*]");
+      view.RowFilter=term.Length==0?"":"[Cliente] LIKE '%"+term+"%' OR [CPF / CNPJ] LIKE '%"+term+"%' OR [Telefone] LIKE '%"+term+"%'";
+     };
+     Action<bool> pick=doEdit=>{
+      if(list.CurrentRow==null)return;
+      var row=list.CurrentRow.DataBoundItem as DataRowView;
+      if(row==null)return;
+      dlg.Tag=Tuple.Create(Convert.ToString(row["Cliente"]),doEdit);
+      dlg.DialogResult=DialogResult.OK;dlg.Close();
+     };
+     choose.Click+=(sender,args)=>pick(false);
+     chooseEdit.Click+=(sender,args)=>pick(true);
+     list.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)pick(true);};
+     dlg.AcceptButton=choose;dlg.CancelButton=cancel;
+     dlg.Controls.Add(list);dlg.Controls.Add(bar);dlg.Controls.Add(lookup);dlg.Controls.Add(title);
+     dlg.Shown+=(sender,args)=>lookup.Focus();
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     var selected=dlg.Tag as Tuple<string,bool>;
+     if(selected==null)return;
+     clientSearch.Text=selected.Item1;
+     LoadClients();
+     foreach(DataGridViewRow row in grid.Rows){
+      if(row.IsNewRow||!string.Equals(Convert.ToString(row.Cells["Cliente / Razão social"].Value),selected.Item1,StringComparison.OrdinalIgnoreCase))continue;
+      grid.ClearSelection();row.Selected=true;
+      grid.CurrentCell=row.Cells["Cliente / Razão social"];
+      if(selected.Item2)EditClient(true);
+      return;
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Falha ao escolher cliente: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+  string BackupCustomerEdit(SQLiteConnection conn){
+   string parent=Path.GetDirectoryName(db);
+   string config=Path.Combine(parent,"backup-location.txt");
+   string folder=File.Exists(config)?File.ReadAllText(config).Trim():Path.Combine(parent,"Backups");
+   if(string.IsNullOrWhiteSpace(folder)||!Path.IsPathRooted(folder))throw new Exception("Pasta de backup inválida.");
+   Directory.CreateDirectory(folder);
+   string file=Path.Combine(folder,"clientes-antes-edicao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   using(var backup=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=file}.ToString())){
+    backup.Open();conn.BackupDatabase(backup,"main","main",-1,null,0);
+    using(var check=new SQLiteCommand("PRAGMA integrity_check",backup))
+     if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup inválido. Cadastro não alterado.");
+   }
+   if(new FileInfo(file).Length==0)throw new Exception("Backup vazio. Cadastro não alterado.");
+   return file;
+  }
+  // Mantém os saldos associados ao mesmo cliente quando o nome é corrigido.
+  // Executado apenas dentro da transação do cadastro, após backup validado.
+  void RenameCustomerLinks(SQLiteConnection conn,SQLiteTransaction tx,string before,string after){
+   if(string.Equals(before,after,StringComparison.OrdinalIgnoreCase))return;
+   foreach(var link in new[]{
+    Tuple.Create("sales","customer_name"),
+    Tuple.Create("bottle_loans","customer_name"),
+    Tuple.Create("customer_credit_entries","customer_name"),
+    Tuple.Create("customer_fiado_limits","customer_name"),
+    Tuple.Create("customer_fiado_limit_audit","customer_name")
+   }){
+    if(!HasTable(conn,link.Item1)||!Columns(conn,link.Item1).Contains(link.Item2))continue;
+    // Não juntar involuntariamente duas pessoas com nomes parecidos.
+    using(var duplicate=new SQLiteCommand("SELECT COUNT(*) FROM \""+link.Item1+"\" WHERE LOWER(TRIM(\""+link.Item2+"\"))=LOWER(TRIM(@new))",conn,tx)){
+     duplicate.Parameters.AddWithValue("@new",after);
+     if(Convert.ToInt64(duplicate.ExecuteScalar())>0)throw new Exception("Já existem registros de outra pessoa com o novo nome no módulo "+link.Item1+". A correção foi cancelada para proteger os saldos.");
+    }
+    using(var update=new SQLiteCommand("UPDATE \""+link.Item1+"\" SET \""+link.Item2+"\"=@new WHERE LOWER(TRIM(\""+link.Item2+"\"))=LOWER(TRIM(@old))",conn,tx)){
+     update.Parameters.AddWithValue("@new",after);update.Parameters.AddWithValue("@old",before);
+     update.ExecuteNonQuery();
+    }
+   }
+  }
   void EditClient(bool edit){
    long id=0;string oldName="",oldPhone="",oldDoc="";
    if(edit){
@@ -542,7 +631,7 @@ namespace ArmazemGratidao {
     object value=grid.CurrentRow.Cells["ID interno"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
    }
    using(var form=new Form{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
-    var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=5,Padding=new Padding(18)};
+    var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(18)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var name=new TextBox{Text=oldName,MaxLength=180,Dock=DockStyle.Top};
     var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=190};
@@ -551,7 +640,10 @@ namespace ArmazemGratidao {
     var phone=new TextBox{Text=oldPhone,MaxLength=40,Width=230};
     Control[] fields={name,type,document,phone};string[] labels={"Nome / Razão social","Tipo de cliente","CPF ou CNPJ","Telefone"};
     for(int i=0;i<fields.Length;i++){panel.RowStyles.Add(new RowStyle(SizeType.Absolute,54));panel.Controls.Add(new Label{Text=labels[i],AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},0,i);panel.Controls.Add(fields[i],1,i);}
-    var save=new Button{Text="Salvar cadastro",Width=190,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var tip=new Label{Text=edit?"Altere os dados e confirme para salvar.":"Preencha os dados do novo cliente.",AutoSize=true,ForeColor=Color.FromArgb(21,75,156)};
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.Controls.Add(tip,1,4);
+    var save=new Button{Text=edit?"Salvar alterações":"Salvar cadastro",Width=190,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var cancel=new Button{Text="Cancelar",Width=130,Height=38,DialogResult=DialogResult.Cancel};
     save.Click+=(s,e)=>{
      string newName=name.Text.Trim(),doc=OnlyDigits(document.Text);
      if(newName.Length<2){MessageBox.Show("Informe nome ou razão social.");return;}
@@ -559,7 +651,7 @@ namespace ArmazemGratidao {
      try{
       string backup;
       using(var conn=StockOpen(false)){
-       backup=BackupStock(conn);
+       backup=BackupCustomerEdit(conn);
        using(var tx=conn.BeginTransaction()){
         PrepareCustomerTable(conn,tx);
         long currentId=id;string beforeName="",beforePhone="",beforeDoc="";
@@ -578,6 +670,11 @@ namespace ArmazemGratidao {
          check.Parameters.AddWithValue("@id",currentId);check.Parameters.AddWithValue("@name",newName);check.Parameters.AddWithValue("@document",doc);
          if(Convert.ToInt32(check.ExecuteScalar())>0)throw new Exception("Já existe um cliente com esse nome ou CPF/CNPJ.");
         }
+        if(edit&&!string.Equals(oldName,newName,StringComparison.OrdinalIgnoreCase)){
+         // Confirma especificamente a alteração de nome antes de migrar as referências.
+         if(MessageBox.Show("O nome do cliente foi alterado. Vendas, Fiado, crédito e cascos com o nome antigo precisam continuar vinculados ao mesmo cliente. Confirmar a correção dessas referências?","Corrigir nome do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)throw new Exception("Alteração de nome cancelada.");
+         RenameCustomerLinks(conn,tx,oldName,newName);
+        }
         if(currentId>0)Execute(conn,tx,"UPDATE customers SET name=@name,phone=@phone,document=@doc WHERE id=@id",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc),P("@id",currentId));
         else{
          Execute(conn,tx,"INSERT INTO customers(name,phone,document) VALUES(@name,@phone,@doc)",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc));
@@ -591,7 +688,9 @@ namespace ArmazemGratidao {
       form.DialogResult=DialogResult.OK;form.Close();LoadClients();MessageBox.Show("Cadastro salvo e auditado. Backup: "+backup,"Clientes");
      }catch(Exception ex){MessageBox.Show("Não foi possível salvar: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     };
-    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,50));panel.Controls.Add(save,1,4);form.Controls.Add(panel);form.ShowDialog(this);
+    var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,Height=45};actions.Controls.Add(save);actions.Controls.Add(cancel);
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,55));panel.Controls.Add(actions,1,5);
+    form.Controls.Add(panel);form.CancelButton=cancel;form.ShowDialog(this);
    }
   }
   void ImportClients(){
