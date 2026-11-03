@@ -38,9 +38,9 @@ namespace ArmazemGratidao {
     top.Height=65;
     top.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.White});
     clientSearch.TextChanged+=(s,e)=>LoadClients();top.Controls.Add(clientSearch);
-    var choose=new Button{Text="Escolher cliente",AutoSize=true,Height=34,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
-    choose.Click+=(sender,args)=>ChooseClient();
-    top.Controls.Add(choose);
+    var removeClient=new Button{Text="Excluir Cliente",AutoSize=true,Height=34,BackColor=Color.FromArgb(176,44,60),ForeColor=Color.White};
+    removeClient.Click+=(sender,args)=>DeleteClient();
+    top.Controls.Add(removeClient);
     var add=new Button{Text="Cadastrar cliente",AutoSize=true,Height=34};add.Click+=(s,e)=>EditClient(false);top.Controls.Add(add);
     var edit=new Button{Text="Editar cliente selecionado",AutoSize=true,Height=34};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
     var import=new Button{Text="Importar 12.1.6",AutoSize=true,Height=34};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);
@@ -514,6 +514,10 @@ namespace ArmazemGratidao {
    try{
     using(var conn=StockOpen(true)){
      var clients=ReadClients(conn);
+     var hidden=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+     if(HasTable(conn,"deleted_customer_names"))
+      using(var hide=new SQLiteCommand("SELECT customer_name FROM deleted_customer_names",conn))
+      using(var rd=hide.ExecuteReader())while(rd.Read())hidden.Add(Convert.ToString(rd[0]).Trim());
      var dt=new DataTable();dt.Columns.Add("Código",typeof(int));dt.Columns.Add("ID interno",typeof(long));dt.Columns.Add("Cliente / Razão social");dt.Columns.Add("CPF / CNPJ");dt.Columns.Add("Telefone");dt.Columns.Add("Origem");
      var ids=new Dictionary<string,long>(StringComparer.OrdinalIgnoreCase);
      if(HasTable(conn,"customers")&&Columns(conn,"customers").Contains("id")){
@@ -523,6 +527,7 @@ namespace ArmazemGratidao {
      string term=clientSearch.Text.Trim(),number=OnlyDigits(term);
      int alphabeticalNumber=0;
      foreach(var client in clients){
+      if(hidden.Contains(client.Item1.Trim()))continue;
       alphabeticalNumber++;
       if(term.Length>0&&client.Item1.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&client.Item2.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&(number.Length==0||OnlyDigits(client.Item3).IndexOf(number,StringComparison.Ordinal)<0))continue;
       long id;bool registered=ids.TryGetValue(client.Item1,out id);
@@ -621,6 +626,43 @@ namespace ArmazemGratidao {
     }
    }
   }
+  // Excluir o cadastro da lista sem excluir vendas, fiado, credito ou cascos.
+  // Nomes vindos de vendas antigas ficam ocultos para nao reaparecer apos a exclusao.
+  void DeleteClient(){
+   if(grid.CurrentRow==null||grid.CurrentRow.IsNewRow){MessageBox.Show("Selecione o cliente que deseja excluir.","Clientes");return;}
+   string name=Convert.ToString(grid.CurrentRow.Cells["Cliente / Razão social"].Value).Trim();
+   if(string.IsNullOrWhiteSpace(name)){MessageBox.Show("Cliente invalido.");return;}
+   object rawId=grid.CurrentRow.Cells["ID interno"].Value;
+   long id=rawId==null||rawId==DBNull.Value?0:Convert.ToInt64(rawId);
+   if(MessageBox.Show("Excluir o cliente \""+name+"\" do cadastro?"+
+      "\n\nEle deixara de aparecer na lista Clientes. Vendas, Fiado, credito e cascos ja registrados serao preservados.",
+      "Excluir Cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+   try{
+    using(var conn=StockOpen(false)){
+     string backup=BackupCustomerEdit(conn);
+     using(var tx=conn.BeginTransaction()){
+      using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS deleted_customer_names(customer_name TEXT PRIMARY KEY COLLATE NOCASE,deleted_at TEXT NOT NULL,customer_id INTEGER)",conn,tx))
+       create.ExecuteNonQuery();
+      using(var hide=new SQLiteCommand("INSERT OR REPLACE INTO deleted_customer_names(customer_name,deleted_at,customer_id) VALUES(@name,datetime('now','localtime'),@id)",conn,tx)){
+       hide.Parameters.AddWithValue("@name",name);
+       hide.Parameters.AddWithValue("@id",id>0?(object)id:DBNull.Value);
+       if(hide.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel retirar o cliente da lista.");
+      }
+      if(id>0&&HasTable(conn,"customers")){
+       using(var remove=new SQLiteCommand("DELETE FROM customers WHERE id=@id AND LOWER(TRIM(name))=LOWER(TRIM(@name))",conn,tx)){
+        remove.Parameters.AddWithValue("@id",id);
+        remove.Parameters.AddWithValue("@name",name);
+        if(remove.ExecuteNonQuery()!=1)throw new Exception("Cadastro foi alterado; atualize a lista antes de excluir.");
+       }
+      }
+      tx.Commit();
+     }
+     clientSearch.Clear();
+     LoadClients();
+     MessageBox.Show("Cliente excluido da lista. Os historicos financeiros foram preservados.\nBackup: "+backup,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+   }catch(Exception ex){MessageBox.Show("Cliente nao excluido: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   void EditClient(bool edit){
    long id=0;string oldName="",oldPhone="",oldDoc="";
    if(edit){
@@ -675,6 +717,12 @@ namespace ArmazemGratidao {
          if(MessageBox.Show("O nome do cliente foi alterado. Vendas, Fiado, crédito e cascos com o nome antigo precisam continuar vinculados ao mesmo cliente. Confirmar a correção dessas referências?","Corrigir nome do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)throw new Exception("Alteração de nome cancelada.");
          RenameCustomerLinks(conn,tx,oldName,newName);
         }
+        // Cadastro novo de pessoa anteriormente excluida volta a ficar visivel.
+        if(HasTable(conn,"deleted_customer_names"))
+         using(var restore=new SQLiteCommand("DELETE FROM deleted_customer_names WHERE customer_name=@name COLLATE NOCASE",conn,tx)){
+          restore.Parameters.AddWithValue("@name",newName);
+          restore.ExecuteNonQuery();
+         }
         if(currentId>0)Execute(conn,tx,"UPDATE customers SET name=@name,phone=@phone,document=@doc WHERE id=@id",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc),P("@id",currentId));
         else{
          Execute(conn,tx,"INSERT INTO customers(name,phone,document) VALUES(@name,@phone,@doc)",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc));
