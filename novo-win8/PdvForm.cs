@@ -403,7 +403,7 @@ namespace ArmazemGratidao {
     var name=new Label{Text=product.Name,Left=20,Top=19,Width=475,Height=54,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
     bool byWeight=Convert.ToString(saleUnit.SelectedItem)=="KG";
     var caption=new Label{Text=byWeight?"Quantidade (kg):":"Quantidade (unidades):",Left=20,Top=92,Width=210,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-    var amount=new NumericUpDown{Left=236,Top=86,Width=240,Height=37,DecimalPlaces=byWeight?3:0,Increment=byWeight?0.001m:1m,Minimum=byWeight?0.001m:1m,Maximum=999999m,Value=Math.Max(byWeight?0.001m:1m,Math.Min(999999m,defaultQuantity)),Font=new Font("Segoe UI",14,FontStyle.Bold)};
+    var amount=new NumericUpDown{Left=236,Top=86,Width=240,Height=37,DecimalPlaces=byWeight?3:0,Increment=byWeight?0.001m:1m,Minimum=byWeight?0.001m:1m,Maximum=999999m,Value=Math.Max(byWeight?0.001m:1m,Math.Min(999999m,byWeight?defaultQuantity:Math.Ceiling(defaultQuantity))),Font=new Font("Segoe UI",14,FontStyle.Bold)};
     var add=new Button{Text="Adicionar ao carrinho",Left=20,Top=159,Width=245,Height=44,DialogResult=DialogResult.OK,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     var cancel=new Button{Text="Cancelar",Left=283,Top=159,Width=193,Height=44,DialogResult=DialogResult.Cancel};
     dialog.Controls.AddRange(new Control[]{name,caption,amount,add,cancel});
