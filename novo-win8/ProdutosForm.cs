@@ -857,6 +857,140 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Estoque nao alterado: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+
+  // Calculadora independente dos valores do cadastro: nada e salvo ao calcular.
+  // Somente os botoes Aplicar transferem explicitamente o resultado ao campo escolhido.
+  Control ProductSideCalculator(NumericUpDown cost,NumericUpDown price){
+   var side=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(243,248,255),Padding=new Padding(12),AutoScroll=true};
+   var content=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,ColumnCount=4,RowCount=11};
+   for(int i=0;i<4;i++)content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+   for(int i=0;i<11;i++)content.RowStyles.Add(new RowStyle(SizeType.Absolute,i==0?38:i==1?64:i==10?52:49));
+   var title=new Label{Text="CALCULADORA",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,
+    Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
+   content.Controls.Add(title,0,0);content.SetColumnSpan(title,4);
+   var display=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Text="0",TextAlign=HorizontalAlignment.Right,
+    Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(20,50,95)};
+   content.Controls.Add(display,0,1);content.SetColumnSpan(display,4);
+   decimal memory=0,stored=0;
+   string operation="";
+   bool newEntry=true,afterEquals=false;
+   var culture=System.Globalization.CultureInfo.CurrentCulture;
+   Func<decimal,string> format=x=>x.ToString("0.########",culture);
+   Func<decimal> current=()=>{
+    decimal number;
+    return decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,culture,out number)?number:0m;
+   };
+   Action<decimal> show=x=>{display.Text=format(x);};
+   Action<string> error=message=>MessageBox.Show(message,"Calculadora do produto",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+   Func<decimal,decimal,string,decimal> compute=(left,right,op)=>{
+    switch(op){
+     case "+":return left+right;
+     case "-":return left-right;
+     case "×":return left*right;
+     case "÷":if(right==0)throw new DivideByZeroException("Não é possível dividir por zero.");return left/right;
+     default:return right;
+    }
+   };
+   Action<string> press=key=>{
+    try{
+     if(key.Length==1&&key[0]>='0'&&key[0]<='9'){
+      if(newEntry||afterEquals){display.Text=key;newEntry=false;afterEquals=false;}
+      else if(display.Text=="0")display.Text=key;
+      else display.Text+=key;
+      return;
+     }
+     if(key==","){
+      if(newEntry||afterEquals){display.Text="0";newEntry=false;afterEquals=false;}
+      if(!display.Text.Contains(culture.NumberFormat.NumberDecimalSeparator))
+       display.Text+=culture.NumberFormat.NumberDecimalSeparator;
+      return;
+     }
+     if(key=="C"){stored=0;operation="";display.Text="0";newEntry=true;afterEquals=false;return;}
+     if(key=="CE"){display.Text="0";newEntry=true;return;}
+     if(key=="⌫"){
+      if(newEntry||display.Text.Length<=1){display.Text="0";newEntry=true;return;}
+      display.Text=display.Text.Substring(0,display.Text.Length-1);
+      if(display.Text=="-"||display.Text=="")display.Text="0";
+      return;
+     }
+     if(key=="±"){show(-current());newEntry=false;return;}
+     if(key=="%"){show(current()/100m);newEntry=false;return;}
+     if(key=="x²"){decimal x=current();show(x*x);newEntry=false;return;}
+     if(key=="√"){
+      decimal x=current();if(x<0){error("A raiz quadrada de número negativo não está disponível.");return;}
+      show((decimal)Math.Sqrt((double)x));newEntry=false;return;
+     }
+     if(key=="1/x"){
+      decimal x=current();if(x==0){error("Não é possível dividir por zero.");return;}
+      show(1m/x);newEntry=false;return;
+     }
+     if(key=="MC"){memory=0;return;}
+     if(key=="MR"){show(memory);newEntry=false;afterEquals=false;return;}
+     if(key=="M+"){memory+=current();return;}
+     if(key=="M-"){memory-=current();return;}
+     if(key=="="){
+      if(operation!=""){
+       decimal value=compute(stored,current(),operation);
+       show(value);stored=value;operation="";
+      }
+      newEntry=true;afterEquals=true;return;
+     }
+     if(key=="+"||key=="-"||key=="×"||key=="÷"){
+      if(operation!=""&&!newEntry){stored=compute(stored,current(),operation);show(stored);}
+      else stored=current();
+      operation=key;newEntry=true;afterEquals=false;return;
+     }
+    }catch(OverflowException){error("O resultado é grande demais para a calculadora.");}
+     catch(DivideByZeroException ex){error(ex.Message);}
+    };
+   string[,] buttons={
+    {"MC","MR","M+","M-"},
+    {"C","CE","⌫","÷"},
+    {"7","8","9","×"},
+    {"4","5","6","-"},
+    {"1","2","3","+"},
+    {"±","0",",","="},
+    {"%","√","x²","1/x"}
+   };
+   for(int row=0;row<7;row++)
+    for(int col=0;col<4;col++){
+     string key=buttons[row,col];
+     var button=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3),Font=new Font("Segoe UI",12,FontStyle.Bold),
+      FlatStyle=FlatStyle.Flat,BackColor=(key=="="?Color.FromArgb(190,38,54):key=="+"||key=="-"||key=="×"||key=="÷"?Color.FromArgb(22,75,160):Color.White),
+      ForeColor=(key=="="||key=="+"||key=="-"||key=="×"||key=="÷")?Color.White:Color.FromArgb(20,57,107)};
+     button.FlatAppearance.BorderSize=0;
+     button.Click+=(sender,args)=>press(key);
+     content.Controls.Add(button,col,row+2);
+    }
+   var label=new Label{Text="O resultado só altera custo ou preço quando você clicar em Aplicar.",Dock=DockStyle.Fill,
+    TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(54,73,102)};
+   content.Controls.Add(label,0,9);content.SetColumnSpan(label,4);
+   var toCost=new Button{Text="Aplicar no Custo",Dock=DockStyle.Fill,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   var toPrice=new Button{Text="Aplicar no Preço",Dock=DockStyle.Fill,BackColor=Color.FromArgb(190,38,54),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   Action<NumericUpDown> apply=field=>{
+    decimal value=current();
+    if(value<field.Minimum||value>field.Maximum){error("Resultado fora do limite permitido para este campo.");return;}
+    field.Value=Math.Round(value,field.DecimalPlaces,MidpointRounding.AwayFromZero);
+    field.Focus();
+   };
+   toCost.Click+=(sender,args)=>apply(cost);
+   toPrice.Click+=(sender,args)=>apply(price);
+   content.Controls.Add(toCost,0,10);content.SetColumnSpan(toCost,2);
+   content.Controls.Add(toPrice,2,10);content.SetColumnSpan(toPrice,2);
+   side.Controls.Add(content);
+   return side;
+  }
+  void AttachProductCalculator(Form form,TableLayoutPanel fields,NumericUpDown cost,NumericUpDown price){
+   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=Color.FromArgb(229,242,255)};
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,62));
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   fields.Dock=DockStyle.Fill;
+   var side=ProductSideCalculator(cost,price);
+   layout.Controls.Add(fields,0,0);
+   layout.Controls.Add(side,1,0);
+   form.Controls.Add(layout);
+  }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
    long id;
@@ -924,7 +1058,7 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Lucro e porcentagem",AutoSize=true},0,5);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,5);panel.Controls.Add(save,1,13);StyleDialog(form,panel);form.Controls.Add(panel);
+       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Lucro e porcentagem",AutoSize=true},0,5);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,5);panel.Controls.Add(save,1,13);StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
@@ -1180,7 +1314,7 @@ namespace ArmazemGratidao {
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
-    panel.Controls.Add(save,1,11);StyleDialog(form,panel);form.Controls.Add(panel);
+    panel.Controls.Add(save,1,11);StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
   }
