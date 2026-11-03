@@ -1030,12 +1030,12 @@ namespace ArmazemGratidao {
   }
   bool ConfirmCashReceived(decimal totalDue){
    using(var dialog=new Form{
-    Text="PDV | Pagamento em dinheiro",Width=530,Height=355,
+    Text=manualEntry?"Lançamento rápido | Dinheiro recebido":"PDV | Pagamento em dinheiro",Width=530,Height=355,
     MinimumSize=new Size(490,325),StartPosition=FormStartPosition.CenterParent,
     FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
     BackColor=Color.FromArgb(229,242,255),KeyPreview=true
    }){
-    var totalLabel=new Label{Text="TOTAL DA VENDA: R$ "+totalDue.ToString("N2"),Left=20,Top=16,Width=475,Height=52,
+    var totalLabel=new Label{Text=(manualEntry?"VENDA ANOTADA | TOTAL: R$ ":"TOTAL DA VENDA: R$ ")+totalDue.ToString("N2"),Left=20,Top=16,Width=475,Height=52,
      Font=new Font("Segoe UI",17,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160)};
     var inputLabel=new Label{Text="Valor recebido em dinheiro (R$):",Left=20,Top=86,Width=460,Height=26,
      Font=new Font("Segoe UI",10,FontStyle.Bold)};
