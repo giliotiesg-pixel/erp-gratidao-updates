@@ -161,7 +161,6 @@ namespace ArmazemGratidao {
      try{
       BackupBeforeProfitChange("antes-devolucao");
       using(var c=Open())using(var tx=c.BeginTransaction()){
-       EnsureReturns(c);
        using(var cmd=new SQLiteCommand("INSERT INTO profit_returns(amount,return_date,note,created_at) VALUES(@v,@d,@n,datetime('now','localtime'))",c,tx)){
         cmd.Parameters.AddWithValue("@v",amount.Value);
         cmd.Parameters.AddWithValue("@d",date.Value.ToString("yyyy-MM-dd"));
@@ -180,7 +179,7 @@ namespace ArmazemGratidao {
    if(returnsGrid.CurrentRow==null)return;
    long id=Convert.ToInt64(returnsGrid.CurrentRow.Cells["id"].Value);
    if(MessageBox.Show("Excluir a devolução selecionada?","Confirmar",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-   try{using(var c=Open())using(var cmd=new SQLiteCommand("DELETE FROM profit_returns WHERE id=@id",c)){cmd.Parameters.AddWithValue("@id",id);cmd.ExecuteNonQuery();}LoadData();}catch(Exception ex){MessageBox.Show(ex.Message);}
+   try{BackupBeforeProfitChange("antes-excluir-devolucao");using(var c=Open())using(var cmd=new SQLiteCommand("DELETE FROM profit_returns WHERE id=@id",c)){cmd.Parameters.AddWithValue("@id",id);cmd.ExecuteNonQuery();}LoadData();}catch(Exception ex){MessageBox.Show("Exclusao nao realizada: "+ex.Message);}
   }
  }
 }
