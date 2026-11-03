@@ -66,6 +66,9 @@ namespace ArmazemGratidao {
    backSmall.FlatAppearance.BorderSize=0;
    backSmall.Click+=(sender,args)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();WindowState=FormWindowState.Normal;};
    switchBar.Controls.Add(backSmall);
+   var fixClientName=new Button{Text="Corrigir nome do cliente",Width=220,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   fixClientName.Click+=(sender,args)=>CorrectWholeClientName();
+   switchBar.Controls.Add(fixClientName);
    tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
    var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=122,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
@@ -317,6 +320,99 @@ namespace ArmazemGratidao {
   DataGridView SelectedSaleGrid(){
    if(saleTabs!=null && saleTabs.SelectedIndex==1)return paidSales;
    return openSales;
+  }
+  // Corrige o apelido ou nome errado do cliente em todas as suas operacoes.
+  // Nunca soma contas de pessoas diferentes: nome de destino existente e bloqueado.
+  void CorrectWholeClientName(){
+   string oldName=(customer??"").Trim();
+   if(oldName.Length<2||oldName=="SEM CLIENTE"){MessageBox.Show("Selecione o cliente do Fiado primeiro.");return;}
+   using(var dlg=new Form{Text="Fiado | Corrigir nome do cliente",Width=550,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var caption=new Label{Text="Nome cadastrado atualmente:",Left=16,Top=15,Width=470,Height=27,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var current=new Label{Text=oldName,Left=16,Top=44,Width=485,Height=34,ForeColor=Color.FromArgb(22,75,160),Font=new Font("Segoe UI",14,FontStyle.Bold)};
+    var newLabel=new Label{Text="Nome correto do cliente:",Left=16,Top=96,Width=470,Height=25};
+    var input=new TextBox{Text=oldName,Left=16,Top=122,Width=490,MaxLength=180,Font=new Font("Segoe UI",12)};
+    var help=new Label{Text="A correção mantém todas as vendas, pagamentos, crédito depositado, limite de Fiado e cascos vinculados a este nome.",Left=16,Top=164,Width=485,Height=45};
+    var confirm=new Button{Text="Confirmar correção",Left=16,Top=222,Width=245,Height=36,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    var cancel=new Button{Text="Cancelar",Left=280,Top=222,Width=225,Height=36,DialogResult=DialogResult.Cancel};
+    dlg.Controls.AddRange(new Control[]{caption,current,newLabel,input,help,confirm,cancel});
+    dlg.CancelButton=cancel;
+    confirm.Click+=(sender,args)=>{
+     string updated=input.Text.Trim();
+     if(updated.Length<2){MessageBox.Show("Informe o nome correto.");return;}
+     if(string.Equals(oldName,updated,StringComparison.Ordinal)){dlg.DialogResult=DialogResult.Cancel;dlg.Close();return;}
+     try{
+      using(var cn=Open(true)){
+       // Nome ja existente pode pertencer a outro cliente; nao mesclar contas sem auditoria.
+       foreach(var target in new[]{new[]{"customers","name"},new[]{"sales","customer_name"},new[]{"bottle_loans","customer_name"},
+          new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"}}){
+        string table=target[0],col=target[1];
+        using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@table",cn)){
+         exists.Parameters.AddWithValue("@table",table);
+         if(Convert.ToInt32(exists.ExecuteScalar())==0)continue;
+        }
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM \""+table+"\" WHERE LOWER(TRIM(\""+col+"\"))=LOWER(TRIM(@new)) AND LOWER(TRIM(\""+col+"\"))<>LOWER(TRIM(@old))",cn)){
+         check.Parameters.AddWithValue("@new",updated);check.Parameters.AddWithValue("@old",oldName);
+         if(Convert.ToInt64(check.ExecuteScalar())>0)throw new Exception("O nome \""+updated+"\" ja possui registros. Para evitar misturar dividas de duas pessoas, use um nome diferente ou confira os cadastros primeiro.");
+        }
+       }
+      }
+      if(MessageBox.Show("Alterar o nome em TODOS os registros deste cliente?\\n\\nDe: "+oldName+"\\nPara: "+updated+
+       "\\n\\nVendas, pagamentos, fiado, carteira, limite e cascos permanecerao com os valores atuais. Um backup sera feito antes.",
+       "Confirmar correção de nome",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+      string backup=CreditBackupPath(db,"antes-corrigir-nome-fiado-");
+      using(var cn=Open(false)){
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+        copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
+        using(var check=new SQLiteCommand("PRAGMA integrity_check",copy))
+         if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup nao passou na verificacao. Nada foi alterado.");
+       }
+       if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio. Nenhuma alteracao feita.");
+       using(var tx=cn.BeginTransaction()){
+        using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_name_corrections(id INTEGER PRIMARY KEY AUTOINCREMENT,old_name TEXT NOT NULL,new_name TEXT NOT NULL,changed_at TEXT NOT NULL,details TEXT NOT NULL)",cn,tx))create.ExecuteNonQuery();
+        int changed=0;
+        foreach(var target in new[]{new[]{"customers","name"},new[]{"sales","customer_name"},new[]{"bottle_loans","customer_name"},
+           new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"},new[]{"customer_fiado_limit_audit","customer_name"}}){
+         string table=target[0],col=target[1];
+         using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@table",cn,tx)){
+          exists.Parameters.AddWithValue("@table",table);
+          if(Convert.ToInt32(exists.ExecuteScalar())==0)continue;
+         }
+         // Revalidar dentro da transacao para prevenir a fusao de clientes.
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM \""+table+"\" WHERE LOWER(TRIM(\""+col+"\"))=LOWER(TRIM(@new)) AND LOWER(TRIM(\""+col+"\"))<>LOWER(TRIM(@old))",cn,tx)){
+          check.Parameters.AddWithValue("@new",updated);check.Parameters.AddWithValue("@old",oldName);
+          if(Convert.ToInt64(check.ExecuteScalar())>0)throw new Exception("Ja existem movimentacoes com o novo nome. Correcao cancelada.");
+         }
+         using(var update=new SQLiteCommand("UPDATE \""+table+"\" SET \""+col+"\"=@new WHERE LOWER(TRIM(\""+col+"\"))=LOWER(TRIM(@old))",cn,tx)){
+          update.Parameters.AddWithValue("@new",updated);update.Parameters.AddWithValue("@old",oldName);
+          changed+=update.ExecuteNonQuery();
+         }
+        }
+        if(changed==0)throw new Exception("Nenhum registro do cliente encontrado.");
+        using(var log=new SQLiteCommand("INSERT INTO customer_name_corrections(old_name,new_name,changed_at,details) VALUES(@old,@new,datetime('now','localtime'),@description)",cn,tx)){
+         log.Parameters.AddWithValue("@old",oldName);log.Parameters.AddWithValue("@new",updated);
+         log.Parameters.AddWithValue("@description","Correcao completa no modulo Fiado; "+changed+" registros atualizados");
+         if(log.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar auditoria da correcao.");
+        }
+        if(changed>0){
+         // Evita que um nome anteriormente excluido seja ocultado por engano.
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='deleted_customer_names'",cn,tx)){
+          if(Convert.ToInt32(check.ExecuteScalar())>0)
+           using(var visible=new SQLiteCommand("DELETE FROM deleted_customer_names WHERE customer_name=@new COLLATE NOCASE",cn,tx)){
+            visible.Parameters.AddWithValue("@new",updated);visible.ExecuteNonQuery();
+           }
+         }
+        }
+        tx.Commit();
+       }
+      }
+      customer=updated;
+      dlg.DialogResult=DialogResult.OK;dlg.Close();
+      LoadClients();SelectClient(updated);
+      MessageBox.Show("Nome corrigido para "+updated+". As vendas e os saldos foram preservados.\\nBackup: "+backup,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Information);
+     }catch(Exception ex){MessageBox.Show("Nome nao alterado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
+    dlg.ShowDialog(this);
+   }
   }
   void CorrectCustomer(){
    var view=SelectedSaleGrid();
