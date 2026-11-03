@@ -1097,6 +1097,8 @@ namespace ArmazemGratidao {
    finishingSale=true;
    try {
     if(bottleCount>0)CascosForm.EnsureSaleLink(db);
+    // Prepara a carteira antes da transacao; bloqueia a venda se o backup inicial falhar.
+    if(method=="FIADO" || splitFiado)FiadoClientesForm.EnsureCustomerCredit(db);
     using(var c=Open()){
      ValidateSaleSchema(c,recordedMethod);
      if(splitFiado)RequireColumns(c,"sale_payments","sale_id","payment_method","amount");
@@ -1122,6 +1124,10 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",recordedMethod);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
      if(bottleCount>0)CascosForm.RecordFromSale(c,tx,saleId,customerName,bottleCount,bottlePaid,manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+     if(method=="FIADO" || splitFiado){
+      decimal fiadoValue=method=="FIADO"?sum:split.Where(part=>part.Key=="FIADO").Sum(part=>part.Value);
+      FiadoClientesForm.ApplyCustomerCredit(c,tx,saleId,customerName,fiadoValue);
+     }
      if(discount>0){
       using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discounts(sale_id INTEGER PRIMARY KEY,gross_before NUMERIC NOT NULL,discount_amount NUMERIC NOT NULL,discount_type TEXT NOT NULL,discount_value NUMERIC NOT NULL)",c,tx))create.ExecuteNonQuery();
       using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
