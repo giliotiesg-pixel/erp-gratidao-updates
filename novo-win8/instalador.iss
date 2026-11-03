@@ -31,8 +31,9 @@ Filename: "{app}\ArmazemGratidaoNovo.exe"; Description: "Abrir Armazem Gratidao"
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  DataDir, DbFile, PsExe, Args: string;
+  DataDir, DbFile, PsExe, Args, BackupDir, BackupConfig: string;
   Code: Integer;
+  BackupLines: TArrayOfString;
 begin
   Result := '';
   { O banco permanece na pasta de dados, nunca no diretorio do aplicativo. }
@@ -40,6 +41,27 @@ begin
   DbFile := DataDir + '\armazem-gratidao.db';
   if not FileExists(DbFile) then
     Exit;
+
+  { Usar a mesma pasta de backup definida no menu do Armazem. }
+  BackupDir := DataDir + '\Backups';
+  BackupConfig := DataDir + '\backup-location.txt';
+  if FileExists(BackupConfig) then
+  begin
+    if not LoadStringsFromFile(BackupConfig, BackupLines) then
+    begin
+      Result := 'Atualizacao cancelada: nao foi possivel ler a pasta de backup configurada.';
+      Exit;
+    end;
+    if GetArrayLength(BackupLines) > 0 then
+      BackupDir := Trim(BackupLines[0])
+    else
+      BackupDir := '';
+    if BackupDir = '' then
+    begin
+      Result := 'Atualizacao cancelada: pasta de backup configurada esta vazia.';
+      Exit;
+    end;
+  end;
 
   try
     ExtractTemporaryFile('backup-antes-instalacao.ps1');
@@ -54,11 +76,11 @@ begin
   Args := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' +
     AddQuotes(ExpandConstant('{tmp}\backup-antes-instalacao.ps1')) +
     ' -Database ' + AddQuotes(DbFile) +
-    ' -TargetDirectory ' + AddQuotes(DataDir);
+    ' -TargetDirectory ' + AddQuotes(BackupDir);
   if (not Exec(PsExe, Args, '', SW_HIDE, ewWaitUntilTerminated, Code)) or (Code <> 0) then
   begin
     Result := 'Atualizacao cancelada: falhou o backup automatico do banco de dados.' + #13#10 +
-      'Verifique o espaco em disco e as permissoes da pasta: ' + DataDir + #13#10 +
+      'Verifique o espaco em disco e as permissoes da pasta: ' + BackupDir + #13#10 +
       'O instalador nao continuara sem uma copia de seguranca valida.';
     Exit;
   end;

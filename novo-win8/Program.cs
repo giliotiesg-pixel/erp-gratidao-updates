@@ -110,6 +110,9 @@ namespace ArmazemGratidao {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   MobileStockServer mobileStock;
+  readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
+  bool checkingUpdates=false;
+  int lastPromptedBuild=-1;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=255,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(11),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
@@ -133,6 +136,7 @@ namespace ArmazemGratidao {
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
+   AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
@@ -157,8 +161,10 @@ namespace ArmazemGratidao {
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
-   Shown+=(s,e)=>BeginInvoke((Action)(()=>AutoRecoverSales()));
-   FormClosed+=(s,e)=>{if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
+   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(false);}));
+   updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
+   updateTimer.Start();
+   FormClosed+=(s,e)=>{updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   public void OpenPdvFromModule(){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.","PDV");return;}
@@ -172,10 +178,27 @@ namespace ArmazemGratidao {
    }
    OpenModuleWindow(new PdvForm(dbPath));
   }
+  string UpdateBackupDirectory(){
+   string file=Path.Combine(dataDir,"backup-location.txt");
+   string directory=File.Exists(file)?File.ReadAllText(file).Trim():Path.Combine(dataDir,"Backups");
+   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))throw new Exception("A pasta de backup configurada e invalida.");
+   Directory.CreateDirectory(directory);
+   return directory;
+  }
+  void ConfigureUpdateBackupFolder(object sender,EventArgs e){
+   try{
+    using(var dlg=new FolderBrowserDialog{Description="Selecione a pasta onde os backups antes de cada atualizacao serao salvos",SelectedPath=UpdateBackupDirectory()}){
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     Directory.CreateDirectory(dlg.SelectedPath);
+     File.WriteAllText(Path.Combine(dataDir,"backup-location.txt"),dlg.SelectedPath);
+     MessageBox.Show("Pasta de backup configurada: "+dlg.SelectedPath+"\\nAs atualizacoes serao bloqueadas se o backup falhar.","Armazem Gratidao");
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel configurar o backup: "+ex.Message,"Backup",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   string CreateVerifiedPreUpdateBackup(){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
-   string backup=Path.Combine(dataDir,"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   string backup=Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    try{
     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
@@ -195,7 +218,9 @@ namespace ArmazemGratidao {
     throw;
    }
   }
-  async Task CheckUpdates(){
+  async Task CheckUpdates(bool manual=true){
+   if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
+   checkingUpdates=true;
    try{
     status.Text="Consultando versão publicada...";
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
@@ -203,15 +228,37 @@ namespace ArmazemGratidao {
     using(var web=new WebClient()){
      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
      web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
-     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases/latest"));
+     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=100"));
     }
-    var release=new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string,object>;
-    if(release==null)throw new Exception("Resposta de atualização inválida.");
-    string tag=Convert.ToString(release["tag_name"]);
+    var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
+    if(releases==null)throw new Exception("Lista de versoes invalida.");
     const string prefix="amzg-novo-win8-build-";
-    int remoteBuild;
-    if(!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)||!int.TryParse(tag.Substring(prefix.Length),out remoteBuild))throw new Exception("Versão publicada não reconhecida.");
-    if(remoteBuild<=InstalledBuild){status.Text="Versão atualizada (build "+InstalledBuild+").";MessageBox.Show("Você já está na versão mais recente disponível.\\nVersão instalada: build "+InstalledBuild);return;}
+    System.Collections.Generic.Dictionary<string,object> release=null;
+    int remoteBuild=-1;
+    foreach(object obj in releases){
+     var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
+     if(candidate==null||!candidate.ContainsKey("tag_name"))continue;
+     if(candidate.ContainsKey("draft")&&Convert.ToBoolean(candidate["draft"]))continue;
+     if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
+     string tag=Convert.ToString(candidate["tag_name"]);
+     int build;
+     if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
+      remoteBuild=build;release=candidate;
+     }
+    }
+    if(release==null){
+     status.Text="Nenhuma versao Windows8 publicada.";
+     if(manual)MessageBox.Show("Nao existe uma atualizacao Windows8 publicada.","Verificar atualizacao");
+     return;
+    }
+    if(remoteBuild<=InstalledBuild){
+     status.Text="Versao atualizada: build "+InstalledBuild+".";
+     if(manual)MessageBox.Show("Versao instalada: "+InstalledBuild+"\\nUltima build publicada: "+remoteBuild+"\\nNenhuma atualizacao nova disponivel.","Verificar atualizacao");
+     return;
+    }
+    status.Text="Nova versao publicada: build "+remoteBuild+".";
+    if(!manual&&lastPromptedBuild==remoteBuild)return;
+    lastPromptedBuild=remoteBuild;
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -224,6 +271,11 @@ namespace ArmazemGratidao {
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
     if(MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
+    // Não fechar a venda em andamento ou módulos com dados não salvos.
+    if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
+     MessageBox.Show("Feche as demais janelas do Armazem antes da instalacao.","Atualizacao adiada");
+     status.Text="Atualizacao adiada por janelas abertas.";return;
+    }
     string dir=Path.Combine(Path.GetTempPath(),"ArmazemGratidaoNovo-Atualizacoes");
     Directory.CreateDirectory(dir);
     string installer=Path.Combine(dir,"Armazem-Gratidao-Novo-build-"+remoteBuild+"-Setup.exe");
@@ -238,7 +290,8 @@ namespace ArmazemGratidao {
     status.Text="Backup confirmado: "+backupPath;
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     Close();
-   }catch(Exception ex){status.Text="Não foi possível atualizar.";MessageBox.Show(ex.Message,"Atualização não iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }catch(Exception ex){status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message,"Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   finally{checkingUpdates=false;}
   }
   void ShowHome(object sender,EventArgs e){
    grid.Visible=false;
