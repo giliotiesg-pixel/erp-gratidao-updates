@@ -500,12 +500,12 @@ namespace ArmazemGratidao {
    digit=total%11<2?0:11-total%11;return digit==n[13]-'0';
   }
   static void PrepareCustomerTable(SQLiteConnection conn,SQLiteTransaction tx){
-   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,document TEXT)");
+   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,document TEXT)",new SQLiteParameter[0]);
    var cols=Columns(conn,"customers");
    if(!cols.Contains("id")||!cols.Contains("name"))throw new Exception("Tabela customers incompatível.");
-   if(!cols.Contains("phone"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN phone TEXT");
-   if(!cols.Contains("document"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN document TEXT");
-   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customer_registration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER,action TEXT NOT NULL,old_name TEXT,old_phone TEXT,old_document TEXT,new_name TEXT,new_phone TEXT,new_document TEXT,changed_at TEXT NOT NULL)");
+   if(!cols.Contains("phone"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN phone TEXT",new SQLiteParameter[0]);
+   if(!cols.Contains("document"))Execute(conn,tx,"ALTER TABLE customers ADD COLUMN document TEXT",new SQLiteParameter[0]);
+   Execute(conn,tx,"CREATE TABLE IF NOT EXISTS customer_registration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER,action TEXT NOT NULL,old_name TEXT,old_phone TEXT,old_document TEXT,new_name TEXT,new_phone TEXT,new_document TEXT,changed_at TEXT NOT NULL)",new SQLiteParameter[0]);
   }
   void LoadClients(){
    try{
