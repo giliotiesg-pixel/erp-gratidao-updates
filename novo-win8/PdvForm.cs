@@ -1028,6 +1028,44 @@ namespace ArmazemGratidao {
     return true;
    }
   }
+  bool ConfirmCashReceived(decimal totalDue){
+   using(var dialog=new Form{
+    Text="PDV | Pagamento em dinheiro",Width=530,Height=355,
+    MinimumSize=new Size(490,325),StartPosition=FormStartPosition.CenterParent,
+    FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
+    BackColor=Color.FromArgb(229,242,255),KeyPreview=true
+   }){
+    var totalLabel=new Label{Text="TOTAL DA VENDA: R$ "+totalDue.ToString("N2"),Left=20,Top=16,Width=475,Height=52,
+     Font=new Font("Segoe UI",17,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160)};
+    var inputLabel=new Label{Text="Valor recebido em dinheiro (R$):",Left=20,Top=86,Width=460,Height=26,
+     Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var cash=new NumericUpDown{Left=20,Top=116,Width=462,Height=42,DecimalPlaces=2,Increment=1m,
+     Minimum=0,Maximum=99999999m,Font=new Font("Segoe UI",18,FontStyle.Bold),
+     Value=Math.Min(99999999m,Math.Max(totalDue,received.Value))};
+    var change=new Label{Left=20,Top=167,Width=465,Height=44,Font=new Font("Segoe UI",14,FontStyle.Bold)};
+    Action calculate=()=>{
+     decimal remaining=cash.Value-totalDue;
+     change.Text=remaining>=0?"TROCO: R$ "+remaining.ToString("N2"):"FALTA: R$ "+(-remaining).ToString("N2");
+     change.ForeColor=remaining>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
+    };
+    cash.ValueChanged+=(sender,args)=>calculate();calculate();
+    var confirm=new Button{Text="Confirmar dinheiro",Left=20,Top=239,Width=230,Height=42,
+     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    var cancel=new Button{Text="Voltar à venda",Left=265,Top=239,Width=216,Height=42,DialogResult=DialogResult.Cancel};
+    confirm.Click+=(sender,args)=>{
+     if(cash.Value<totalDue){MessageBox.Show("Valor recebido menor que o total. Confira o dinheiro antes de finalizar.","Dinheiro insuficiente",MessageBoxButtons.OK,MessageBoxIcon.Warning);cash.Focus();return;}
+     dialog.DialogResult=DialogResult.OK;dialog.Close();
+    };
+    dialog.Controls.AddRange(new Control[]{totalLabel,inputLabel,cash,change,confirm,cancel});
+    dialog.AcceptButton=confirm;dialog.CancelButton=cancel;
+    dialog.Shown+=(sender,args)=>{cash.Focus();cash.Select(0,cash.Text.Length);};
+    if(dialog.ShowDialog(this)!=DialogResult.OK)return false;
+    // Somente salvar o valor informado após confirmação da janela.
+    received.Value=cash.Value;
+    UpdateChange();
+    return true;
+   }
+  }
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
@@ -1097,6 +1135,7 @@ namespace ArmazemGratidao {
      MessageBox.Show("Para dividir uma venda com Fiado, selecione ou cadastre um cliente antes de finalizar.","Cliente obrigatório");return;
     }
    }
+   if(method=="DINHEIRO"&&!ConfirmCashReceived(sum))return;
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
    string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
    if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
