@@ -73,6 +73,8 @@ namespace ArmazemGratidao {
    bottom.Controls.Add(receivedBalance);
    var fillAll=new Button {Text="Preencher saldo de todas",AutoSize=true,Height=36};fillAll.Click+=(s,e)=>FillAllBalances();bottom.Controls.Add(fillAll);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();bottom.Controls.Add(pay);
+   var saveCredit=new Button {Text="Guardar credito do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};saveCredit.Click+=(s,e)=>DepositCustomerCredit();bottom.Controls.Add(saveCredit);
+   var creditHistory=new Button {Text="Historico de credito",AutoSize=true,Height=36};creditHistory.Click+=(s,e)=>ShowCustomerCreditHistory();bottom.Controls.Add(creditHistory);
    var settle=new Button {Text="Receber nas vendas do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();bottom.Controls.Add(settle);
    var rename=new Button {Text="Corrigir cliente da venda",AutoSize=true,Height=36,BackColor=Color.FromArgb(98,60,154),ForeColor=Color.White};rename.Click+=(s,e)=>CorrectCustomer();bottom.Controls.Add(rename);
    var fixDate=new Button {Text="Corrigir data do pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(95,64,145),ForeColor=Color.White};fixDate.Click+=(s,e)=>CorrectPaymentDate();bottom.Controls.Add(fixDate);
@@ -192,7 +194,11 @@ namespace ArmazemGratidao {
     paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY s.id DESC","@name",name);
     paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY p.paid_at DESC,p.id DESC","@name",name);
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
-    selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Saldo R$ "+total.ToString("N2");
+    decimal credit=0m;
+    using(var cn=Open(true))using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn)){
+     if(Convert.ToInt32(check.ExecuteScalar())>0)credit=CustomerCreditBalance(cn,null,name);
+    }
+    selected.Text="FIADO | "+name+" | "+dt.Rows.Count+" em aberto | "+paidSales.Rows.Count+" pagas | Divida R$ "+total.ToString("N2")+" | Credito R$ "+credit.ToString("N2");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
    finally{refreshingClientSales=false;UpdatePaymentSelection(true);}
   }
@@ -641,6 +647,90 @@ namespace ArmazemGratidao {
      Environment.NewLine+"Saldo restante nas vendas consideradas: "+left+
      Environment.NewLine+"Pagamentos registrados por venda no histórico.","Fiado");
    }catch(Exception ex){MessageBox.Show(ex.Message,"Baixa não realizada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+
+  // Carteira de credito separada da divida, com movimentacoes imutaveis.
+  public static void EnsureCustomerCredit(string database){
+   using(var cn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=database,FailIfMissing=true}.ToString())){
+    cn.Open();
+    using(var check=new SQLiteCommand("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn))
+     if(Convert.ToInt32(check.ExecuteScalar())>0)return;
+    string backup=database+".antes-credito-clientes-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+    using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+     dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+     using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
+      if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup de credito invalido; operacao cancelada.");
+    }
+    if(new FileInfo(backup).Length<=0)throw new Exception("Backup de credito vazio; operacao cancelada.");
+    using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_credit_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL COLLATE NOCASE,amount NUMERIC NOT NULL CHECK(amount<>0),entry_type TEXT NOT NULL,method TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),sale_id INTEGER,details TEXT NOT NULL DEFAULT '')",cn))cmd.ExecuteNonQuery();
+    using(var index=new SQLiteCommand("CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_credit_sale ON customer_credit_entries(sale_id) WHERE sale_id IS NOT NULL",cn))index.ExecuteNonQuery();
+   }
+  }
+  public static decimal CustomerCreditBalance(SQLiteConnection cn,SQLiteTransaction tx,string name){
+   using(var cmd=new SQLiteCommand("SELECT COALESCE(SUM(amount),0) FROM customer_credit_entries WHERE customer_name=@name COLLATE NOCASE",cn,tx)){
+    cmd.Parameters.AddWithValue("@name",name.Trim());return Convert.ToDecimal(cmd.ExecuteScalar());
+   }
+  }
+  // Chamar apenas dentro da transacao da venda, depois de gravar sales.
+  public static decimal ApplyCustomerCredit(SQLiteConnection cn,SQLiteTransaction tx,long saleId,string name,decimal fiadoAmount){
+   if(fiadoAmount<=0 || string.IsNullOrWhiteSpace(name) || string.Equals(name.Trim(),"Consumidor",StringComparison.OrdinalIgnoreCase))return 0m;
+   decimal available=CustomerCreditBalance(cn,tx,name);
+   decimal applied=Math.Min(Math.Max(0m,available),fiadoAmount);
+   applied=Math.Round(applied,2);
+   if(applied<=0)return 0m;
+   using(var ledger=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,sale_id,details) VALUES(@client,@amount,'UTILIZACAO','CREDITO_CLIENTE',@sale,'Abatimento automatico da venda fiada')",cn,tx)){
+    ledger.Parameters.AddWithValue("@client",name.Trim());ledger.Parameters.AddWithValue("@amount",-applied);ledger.Parameters.AddWithValue("@sale",saleId);
+    if(ledger.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel abater credito do cliente.");
+   }
+   using(var payment=new SQLiteCommand("INSERT INTO credit_payments(sale_id,amount,payment_method,paid_at,note) VALUES(@sale,@amount,'CREDITO_CLIENTE',datetime('now','localtime'),'Credito antecipado aplicado automaticamente')",cn,tx)){
+    payment.Parameters.AddWithValue("@sale",saleId);payment.Parameters.AddWithValue("@amount",applied);
+    if(payment.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel registrar o abatimento no fiado.");
+   }
+   return applied;
+  }
+  void DepositCustomerCredit(){
+   if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente cadastrado.");return;}
+   decimal value=amount.Value;
+   if(value<=0){MessageBox.Show("Informe um valor maior que zero no campo Valor R$.");return;}
+   string payMethod=Convert.ToString(method.SelectedItem);
+   if(MessageBox.Show("Cliente: "+customer+"\\nCredito recebido: R$ "+value.ToString("N2")+"\\nForma: "+payMethod+"\\n\\nEste valor sera guardado para abater compras fiadas futuras. Confirmar?","Credito do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+   try{
+    EnsureCustomerCredit(db);
+    using(var cn=Open(false)){
+     string backup=db+".antes-credito-deposito-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+      using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido. Credito nao gravado.");
+     }
+     if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio. Credito nao gravado.");
+     using(var tx=cn.BeginTransaction()){
+      using(var cmd=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,details) VALUES(@client,@amount,'DEPOSITO',@method,'Credito antecipado recebido no Fiado')",cn,tx)){
+       cmd.Parameters.AddWithValue("@client",customer.Trim());cmd.Parameters.AddWithValue("@amount",value);cmd.Parameters.AddWithValue("@method",payMethod);
+       if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar credito.");
+      }
+      tx.Commit();
+     }
+    }
+    SetPaymentAmount(0);LoadClients();SelectClient(customer);
+    MessageBox.Show("Credito registrado para "+customer+". O valor sera abatido automaticamente das proximas compras fiadas.","Fiado");
+   }catch(Exception ex){MessageBox.Show("Credito nao registrado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void ShowCustomerCreditHistory(){
+   if(string.IsNullOrWhiteSpace(customer))return;
+   try{
+    EnsureCustomerCredit(db);
+    using(var cn=Open(true)){
+     var data=new DataTable();
+     using(var cmd=new SQLiteCommand("SELECT created_at AS Data,entry_type AS Operacao,amount AS Valor,method AS Forma,sale_id AS Venda,details AS Detalhes FROM customer_credit_entries WHERE customer_name=@client COLLATE NOCASE ORDER BY id DESC LIMIT 1000",cn)){
+      cmd.Parameters.AddWithValue("@client",customer.Trim());
+      using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
+     }
+     using(var dlg=new Form{Text="Historico de credito - "+customer,Width=860,Height=530,StartPosition=FormStartPosition.CenterParent}){
+      dlg.Controls.Add(new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill});
+      dlg.ShowDialog(this);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
   }
   void PayAll(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
