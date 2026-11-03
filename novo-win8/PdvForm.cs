@@ -1098,7 +1098,7 @@ namespace ArmazemGratidao {
    try {
     if(bottleCount>0)CascosForm.EnsureSaleLink(db);
     // Prepara a carteira antes da transacao; bloqueia a venda se o backup inicial falhar.
-    if(method=="FIADO" || splitFiado)FiadoClientesForm.EnsureCustomerCredit(db);
+    if(method=="FIADO" || splitFiado){FiadoClientesForm.EnsureCustomerCredit(db);FiadoClientesForm.EnsureCreditLimits(db);}
     using(var c=Open()){
      ValidateSaleSchema(c,recordedMethod);
      if(splitFiado)RequireColumns(c,"sale_payments","sale_id","payment_method","amount");
@@ -1117,6 +1117,11 @@ namespace ArmazemGratidao {
       }
       using(var authorize=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='VENDA_PDV_AUDITADA' WHERE id=1",c,tx))
        if(authorize.ExecuteNonQuery()!=1)throw new Exception("Não foi possível autorizar a baixa de estoque da venda.");
+     }
+     if(method=="FIADO" || splitFiado){
+      decimal plannedFiado=method=="FIADO"?sum:split.Where(part=>part.Key=="FIADO").Sum(part=>part.Value);
+      // Lancamentos historicos nao consomem o limite do periodo atual.
+      if(!manualEntry)FiadoClientesForm.EnforceCreditLimit(c,tx,customerName,plannedFiado);
      }
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@saleDate); SELECT last_insert_rowid();",c,tx)){
