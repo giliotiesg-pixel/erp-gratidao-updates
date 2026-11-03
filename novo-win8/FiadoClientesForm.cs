@@ -96,6 +96,8 @@ namespace ArmazemGratidao {
    limitTop.Click+=(sender,args)=>ConfigureClientCreditLimit();creditBar.Controls.Add(limitTop);
    var adjustTop=new Button{Text="Ajustar credito",Width=140,Height=35,BackColor=Color.FromArgb(133,74,20),ForeColor=Color.White};
    adjustTop.Click+=(sender,args)=>AdjustCustomerCredit();creditBar.Controls.Add(adjustTop);
+   var creditPayTop=new Button{Text="Pagar Fiado com credito",Width=195,Height=35,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};
+   creditPayTop.Click+=(sender,args)=>PayFiadoWithCredit();creditBar.Controls.Add(creditPayTop);
    var creditExtractTop=new Button{Text="Extrato do credito",Width=150,Height=35};
    creditExtractTop.Click+=(sender,args)=>ShowCustomerCreditHistory();creditBar.Controls.Add(creditExtractTop);
    split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(creditBar);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
@@ -943,6 +945,26 @@ namespace ArmazemGratidao {
     }
     LoadClients();SelectClient(customer);
    }catch(Exception ex){MessageBox.Show("Limite nao salvo: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void PayFiadoWithCredit(){
+   if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente.");return;}
+   try{
+    EnsureCustomerCredit(db);
+    decimal available;
+    using(var cn=Open(true))available=CustomerCreditBalance(cn,null,customer);
+    decimal total=0;
+    foreach(DataGridViewRow row in openSales.Rows)
+     if(!row.IsNewRow && row.Cells["saldo"].Value!=null && row.Cells["saldo"].Value!=DBNull.Value)
+      total+=Math.Max(0,Convert.ToDecimal(row.Cells["saldo"].Value));
+    decimal apply=Math.Round(Math.Min(total,available),2);
+    if(apply<=0){MessageBox.Show(available<=0?"Este cliente nao tem credito depositado disponivel.":"Este cliente nao tem divida fiada em aberto.","Fiado");return;}
+    int creditIndex=method.Items.IndexOf("CREDITO DEPOSITADO");
+    if(creditIndex<0)throw new Exception("Forma de credito depositado indisponivel.");
+    saleTabs.SelectedIndex=0;
+    method.SelectedIndex=creditIndex;
+    amount.Value=Math.Min(amount.Maximum,apply);
+    PayAll();
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel aplicar credito: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void PayAll(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
