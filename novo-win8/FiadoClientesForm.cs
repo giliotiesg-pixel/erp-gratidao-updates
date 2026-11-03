@@ -190,41 +190,49 @@ namespace ArmazemGratidao {
   }
   void LoadClients(){
    try {
-    // Clientes com cadastro, vendas antigas ou carteira de credito devem aparecer.
-    string names="SELECT DISTINCT TRIM(customer_name) AS cliente FROM sales WHERE customer_name IS NOT NULL AND TRIM(customer_name)<>''";
-    using(var cn=Open(true))using(var table=new SQLiteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('customers','customer_credit_entries','customer_fiado_limits')",cn)){
-     using(var rd=table.ExecuteReader())while(rd.Read()){
-      string tableName=Convert.ToString(rd[0]);
-      if(tableName=="customers")names+=" UNION SELECT DISTINCT TRIM(name) FROM customers WHERE name IS NOT NULL AND TRIM(name)<>''";
-      if(tableName=="customer_credit_entries")names+=" UNION SELECT DISTINCT TRIM(customer_name) FROM customer_credit_entries WHERE TRIM(customer_name)<>''";
-      if(tableName=="customer_fiado_limits")names+=" UNION SELECT DISTINCT TRIM(customer_name) FROM customer_fiado_limits WHERE TRIM(customer_name)<>''";
-     }
-    }
-    var dt=Query("SELECT names.cliente AS cliente,COALESCE((SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS vendas,COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+CreditFilter+" AND s.customer_name=names.cliente COLLATE NOCASE),0) AS saldo FROM ("+names+") names WHERE UPPER(names.cliente)<>'CONSUMIDOR' AND names.cliente<>'SEM CLIENTE' ORDER BY names.cliente");
+    // Na tela do FIADO, so aparecem pessoas com VENDA FIADA registrada.
+    // Cadastro isolado, limite de credito ou deposito sem venda nao geram box.
+    // Agrupamento sem distinguir maiusculas e espacos evita dois boxes da mesma grafia.
+    string names="SELECT MIN(TRIM(s.customer_name)) AS cliente FROM sales s WHERE "+CreditFilter+
+     " AND TRIM(COALESCE(s.customer_name,''))<>'' AND UPPER(TRIM(s.customer_name)) NOT IN ('CONSUMIDOR','SEM CLIENTE')"+
+     " GROUP BY TRIM(s.customer_name) COLLATE NOCASE";
+    var dt=Query("SELECT names.cliente AS cliente,"+
+     "(SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=names.cliente COLLATE NOCASE) AS vendas,"+
+     "COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+
+     CreditFilter+" AND TRIM(s.customer_name)=names.cliente COLLATE NOCASE),0) AS saldo"+
+     " FROM ("+names+") names ORDER BY names.cliente COLLATE NOCASE");
     clients.SuspendLayout();clients.Controls.Clear();
-    decimal allBalance=0,internalBalance=0;int visibleClients=0;
+    decimal allBalance=0,internalBalance=0;
+    bool selectedClientStillHasFiado=false;
     foreach(DataRow r in dt.Rows) {
      var name=Convert.ToString(r["cliente"]);var balance=Convert.ToDecimal(r["saldo"]);
+     if(string.Equals(name,customer,StringComparison.OrdinalIgnoreCase))selectedClientStillHasFiado=true;
      if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
-     visibleClients++;
      var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(190,72),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
-     b.Click+=(s,e)=>SelectClient(Convert.ToString(((Button)s).Tag));clients.Controls.Add(b);
+     b.Click+=(sender,args)=>SelectClient(Convert.ToString(((Button)sender).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
     ArrangeClientBoxes();
-    overview.Text="TOTAL EM ABERTO\n(SEM INTERNOS): R$ "+allBalance.ToString("N2")+"\nInternos fora do total: R$ "+internalBalance.ToString("N2");
-    if(customer.Length>0)SelectClient(customer);
+    overview.Text="TOTAL EM ABERTO\\n(SEM INTERNOS): R$ "+allBalance.ToString("N2")+"\\nInternos fora do total: R$ "+internalBalance.ToString("N2");
+    if(customer.Length>0){
+     if(selectedClientStillHasFiado)SelectClient(customer);
+     else{
+      customer="";
+      detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;
+      clientHome.Visible=true;clientHome.BringToFront();
+     }
+    }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao listar clientes");}
   }
   void SelectClient(string name){
    customer=name;detailSplit.Panel1Collapsed=true;detailSplit.Panel2Collapsed=false;clientHome.Visible=false;selected.Text="FIADO | "+customer;
    refreshingClientSales=true;
    try {
-    var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name";
+    var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
     openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY s.id DESC","@name",name);
     paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY s.id DESC","@name",name);
-    paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY p.paid_at DESC,p.id DESC","@name",name);
+    paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE ORDER BY p.paid_at DESC,p.id DESC","@name",name);
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     decimal credit=0m;
     using(var cn=Open(true))using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn)){
