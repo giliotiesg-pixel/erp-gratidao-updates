@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
+using System.IO;
 namespace ArmazemGratidao {
  public sealed class LucroForm : Form {
   readonly string db;
@@ -13,6 +14,7 @@ namespace ArmazemGratidao {
   readonly TextBox search=new TextBox {Width=370,Font=new Font("Segoe UI",11)};
   readonly DataGridView returnsGrid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   decimal available;
+  readonly Label remainingLabel=new Label{Dock=DockStyle.Top,Height=65,Padding=new Padding(14,12,10,8),Font=new Font("Segoe UI",14,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147),BackColor=Color.White};
   static readonly Color MainBlue=Color.FromArgb(22,75,160);
   static readonly Color LightBackground=Color.FromArgb(229,242,255);
   static readonly Color HeaderColor=Color.FromArgb(20,58,117);
@@ -64,13 +66,13 @@ namespace ArmazemGratidao {
    StyleGrid(grid);StyleGrid(returnsGrid);
    products.Controls.Add(grid);products.Controls.Add(summary);products.Controls.Add(section);products.Controls.Add(cards);products.Controls.Add(bar);
    var historyBar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=70,BackColor=LightBackground,Padding=new Padding(12),WrapContents=true,AutoScroll=true};
-   var add=new Button{Text="Registrar devolução",Width=185,Height=37,BackColor=MainBlue,ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+   var add=new Button{Text="Registrar data e valor",Width=210,Height=37,BackColor=MainBlue,ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    add.Click+=(sender,args)=>AddReturn();
    var remove=new Button{Text="Excluir devolução selecionada",Width=245,Height=37,BackColor=Color.FromArgb(180,43,55),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    remove.Click+=(sender,args)=>DeleteReturn();
    historyBar.Controls.Add(add);historyBar.Controls.Add(remove);
    var historyHeading=new Label{Text="HISTÓRICO DAS DEVOLUÇÕES DOS 10%",Dock=DockStyle.Top,Height=40,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=HeaderColor,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0)};
-   history.Controls.Add(returnsGrid);history.Controls.Add(historyHeading);history.Controls.Add(historyBar);
+   history.Controls.Add(returnsGrid);history.Controls.Add(historyHeading);history.Controls.Add(historyBar);history.Controls.Add(remainingLabel);
    tabs.TabPages.Add(products);tabs.TabPages.Add(history);Controls.Add(tabs);
    search.TextChanged+=(sender,args)=>LoadData();
    Shown+=(sender,args)=>LoadData();
@@ -101,7 +103,11 @@ namespace ArmazemGratidao {
     decimal returned=0;var ret=new DataTable();
     using(var a=new SQLiteDataAdapter("SELECT id,return_date Data,amount Valor,note Observacao,created_at Registro FROM profit_returns ORDER BY return_date DESC,id DESC",c))a.Fill(ret);
     foreach(DataRow r in ret.Rows)returned+=Number(r["Valor"]);
-    available=Math.Max(0,Math.Round(Math.Max(fullProfit,0)*0.10M,2)-returned);
+    decimal tenPercent=Math.Round(Math.Max(fullProfit,0)*0.10M,2);
+    decimal remaining=tenPercent-returned;
+    available=Math.Max(0,remaining);
+    remainingLabel.Text="TOTAL DOS 10%: "+Money(tenPercent)+"     |     JÁ DEVOLVIDO: "+Money(returned)+
+     Environment.NewLine+"AINDA FALTA DEVOLVER: "+Money(available)+(remaining<0?"  |  Excesso registrado: "+Money(-remaining):"");
     decimal[] totals={sales,costs,feesTotal,profit,Math.Max(fullProfit,0)*0.10M,returned,available};
     for(int i=0;i<metricValues.Length;i++)metricValues[i].Text=Money(totals[i]);
     summary.Text=string.IsNullOrWhiteSpace(search.Text)?"Exibindo todos os produtos: "+shown.Rows.Count+" produto(s).":"Filtro: "+search.Text.Trim()+"  |  "+shown.Rows.Count+" produto(s) encontrado(s). Valores dos primeiros quatro cartões seguem a pesquisa; os três últimos são gerais.";
@@ -112,15 +118,61 @@ namespace ArmazemGratidao {
     if(grid.Columns.Contains("Codigo"))grid.Columns["Codigo"].FillWeight=120;
    }}catch(Exception ex){MessageBox.Show("Não foi possível consultar o lucro: "+ex.Message);}
   }
+  // Salva a devolucao datada separadamente do caixa e das vendas.
+  // Nunca atualizar dados financeiros sem backup SQLite verificado.
+  void BackupBeforeProfitChange(string action){
+   string home=Path.GetDirectoryName(db);
+   string config=Path.Combine(home,"backup-location.txt");
+   string folder=File.Exists(config)?File.ReadAllText(config).Trim():Path.Combine(home,"Backups");
+   if(string.IsNullOrWhiteSpace(folder)||!Path.IsPathRooted(folder))throw new Exception("Pasta de backup invalida.");
+   Directory.CreateDirectory(folder);
+   string destination=Path.Combine(folder,"lucro-"+action+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   using(var source=Open())using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=destination}.ToString())){
+    copy.Open();source.BackupDatabase(copy,"main","main",-1,null,0);
+    using(var check=new SQLiteCommand("PRAGMA integrity_check",copy))
+     if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Falha na verificacao do backup. Operacao bloqueada.");
+   }
+   if(new FileInfo(destination).Length<=0)throw new Exception("Backup vazio. Operacao bloqueada.");
+  }
   void AddReturn(){
-   using(var dialog=new Form {Text="Registrar devolução dos 10%",Width=450,Height=275,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
-    var info=new Label {Left=15,Top=12,Width=400,Text="Saldo disponível: "+Money(available)};
-    var amount=new NumericUpDown {Left=15,Top=45,Width=180,DecimalPlaces=2,Maximum=999999999};
-    var date=new DateTimePicker {Left=215,Top=45,Width=200,Format=DateTimePickerFormat.Short};
-    var note=new TextBox {Left=15,Top=105,Width=400};
-    var ok=new Button {Text="Salvar devolução",Left=230,Top=150,Width=185,Height=38};
-    dialog.Controls.AddRange(new Control[]{info,amount,date,new Label {Text="Observação:",Left=15,Top=84,Width=180},note,ok});
-    ok.Click+=(s,e)=>{if(amount.Value<=0||amount.Value>available){MessageBox.Show("Informe um valor positivo até "+Money(available));return;}try{using(var c=Open()){EnsureReturns(c);using(var cmd=new SQLiteCommand("INSERT INTO profit_returns(amount,return_date,note,created_at) VALUES(@v,@d,@n,datetime('now','localtime'))",c)){cmd.Parameters.AddWithValue("@v",amount.Value);cmd.Parameters.AddWithValue("@d",date.Value.ToString("yyyy-MM-dd"));cmd.Parameters.AddWithValue("@n",note.Text);cmd.ExecuteNonQuery();}}dialog.DialogResult=DialogResult.OK;}catch(Exception ex){MessageBox.Show(ex.Message);}};
+   // O registro so e confirmado depois da data, do valor e do novo saldo.
+   using(var dialog=new Form{Text="Devolucao pessoal dos 10%",Width=520,Height=350,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=LightBackground}){
+    var info=new Label{Left=18,Top=16,Width=460,Height=52,Text="SALDO DOS 10% A DEVOLVER: "+Money(available),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
+    var dateLabel=new Label{Text="Data da devolucao:",Left=18,Top=82,Width=215,Height=26};
+    var date=new DateTimePicker{Left=18,Top=109,Width=215,Format=DateTimePickerFormat.Short,Value=DateTime.Today,MaxDate=DateTime.Today};
+    var amountLabel=new Label{Text="Valor devolvido (R$):",Left=255,Top=82,Width=220,Height=26};
+    var amount=new NumericUpDown{Left=255,Top=109,Width=220,DecimalPlaces=2,Maximum=999999999,Font=new Font("Segoe UI",12,FontStyle.Bold)};
+    var balance=new Label{Text="Restara a devolver: "+Money(available),Left=18,Top=157,Width=458,Height=38,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
+    amount.ValueChanged+=(sender,args)=>{
+     decimal after=available-amount.Value;
+     balance.Text=after<0?"Valor maior que o saldo dos 10%": "Restara a devolver: "+Money(after);
+     balance.ForeColor=after<0?Color.FromArgb(175,25,45):MainBlue;
+    };
+    var note=new TextBox{Left=18,Top=225,Width=457,MaxLength=255};
+    var noteLabel=new Label{Text="Observacao (opcional):",Left=18,Top=201,Width=280,Height=24};
+    var ok=new Button{Text="Registrar e subtrair",Left=18,Top=271,Width=225,Height=36,BackColor=MainBlue,ForeColor=Color.White};
+    var cancel=new Button{Text="Cancelar",Left=255,Top=271,Width=220,Height=36,DialogResult=DialogResult.Cancel};
+    dialog.Controls.AddRange(new Control[]{info,dateLabel,date,amountLabel,amount,balance,noteLabel,note,ok,cancel});
+    ok.Click+=(sender,args)=>{
+     if(amount.Value<=0||amount.Value>available){MessageBox.Show("Informe um valor maior que zero e ate "+Money(available));return;}
+     if(MessageBox.Show("Data: "+date.Value.ToString("dd/MM/yyyy")+"\nValor devolvido: "+Money(amount.Value)+
+      "\nSaldo antes: "+Money(available)+"\nFaltara devolver: "+Money(available-amount.Value)+
+      "\n\nConfirmar registro?", "Conferir devolucao",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     try{
+      BackupBeforeProfitChange("antes-devolucao");
+      using(var c=Open())using(var tx=c.BeginTransaction()){
+       EnsureReturns(c);
+       using(var cmd=new SQLiteCommand("INSERT INTO profit_returns(amount,return_date,note,created_at) VALUES(@v,@d,@n,datetime('now','localtime'))",c,tx)){
+        cmd.Parameters.AddWithValue("@v",amount.Value);
+        cmd.Parameters.AddWithValue("@d",date.Value.ToString("yyyy-MM-dd"));
+        cmd.Parameters.AddWithValue("@n",note.Text.Trim());
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel salvar a devolucao.");
+       }
+       tx.Commit();
+      }
+      dialog.DialogResult=DialogResult.OK;dialog.Close();
+     }catch(Exception ex){MessageBox.Show("Devolucao nao registrada: "+ex.Message,"Lucro",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    };
     if(dialog.ShowDialog(this)==DialogResult.OK)LoadData();
    }
   }
