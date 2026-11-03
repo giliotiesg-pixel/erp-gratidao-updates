@@ -146,21 +146,36 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   string SalesFilterTitle(){
    return selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
   }
-  static void PrepareSalesList(DataTable rows){
+  // A numeracao e cronologica; IDs de vendas nunca mudam (itens, pagamentos e Fiado).
+  void PrepareSalesList(DataTable rows){
+   var positions=new System.Collections.Generic.Dictionary<long,long>();
+   using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
+    conn.Open();
+    using(var cmd=new SQLiteCommand("SELECT id FROM sales ORDER BY datetime(created_at),id",conn))
+    using(var rd=cmd.ExecuteReader()){
+     long position=0;while(rd.Read())positions[Convert.ToInt64(rd["id"])]=++position;
+    }
+   }
+   var sequence=rows.Columns.Add("Ordem cronológica",typeof(long));
    var display=rows.Columns.Add("Venda para consultar",typeof(string));display.SetOrdinal(0);
-   foreach(DataRow item in rows.Rows)item[display]="Venda nº "+item["venda"]+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
+   foreach(DataRow item in rows.Rows){
+    long id=Convert.ToInt64(item["venda"]);long sequenceNumber;
+    if(!positions.TryGetValue(id,out sequenceNumber))sequenceNumber=0;
+    item[sequence]=sequenceNumber;
+    item[display]="Venda nº "+sequenceNumber+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
+   }
   }
   void LoadMaster() {
    loadingMaster=true;
    try {
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     Query(SalesWithDailyTotalsSql()+" WHERE "+SalesFilterSql().Replace("created_at","s.created_at")+" ORDER BY s.id DESC LIMIT 3000",SalesFilterParameter(),SalesFilterValue());
+     Query(SalesWithDailyTotalsSql()+" WHERE "+SalesFilterSql().Replace("created_at","s.created_at")+" ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000",SalesFilterParameter(),SalesFilterValue());
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
      foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";
-     master.Columns["Venda para consultar"].HeaderText="VENDAS — clique para ver produtos e quantidades";
+     master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";
      master.Columns["Venda para consultar"].DefaultCellStyle.Padding=new Padding(8,4,4,4);
      if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
      if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
@@ -358,7 +373,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(!long.TryParse(saleSearch.Text.Trim(),out id)||id<=0){MessageBox.Show("Informe o numero da venda.");return;}
    try{
     loadingMaster=true;
-    try{var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);PrepareSalesList(rows);master.DataSource=rows;foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";master.Columns["Venda para consultar"].HeaderText="VENDAS — clique para ver produtos e quantidades";}finally{loadingMaster=false;}
+    try{var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);PrepareSalesList(rows);master.DataSource=rows;foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";}finally{loadingMaster=false;}
     LoadDetails();
     heading.Text=((DataTable)master.DataSource).Rows.Count==0?"Venda nao encontrada.":"VENDA #"+id+" | Resultado da busca";
     if(((DataTable)master.DataSource).Rows.Count==0)details.DataSource=null;
