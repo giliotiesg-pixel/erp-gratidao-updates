@@ -598,6 +598,29 @@ namespace ArmazemGratidao {
    if(new FileInfo(file).Length==0)throw new Exception("Backup vazio. Cadastro não alterado.");
    return file;
   }
+  // Mantém os saldos associados ao mesmo cliente quando o nome é corrigido.
+  // Executado apenas dentro da transação do cadastro, após backup validado.
+  void RenameCustomerLinks(SQLiteConnection conn,SQLiteTransaction tx,string before,string after){
+   if(string.Equals(before,after,StringComparison.Ordinal))return;
+   foreach(var link in new[]{
+    Tuple.Create("sales","customer_name"),
+    Tuple.Create("bottle_loans","customer_name"),
+    Tuple.Create("customer_credit_entries","customer_name"),
+    Tuple.Create("customer_fiado_limits","customer_name"),
+    Tuple.Create("customer_fiado_limit_audit","customer_name")
+   }){
+    if(!HasTable(conn,link.Item1)||!Columns(conn,link.Item1).Contains(link.Item2))continue;
+    // Não juntar involuntariamente duas pessoas com nomes parecidos.
+    using(var duplicate=new SQLiteCommand("SELECT COUNT(*) FROM \""+link.Item1+"\" WHERE LOWER(TRIM(\""+link.Item2+"\"))=LOWER(TRIM(@new))",conn,tx)){
+     duplicate.Parameters.AddWithValue("@new",after);
+     if(Convert.ToInt64(duplicate.ExecuteScalar())>0)throw new Exception("Já existem registros de outra pessoa com o novo nome no módulo "+link.Item1+". A correção foi cancelada para proteger os saldos.");
+    }
+    using(var update=new SQLiteCommand("UPDATE \""+link.Item1+"\" SET \""+link.Item2+"\"=@new WHERE LOWER(TRIM(\""+link.Item2+"\"))=LOWER(TRIM(@old))",conn,tx)){
+     update.Parameters.AddWithValue("@new",after);update.Parameters.AddWithValue("@old",before);
+     update.ExecuteNonQuery();
+    }
+   }
+  }
   void EditClient(bool edit){
    long id=0;string oldName="",oldPhone="",oldDoc="";
    if(edit){
@@ -646,6 +669,11 @@ namespace ArmazemGratidao {
         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE id<>@id AND (LOWER(TRIM(name))=LOWER(TRIM(@name)) OR (@document<>'' AND REPLACE(REPLACE(REPLACE(COALESCE(document,''),'.',''),'-',''),'/','')=@document))",conn,tx)){
          check.Parameters.AddWithValue("@id",currentId);check.Parameters.AddWithValue("@name",newName);check.Parameters.AddWithValue("@document",doc);
          if(Convert.ToInt32(check.ExecuteScalar())>0)throw new Exception("Já existe um cliente com esse nome ou CPF/CNPJ.");
+        }
+        if(edit&&!string.Equals(oldName,newName,StringComparison.Ordinal)){
+         // Confirma especificamente a alteração de nome antes de migrar as referências.
+         if(MessageBox.Show("O nome do cliente foi alterado. Vendas, Fiado, crédito e cascos com o nome antigo precisam continuar vinculados ao mesmo cliente. Confirmar a correção dessas referências?","Corrigir nome do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)throw new Exception("Alteração de nome cancelada.");
+         RenameCustomerLinks(conn,tx,oldName,newName);
         }
         if(currentId>0)Execute(conn,tx,"UPDATE customers SET name=@name,phone=@phone,document=@doc WHERE id=@id",P("@name",newName),P("@phone",phone.Text.Trim()),P("@doc",doc),P("@id",currentId));
         else{
