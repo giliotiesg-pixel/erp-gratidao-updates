@@ -10,6 +10,7 @@ using QRCoder;
 namespace ArmazemGratidao {
  public sealed class ProdutosForm:Form {
   readonly string db;
+  readonly bool rapidInventoryMode;
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=false,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
@@ -32,7 +33,9 @@ namespace ArmazemGratidao {
   readonly ComboBox statusFilter=new ComboBox {Width=155,DropDownStyle=ComboBoxStyle.DropDownList};
   readonly Label info=new Label {Dock=DockStyle.Bottom,Height=32};
   readonly Label metrics=new Label {Dock=DockStyle.Top,Height=45,TextAlign=ContentAlignment.MiddleLeft};
-  public ProdutosForm(string database) {
+  public ProdutosForm(string database):this(database,false){}
+  public ProdutosForm(string database,bool openedFromQuickSales) {
+   rapidInventoryMode=openedFromQuickSales;
    db=database;LoadColumnWidths();Text="Armazém Gratidão | Cadastro de Produtos";Width=1100;Height=720;BackColor=Color.FromArgb(229,242,255);
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
@@ -58,6 +61,11 @@ namespace ArmazemGratidao {
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
+   if(rapidInventoryMode){
+    var correctQty=new Button{Text="Corrigir quantidade atual",Width=220,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    correctQty.Click+=(sender,args)=>CorrectCurrentQuantity();
+    bar.Controls.Add(correctQty);
+   }
    var history=new Button {Text="Histórico QTD",Width=150,Height=33};history.Click+=(s,e)=>ShowProductQuantityHistory();bar.Controls.Add(history);
    var exportHistory=new Button {Text="Exportar histórico QTD",Width=190,Height=33};exportHistory.Click+=(s,e)=>ExportProductQuantityHistory();bar.Controls.Add(exportHistory);
    var resetFilters=new Button {Text="Mostrar todos",Width=145,Height=33};resetFilters.Click+=(s,e)=>{search.Clear();currentPage=0;statusFilter.SelectedIndex=0;LoadProducts();};bar.Controls.Add(resetFilters);
@@ -102,6 +110,11 @@ namespace ArmazemGratidao {
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);grid.Visible=false;info.Text="  Lista de produtos oculta para abertura rápida. Clique em Mostrar lista de produtos.";previousPage.Enabled=false;nextPage.Enabled=false;
+   if(rapidInventoryMode){
+    Text="Lançamento rápido | Estoque completo - editar produtos";
+    listVisible=true;grid.Visible=true;showList.Text="Ocultar lista de produtos";
+    Shown+=(sender,args)=>{LoadProducts();search.Focus();};
+   }
   }
   bool resizingProductsToolbar=false;
   void ResizeProductsToolbar(FlowLayoutPanel bar){
@@ -666,7 +679,7 @@ namespace ArmazemGratidao {
     if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
     string filter="";
     int mode=statusFilter.SelectedIndex;
-    if(activeColumn!=null&&mode!=2)filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
+    if(activeColumn!=null&&mode!=2&&!(rapidInventoryMode&&mode==0))filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
     if(mode==2&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=0";
     if(mode==3)filter=" AND COALESCE(stock,0)<=0";
     if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
@@ -762,6 +775,87 @@ namespace ArmazemGratidao {
    panel.Controls.Add(new Label{Text="Acréscimo desejado %",AutoSize=true,Padding=new Padding(0,9,0,0)});
    panel.Controls.Add(desired);panel.Controls.Add(apply);panel.Controls.Add(preview);
    update();return panel;
+  }
+  // Acesso exclusivo a partir de Vendas Anotadas: corrige o saldo real, inclusive para menos.
+  // A alteração é individual, auditada e nunca reescreve itens de vendas já registradas.
+  void CorrectCurrentQuantity(){
+   if(grid.CurrentRow==null||!grid.Columns.Contains("codigo_interno")){MessageBox.Show("Selecione um produto na lista.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)){MessageBox.Show("Produto invalido.");return;}
+   try{
+    string product;decimal before;
+    using(var conn=Open(true))
+    using(var cmd=new SQLiteCommand("SELECT name,COALESCE(stock,0) FROM products WHERE id=@id",conn)){
+     cmd.Parameters.AddWithValue("@id",id);
+     using(var rd=cmd.ExecuteReader()){
+      if(!rd.Read())throw new Exception("Produto nao localizado.");
+      product=Convert.ToString(rd[0]);before=Convert.ToDecimal(rd[1]);
+     }
+    }
+    using(var dlg=new Form{Text="Conferir estoque real",Width=600,Height=330,MinimumSize=new Size(540,300),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+     var name=new Label{Text=product+" | Atual: "+before.ToString("N3"),Left=18,Top=16,Width=535,Height=50,Font=new Font("Segoe UI",12,FontStyle.Bold)};
+     var lbl=new Label{Text="Quantidade REAL conferida:",Left=18,Top=75,Width=250,Height=26};
+     var qty=new NumericUpDown{Left=273,Top=73,Width=250,DecimalPlaces=3,Maximum=10000000m,Minimum=0m,Value=Math.Max(0,Math.Min(10000000m,before))};
+     var why=new Label{Text="Motivo da correção:",Left=18,Top=119,Width=250,Height=25};
+     var reason=new TextBox{Left=18,Top=150,Width=505,MaxLength=250};
+     var confirm=new Button{Text="Salvar com auditoria",Left=18,Top=214,Width=245,Height=39,DialogResult=DialogResult.OK};
+     var cancel=new Button{Text="Cancelar",Left=280,Top=214,Width=243,Height=39,DialogResult=DialogResult.Cancel};
+     dlg.Controls.AddRange(new Control[]{name,lbl,qty,why,reason,confirm,cancel});
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     if(string.IsNullOrWhiteSpace(reason.Text)){MessageBox.Show("Informe o motivo da correção de estoque.");return;}
+     decimal after=qty.Value;
+     if(after==before){MessageBox.Show("A quantidade nao mudou.");return;}
+     if(MessageBox.Show("Produto: "+product+"\\nAnterior: "+before.ToString("N3")+"\\nNovo: "+after.ToString("N3")+"\\nMotivo: "+reason.Text.Trim()+"\\n\\nConfirmar alteração no estoque?","Conferir estoque",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+     // Backup na pasta de backup que o atualizador do Armazem usa.
+     string config=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(db),"backup-location.txt");
+     string backupDir=System.IO.File.Exists(config)?System.IO.File.ReadAllText(config).Trim():System.IO.Path.Combine(System.IO.Path.GetDirectoryName(db),"Backups");
+     if(string.IsNullOrWhiteSpace(backupDir)||!System.IO.Path.IsPathRooted(backupDir))throw new Exception("Pasta de backup inválida.");
+     System.IO.Directory.CreateDirectory(backupDir);
+     string backup=System.IO.Path.Combine(backupDir,"antes-corrigir-estoque-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+     using(var conn=Open(false)){
+      using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+       copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);
+       using(var check=new SQLiteCommand("PRAGMA integrity_check",copy))
+        if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup com falha de integridade. Estoque nao alterado.");
+      }
+      if(new System.IO.FileInfo(backup).Length<=0)throw new Exception("Backup vazio. Estoque nao alterado.");
+      using(var tx=conn.BeginTransaction()){
+       decimal current;
+       using(var check=new SQLiteCommand("SELECT COALESCE(stock,0) FROM products WHERE id=@id",conn,tx)){
+        check.Parameters.AddWithValue("@id",id);object obj=check.ExecuteScalar();
+        if(obj==null)throw new Exception("Produto excluido ou indisponivel.");
+        current=Convert.ToDecimal(obj);
+       }
+       if(current!=before)throw new Exception("Quantidade alterada por outra operacao. Atualize a lista.");
+       int oldAuth;string oldOperation;
+       using(var control=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",conn,tx))
+       using(var rd=control.ExecuteReader()){
+        if(!rd.Read())throw new Exception("Controle de estoque nao encontrado.");
+        oldAuth=Convert.ToInt32(rd[0]);oldOperation=Convert.ToString(rd[1]);
+       }
+       using(var auth=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='AJUSTE_ESTOQUE_VENDAS_ANOTADAS' WHERE id=1",conn,tx))
+        if(auth.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel autorizar ajuste auditado.");
+       using(var update=new SQLiteCommand("UPDATE products SET stock=@stock WHERE id=@id AND stock=@old",conn,tx)){
+        update.Parameters.AddWithValue("@stock",after);update.Parameters.AddWithValue("@id",id);
+        update.Parameters.AddWithValue("@old",before);
+        if(update.ExecuteNonQuery()!=1)throw new Exception("Estoque mudou durante a operacao.");
+       }
+       using(var audit=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) SELECT id,name,COALESCE(barcode,''),'AJUSTE_MANUAL',@before,@after,@delta,'ESTOQUE',@reason FROM products WHERE id=@id",conn,tx)){
+        audit.Parameters.AddWithValue("@before",before);audit.Parameters.AddWithValue("@after",after);audit.Parameters.AddWithValue("@delta",after-before);
+        audit.Parameters.AddWithValue("@reason",reason.Text.Trim());audit.Parameters.AddWithValue("@id",id);
+        if(audit.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria do ajuste.");
+       }
+       using(var restore=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@op WHERE id=1",conn,tx)){
+        restore.Parameters.AddWithValue("@auth",oldAuth);restore.Parameters.AddWithValue("@op",oldOperation);
+        if(restore.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel restaurar protecao de estoque.");
+       }
+       tx.Commit();
+      }
+     }
+     LoadProducts();
+     MessageBox.Show("Quantidade atualizada e auditada. Backup: "+backup,"Estoque");
+    }
+   }catch(Exception ex){MessageBox.Show("Estoque nao alterado: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
