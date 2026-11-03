@@ -18,6 +18,9 @@ namespace ArmazemGratidao {
    db=database;Text="Cascos retornáveis — controle separado de vendas";Width=1050;Height=650;MinimumSize=new Size(760,480);
    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=95,Padding=new Padding(10),BackColor=Color.FromArgb(229,242,255)};
    bar.Controls.Add(new Label {Text="Pessoa:",AutoSize=true,Padding=new Padding(0,8,0,0)});bar.Controls.Add(customer);
+   var clients=new Button{Text="Clientes",Width=115,Height=35,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   clients.Click+=(sender,args)=>SelectCustomer();
+   bar.Controls.Add(clients);
    bar.Controls.Add(new Label {Text="Qtd.:",AutoSize=true,Padding=new Padding(0,8,0,0)});bar.Controls.Add(quantity);
    var deliver=new Button {Text="Entregar casco (+ R$ 4)",Width=190,Height=35};deliver.Click+=(s,e)=>Deliver();bar.Controls.Add(deliver);
    var returned=new Button {Text="Receber e devolver R$ 4",Width=210,Height=35};returned.Click+=(s,e)=>Return();bar.Controls.Add(returned);
@@ -29,9 +32,68 @@ namespace ArmazemGratidao {
    Controls.Add(grid);Controls.Add(summary);Controls.Add(bar);
    try{EnsureSchema();RefreshRows();}catch(Exception ex){bar.Enabled=false;MessageBox.Show("Controle de cascos indisponível: "+ex.Message,"Cascos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  // Busca clientes cadastrados sem modificar cadastros, fiado ou vendas.
+  // Inclui nomes do controle de cascos para preservar o acesso aos registros antigos.
+  void SelectCustomer(){
+   try{
+    using(var dialog=new Form{Text="Clientes | Controle de Cascos",Width=750,Height=550,MinimumSize=new Size(540,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=38};
+     var heading=new Label{Text="Pesquisar cliente cadastrado por nome ou documento:",Dock=DockStyle.Top,Height=36,Padding=new Padding(9,8,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     var listing=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+     var actionBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=55,Padding=new Padding(8),BackColor=Color.White};
+     var choose=new Button{Text="Usar cliente selecionado",Width=220,Height=36,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Width=120,Height=36,DialogResult=DialogResult.Cancel};
+     actionBar.Controls.Add(choose);actionBar.Controls.Add(cancel);
+     var table=new DataTable();
+     table.Columns.Add("Nome");table.Columns.Add("Telefone");table.Columns.Add("CPF / CNPJ");table.Columns.Add("Origem");
+     using(var cn=Open()){
+      var hasCustomers=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",cn);
+      if(Convert.ToInt32(hasCustomers.ExecuteScalar())>0){
+       using(var cmd=new SQLiteCommand("SELECT name,COALESCE(phone,''),COALESCE(document,'') FROM customers WHERE TRIM(COALESCE(name,''))<>'' ORDER BY name COLLATE NOCASE",cn))
+       using(var rd=cmd.ExecuteReader())while(rd.Read())table.Rows.Add(Convert.ToString(rd[0]),Convert.ToString(rd[1]),Convert.ToString(rd[2]),"Cadastro");
+      }
+      using(var cmd=new SQLiteCommand("SELECT DISTINCT customer_name FROM bottle_loans WHERE TRIM(COALESCE(customer_name,''))<>'' ORDER BY customer_name COLLATE NOCASE",cn))
+      using(var rd=cmd.ExecuteReader())while(rd.Read()){
+       string name=Convert.ToString(rd[0]);bool found=false;
+       foreach(DataRow row in table.Rows)if(string.Equals(Convert.ToString(row["Nome"]),name,StringComparison.OrdinalIgnoreCase)){found=true;break;}
+       if(!found)table.Rows.Add(name,"","","Cascos anteriores");
+      }
+     }
+     var view=new DataView(table);
+     listing.DataSource=view;
+     Action applySearch=()=>{
+      string term=search.Text.Trim().Replace("'","''").Replace("[","[[]").Replace("%","[%]").Replace("*","[*]");
+      view.RowFilter=term.Length==0?"":"[Nome] LIKE '%"+term+"%' OR [CPF / CNPJ] LIKE '%"+term+"%' OR [Telefone] LIKE '%"+term+"%'";
+     };
+     search.TextChanged+=(sender,args)=>applySearch();
+     Action select=()=>{
+      if(listing.CurrentRow==null)return;
+      var row=listing.CurrentRow.DataBoundItem as DataRowView;
+      if(row==null)return;
+      dialog.Tag=Convert.ToString(row["Nome"]);dialog.DialogResult=DialogResult.OK;dialog.Close();
+     };
+     choose.Click+=(sender,args)=>select();
+     listing.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)select();};
+     dialog.AcceptButton=choose;dialog.CancelButton=cancel;
+     dialog.Controls.Add(listing);dialog.Controls.Add(actionBar);dialog.Controls.Add(search);dialog.Controls.Add(heading);
+     dialog.Shown+=(sender,args)=>search.Focus();
+     if(dialog.ShowDialog(this)==DialogResult.OK&&!string.IsNullOrWhiteSpace(Convert.ToString(dialog.Tag))){
+      customer.Text=Convert.ToString(dialog.Tag);
+      filter.Text=customer.Text;
+      RefreshRows();
+      customer.Focus();
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel consultar os clientes: "+ex.Message,"Cascos",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
   SQLiteConnection Open(){var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
   void Backup(){
-   string path=db+".antes-cascos-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db";
+   string baseDir=Path.GetDirectoryName(db);
+   string config=Path.Combine(baseDir,"backup-location.txt");
+   string backupDir=File.Exists(config)?File.ReadAllText(config).Trim():Path.Combine(baseDir,"Backups");
+   if(string.IsNullOrWhiteSpace(backupDir)||!Path.IsPathRooted(backupDir))throw new Exception("A pasta de backup configurada e invalida.");
+   Directory.CreateDirectory(backupDir);
+   string path=Path.Combine(backupDir,"antes-cascos-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    using(var source=Open())using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=path}.ToString())){
     dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
     using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup não passou na verificação de integridade.");
