@@ -9,7 +9,9 @@ namespace ArmazemGratidao {
  public sealed class ConsultaForm:Form {
   readonly string db;readonly bool credit;
   public bool IsCreditWindow {get{return credit;}}
-bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=new DateTimePicker {Format=DateTimePickerFormat.Short,Width=115};
+bool previous=false;bool selectedDate=false;bool selectedMonth=false;
+  readonly DateTimePicker dateFilter=new DateTimePicker {Format=DateTimePickerFormat.Short,Width=115};
+  readonly DateTimePicker monthFilter=new DateTimePicker {Format=DateTimePickerFormat.Custom,CustomFormat="MMMM yyyy",ShowUpDown=true,Width=175};
   readonly TextBox saleSearch=new TextBox {Width=110};
   readonly Label summary=new Label {Dock=DockStyle.Bottom,Height=36,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(229,242,255)};
   readonly DataGridView master=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
@@ -25,12 +27,23 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
    if(!fiado)split.Panel2Collapsed=true;
    if(!fiado){
     var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=108,Padding=new Padding(5),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(190,225,250)};
-    var today=new Button {Text="Vendas do dia",Width=150,Height=33};today.Click+=(s,e)=>{previous=false;selectedDate=false;LoadMaster();};
-    var older=new Button {Text="Vendas anteriores",Width=170,Height=33};older.Click+=(s,e)=>{previous=true;selectedDate=false;LoadMaster();};
+    var today=new Button {Text="Vendas do dia",Width=150,Height=33};today.Click+=(s,e)=>{previous=false;selectedDate=false;selectedMonth=false;LoadMaster();};
+    var older=new Button {Text="Vendas anteriores",Width=170,Height=33};older.Click+=(s,e)=>{previous=true;selectedDate=false;selectedMonth=false;LoadMaster();};
     var refresh=new Button {Text="Atualizar",Width=110,Height=33};refresh.Click+=(s,e)=>LoadMaster();
     bar.Controls.Add(today);bar.Controls.Add(older);bar.Controls.Add(refresh);
+    bar.Controls.Add(new Label{Text="Mês / Ano:",AutoSize=true,Padding=new Padding(5,8,0,0)});
+    bar.Controls.Add(monthFilter);
+    var showMonth=new Button{Text="Ver mês",Width=95,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    showMonth.Click+=(s,e)=>{selectedMonth=true;selectedDate=false;LoadMaster();};
+    bar.Controls.Add(showMonth);
+    var priorMonth=new Button{Text="◀ Mês anterior",Width=130,Height=33};
+    priorMonth.Click+=(s,e)=>{monthFilter.Value=monthFilter.Value.AddMonths(-1);selectedMonth=true;selectedDate=false;LoadMaster();};
+    bar.Controls.Add(priorMonth);
+    var followingMonth=new Button{Text="Próximo mês ▶",Width=130,Height=33};
+    followingMonth.Click+=(s,e)=>{monthFilter.Value=monthFilter.Value.AddMonths(1);selectedMonth=true;selectedDate=false;LoadMaster();};
+    bar.Controls.Add(followingMonth);
     bar.Controls.Add(new Label {Text="Data:",AutoSize=true,Padding=new Padding(5,8,0,0)});bar.Controls.Add(dateFilter);
-    var filter=new Button {Text="Ver data",Width=85,Height=33};filter.Click+=(s,e)=>{selectedDate=true;LoadMaster();};bar.Controls.Add(filter);
+    var filter=new Button {Text="Ver data",Width=85,Height=33};filter.Click+=(s,e)=>{selectedDate=true;selectedMonth=false;LoadMaster();};bar.Controls.Add(filter);
     var editDate=new Button {Text="Atualizar data / hora",Width=175,Height=33};editDate.Click+=(s,e)=>EditSaleDate();bar.Controls.Add(editDate);
     var showEdit=new Button {Text="Editar itens",Width=105,Height=33};showEdit.Click+=(s,e)=>{split.Panel2Collapsed=!split.Panel2Collapsed;showEdit.Text=split.Panel2Collapsed?"Editar itens":"Ocultar edição";};bar.Controls.Add(showEdit);
     var changeProduct=new Button {Text="Alterar produto",Width=125,Height=33};changeProduct.Click+=(s,e)=>{split.Panel2Collapsed=false;showEdit.Text="Ocultar edição";ChangeProduct();};bar.Controls.Add(changeProduct);
@@ -70,7 +83,7 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
    }
    master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
    master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster){LoadDetails();if(!credit)ShowSaleItems();}};
-   dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;LoadMaster();}};
+   dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;selectedMonth=false;LoadMaster();}};
    // Ao voltar à janela, conferir vendas registradas por PDV, lançamentos anotados ou outra janela.
    Activated+=(sender,args)=>{if(!credit&&!loadingMaster)LoadMaster();};
    LoadMaster();
@@ -102,11 +115,11 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
   void ShowDailyTotals(){
    if(credit)return;
    try{
-    string where=selectedDate?"WHERE date(created_at)=@date":previous?"WHERE date(created_at)<date('now','localtime')":"WHERE date(created_at)=date('now','localtime')";
+    string condition=SalesFilterSql();
     var days=Query("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
-     "ROUND(SUM(COALESCE(gross_total,0)),2) AS 'Total vendido (R$)' FROM sales "+
-     where+" GROUP BY date(created_at) ORDER BY date(created_at) DESC",
-     selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
+     "ROUND(SUM(COALESCE(gross_total,0)),2) AS 'Total vendido (R$)' FROM sales WHERE "+condition+
+     " GROUP BY date(created_at) ORDER BY date(created_at) DESC",
+     SalesFilterParameter(),SalesFilterValue());
     using(var dialog=new Form{Text="Fechamento de vendas - totais diários",Width=680,Height=520,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      decimal total=0;long count=0;
      foreach(DataRow row in days.Rows){total+=Convert.ToDecimal(row["Total vendido (R$)"]);count+=Convert.ToInt64(row["Vendas"]);}
@@ -120,6 +133,19 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível calcular os totais diários: "+ex.Message,"Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  string SalesFilterSql(){
+   if(selectedMonth)return "created_at >= @date AND created_at < date(@date,'+1 month')";
+   if(selectedDate)return "created_at >= @date AND created_at < date(@date,'+1 day')";
+   return previous?"created_at < date('now','localtime')":"created_at >= date('now','localtime') AND created_at < date('now','localtime','+1 day')";
+  }
+  string SalesFilterParameter(){return selectedDate||selectedMonth?"@date":null;}
+  object SalesFilterValue(){
+   if(selectedMonth)return monthFilter.Value.ToString("yyyy-MM-01");
+   return selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null;
+  }
+  string SalesFilterTitle(){
+   return selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
+  }
   static void PrepareSalesList(DataTable rows){
    var display=rows.Columns.Add("Venda para consultar",typeof(string));display.SetOrdinal(0);
    foreach(DataRow item in rows.Rows)item[display]="Venda nº "+item["venda"]+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
@@ -129,25 +155,27 @@ bool previous=false;bool selectedDate=false;readonly DateTimePicker dateFilter=n
    try {
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     Query(SalesWithDailyTotalsSql()+" WHERE s.created_at "+(selectedDate?">= @date AND created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND created_at < date('now','localtime','+1 day')")+" ORDER BY s.id DESC LIMIT 3000",selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
+     Query(SalesWithDailyTotalsSql()+" WHERE "+SalesFilterSql().Replace("created_at","s.created_at")+" ORDER BY s.id DESC LIMIT 3000",SalesFilterParameter(),SalesFilterValue());
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
-     // Colunas de vendas ajustadas depois da vinculação, fora de DataBindingComplete.
      foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";
      master.Columns["Venda para consultar"].HeaderText="VENDAS — clique para ver produtos e quantidades";
      master.Columns["Venda para consultar"].DefaultCellStyle.Padding=new Padding(8,4,4,4);
-     // Mantém a grade compacta e evita o erro anterior de espessura de linhas.
      if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
      if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
      if(master.Columns.Contains("cliente")){master.Columns["cliente"].HeaderText="Cliente";master.Columns["cliente"].FillWeight=230;}
      if(master.Columns.Contains("pagamento")){master.Columns["pagamento"].HeaderText="Pagamento";master.Columns["pagamento"].FillWeight=134;}
      if(master.Columns.Contains("total")){master.Columns["total"].HeaderText="Valor (R$)";master.Columns["total"].FillWeight=120;master.Columns["total"].DefaultCellStyle.Format="N2";master.Columns["total"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
      if(master.Columns.Contains("Total do dia")){master.Columns["Total do dia"].HeaderText="Total do dia (R$)";master.Columns["Total do dia"].FillWeight=150;master.Columns["Total do dia"].DefaultCellStyle.Format="N2";master.Columns["Total do dia"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     heading.Text=selectedDate?"VENDAS DE "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"VENDAS ANTERIORES | Clique na venda para ver produtos":"VENDAS DO DIA | Clique na venda para ver produtos";
-     var dt=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE created_at "+(selectedDate?">= @date AND created_at < date(@date, '+1 day')":previous?"< date('now','localtime')":">= date('now','localtime') AND created_at < date('now','localtime','+1 day')"),selectedDate?"@date":null,selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null);
-     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE date(created_at) >= date(\'now\',\'localtime\',\'start of month\') AND date(created_at) < date(\'now\',\'localtime\',\'start of month\',\'+1 month\')");
-     summary.Text="  "+(selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje")+"  |  Quantidade: "+Convert.ToInt64(dt.Rows[0]["quantidade"])+"  |  TOTAL VENDIDO: R$ "+Convert.ToDecimal(dt.Rows[0]["total"]).ToString("N2")+"  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2")+"  |  Consulte Totais por dia";
+     heading.Text=selectedMonth?"VENDAS | "+monthFilter.Value.ToString("MMMM yyyy").ToUpperInvariant():selectedDate?"VENDAS DE "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"VENDAS ANTERIORES | Clique na venda para ver produtos":"VENDAS DO DIA | Clique na venda para ver produtos";
+     var totals=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE "+SalesFilterSql(),SalesFilterParameter(),SalesFilterValue());
+     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE created_at >= @date AND created_at < date(@date,'+1 month')","@date",
+      (selectedMonth?monthFilter.Value:DateTime.Today).ToString("yyyy-MM-01"));
+     summary.Text="  "+SalesFilterTitle()+"  |  Quantidade: "+Convert.ToInt64(totals.Rows[0]["quantidade"])+
+      "  |  TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
+      "  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2")+
+      (rows.Rows.Count>=3000?"  |  Exibindo 3000 vendas; totais calculados sobre todas.":"  |  Consulte Totais por dia");
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
    finally{loadingMaster=false;LoadDetails();}
