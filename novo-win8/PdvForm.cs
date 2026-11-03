@@ -61,6 +61,11 @@ namespace ArmazemGratidao {
    saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
+   if(manualEntry){
+    var inventory=new Button{Text="ESTOQUE COMPLETO / EDITAR",Width=245,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(174,48,67),ForeColor=Color.White};
+    inventory.Click+=(sender,args)=>OpenFullInventoryForManualSales();
+    header.Controls.Add(inventory);
+   }
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
@@ -411,6 +416,36 @@ namespace ArmazemGratidao {
     dialog.Shown+=(sender,args)=>{amount.Focus();amount.Select(0,amount.Text.Length);};
     return dialog.ShowDialog(this)==DialogResult.OK?(decimal?)amount.Value:null;
    }
+  }
+  // Abrir o mesmo cadastro de produtos do Armazem, com estoque inteiro e edicao auditada.
+  // Nao recria cadastros nem altera historico de vendas anotadas.
+  void OpenFullInventoryForManualSales(){
+   if(!manualEntry)return;
+   try{
+    lookupDelay.Stop();suggestions.Visible=false;
+    using(var products=new ProdutosForm(db,true))products.ShowDialog(this);
+    // Atualizar apenas os dados dos itens ja presentes no carrinho ainda nao finalizado.
+    // Os itens e quantidades permanecem; alteracoes feitas no cadastro refletem no lancamento.
+    int changed=0;
+    using(var conn=Open()){
+     foreach(var item in cart){
+      using(var cmd=new SQLiteCommand("SELECT name,barcode,internal_code,price,cost FROM products WHERE id=@id",conn)){
+       cmd.Parameters.AddWithValue("@id",item.Id);
+       using(var rd=cmd.ExecuteReader()){
+        if(!rd.Read())continue;
+        string name=Convert.ToString(rd["name"]),barcode=Convert.ToString(rd["barcode"]),internalCode=Convert.ToString(rd["internal_code"]);
+        decimal price=Dec(rd["price"]),cost=Dec(rd["cost"]);
+        if(item.Name!=name||item.Barcode!=barcode||item.InternalCode!=internalCode||item.Price!=price||item.Cost!=cost){
+         item.Name=name;item.Barcode=barcode;item.InternalCode=internalCode;item.Price=price;item.Cost=cost;changed++;
+        }
+       }
+      }
+     }
+    }
+    Render();
+    if(changed>0)MessageBox.Show(changed+" item(ns) do carrinho foram atualizados com nome, custo e preco cadastrados. Confira os totais antes de finalizar.","Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    code.Focus();
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel abrir ou atualizar o estoque: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void AddProduct(bool askQuantity=false) {
    string search=code.Text.Trim();if(search.Length==0)return;
