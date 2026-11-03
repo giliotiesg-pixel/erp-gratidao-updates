@@ -69,6 +69,9 @@ namespace ArmazemGratidao {
    var fixClientName=new Button{Text="Corrigir nome do cliente",Width=220,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
    fixClientName.Click+=(sender,args)=>CorrectWholeClientName();
    switchBar.Controls.Add(fixClientName);
+   var transferClient=new Button{Text="Trocar por cliente cadastrado",Width=255,Height=32,BackColor=Color.FromArgb(12,113,88),ForeColor=Color.White};
+   transferClient.Click+=(sender,args)=>TransferFiadoToRegisteredClient();
+   switchBar.Controls.Add(transferClient);
    tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
    var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=122,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
    bottom.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
@@ -323,6 +326,117 @@ namespace ArmazemGratidao {
   }
   // Corrige o apelido ou nome errado do cliente em todas as suas operacoes.
   // Nunca soma contas de pessoas diferentes: nome de destino existente e bloqueado.
+
+  // Troca o titular de TODAS as vendas fiadas do apelido anterior por um cliente
+  // ja cadastrado. Preserva registros de pagamentos por ID; nao modifica
+  // carteiras de credito ou limites (sao saldos financeiros distintos).
+  void TransferFiadoToRegisteredClient(){
+   string source=(customer??"").Trim();
+   if(source.Length==0||source=="SEM CLIENTE"){MessageBox.Show("Selecione o cliente de origem no Fiado.");return;}
+   try{
+    var names=new DataTable();
+    names.Columns.Add("Nome do Cliente");
+    names.Columns.Add("Documento");
+    using(var cn=Open(true)){
+     using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customers'",cn)){
+      if(Convert.ToInt32(exists.ExecuteScalar())==0){MessageBox.Show("Ainda nao existe cadastro de Clientes. Cadastre o cliente correto primeiro.");return;}
+     }
+     using(var cmd=new SQLiteCommand("SELECT DISTINCT TRIM(name) AS nome,COALESCE(document,'') AS documento FROM customers WHERE TRIM(COALESCE(name,''))<>'' ORDER BY nome COLLATE NOCASE",cn))
+     using(var rd=cmd.ExecuteReader()){
+      while(rd.Read()){
+       string name=Convert.ToString(rd["nome"]);
+       if(!string.Equals(name,source,StringComparison.OrdinalIgnoreCase))
+        names.Rows.Add(name,Convert.ToString(rd["documento"]));
+      }
+     }
+    }
+    if(names.Rows.Count==0){MessageBox.Show("Nenhum outro cliente cadastrado foi encontrado. Cadastre o cliente correto antes de transferir.");return;}
+    using(var dlg=new Form{Text="Fiado | Transferir para cliente cadastrado",Width=690,Height=565,MinimumSize=new Size(550,430),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     var header=new Label{Text="Origem: "+source+"\nEscolha o cadastro correto para receber as vendas fiadas.",Dock=DockStyle.Top,Height=77,Padding=new Padding(12,11,5,5),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+     var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
+     var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,MultiSelect=false,AllowUserToAddRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+     var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=58,Padding=new Padding(9),BackColor=Color.White};
+     var choose=new Button{Text="Transferir vendas fiadas",Width=240,Height=36,BackColor=Color.FromArgb(12,113,88),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Width=140,Height=36,DialogResult=DialogResult.Cancel};
+     bar.Controls.Add(choose);bar.Controls.Add(cancel);
+     var view=new DataView(names);list.DataSource=view;
+     search.TextChanged+=(sender,args)=>{
+      string value=search.Text.Trim().Replace("'","''").Replace("[","[[]").Replace("%","[%]").Replace("*","[*]");
+      view.RowFilter=value.Length==0?"":"[Nome do Cliente] LIKE '%"+value+"%' OR Documento LIKE '%"+value+"%'";
+     };
+     Action transfer=()=>{
+      if(list.CurrentRow==null){MessageBox.Show("Selecione o cliente correto.");return;}
+      var selected=list.CurrentRow.DataBoundItem as DataRowView;
+      if(selected==null)return;
+      string destination=Convert.ToString(selected["Nome do Cliente"]).Trim();
+      if(destination.Length==0||string.Equals(source,destination,StringComparison.OrdinalIgnoreCase)){
+       MessageBox.Show("Selecione outro cliente.");return;
+      }
+      try{
+       long count;decimal debt;
+       using(var cn=Open(true)){
+        using(var cmd=new SQLiteCommand("SELECT COUNT(*) AS quantity, COALESCE(SUM(CASE WHEN "+Balance+">0 THEN "+Balance+" ELSE 0 END),0) AS debt FROM sales s WHERE "+CreditFilter+" AND s.customer_name=@source COLLATE NOCASE",cn)){
+         cmd.Parameters.AddWithValue("@source",source);
+         using(var rd=cmd.ExecuteReader()){
+          if(!rd.Read())throw new Exception("Nao foi possivel calcular as vendas.");
+          count=Convert.ToInt64(rd["quantity"]);debt=Convert.ToDecimal(rd["debt"]);
+         }
+        }
+        using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE name=@name COLLATE NOCASE",cn)){
+         cmd.Parameters.AddWithValue("@name",destination);
+         if(Convert.ToInt64(cmd.ExecuteScalar())==0)throw new Exception("O cadastro de destino nao existe mais. Atualize a lista.");
+        }
+       }
+       if(count==0){MessageBox.Show("O nome de origem nao possui vendas fiadas para transferir.");return;}
+       string warning="Transferir "+count+" venda(s) fiada(s) de:\n"+source+"\n\nPara o cliente cadastrado:\n"+destination+
+        "\n\nSaldo em aberto destas vendas: R$ "+debt.ToString("N2")+
+        "\n\nOs pagamentos feitos continuam vinculados as mesmas vendas. O saldo do destino somara as dividas transferidas."+
+        "\n\nCredito depositado, limite de Fiado e cascos da origem NAO serao transferidos. Confirme somente se for a mesma pessoa.";
+       if(MessageBox.Show(warning,"CONFIRMAR TROCA DE CLIENTE",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+       string backup=CreditBackupPath(db,"antes-transferir-fiado-");
+       using(var cn=Open(false)){
+        using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+         copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
+         using(var check=new SQLiteCommand("PRAGMA integrity_check",copy))
+          if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido. Transferencia bloqueada.");
+        }
+        if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio. Transferencia bloqueada.");
+        using(var tx=cn.BeginTransaction()){
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE name=@dest COLLATE NOCASE",cn,tx)){
+          check.Parameters.AddWithValue("@dest",destination);
+          if(Convert.ToInt64(check.ExecuteScalar())==0)throw new Exception("Cliente de destino nao existe mais.");
+         }
+         using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS fiado_customer_transfers(id INTEGER PRIMARY KEY AUTOINCREMENT,source_name TEXT NOT NULL,destination_name TEXT NOT NULL,sales_transferred INTEGER NOT NULL,changed_at TEXT NOT NULL,description TEXT NOT NULL)",cn,tx))
+          create.ExecuteNonQuery();
+         int changed;
+         using(var cmd=new SQLiteCommand("UPDATE sales SET customer_name=@dest WHERE customer_name=@source COLLATE NOCASE AND (UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(status,'')) LIKE '%FIADO%')",cn,tx)){
+          cmd.Parameters.AddWithValue("@dest",destination);cmd.Parameters.AddWithValue("@source",source);
+          changed=cmd.ExecuteNonQuery();
+         }
+         if(changed!=count)throw new Exception("O numero de vendas mudou durante a transferencia. Atualize a tela e tente novamente.");
+         using(var audit=new SQLiteCommand("INSERT INTO fiado_customer_transfers(source_name,destination_name,sales_transferred,changed_at,description) VALUES(@source,@dest,@count,datetime('now','localtime'),@detail)",cn,tx)){
+          audit.Parameters.AddWithValue("@source",source);audit.Parameters.AddWithValue("@dest",destination);audit.Parameters.AddWithValue("@count",changed);
+          audit.Parameters.AddWithValue("@detail","Vendas e pagamentos mantidos nos mesmos IDs; carteira, limites e cascos nao transferidos. Saldo original R$ "+debt.ToString("N2"));
+          if(audit.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel auditar a transferencia.");
+         }
+         tx.Commit();
+        }
+       }
+       customer=destination;
+       dlg.DialogResult=DialogResult.OK;dlg.Close();
+       clientSearch.Clear();LoadClients();SelectClient(destination);
+       MessageBox.Show(count+" vendas fiadas transferidas para "+destination+". Valores e pagamentos preservados.\nBackup: "+backup,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Information);
+      }catch(Exception ex){MessageBox.Show("Transferencia nao realizada: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+     };
+     choose.Click+=(sender,args)=>transfer();
+     list.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)transfer();};
+     dlg.AcceptButton=choose;dlg.CancelButton=cancel;
+     dlg.Controls.Add(list);dlg.Controls.Add(bar);dlg.Controls.Add(search);dlg.Controls.Add(header);
+     dlg.Shown+=(sender,args)=>search.Focus();
+     dlg.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel escolher o cliente: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   void CorrectWholeClientName(){
    string oldName=(customer??"").Trim();
    if(oldName.Length<2||oldName=="SEM CLIENTE"){MessageBox.Show("Selecione o cliente do Fiado primeiro.");return;}
