@@ -270,7 +270,7 @@ namespace ArmazemGratidao {
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
-  readonly Button menuToggle=new Button {Text="▦  Módulos",Width=133,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+  readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
@@ -285,11 +285,11 @@ namespace ArmazemGratidao {
    menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
-   menuToggle.Click+=(s,e)=>ShowModulesWindow();
+   menuToggle.Click+=(s,e)=>ShowMainMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=165,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
-   AddButton(bar,"Início",ShowHome);
+   AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
@@ -320,7 +320,7 @@ namespace ArmazemGratidao {
    EnableWheelScrolling(bar);
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
-   ShowHome(this,EventArgs.Empty);
+   ShowMainMenu();
    Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(false);}));
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
@@ -577,6 +577,49 @@ namespace ArmazemGratidao {
    status.Text="Início • Indicadores e ranking. Acesse as ferramentas em Módulos.";
   }
 
+  // Tela inicial única de navegação; preserva os handlers originais dos módulos.
+  void ShowMainMenu(){
+   grid.Visible=false;
+   var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
+   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(246,249,253)};
+   var top=new Panel{Dock=DockStyle.Top,Height=76,BackColor=Color.White};
+   top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=40,
+    Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)});
+   top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
+    Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
+   var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
+    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
+   var actions=ModuleActions();
+   actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
+   actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
+   actions.Add(Tuple.Create("Pasta do backup das atualizações",(EventHandler)ConfigureUpdateBackupFolder));
+   actions.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
+   actions.Add(Tuple.Create("Preparar recuperação",(EventHandler)PrepareRecoveredSales));
+   actions.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
+   actions.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
+   actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
+   actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
+   actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
+   foreach(var item in actions){
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=162,Height=49,
+     MinimumSize=new Size(162,49),MaximumSize=new Size(162,49),Margin=new Padding(4),
+     Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
+     BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
+     Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
+     AutoEllipsis=true,UseMnemonic=false};
+    tile.FlatAppearance.BorderSize=0;
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(226,238,253);
+    tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+     new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
+     9,Color.FromArgb(174,194,224),1.3f);
+    tile.Click+=item.Item2;
+    tiles.Controls.Add(tile);
+   }
+   page.Controls.Add(tiles);page.Controls.Add(top);
+   Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
+   sideMenu.Visible=false;EnableWheelScrolling(tiles);
+   status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
+  }
   // Janela independente de atalhos: os mais usados primeiro.
   // O menu lateral antigo continua acessível como alternativa de navegação.
   System.Collections.Generic.List<Tuple<string,EventHandler>> ModuleActions(){
