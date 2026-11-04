@@ -1162,7 +1162,14 @@ namespace ArmazemGratidao {
    using(var client=new ProductLookupWebClient()){
     client.Encoding=System.Text.Encoding.UTF8;
     client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (barcode product lookup)";
-    string json=client.DownloadString(url);
+    string json;
+    try{json=client.DownloadString(url);}
+    catch(System.Net.WebException ex){
+     var response=ex.Response as System.Net.HttpWebResponse;
+     if(response!=null&&response.StatusCode==System.Net.HttpStatusCode.NotFound)
+      return null; // Código não encontrado no catálogo; não é falha do cadastro.
+     throw;
+    }
     if(!System.Text.RegularExpressions.Regex.IsMatch(json,"\\\"status\\\"\\s*:\\s*1(?:\\D|$)"))return null;
     string name=JsonProductField(json,"product_name_pt");
     if(string.IsNullOrWhiteSpace(name))name=JsonProductField(json,"product_name");
