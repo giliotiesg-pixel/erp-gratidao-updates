@@ -840,10 +840,10 @@ Panel BuildEmbeddedCalculator(){
    var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
    var sections=new System.Collections.Generic.List<Panel>();
    foreach(string section in order){
-    var matches=buttons.Where(x=>ModuleSection(x.Text)==section).ToList();
+    var matches=buttons.Where(x=>ModuleSection(x.AccessibleDescription)==section).ToList();
     if(matches.Count==0)continue;
     bool maintenance=section=="SISTEMA E MANUTENÇÃO"||section=="CONSULTAS E RELATÓRIOS";
-    var block=new Panel{Width=405,Height=36+(maintenance?0:((matches.Count+1)/2)*42),
+    var block=new Panel{Width=424,Height=36+(maintenance?0:((matches.Count+1)/2)*37),
      Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
     var heading=new Label{Dock=DockStyle.Top,Height=31,
      Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
@@ -852,13 +852,18 @@ Panel BuildEmbeddedCalculator(){
     var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
      RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50f));
-    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,210));
+    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,37));
     for(int n=0;n<matches.Count;n++){
      var button=matches[n];
-     button.Dock=DockStyle.Fill;
+     button.Dock=DockStyle.None;
+     button.Anchor=AnchorStyles.Left;
+     button.Height=31;
+     button.Width=Math.Min(204,Math.Max(94,TextRenderer.MeasureText(button.Text,button.Font).Width+22));
+     button.AutoEllipsis=true;
+     var tip=new ToolTip();tip.SetToolTip(button,button.Text);
      button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
-     button.Margin=new Padding(2,2,2,3);
+     button.Margin=new Padding(2,2,2,2);
      group.Controls.Add(button,n%2,n/2);
     }
     block.Controls.Add(group);block.Controls.Add(heading);
@@ -868,14 +873,14 @@ Panel BuildEmbeddedCalculator(){
      heading.Click+=(sender,args)=>{
       bool expanded=!group.Visible;
       group.Visible=expanded;
-      block.Height=36+(expanded?group.RowCount*42:0);
+      block.Height=36+(expanded?group.RowCount*37:0);
       heading.Text=expanded?"▾ "+section+"  (clique para ocultar)":"▸ "+section+"  (clique para abrir)";
      };
     }
     sections.Add(block);panel.Controls.Add(block);
    }
    Action resize=()=>{
-    int width=Math.Max(260,panel.ClientSize.Width-20);
+    int width=424;
     foreach(Panel block in sections)block.Width=width;
    };
    panel.Resize+=(sender,args)=>resize();
@@ -909,7 +914,9 @@ Panel BuildEmbeddedCalculator(){
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
    // Sistema e manutencao ficam na mesma faixa dos demais modulos, recolhidos inicialmente.
    foreach(var item in actions){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=120,Height=38,
+    string displayName=System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(item.Item1.ToLower(System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
+    displayName=displayName.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp").Replace("Qr","QR").Replace("Pix","PIX");
+    var tile=new Button{Text=displayName,Tag="home-shortcut",AccessibleDescription=item.Item1,Width=120,Height=38,
      MinimumSize=new Size(120,38),MaximumSize=new Size(120,38),Margin=new Padding(3),
      Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
