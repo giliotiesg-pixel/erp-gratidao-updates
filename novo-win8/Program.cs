@@ -870,16 +870,16 @@ Panel BuildEmbeddedCalculator(){
     var matches=buttons.Where(x=>ModuleSection(x.AccessibleDescription)==section).ToList();
     if(matches.Count==0)continue;
     bool maintenance=section=="SISTEMA E MANUTENÇÃO"||section=="CONSULTAS E RELATÓRIOS";
-    var block=new Panel{Width=424,Height=36+(maintenance?0:((matches.Count+1)/2)*40),
+    var block=new Panel{Width=606,Height=36+(maintenance?0:((matches.Count+2)/3)*40),
      Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
     var heading=new Label{Dock=DockStyle.Top,Height=31,
      Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
      ForeColor=Color.FromArgb(180,35,50),BackColor=Color.FromArgb(229,237,249)};
-    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
+    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,
      RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,210));
+    for(int col=0;col<3;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,200));
     for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
     for(int n=0;n<matches.Count;n++){
      var button=matches[n];
@@ -891,7 +891,7 @@ Panel BuildEmbeddedCalculator(){
      var tip=new ToolTip();tip.SetToolTip(button,button.Text);
      button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
      button.Margin=new Padding(2,2,2,2);
-     group.Controls.Add(button,n%2,n/2);
+     group.Controls.Add(button,n%3,n/3);
     }
     block.Controls.Add(group);block.Controls.Add(heading);
     if(maintenance){
@@ -907,7 +907,7 @@ Panel BuildEmbeddedCalculator(){
     sections.Add(block);panel.Controls.Add(block);
    }
    Action resize=()=>{
-    int width=424;
+    int width=606;
     foreach(Panel block in sections)block.Width=width;
    };
    panel.Resize+=(sender,args)=>resize();
@@ -923,7 +923,7 @@ Panel BuildEmbeddedCalculator(){
     Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)});
    top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
     Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
-   var tiles=new FlowLayoutPanel{Dock=DockStyle.Left,Width=440,AutoScroll=true,WrapContents=true,
+   var tiles=new FlowLayoutPanel{Dock=DockStyle.Left,Width=620,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
    var actions=ModuleActions();
 
