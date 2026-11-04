@@ -326,13 +326,20 @@ namespace ArmazemGratidao {
      }
     }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
    }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
+   // Quatro indicadores compactos e alinhados em uma faixa, com rolagem horizontal
+   // apenas se a area util da janela for pequena.
+   var indicators=new FlowLayoutPanel {Width=920,Height=91,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,
+    AutoScroll=true,Margin=new Padding(0,1,0,8),Padding=new Padding(0),BackColor=Color.FromArgb(246,249,253)};
    foreach(var metric in metrics){
-    var panel=new Panel {Width=285,Height=103,BackColor=Color.White,Margin=new Padding(7,4,7,14)};
-    RoundHomeControl(panel,16);
-    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=34,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)});
-    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Bottom,Height=60,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",15,FontStyle.Bold),AutoEllipsis=true});
-    home.Controls.Add(panel);
+    var panel=new Panel {Width=215,Height=78,BackColor=Color.White,Margin=new Padding(5,2,5,2),BorderStyle=BorderStyle.FixedSingle};
+    RoundHomeControl(panel,12);
+    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Fill,Padding=new Padding(10,5,3,0),
+     ForeColor=Color.FromArgb(15,57,146),Font=new Font("Segoe UI",13,FontStyle.Bold),AutoEllipsis=true});
+    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=27,Padding=new Padding(10,7,4,0),
+     ForeColor=Color.FromArgb(180,38,56),Font=new Font("Segoe UI",8,FontStyle.Bold),AutoEllipsis=true});
+    indicators.Controls.Add(panel);
    }
+   home.Controls.Add(indicators);
    home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
