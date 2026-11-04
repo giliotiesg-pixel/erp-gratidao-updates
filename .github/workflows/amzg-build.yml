@@ -1,6 +1,10 @@
 name: AMZG Windows Build
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'amzg-src/**'
+      - '.github/workflows/amzg-build.yml'
   push:
     tags:
       - 'amzg-v*'
