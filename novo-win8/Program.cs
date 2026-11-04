@@ -875,7 +875,7 @@ Panel BuildEmbeddedCalculator(){
     else if(ch=='*'||ch=='x'||ch=='X'||ch=='×')key="×";
     else if(ch=='/'||ch=='÷')key="÷";
     else if(ch==','||ch=='.')key=",";
-    else if(ch=='='||ch=='\\r')key="=";
+    else if(ch=='='||ch=='\r')key="=";
     else if(ch=='%')key="%";
     if(key!=null){
      args.Handled=true;
