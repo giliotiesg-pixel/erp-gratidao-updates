@@ -855,7 +855,7 @@ Panel BuildEmbeddedCalculator(){
    if(new[]{"PDV  •  Nova venda","Vendas","Lançar vendas anotadas","Cascos retornáveis","Fiado","Clientes","WhatsApp"}.Contains(name))return "VENDAS E ATENDIMENTO";
    if(new[]{"Produtos","Estoque","Compras","Estoque pelo celular","Conferência rápida de estoque"}.Contains(name))return "PRODUTOS E ESTOQUE";
    if(new[]{"Caixa","Financeiro","Lucro","Taxas dos pagamentos"}.Contains(name))return "FINANCEIRO E CAIXA";
-   if(new[]{"Relatórios","Início / Indicadores","Localizar vendas","Conferir valores","Itens"}.Contains(name))return "CONSULTAS E RELATÓRIOS";
+   if(new[]{"Relatórios","Consulta de preços","Início / Indicadores","Localizar vendas","Conferir valores","Itens"}.Contains(name))return "CONSULTAS E RELATÓRIOS";
    return "SISTEMA E MANUTENÇÃO";
   }
   void GroupModuleButtons(FlowLayoutPanel panel){
@@ -993,6 +993,7 @@ Panel BuildEmbeddedCalculator(){
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Cascos retornáveis",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));})),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
+    Tuple.Create("Consulta de preços",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco de produtos.");return;}OpenModuleWindow(new ConsultaPrecoForm(dbPath));})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));})),
     Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
     Tuple.Create("Clientes",(EventHandler)((s,a)=>OpenHomeModule("Clientes"))),
