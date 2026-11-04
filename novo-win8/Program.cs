@@ -307,7 +307,14 @@ namespace ArmazemGratidao {
    updateHeader.FlatAppearance.BorderSize=0;
    updateHeader.Click+=async (sender,args)=>await CheckUpdates();
    RoundHomeControl(updateHeader,9);header.Controls.Add(updateHeader);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=377,Top=17};header.Controls.Add(brand);
+   var inicioHeader=new Button{Text="Início",Left=367,Top=13,Width=90,Height=40,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9.5f,FontStyle.Bold)};
+   inicioHeader.FlatAppearance.BorderSize=0;
+   inicioHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
+   inicioHeader.Click+=ShowHome;
+   RoundHomeControl(inicioHeader,9);header.Controls.Add(inicioHeader);
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=475,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
