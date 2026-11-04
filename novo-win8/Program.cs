@@ -641,12 +641,12 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(tile);
    }
    var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
-   var previous=new Button{Text="Abrir menu antigo",Width=179,Height=35,Top=10,Left=17,
+   var previous=new Button{Text="Mostrar/ocultar menu antigo",Width=218,Height=35,Top=10,Left=17,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9,FontStyle.Bold)};
    previous.FlatAppearance.BorderSize=0;RoundHomeControl(previous,9);
-   previous.Click+=(sender,args)=>{sideMenu.Visible=true;dialog.Close();};
-   var dashboard=new Button{Text="Início / Indicadores",Width=179,Height=35,Top=10,Left=205,
+   previous.Click+=(sender,args)=>{sideMenu.Visible=!sideMenu.Visible;dialog.Close();};
+   var dashboard=new Button{Text="Início / Indicadores",Width=179,Height=35,Top=10,Left=248,
     FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(22,75,160),
     Font=new Font("Segoe UI",9,FontStyle.Bold)};
    dashboard.FlatAppearance.BorderSize=0;RoundHomeControl(dashboard,9);
