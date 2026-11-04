@@ -289,7 +289,14 @@ namespace ArmazemGratidao {
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
    menuToggle.Click+=(s,e)=>ShowMainMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=165,Top=17};header.Controls.Add(brand);
+   // Atualização sempre acessível no cabeçalho, independentemente do módulo aberto.
+   var updateHeader=new Button{Text="Verificar Atualização",Left=181,Top=13,Width=177,Height=40,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(62,76,99),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9.5f,FontStyle.Bold)};
+   updateHeader.FlatAppearance.BorderSize=0;
+   updateHeader.Click+=async (sender,args)=>await CheckUpdates();
+   RoundHomeControl(updateHeader,9);header.Controls.Add(updateHeader);
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=377,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -790,18 +797,19 @@ namespace ArmazemGratidao {
    actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
    actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
+   actions.RemoveAll(x=>x.Item1=="Verificar atualização");
    foreach(var item in actions){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=162,Height=49,
-     MinimumSize=new Size(162,49),MaximumSize=new Size(162,49),Margin=new Padding(4),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=143,Height=42,
+     MinimumSize=new Size(143,42),MaximumSize=new Size(143,42),Margin=new Padding(3),
      Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
-     BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
+     BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
+     Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
      AutoEllipsis=true,UseMnemonic=false};
     tile.FlatAppearance.BorderSize=0;
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(226,238,253);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(65,91,139);
     tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
      new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
-     9,Color.FromArgb(174,194,224),1.3f);
+     9,Color.FromArgb(92,117,155),1.3f);
     tile.Click+=item.Item2;
     tiles.Controls.Add(tile);
    }
@@ -857,20 +865,20 @@ namespace ArmazemGratidao {
    top.Controls.Add(title);top.Controls.Add(info);
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
-   foreach(var item in ModuleActions()){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=132,Height=43,
-     MinimumSize=new Size(132,43),MaximumSize=new Size(132,43),Margin=new Padding(2),
+   foreach(var item in ModuleActions().Where(x=>x.Item1!="Verificar atualização")){
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=126,Height=40,
+     MinimumSize=new Size(126,40),MaximumSize=new Size(126,40),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
-     BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
+     BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
+     Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
      Image=HomeShortcutImage(item.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true};
     tile.FlatAppearance.BorderSize=0;
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(226,238,253);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(65,91,139);
     tile.Paint+=(paintSender,paintArgs)=>RoundedVisuals.DrawOutline(paintArgs.Graphics,
      new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
-     9,Color.FromArgb(174,194,224),1.3f);
+     9,Color.FromArgb(92,117,155),1.3f);
     tile.Click+=item.Item2;
     tiles.Controls.Add(tile);
    }
