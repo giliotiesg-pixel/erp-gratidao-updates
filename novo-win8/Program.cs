@@ -378,11 +378,11 @@ namespace ArmazemGratidao {
     WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
    foreach(var action in actions){
     var button=new Button {
-     Text=action.Item1,Tag="home-shortcut",Width=144,Height=65,
-     MinimumSize=new Size(144,65),MaximumSize=new Size(144,65),
-     Margin=new Padding(5,3,5,3),Padding=new Padding(5,3,5,3),
+     Text=action.Item1,Tag="home-shortcut",Width=144,Height=60,
+     MinimumSize=new Size(144,60),MaximumSize=new Size(144,60),
+     Margin=new Padding(2,2,2,2),Padding=new Padding(3,2,2,2),
      FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(246,249,253),ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",8.1f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
+     Font=new Font("Segoe UI",9.3f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true
     };
