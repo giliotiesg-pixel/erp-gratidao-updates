@@ -378,6 +378,43 @@ namespace ArmazemGratidao {
     throw;
    }
   }
+  string UpdatesDirectory(){
+   string folder=Path.Combine(dataDir,"Atualizacoes");
+   Directory.CreateDirectory(folder);
+   return folder;
+  }
+  void OpenSavedUpdates(){
+   try{
+    string folder=UpdatesDirectory();
+    Process.Start("explorer.exe","\""+folder+"\"");
+   }catch(Exception ex){MessageBox.Show(this,ex.Message,"Atualizações Salvas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+  async Task<string> DownloadVerifiedInstaller(int build,string url,string digest){
+   string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-Novo-build-"+build+"-Setup.exe");
+   bool valid=false;
+   if(File.Exists(installer)){
+    using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())
+     valid=string.Equals(BitConverter.ToString(sha.ComputeHash(stream)).Replace("-",""),digest.Substring(7),StringComparison.OrdinalIgnoreCase);
+    if(!valid)File.Delete(installer);
+   }
+   if(!valid){
+    string temp=installer+".download";
+    try{
+     status.Text="Salvando atualização build "+build+"...";
+     using(var web=new WebClient()){
+      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+      await web.DownloadFileTaskAsync(new Uri(url),temp);
+     }
+     string actual;
+     using(var stream=File.OpenRead(temp))using(var sha=SHA256.Create())
+      actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
+     if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase))
+      throw new Exception("SHA-256 inválido. Atualização rejeitada.");
+     File.Move(temp,installer);
+    }finally{try{if(File.Exists(temp))File.Delete(temp);}catch{}}
+   }
+   return installer;
+  }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
@@ -417,8 +454,6 @@ namespace ArmazemGratidao {
      return;
     }
     status.Text="Nova versao publicada: build "+remoteBuild+".";
-    if(!manual&&lastPromptedBuild==remoteBuild)return;
-    lastPromptedBuild=remoteBuild;
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -430,22 +465,19 @@ namespace ArmazemGratidao {
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
-    if(MessageBox.Show("Nova versão: build "+remoteBuild+Environment.NewLine+"Versão atual: build "+InstalledBuild+Environment.NewLine+Environment.NewLine+"Baixar, conferir e iniciar a instalação?"+Environment.NewLine+"O programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
-    // Não fechar a venda em andamento ou módulos com dados não salvos.
+    // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
+    string installer=await DownloadVerifiedInstaller(remoteBuild,url,digest);
+    status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
+    if(!manual&&lastPromptedBuild==remoteBuild)return;
+    lastPromptedBuild=remoteBuild;
+    if(MessageBox.Show("Atualização build "+remoteBuild+" já baixada e verificada."+Environment.NewLine+
+     "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
+     Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
+     "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
-     MessageBox.Show("Feche as demais janelas do Armazem antes da instalacao.","Atualizacao adiada");
-     status.Text="Atualizacao adiada por janelas abertas.";return;
+     MessageBox.Show("Feche as demais janelas do Armazém antes da instalação.","Atualização adiada");
+     return;
     }
-    string dir=Path.Combine(Path.GetTempPath(),"ArmazemGratidaoNovo-Atualizacoes");
-    Directory.CreateDirectory(dir);
-    string installer=Path.Combine(dir,"Armazem-Gratidao-Novo-build-"+remoteBuild+"-Setup.exe");
-    status.Text="Baixando atualização build "+remoteBuild+"...";
-    using(var web=new WebClient())await web.DownloadFileTaskAsync(new Uri(url),installer);
-    string actual;
-    using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
-    if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase)){File.Delete(installer);throw new Exception("SHA-256 inválido. Instalador rejeitado.");}
-    // A instalação EXE também cria seu próprio backup, para cobrir atualizações manuais.
-    // Um backup validado agora é obrigatório antes de iniciar o instalador pelo programa.
     string backupPath=CreateVerifiedPreUpdateBackup();
     status.Text="Backup confirmado: "+backupPath;
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
@@ -685,6 +717,7 @@ namespace ArmazemGratidao {
    actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
    actions.Insert(1,Tuple.Create("Calculadora",(EventHandler)((sender,args)=>ShowCalculator())));
    actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
+   actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
    actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
    actions.Add(Tuple.Create("Pasta do backup das atualizações",(EventHandler)ConfigureUpdateBackupFolder));
    actions.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
