@@ -35,15 +35,17 @@ namespace ArmazemGratidao {
     grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];StockEdit();}};
    }
    if(module=="Clientes"){
+    // Cadastro de clientes: mesma paleta azul dos demais módulos.
+    top.BackColor=Color.FromArgb(218,233,250);
     top.Height=65;
-    top.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.White});
+    top.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(0,9,0,0),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10,FontStyle.Bold)});
     clientSearch.TextChanged+=(s,e)=>LoadClients();top.Controls.Add(clientSearch);
-    var removeClient=new Button{Text="Excluir Cliente",AutoSize=true,Height=34,BackColor=Color.FromArgb(176,44,60),ForeColor=Color.White};
+    var removeClient=new Button{Text="Excluir Cliente",AutoSize=true,Height=34,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(176,44,60),ForeColor=Color.White};
     removeClient.Click+=(sender,args)=>DeleteClient();
     top.Controls.Add(removeClient);
-    var add=new Button{Text="Cadastrar cliente",AutoSize=true,Height=34};add.Click+=(s,e)=>EditClient(false);top.Controls.Add(add);
-    var edit=new Button{Text="Editar cliente selecionado",AutoSize=true,Height=34};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
-    var import=new Button{Text="Importar 12.1.6",AutoSize=true,Height=34};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);
+    var add=new Button{Text="Cadastrar cliente",AutoSize=true,Height=34,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.Click+=(s,e)=>EditClient(false);top.Controls.Add(add);
+    var edit=new Button{Text="Editar cliente selecionado",AutoSize=true,Height=34,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};edit.Click+=(s,e)=>EditClient(true);top.Controls.Add(edit);
+    var import=new Button{Text="Importar 12.1.6",AutoSize=true,Height=34,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};import.Click+=(s,e)=>ImportClients();top.Controls.Add(import);
     grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditClient(true);};
    }
    grid.Font=new Font("Segoe UI",10,FontStyle.Regular);grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;grid.RowTemplate.Height=29;
@@ -685,7 +687,7 @@ namespace ArmazemGratidao {
     var tip=new Label{Text=edit?"Altere os dados e confirme para salvar.":"Preencha os dados do novo cliente.",AutoSize=true,ForeColor=Color.FromArgb(21,75,156)};
     panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.Controls.Add(tip,1,4);
     var save=new Button{Text=edit?"Salvar alterações":"Salvar cadastro",Width=190,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
-    var cancel=new Button{Text="Cancelar",Width=130,Height=38,DialogResult=DialogResult.Cancel};
+    var cancel=new Button{Text="Cancelar",Width=130,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.Cancel};
     save.Click+=(s,e)=>{
      string newName=name.Text.Trim(),doc=OnlyDigits(document.Text);
      if(newName.Length<2){MessageBox.Show("Informe nome ou razão social.");return;}
