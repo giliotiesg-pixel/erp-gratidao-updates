@@ -1,6 +1,10 @@
 name: AMZG Windows Build
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'amzg-src/**'
+      - '.github/workflows/amzg-build.yml'
   push:
     tags:
       - 'amzg-v*'
@@ -25,4 +29,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AMZG-Setup
-          path: installer/Output/AMZG-Setup.exe
+          path: amzg-src/installer/Output/AMZG-Setup.exe
+          if-no-files-found: error

@@ -4,23 +4,42 @@ using AMZG.Core;
 namespace AMZG.App;
 internal static class Program { [STAThread] static void Main(){ApplicationConfiguration.Initialize();Application.Run(new MainForm());} }
 public sealed class MainForm:Form{
- readonly Panel menu=new(){Width=250,Dock=DockStyle.Left,BackColor=Color.White,AutoScroll=true};
  readonly Panel body=new(){Dock=DockStyle.Fill,BackColor=Color.FromArgb(244,246,248)};
  readonly Panel header=new(){Height=54,Dock=DockStyle.Top,BackColor=Color.FromArgb(15,61,102)};
- readonly Button toggle=new(){Text="☰",Width=52,Dock=DockStyle.Left,FlatStyle=FlatStyle.Flat,ForeColor=Color.White,BackColor=Color.FromArgb(15,61,102),Font=new Font("Segoe UI",14,FontStyle.Bold)};
- bool menuOpen=true;
+ readonly string[] modules={"PDV","Vendas","Produtos","Estoque","Clientes / Fornecedores","Fiado","Caixa","Compras","Validade","Relatórios","Lucro","Contas","Fiscal","Empresa","Ofertas","Cofre Digital","Configurações","Início / Indicadores"};
  public MainForm(){
-  Text="AMZ.G — Migração v2.1.9";WindowState=FormWindowState.Maximized;MinimumSize=new Size(1100,700);
+  Text="AMZ.G — Armazém Gratidão Novo";WindowState=FormWindowState.Maximized;MinimumSize=new Size(1100,700);
+  var home=new RoundedButton{Radius=12,Text="Menu Principal",Dock=DockStyle.Left,Width=155,Height=38,Margin=new Padding(8),BackColor=Color.White,ForeColor=Color.FromArgb(15,61,102),FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+  home.Click+=(_,_)=>OpenMenuPrincipal();
   header.Controls.Add(new Label{Text="ARMAZÉM GRATIDÃO",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold)});
-  header.Controls.Add(toggle);toggle.BringToFront();toggle.Click+=(_,_)=>{menuOpen=!menuOpen;menu.Visible=menuOpen;};
-  BuildMenu();Controls.Add(body);Controls.Add(menu);Controls.Add(header);header.BringToFront();OpenInicio();ApplyBoldStyle(this);Shown+=async (_,_)=>await CheckUpdateAsync(false);
+  header.Controls.Add(home);home.BringToFront();
+  Controls.Add(body);Controls.Add(header);header.BringToFront();OpenMenuPrincipal();ApplyBoldStyle(this);Shown+=async (_,_)=>await CheckUpdateAsync(false);
  }
- void BuildMenu(){
-  var f=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10,14,10,14)};
-  foreach(var name in new[]{"Início","PDV","Vendas","Caixa","Produtos","Estoque","Validade","Compras","Fiscal","Clientes / Fornecedores","Empresa","Fiado","Contas","Lucro","Relatórios","Ofertas","Cofre Digital","Configurações"}){
-   var b=new RoundedButton{Radius=12,Text=name,Width=210,Height=34,Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,BackColor=name=="Início"?Color.FromArgb(15,61,102):Color.White,ForeColor=name=="Início"?Color.White:Color.FromArgb(32,33,36),Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
-   b.FlatAppearance.BorderColor=Color.FromArgb(220,227,238);if(name=="Início")b.Click+=(_,_)=>OpenInicio();if(name=="PDV")b.Click+=(_,_)=>OpenPdv();if(name=="Configurações")b.Click+=(_,_)=>OpenSettings();f.Controls.Add(b);
-  } menu.Controls.Add(f);
+ void OpenMenuPrincipal(){
+  body.Controls.Clear();
+  var page=new Panel{Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(24),BackColor=Color.FromArgb(244,246,248)};
+  var title=new Label{Text="Menu Principal — Acesso aos Módulos",Dock=DockStyle.Top,Height=62,Font=new Font("Segoe UI",20,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)};
+  var grid=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=4,RowCount=(modules.Length+3)/4,AutoSize=true,Padding=new Padding(0,10,0,10)};
+  for(int i=0;i<4;i++)grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+  for(int i=0;i<grid.RowCount;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
+  for(int i=0;i<modules.Length;i++){
+   string name=modules[i];
+   var button=new RoundedButton{Radius=14,Text=name,Dock=DockStyle.Fill,Margin=new Padding(6),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,61,102),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+   button.FlatAppearance.BorderColor=Color.FromArgb(205,218,233);
+   button.Enabled=name=="PDV" || name=="Início / Indicadores" || name=="Configurações";
+   if(!button.Enabled){button.ForeColor=Color.FromArgb(120,130,140);button.Text=name+" (em desenvolvimento)";}
+   button.Click+=(_,_)=>OpenModule(name);
+   grid.Controls.Add(button,i%4,i/4);
+  }
+  page.Controls.Add(grid);page.Controls.Add(title);body.Controls.Add(page);
+ }
+ void OpenModule(string name){
+  switch(name){
+   case "PDV":OpenPdv();break;
+   case "Início / Indicadores":OpenInicio();break;
+   case "Configurações":OpenSettings();break;
+   default:MessageBox.Show("O módulo "+name+" ainda não está conectado a esta versão do código-fonte. Nenhum dado foi alterado.","Módulo indisponível",MessageBoxButtons.OK,MessageBoxIcon.Information);break;
+  }
  }
  void OpenPdv(){
   body.Controls.Clear();
@@ -118,14 +137,14 @@ public sealed class MainForm:Form{
   var h=new Panel{Height=74};
   var venda=new RoundedButton{Radius=13,Text="VENDA - IR AO PDV",Dock=DockStyle.Right,Width=190,Height=38,Margin=new Padding(8),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(15,61,102),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
   venda.Click+=(_,_)=>OpenPdv();h.Controls.Add(venda);
-  h.Controls.Add(new Label{Text="Faturamento",Dock=DockStyle.Top,Height=38,Font=new Font("Segoe UI",19,FontStyle.Bold)});h.Controls.Add(new Label{Text="Resumo das vendas e dos valores faturados.",Dock=DockStyle.Bottom,Height=28,ForeColor=Color.FromArgb(66,91,114),Font=new Font("Segoe UI",10)});page.Controls.Add(h);
+  h.Controls.Add(new Label{Text="Indicadores e Ranking",Dock=DockStyle.Top,Height=38,Font=new Font("Segoe UI",19,FontStyle.Bold)});h.Controls.Add(new Label{Text="Resumo dos indicadores e produtos mais vendidos.",Dock=DockStyle.Bottom,Height=28,ForeColor=Color.FromArgb(66,91,114),Font=new Font("Segoe UI",10)});page.Controls.Add(h);
   var cards=new TableLayoutPanel{Height=92,ColumnCount=4,Dock=DockStyle.Top,Margin=new Padding(0,0,0,18)};for(int i=0;i<4;i++)cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
   string[] labs={"Faturamento hoje","Vendas hoje","Lucro hoje","Faturamento do mês"}, vals={"R$ 0,00","0","R$ 0,00","R$ 0,00"};
   for(int i=0;i<4;i++){var c=Card();c.Margin=new Padding(i==0?0:7,0,i==3?0:7,0);c.Controls.Add(new Label{Text=vals[i],Dock=DockStyle.Fill,Padding=new Padding(14,14,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(15,45,89)});c.Controls.Add(new Label{Text=labs[i],Dock=DockStyle.Top,Height=28,Padding=new Padding(14,8,0,0),ForeColor=Color.FromArgb(100,116,139)});cards.Controls.Add(c,i,0);}page.Controls.Add(cards);
   var two=new TableLayoutPanel{Height=285,ColumnCount=2,Dock=DockStyle.Top,Margin=new Padding(0,0,0,16)};two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,66.7f));two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.3f));
   two.Controls.Add(TableCard("Produtos mais vendidos hoje",new[]{"Produto","Quantidade","Total"},new[]{"Atualizar produtos mais vendidos"}),0,0);
   two.Controls.Add(TableCard("Produtos mais vendidos do mês",new[]{"Produto","Qtd. vendida","Vendas","Total"},new[]{"Atualizar","Histórico dos meses anteriores"}),1,0);page.Controls.Add(two);
-  var recent=TableCard("Vendas recentes",new[]{"Data","Cliente","Pagamento","Total"},Array.Empty<string>());recent.Height=250;page.Controls.Add(recent);
+
   scroll.Controls.Add(page);body.Controls.Add(scroll);ApplyBoldStyle(scroll);
  }
  RoundedPanel TableCard(string title,string[] cols,string[] actions){

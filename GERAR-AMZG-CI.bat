@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
+cd /d "%~dp0amzg-src" || exit /b 1
 if exist publish rmdir /s /q publish
 if exist publish-maintenance rmdir /s /q publish-maintenance
 if exist installer\Output rmdir /s /q installer\Output
