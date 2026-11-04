@@ -768,8 +768,24 @@ namespace ArmazemGratidao {
      Width=Math.Max(300,panel.ClientSize.Width-32),Margin=new Padding(3,12,3,3),
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
      ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
+    if(section=="SISTEMA E MANUTENÇÃO"){
+     heading.Text="▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
+     heading.Cursor=Cursors.Hand;
+     heading.BackColor=Color.FromArgb(218,231,250);
+     bool expanded=false;
+     heading.Click+=(sender,args)=>{
+      expanded=!expanded;
+      heading.Text=expanded?"▾ SISTEMA E MANUTENÇÃO  (clique para ocultar)":"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
+      panel.SuspendLayout();
+      foreach(Button button in matches)button.Visible=expanded;
+      panel.ResumeLayout(true);
+     };
+    }
     panel.Controls.Add(heading);
-    foreach(Button button in matches)panel.Controls.Add(button);
+    foreach(Button button in matches){
+     if(section=="SISTEMA E MANUTENÇÃO")button.Visible=false;
+     panel.Controls.Add(button);
+    }
    }
    panel.Resize+=(sender,args)=>{
     int width=Math.Max(300,panel.ClientSize.Width-32);
@@ -802,9 +818,7 @@ namespace ArmazemGratidao {
    actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
    actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
-   // Ferramentas do sistema ficam somente no menu lateral ocultavel.
-   actions.RemoveAll(x=>ModuleSection(x.Item1)=="SISTEMA E MANUTENÇÃO");
-   actions.Add(Tuple.Create("Sistema / Manutenção",(EventHandler)((sender,args)=>{sideMenu.Visible=!sideMenu.Visible;})));
+   // Sistema e manutencao ficam na mesma faixa dos demais modulos, recolhidos inicialmente.
    foreach(var item in actions){
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=128,Height=38,
      MinimumSize=new Size(128,38),MaximumSize=new Size(128,38),Margin=new Padding(3),
@@ -872,7 +886,7 @@ namespace ArmazemGratidao {
    top.Controls.Add(title);top.Controls.Add(info);
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
-   foreach(var item in ModuleActions().Where(x=>ModuleSection(x.Item1)!="SISTEMA E MANUTENÇÃO")){
+   foreach(var item in ModuleActions()){
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=116,Height=37,
      MinimumSize=new Size(116,37),MaximumSize=new Size(116,37),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
@@ -891,7 +905,7 @@ namespace ArmazemGratidao {
    }
    GroupModuleButtons(tiles);
    var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
-   var previous=new Button{Text="Sistema / Manutenção",Width=218,Height=35,Top=10,Left=17,
+   var previous=new Button{Text="Mostrar/ocultar menu antigo",Width=218,Height=35,Top=10,Left=17,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9,FontStyle.Bold)};
    previous.FlatAppearance.BorderSize=0;RoundHomeControl(previous,9);
