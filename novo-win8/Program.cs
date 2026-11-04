@@ -162,6 +162,11 @@ namespace ArmazemGratidao {
     // Atalhos de Inicio e menu ja possuem moldura propria.
     bool ownFrame=string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)
        ||(button.Parent is FlowLayoutPanel && button.FindForm() is MainForm);
+    // Todos os botoes recebem regiao arredondada, inclusive atalhos e menu lateral.
+    // Os que ja possuem desenho proprio mantem sua moldura e seus eventos.
+    Action roundButton=()=>Round(button,9);
+    button.Resize+=(sender,args)=>roundButton();
+    roundButton();
     if(!ownFrame){
      button.FlatStyle=FlatStyle.Flat;
      button.FlatAppearance.BorderSize=0;
