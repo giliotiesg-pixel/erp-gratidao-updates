@@ -73,17 +73,14 @@ namespace ArmazemGratidao {
    transferClient.Click+=(sender,args)=>TransferFiadoToRegisteredClient();
    switchBar.Controls.Add(transferClient);
    tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
-   var bottom=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=144,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=Color.FromArgb(235,241,250)};
+   var bottom=new Panel {Dock=DockStyle.Bottom,Height=105,Padding=new Padding(6),BackColor=Color.FromArgb(235,241,250)};
    var paymentRow=new FlowLayoutPanel{Dock=DockStyle.Top,Height=44,WrapContents=false,AutoScroll=true};
    var toolsRow=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};
    var paymentHeader=new Label{Text="RECEBIMENTO DE FIADO",Dock=DockStyle.Top,Height=25,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.DarkRed};
    var toolsHeader=new Label{Text="▸ CONSULTAS E AJUSTES (clique para abrir)",Dock=DockStyle.Top,Height=28,Cursor=Cursors.Hand,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.DarkRed};
-   var bottomContent=new Panel{Dock=DockStyle.Fill};
-   bottomContent.Controls.Add(toolsRow);bottomContent.Controls.Add(toolsHeader);bottomContent.Controls.Add(paymentRow);bottomContent.Controls.Add(paymentHeader);
-   bottom.Controls.Add(bottomContent);
-   bottomContent.Width=980;bottomContent.Height=132;
+   bottom.Controls.Add(toolsRow);bottom.Controls.Add(toolsHeader);bottom.Controls.Add(paymentRow);bottom.Controls.Add(paymentHeader);
    toolsRow.Visible=false;
-   toolsHeader.Click+=(sender,args)=>{toolsRow.Visible=!toolsRow.Visible;toolsHeader.Text=(toolsRow.Visible?"▾":"▸")+" CONSULTAS E AJUSTES (clique para "+(toolsRow.Visible?"ocultar":"abrir")+")";};
+   toolsHeader.Click+=(sender,args)=>{toolsRow.Visible=!toolsRow.Visible;bottom.Height=toolsRow.Visible?225:105;toolsHeader.Text=(toolsRow.Visible?"▾":"▸")+" CONSULTAS E AJUSTES (clique para "+(toolsRow.Visible?"ocultar":"abrir")+")";};
 
    paymentRow.Controls.Add(new Label {Text="Forma de pagamento:",AutoSize=true,Padding=new Padding(0,9,0,0)});
    method.Items.AddRange(new object[]{"DINHEIRO","PIX","PIX QR CODE","DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","CREDITO DEPOSITADO"});method.SelectedIndex=0;paymentRow.Controls.Add(method);
