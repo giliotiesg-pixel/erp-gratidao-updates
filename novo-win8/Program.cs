@@ -761,6 +761,65 @@ namespace ArmazemGratidao {
    calc.Controls.Add(keys);keys.BringToFront();
    calc.Show();
   }
+Panel BuildEmbeddedCalculator(){
+   var panel=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(242,247,255),Padding=new Padding(6)};
+   var display=new TextBox{Dock=DockStyle.Top,Height=55,ReadOnly=true,
+    Text="0",TextAlign=HorizontalAlignment.Right,
+    Font=new Font("Segoe UI",24,FontStyle.Bold),BackColor=Color.White,
+    ForeColor=Color.FromArgb(20,69,147)};
+   panel.Controls.Add(display);
+   var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
+    Padding=new Padding(10),BackColor=Color.FromArgb(242,247,255)};
+   for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+   for(int i=0;i<5;i++)keys.RowStyles.Add(new RowStyle(SizeType.Percent,20));
+   decimal stored=0m;
+   string operation=null;
+   bool newNumber=true;
+   string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
+   for(int i=0;i<labels.Length;i++){
+    string key=labels[i];
+    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3),
+     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
+     BackColor=(key=="=")?Color.FromArgb(20,69,147):Color.White,
+     ForeColor=(key=="=")?Color.White:Color.FromArgb(20,69,147)};
+    b.FlatAppearance.BorderSize=0;
+    b.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),9,
+     Color.FromArgb(181,201,228),1.2f);
+    b.Click+=(sender,args)=>{
+     try{
+      decimal current;
+      if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
+        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
+      if(key.Length==1&&char.IsDigit(key[0])){
+       display.Text=newNumber?key:(display.Text=="0"?key:display.Text+key);
+       newNumber=false;
+      }else if(key==","){
+       if(newNumber){display.Text="0,";newNumber=false;}
+       else if(!display.Text.Contains(","))display.Text+=",";
+      }else if(key=="C"){stored=0m;operation=null;newNumber=true;display.Text="0";}
+      else if(key=="⌫"){display.Text=display.Text.Length<=1?"0":display.Text.Substring(0,display.Text.Length-1);newNumber=false;}
+      else if(key=="±"){display.Text=(-current).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));}
+      else if(key=="%"){display.Text=(current/100m).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));newNumber=true;}
+      else if(key=="="){
+       if(operation!=null){
+        decimal answer=current;
+        if(operation=="+")answer=stored+current;
+        else if(operation=="−")answer=stored-current;
+        else if(operation=="×")answer=stored*current;
+        else if(operation=="÷"){if(current==0m){MessageBox.Show(panel.FindForm(),"Não é possível dividir por zero.","Calculadora");return;}answer=stored/current;}
+        display.Text=answer.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        operation=null;newNumber=true;
+       }
+      }else{stored=current;operation=key;newNumber=true;}
+     }catch(OverflowException){MessageBox.Show(panel.FindForm(),"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
+    };
+    keys.Controls.Add(b,i%4,i/4);
+   }
+
+   panel.Controls.Add(keys);keys.BringToFront();
+   return panel;
+  }
   // Tela inicial única de navegação; preserva os handlers originais dos módulos.
   // Seções visuais do menu; não altera a ação associada a cada botão.
   string ModuleSection(string name){
@@ -819,7 +878,7 @@ namespace ArmazemGratidao {
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
    var actions=ModuleActions();
    actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
-   actions.Insert(1,Tuple.Create("Calculadora",(EventHandler)((sender,args)=>ShowCalculator())));
+
    actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
    actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
    actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
@@ -848,7 +907,14 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   page.Controls.Add(tiles);page.Controls.Add(top);
+   var calculatorSide=new Panel{Dock=DockStyle.Right,Width=264,
+    BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
+   var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
+    Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
+    TextAlign=ContentAlignment.MiddleCenter};
+   calculatorSide.Controls.Add(BuildEmbeddedCalculator());
+   calculatorSide.Controls.Add(calcTitle);
+   page.Controls.Add(tiles);page.Controls.Add(calculatorSide);page.Controls.Add(top);
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
    status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
