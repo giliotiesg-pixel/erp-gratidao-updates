@@ -1232,11 +1232,20 @@ namespace ArmazemGratidao {
     // Porcentagem de ganho calculada sobre o custo, sem nova coluna no banco.
     var gainPercent=new NumericUpDown{DecimalPlaces=2,Minimum=-100,Maximum=100000,Increment=1,Width=110};
     var gainValue=new Label{AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),Padding=new Padding(6,7,0,0)};
-    var pricingRow=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true,Margin=Padding.Empty};
-    pricingRow.Controls.Add(price);
-    pricingRow.Controls.Add(new Label{Text="Ganho %",AutoSize=true,Padding=new Padding(12,7,0,0)});
-    pricingRow.Controls.Add(gainPercent);
-    pricingRow.Controls.Add(gainValue);
+    // Campos proporcionais e sem barra de rolagem horizontal.
+    var pricingRow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty,AutoScroll=false};
+    pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));
+    pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,88));
+    pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));
+    pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    pricingRow.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+    price.Dock=DockStyle.Fill;price.Margin=new Padding(0,2,5,2);
+    gainPercent.Dock=DockStyle.Fill;gainPercent.Margin=new Padding(0,2,5,2);
+    gainValue.Dock=DockStyle.Fill;gainValue.AutoSize=false;gainValue.TextAlign=ContentAlignment.MiddleLeft;
+    pricingRow.Controls.Add(price,0,0);
+    pricingRow.Controls.Add(new Label{Text="Ganho %",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter},1,0);
+    pricingRow.Controls.Add(gainPercent,2,0);
+    pricingRow.Controls.Add(gainValue,3,0);
     panel.Controls.Remove(price);
     panel.Controls.Add(pricingRow,1,4);
     bool changingPricing=false;
