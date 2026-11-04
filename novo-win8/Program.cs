@@ -1003,7 +1003,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.None,Width=365,Height=485,Left=630,Top=85,
+   var calculatorSide=new Panel{Dock=DockStyle.None,Width=390,Height=515,Left=630,Top=85,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
@@ -1029,8 +1029,8 @@ Panel BuildEmbeddedCalculator(){
    Action positionCalculator=()=>{
     calculatorSide.Left=tiles.Right+8;
     calculatorSide.Top=top.Bottom+8;
-    calculatorSide.Height=Math.Min(485,Math.Max(360,page.ClientSize.Height-calculatorSide.Top-12));
-    calculatorSide.Width=Math.Min(365,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
+    calculatorSide.Height=Math.Min(515,Math.Max(360,page.ClientSize.Height-calculatorSide.Top-12));
+    calculatorSide.Width=Math.Min(390,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
     calculatorSide.Visible=page.ClientSize.Width-calculatorSide.Left>=210;
    };
    page.Resize+=(sender,args)=>positionCalculator();
