@@ -762,14 +762,14 @@ namespace ArmazemGratidao {
    calc.Show();
   }
 Panel BuildEmbeddedCalculator(){
-   var panel=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(242,247,255),Padding=new Padding(6)};
-   var display=new TextBox{Dock=DockStyle.Top,Height=55,ReadOnly=true,
+   var panel=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(234,242,253),Padding=new Padding(9)};
+   var display=new TextBox{Dock=DockStyle.Top,Height=60,ReadOnly=true,BorderStyle=BorderStyle.None,
     Text="0",TextAlign=HorizontalAlignment.Right,
-    Font=new Font("Segoe UI",24,FontStyle.Bold),BackColor=Color.White,
+    Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
    panel.Controls.Add(display);
    var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
-    Padding=new Padding(10),BackColor=Color.FromArgb(242,247,255)};
+    Padding=new Padding(3,12,3,4),BackColor=Color.FromArgb(234,242,253)};
    for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
    for(int i=0;i<5;i++)keys.RowStyles.Add(new RowStyle(SizeType.Percent,20));
    decimal stored=0m;
@@ -778,13 +778,15 @@ Panel BuildEmbeddedCalculator(){
    string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
    for(int i=0;i<labels.Length;i++){
     string key=labels[i];
-    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3),
-     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
-     BackColor=(key=="=")?Color.FromArgb(20,69,147):Color.White,
-     ForeColor=(key=="=")?Color.White:Color.FromArgb(20,69,147)};
+    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3,4,3,4),
+     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,
+     BackColor=(key=="=")?Color.FromArgb(22,75,160):(key=="C"?Color.FromArgb(184,55,69):((key=="+"||key=="−"||key=="×"||key=="÷")?Color.FromArgb(207,226,251):Color.White)),
+     ForeColor=(key=="="||key=="C")?Color.White:Color.FromArgb(20,69,147)};
     b.FlatAppearance.BorderSize=0;
+    b.FlatAppearance.MouseOverBackColor=Color.FromArgb(174,209,250);
+    RoundHomeControl(b,12);
     b.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),9,
+     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),12,
      Color.FromArgb(181,201,228),1.2f);
     b.Click+=(sender,args)=>{
      try{
@@ -912,7 +914,8 @@ Panel BuildEmbeddedCalculator(){
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
     TextAlign=ContentAlignment.MiddleCenter};
-   calculatorSide.Controls.Add(BuildEmbeddedCalculator());
+   var calcBody=BuildEmbeddedCalculator();
+   calculatorSide.Controls.Add(calcBody);
    calculatorSide.Controls.Add(calcTitle);
    page.Controls.Add(tiles);page.Controls.Add(calculatorSide);page.Controls.Add(top);
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
