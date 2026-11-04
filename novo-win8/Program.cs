@@ -549,7 +549,7 @@ namespace ArmazemGratidao {
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,10,12,10),BackColor=Color.FromArgb(246,249,253)};
-   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=920,Height=36,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(10,52,145)};
+   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=920,Height=36,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)};
    home.Controls.Add(title);
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=920,Height=25,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
@@ -610,20 +610,20 @@ namespace ArmazemGratidao {
     indicators.Controls.Add(panel);
    }
    home.Controls.Add(indicators);
-   home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=920,Height=29,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",11,FontStyle.Bold)});
+   home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=920,Height=29,ForeColor=Color.FromArgb(180,35,50),Font=new Font("Segoe UI",11,FontStyle.Bold)});
    var ranking=new Panel {Width=920,Height=355,BackColor=Color.White,Margin=new Padding(0,2,0,5),AutoScroll=false};
    RoundHomeControl(ranking,12);
-   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(14,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
+   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(14,12,12,8),ForeColor=Color.FromArgb(180,35,50),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
    var rankingGrid=new DataGridView {Dock=DockStyle.Fill,Visible=false,BackgroundColor=Color.White,BorderStyle=BorderStyle.None,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AllowUserToResizeRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both,ColumnHeadersHeight=40,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing};
    rankingGrid.Font=new Font("Segoe UI",10.5f,FontStyle.Regular);rankingGrid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
    rankingGrid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
    rankingGrid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(226,238,251);
-   rankingGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(180,35,50);
    rankingGrid.EnableHeadersVisualStyles=false;
    rankingGrid.DefaultCellStyle.BackColor=Color.White;
    rankingGrid.DefaultCellStyle.ForeColor=Color.FromArgb(20,40,75);
    rankingGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(230,239,250);
-   rankingGrid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(180,35,50);
    rankingGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(247,250,255);
    rankingGrid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
    rankingGrid.GridColor=Color.FromArgb(232,237,245);
@@ -873,7 +873,7 @@ Panel BuildEmbeddedCalculator(){
     var heading=new Label{Dock=DockStyle.Top,Height=31,
      Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
-     ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
+     ForeColor=Color.FromArgb(180,35,50),BackColor=Color.FromArgb(229,237,249)};
     var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
      RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
      BackColor=Color.FromArgb(246,249,253)};
@@ -918,9 +918,9 @@ Panel BuildEmbeddedCalculator(){
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(246,249,253)};
    var top=new Panel{Dock=DockStyle.Top,Height=76,BackColor=Color.White};
    top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=40,
-    Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)});
+    Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)});
    top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
-    Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
+    Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(180,35,50)});
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
    var actions=ModuleActions();
@@ -959,7 +959,7 @@ Panel BuildEmbeddedCalculator(){
    var calculatorSide=new Panel{Dock=DockStyle.Right,Width=335,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
-    Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
+    Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
     TextAlign=ContentAlignment.MiddleCenter};
    var calcBody=BuildEmbeddedCalculator();
    calculatorSide.Controls.Add(calcBody);
