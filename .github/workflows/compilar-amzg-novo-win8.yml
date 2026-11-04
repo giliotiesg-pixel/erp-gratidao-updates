@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+# Manter somente a compilacao mais recente por ramificacao.
+# Em main, nao cancelar uma publicacao em andamento.
+concurrency:
+  group: amzg-novo-win8-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   build:
     runs-on: windows-2022
