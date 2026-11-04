@@ -337,7 +337,7 @@ namespace ArmazemGratidao {
    };
    foreach(var metric in metrics){
     var panel=new Panel {Width=183,Height=70,BackColor=Color.White,Margin=new Padding(5,2,5,2)};
-    panel.Paint+=(sender,args)=>{
+    panel.Paint+=(paintControl,paintArgs)=>{
      var rect=new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3);
      int r=10,diameter=r*2;
      using(var outline=new System.Drawing.Drawing2D.GraphicsPath()){
@@ -346,8 +346,8 @@ namespace ArmazemGratidao {
       outline.AddArc(rect.Right-diameter,rect.Bottom-diameter,diameter,diameter,0,90);
       outline.AddArc(rect.Left,rect.Bottom-diameter,diameter,diameter,90,90);
       outline.CloseFigure();
-      args.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-      using(var border=new Pen(Color.FromArgb(180,197,222),1.6f))args.Graphics.DrawPath(border,outline);
+      paintArgs.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+      using(var border=new Pen(Color.FromArgb(180,197,222),1.6f))paintArgs.Graphics.DrawPath(border,outline);
      }
     };
     panel.Controls.Add(new Label {Text=metric.Item1,Left=11,Top=7,Width=163,Height=20,
