@@ -737,6 +737,34 @@ namespace ArmazemGratidao {
    calc.Show();
   }
   // Tela inicial única de navegação; preserva os handlers originais dos módulos.
+  // Seções visuais do menu; não altera a ação associada a cada botão.
+  string ModuleSection(string name){
+   if(new[]{"PDV  •  Nova venda","Vendas","Lançar vendas anotadas","Cascos retornáveis","Fiado","Clientes","WhatsApp"}.Contains(name))return "VENDAS E ATENDIMENTO";
+   if(new[]{"Produtos","Estoque","Compras","Estoque pelo celular","Conferência rápida de estoque"}.Contains(name))return "PRODUTOS E ESTOQUE";
+   if(new[]{"Caixa","Financeiro","Lucro","Taxas dos pagamentos"}.Contains(name))return "FINANCEIRO E CAIXA";
+   if(new[]{"Relatórios","Início / Indicadores","Localizar vendas","Conferir valores","Itens"}.Contains(name))return "CONSULTAS E RELATÓRIOS";
+   return "SISTEMA E MANUTENÇÃO";
+  }
+  void GroupModuleButtons(FlowLayoutPanel panel){
+   var buttons=panel.Controls.OfType<Button>().ToList();
+   panel.SuspendLayout();panel.Controls.Clear();
+   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
+   foreach(string section in order){
+    var matches=buttons.Where(x=>ModuleSection(x.Text)==section).ToList();
+    if(matches.Count==0)continue;
+    var heading=new Label{Text=section,AutoSize=false,Height=30,
+     Width=Math.Max(300,panel.ClientSize.Width-32),Margin=new Padding(3,12,3,3),
+     Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
+     ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
+    panel.Controls.Add(heading);
+    foreach(Button button in matches)panel.Controls.Add(button);
+   }
+   panel.Resize+=(sender,args)=>{
+    int width=Math.Max(300,panel.ClientSize.Width-32);
+    foreach(Label heading in panel.Controls.OfType<Label>())heading.Width=width;
+   };
+   panel.ResumeLayout(true);
+  }
   void ShowMainMenu(){
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
@@ -777,6 +805,7 @@ namespace ArmazemGratidao {
     tile.Click+=item.Item2;
     tiles.Controls.Add(tile);
    }
+   GroupModuleButtons(tiles);
    page.Controls.Add(tiles);page.Controls.Add(top);
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
@@ -845,6 +874,7 @@ namespace ArmazemGratidao {
     tile.Click+=item.Item2;
     tiles.Controls.Add(tile);
    }
+   GroupModuleButtons(tiles);
    var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
    var previous=new Button{Text="Mostrar/ocultar menu antigo",Width=218,Height=35,Top=10,Left=17,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
