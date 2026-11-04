@@ -281,7 +281,11 @@ namespace ArmazemGratidao {
 
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
    status.BackColor=Color.FromArgb(234,238,247);status.ForeColor=Color.FromArgb(30,40,55);status.Padding=new Padding(12,0,0,0);
-   menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};header.Controls.Add(menuToggle);
+   menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
+   menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
+   menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
+   menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};
+   RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=155,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início",ShowHome);
@@ -457,7 +461,11 @@ namespace ArmazemGratidao {
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
    var refresh=new Button {Text="Atualizar indicadores",Width=200,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold),Margin=new Padding(8)};
-   refresh.FlatAppearance.BorderSize=0;refresh.Click+=ShowHome;home.Controls.Add(refresh);
+   refresh.FlatAppearance.BorderSize=0;
+   refresh.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
+   refresh.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
+   RoundHomeControl(refresh,11);
+   refresh.Click+=ShowHome;home.Controls.Add(refresh);
    home.Controls.Add(new Label {Text="",Width=680,Height=40});
    var metrics=new System.Collections.Generic.List<Tuple<string,string>>();
    if(File.Exists(dbPath)){
@@ -771,6 +779,7 @@ namespace ArmazemGratidao {
    b.Paint+=(paintSender,paintArgs)=>RoundedVisuals.DrawOutline(paintArgs.Graphics,
     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),7,
     Color.FromArgb(194,211,233),1.1f);
+   RoundHomeControl(b,7);
    b.Click+=click;parent.Controls.Add(b);
   }
   void BackupDatabase(object sender,EventArgs e) {
