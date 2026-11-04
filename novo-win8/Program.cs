@@ -979,7 +979,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.Left,Width=335,
+   var calculatorSide=new Panel{Dock=DockStyle.Fill,MinimumSize=new Size(240,0),
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
@@ -1001,6 +1001,7 @@ Panel BuildEmbeddedCalculator(){
    page.Disposed+=(sender,args)=>Activated-=onActivated;
    page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
    page.Controls.Add(calculatorSide);page.Controls.Add(tiles);page.Controls.Add(top);
+   calculatorSide.BringToFront();tiles.BringToFront();top.BringToFront();
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
    BeginInvoke((Action)(()=>focusCalculator()));
