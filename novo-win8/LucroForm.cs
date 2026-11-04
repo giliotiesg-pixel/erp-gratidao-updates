@@ -14,6 +14,7 @@ namespace ArmazemGratidao {
   readonly TextBox search=new TextBox {Width=370,Font=new Font("Segoe UI",11)};
   readonly DataGridView returnsGrid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   decimal available;
+  readonly Label reserveAvailable=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(14,5,0,5),Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(18,90,64)};
   readonly Label remainingLabel=new Label{Dock=DockStyle.Top,Height=65,Padding=new Padding(14,12,10,8),Font=new Font("Segoe UI",14,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147),BackColor=Color.White};
   static readonly Color MainBlue=Color.FromArgb(22,75,160);
   static readonly Color LightBackground=Color.FromArgb(229,242,255);
@@ -41,7 +42,7 @@ namespace ArmazemGratidao {
   Control MetricCard(int index,string title){
    var card=new Panel{Width=235,Height=92,Margin=new Padding(6,5,6,5),BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
    var caption=new Label{Text=title,Left=12,Top=9,Width=208,Height=24,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(60,80,105)};
-   var value=new Label{Text="R$ 0,00",Left=12,Top=36,Width=210,Height=39,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=index==4?Color.FromArgb(20,115,82):MainBlue};
+   var value=new Label{Text="R$ 0,00",Left=12,Top=36,Width=210,Height=39,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=index==6?Color.FromArgb(20,115,82):MainBlue};
    metricValues[index]=value;
    card.Controls.Add(caption);card.Controls.Add(value);
    return card;
@@ -60,11 +61,19 @@ namespace ArmazemGratidao {
    var clear=new Button{Text="Limpar busca",Width=130,Height=36};
    clear.Click+=(sender,args)=>{search.Clear();search.Focus();};bar.Controls.Add(clear);
    var cards=new FlowLayoutPanel{Dock=DockStyle.Top,Height=228,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=LightBackground};
-   string[] labels={"Total vendido","Custo dos produtos","Taxas","Lucro líquido","Reserva de 10% (geral)","Devoluções dos 10%","Saldo dos 10%"};
+   string[] labels={"Total vendido","Custo dos produtos","Taxas","Lucro líquido","Reserva 10% acumulada","Total já devolvido","Reserva 10% disponível"};
    for(int i=0;i<labels.Length;i++)cards.Controls.Add(MetricCard(i,labels[i]));
+   var reserveBar=new TableLayoutPanel{Dock=DockStyle.Top,Height=67,ColumnCount=2,RowCount=1,BackColor=Color.White,Padding=new Padding(6)};
+   reserveBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));
+   reserveBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
+   reserveBar.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   reserveBar.Controls.Add(reserveAvailable,0,0);
+   var debitReserve=new Button{Text="Registrar devolução / Abater 10%",Dock=DockStyle.Fill,BackColor=MainBlue,ForeColor=Color.White,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+   debitReserve.Click+=(sender,args)=>{LoadData();AddReturn();};
+   reserveBar.Controls.Add(debitReserve,1,0);
    var section=new Label{Text="RESULTADO POR PRODUTO  |  Quantidades, vendas, custos e lucro",Dock=DockStyle.Top,Height=38,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0),ForeColor=HeaderColor,Font=new Font("Segoe UI",11,FontStyle.Bold)};
    StyleGrid(grid);StyleGrid(returnsGrid);
-   products.Controls.Add(grid);products.Controls.Add(summary);products.Controls.Add(section);products.Controls.Add(cards);products.Controls.Add(bar);
+   products.Controls.Add(grid);products.Controls.Add(summary);products.Controls.Add(section);products.Controls.Add(cards);products.Controls.Add(reserveBar);products.Controls.Add(bar);
    var historyBar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=70,BackColor=LightBackground,Padding=new Padding(12),WrapContents=true,AutoScroll=true};
    var add=new Button{Text="Registrar data e valor",Width=210,Height=37,BackColor=MainBlue,ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
    add.Click+=(sender,args)=>AddReturn();
@@ -106,11 +115,12 @@ namespace ArmazemGratidao {
     decimal tenPercent=Math.Round(Math.Max(fullProfit,0)*0.10M,2);
     decimal remaining=tenPercent-returned;
     available=Math.Max(0,remaining);
+    reserveAvailable.Text="SALDO DISPONÍVEL DOS 10%: "+Money(available);
     remainingLabel.Text="TOTAL DOS 10%: "+Money(tenPercent)+"     |     JÁ DEVOLVIDO: "+Money(returned)+
      Environment.NewLine+"AINDA FALTA DEVOLVER: "+Money(available)+(remaining<0?"  |  Excesso registrado: "+Money(-remaining):"");
     decimal[] totals={sales,costs,feesTotal,profit,Math.Max(fullProfit,0)*0.10M,returned,available};
     for(int i=0;i<metricValues.Length;i++)metricValues[i].Text=Money(totals[i]);
-    summary.Text=string.IsNullOrWhiteSpace(search.Text)?"Exibindo todos os produtos: "+shown.Rows.Count+" produto(s).":"Filtro: "+search.Text.Trim()+"  |  "+shown.Rows.Count+" produto(s) encontrado(s). Valores dos primeiros quatro cartões seguem a pesquisa; os três últimos são gerais.";
+    summary.Text=string.IsNullOrWhiteSpace(search.Text)?"Reserva dos 10%: "+Money(tenPercent)+"  |  Devolvido: "+Money(returned)+"  |  SALDO: "+Money(available):"Filtro: "+search.Text.Trim()+"  |  "+shown.Rows.Count+" produto(s). A reserva é calculada sobre todas as vendas.";
     grid.DataSource=shown;returnsGrid.DataSource=ret;
     string[] monetary={"ValorVendido","Custo","Taxas","LucroLiquido"};
     foreach(string column in monetary)if(grid.Columns.Contains(column))grid.Columns[column].DefaultCellStyle.Format="N2";
@@ -137,15 +147,15 @@ namespace ArmazemGratidao {
   void AddReturn(){
    // O registro so e confirmado depois da data, do valor e do novo saldo.
    using(var dialog=new Form{Text="Devolucao pessoal dos 10%",Width=520,Height=350,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=LightBackground}){
-    var info=new Label{Left=18,Top=16,Width=460,Height=52,Text="SALDO DOS 10% A DEVOLVER: "+Money(available),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
+    var info=new Label{Left=18,Top=16,Width=460,Height=52,Text="RESERVA DISPONÍVEL DOS 10%: "+Money(available),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
     var dateLabel=new Label{Text="Data da devolucao:",Left=18,Top=82,Width=215,Height=26};
     var date=new DateTimePicker{Left=18,Top=109,Width=215,Format=DateTimePickerFormat.Short,Value=DateTime.Today,MaxDate=DateTime.Today};
     var amountLabel=new Label{Text="Valor devolvido (R$):",Left=255,Top=82,Width=220,Height=26};
     var amount=new NumericUpDown{Left=255,Top=109,Width=220,DecimalPlaces=2,Maximum=999999999,Font=new Font("Segoe UI",12,FontStyle.Bold)};
-    var balance=new Label{Text="Restara a devolver: "+Money(available),Left=18,Top=157,Width=458,Height=38,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
+    var balance=new Label{Text="Saldo da reserva após devolução: "+Money(available),Left=18,Top=157,Width=458,Height=38,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
     amount.ValueChanged+=(sender,args)=>{
      decimal after=available-amount.Value;
-     balance.Text=after<0?"Valor maior que o saldo dos 10%": "Restara a devolver: "+Money(after);
+     balance.Text=after<0?"Valor maior que o saldo dos 10%":"Saldo da reserva após devolução: "+Money(after);
      balance.ForeColor=after<0?Color.FromArgb(175,25,45):MainBlue;
     };
     var note=new TextBox{Left=18,Top=225,Width=457,MaxLength=255};
@@ -156,7 +166,7 @@ namespace ArmazemGratidao {
     ok.Click+=(sender,args)=>{
      if(amount.Value<=0||amount.Value>available){MessageBox.Show("Informe um valor maior que zero e ate "+Money(available));return;}
      if(MessageBox.Show("Data: "+date.Value.ToString("dd/MM/yyyy")+"\nValor devolvido: "+Money(amount.Value)+
-      "\nSaldo antes: "+Money(available)+"\nFaltara devolver: "+Money(available-amount.Value)+
+      "\nSaldo antes: "+Money(available)+"\nSaldo depois de abater: "+Money(available-amount.Value)+
       "\n\nConfirmar registro?", "Conferir devolucao",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
      try{
       BackupBeforeProfitChange("antes-devolucao");
