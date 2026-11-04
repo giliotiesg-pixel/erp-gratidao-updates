@@ -843,25 +843,43 @@ Panel BuildEmbeddedCalculator(){
     keys.Controls.Add(b,i%4,i/4);
    }
 
-   // O teclado funciona somente com o visor da calculadora em foco.
-   // Não intercepta atalhos nem digitação dos outros módulos.
+   // Teclas do teclado numérico e comandos especiais são tratados por KeyDown.
+   // Sinais do teclado alfanumérico usam KeyPress: respeita ABNT2 e outros layouts.
+   Action<string> pressCalculatorKey=key=>{
+    Button button;
+    if(calculatorButtons.TryGetValue(key,out button))button.PerformClick();
+   };
    display.KeyDown+=(sender,args)=>{
     string key=null;
-    if(args.KeyCode==Keys.D5&&args.Shift)key="%";
-    else if(args.KeyCode>=Keys.D0&&args.KeyCode<=Keys.D9)key=((int)(args.KeyCode-Keys.D0)).ToString();
-    else if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
-    else if(args.KeyCode==Keys.Add||(args.KeyCode==Keys.Oemplus&&args.Shift))key="+";
-    else if(args.KeyCode==Keys.Oemplus)key="=";
-    else if(args.KeyCode==Keys.Subtract||args.KeyCode==Keys.OemMinus)key="−";
+    if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)
+     key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
+    else if(args.KeyCode==Keys.Add)key="+";
+    else if(args.KeyCode==Keys.Subtract)key="−";
     else if(args.KeyCode==Keys.Multiply)key="×";
-    else if(args.KeyCode==Keys.Divide||args.KeyCode==Keys.OemQuestion)key="÷";
-    else if(args.KeyCode==Keys.Decimal||args.KeyCode==Keys.Oemcomma||args.KeyCode==Keys.OemPeriod)key=",";
-    else if(args.KeyCode==Keys.Enter)key="=";
+    else if(args.KeyCode==Keys.Divide)key="÷";
+    else if(args.KeyCode==Keys.Decimal)key=",";
+    else if(args.KeyCode==Keys.Enter||args.KeyCode==Keys.Return)key="=";
     else if(args.KeyCode==Keys.Back)key="⌫";
     else if(args.KeyCode==Keys.Escape||args.KeyCode==Keys.Delete)key="C";
-    if(key!=null&&calculatorButtons.ContainsKey(key)){
+    if(key!=null){
      args.Handled=true;args.SuppressKeyPress=true;
-     calculatorButtons[key].PerformClick();
+     pressCalculatorKey(key);
+    }
+   };
+   display.KeyPress+=(sender,args)=>{
+    string key=null;
+    char ch=args.KeyChar;
+    if(ch>='0'&&ch<='9')key=ch.ToString();
+    else if(ch=='+')key="+";
+    else if(ch=='-')key="−";
+    else if(ch=='*'||ch=='x'||ch=='X'||ch=='×')key="×";
+    else if(ch=='/'||ch=='÷')key="÷";
+    else if(ch==','||ch=='.')key=",";
+    else if(ch=='='||ch=='\\r')key="=";
+    else if(ch=='%')key="%";
+    if(key!=null){
+     args.Handled=true;
+     pressCalculatorKey(key);
     }
    };
    // Grade explicita impede que visor, resultado e teclas se sobreponham.
