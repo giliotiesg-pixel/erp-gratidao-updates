@@ -503,12 +503,18 @@ namespace ArmazemGratidao {
      "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
      Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
      "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-    if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
-     MessageBox.Show("Feche as demais janelas do Armazém antes da instalação.","Atualização adiada");
-     return;
-    }
+    // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
     string backupPath=CreateVerifiedPreUpdateBackup();
     status.Text="Backup confirmado: "+backupPath;
+    // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
+    // de fechamento (por exemplo, uma venda em edição ainda não salva).
+    foreach(Form window in Application.OpenForms.Cast<Form>().Where(x=>x!=this&&!x.IsDisposed).ToArray()){
+     window.Close();
+    }
+    if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
+     MessageBox.Show(this,"Uma janela impediu o fechamento. Salve a operação em andamento e tente novamente.","Atualização adiada",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+     return;
+    }
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     Close();
    }catch(Exception ex){status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message,"Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
