@@ -593,7 +593,15 @@ namespace ArmazemGratidao {
     Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));})),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
-    Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
+    Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates())),
+    // Funções complementares vêm depois dos acessos mais frequentes.
+    Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
+    Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
+    Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
+    Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
+    Tuple.Create("WhatsApp",(EventHandler)((s,a)=>OpenModuleWindow(new WhatsAppNormalForm()))),
+    Tuple.Create("Taxas dos pagamentos",(EventHandler)((s,a)=>PaymentFees.ShowEditor(dbPath,this))),
+    Tuple.Create("Verificar banco",(EventHandler)CheckDatabase)
    };
   }
   void ShowModulesWindow(){
