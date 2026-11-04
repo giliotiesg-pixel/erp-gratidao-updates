@@ -785,6 +785,7 @@ Panel BuildEmbeddedCalculator(){
     decimal current;
     if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
+    if(operation!=null&&newNumber){liveResult.Text="Digite o próximo número";return;}
     if(operation==null){liveResult.Text="Resultado: "+current.ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));return;}
     if(operation=="÷"&&current==0m){liveResult.Text="Aguardando divisor";return;}
     try{
@@ -825,7 +826,7 @@ Panel BuildEmbeddedCalculator(){
       else if(key=="±"){display.Text=(-current).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));}
       else if(key=="%"){display.Text=(current/100m).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));newNumber=true;}
       else if(key=="="){
-       if(operation!=null){
+       if(operation!=null&&!newNumber){
         decimal answer=current;
         if(operation=="+")answer=stored+current;
         else if(operation=="−")answer=stored-current;
@@ -834,7 +835,19 @@ Panel BuildEmbeddedCalculator(){
         display.Text=answer.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
         operation=null;newNumber=true;
        }
-      }else{stored=current;operation=key;newNumber=true;}
+      }else{
+       if(operation!=null&&!newNumber){
+        if(operation=="+")stored=checked(stored+current);
+        else if(operation=="−")stored=checked(stored-current);
+        else if(operation=="×")stored=checked(stored*current);
+        else if(operation=="÷"){
+         if(current==0m){MessageBox.Show(panel.FindForm(),"Não é possível dividir por zero.","Calculadora");return;}
+         stored=stored/current;
+        }
+        display.Text=stored.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+       }else if(operation==null)stored=current;
+       operation=key;newNumber=true;
+      }
      }catch(OverflowException){MessageBox.Show(panel.FindForm(),"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
      updatePreview();
     };
@@ -888,12 +901,12 @@ Panel BuildEmbeddedCalculator(){
    mainForm.KeyPreview=true;
    KeyEventHandler guardedKeyDown=(sender,args)=>{
     var home=mainForm.Controls["homePanel"];
-    if(home==null||!home.Visible||!panel.Visible||mainForm.ActiveControl is TextBox && mainForm.ActiveControl!=display)return;
+    if(home==null||!home.Visible||!panel.Visible||!mainForm.ContainsFocus)return;
     calculatorKeyDown(sender,args);
    };
    KeyPressEventHandler guardedKeyPress=(sender,args)=>{
     var home=mainForm.Controls["homePanel"];
-    if(home==null||!home.Visible||!panel.Visible||mainForm.ActiveControl is TextBox && mainForm.ActiveControl!=display)return;
+    if(home==null||!home.Visible||!panel.Visible||!mainForm.ContainsFocus)return;
     calculatorKeyPress(sender,args);
    };
    mainForm.KeyDown+=guardedKeyDown;
