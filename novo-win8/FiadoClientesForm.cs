@@ -171,19 +171,18 @@ namespace ArmazemGratidao {
    panel.Controls.Add(grid);panel.Controls.Add(bar);
   }
   void ArrangeClientBoxes(){
-   int available=Math.Max(160,clients.ClientSize.Width-clients.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-8);
-   const int gap=12;
-   const int targetWidth=190;
-   int columns=Math.Max(1,(available+gap)/(targetWidth+gap));
-   int width=Math.Max(145,(available-(columns-1)*gap)/columns);
+   // Cartões compactos, uniformes e sem esticar para ocupar toda a largura.
+   const int width=158;
+   const int height=49;
+   const int gap=9;
    clients.SuspendLayout();
    foreach(Control control in clients.Controls){
     var button=control as Button;
     if(button==null)continue;
     button.AutoSize=false;
-    button.MinimumSize=new Size(width,72);
-    button.MaximumSize=new Size(width,72);
-    button.Size=new Size(width,72);
+    button.MinimumSize=new Size(width,height);
+    button.MaximumSize=new Size(width,height);
+    button.Size=new Size(width,height);
     button.Margin=new Padding(0,0,gap,gap);
    }
    clients.ResumeLayout();
@@ -209,7 +208,7 @@ namespace ArmazemGratidao {
      if(string.Equals(name,customer,StringComparison.OrdinalIgnoreCase))selectedClientStillHasFiado=true;
      if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
-     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(190,72),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
+     var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(158,49),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
      b.Click+=(sender,args)=>SelectClient(Convert.ToString(((Button)sender).Tag));clients.Controls.Add(b);
     }
     clients.ResumeLayout();
