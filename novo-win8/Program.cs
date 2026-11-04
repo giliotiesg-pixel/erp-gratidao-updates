@@ -326,13 +326,20 @@ namespace ArmazemGratidao {
      }
     }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
    }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
+   // Quatro indicadores compactos e alinhados em uma faixa, com rolagem horizontal
+   // apenas se a area util da janela for pequena.
+   var indicators=new FlowLayoutPanel {Width=920,Height=91,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,
+    AutoScroll=true,Margin=new Padding(0,1,0,8),Padding=new Padding(0),BackColor=Color.FromArgb(246,249,253)};
    foreach(var metric in metrics){
-    var panel=new Panel {Width=285,Height=103,BackColor=Color.White,Margin=new Padding(7,4,7,14)};
-    RoundHomeControl(panel,16);
-    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=34,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(160,20,40),Font=new Font("Segoe UI",9,FontStyle.Bold)});
-    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Bottom,Height=60,Padding=new Padding(12,8,0,0),ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",15,FontStyle.Bold),AutoEllipsis=true});
-    home.Controls.Add(panel);
+    var panel=new Panel {Width=215,Height=78,BackColor=Color.White,Margin=new Padding(5,2,5,2),BorderStyle=BorderStyle.FixedSingle};
+    RoundHomeControl(panel,12);
+    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Fill,Padding=new Padding(10,5,3,0),
+     ForeColor=Color.FromArgb(15,57,146),Font=new Font("Segoe UI",13,FontStyle.Bold),AutoEllipsis=true});
+    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=27,Padding=new Padding(10,7,4,0),
+     ForeColor=Color.FromArgb(180,38,56),Font=new Font("Segoe UI",8,FontStyle.Bold),AutoEllipsis=true});
+    indicators.Controls.Add(panel);
    }
+   home.Controls.Add(indicators);
    home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
@@ -340,7 +347,6 @@ namespace ArmazemGratidao {
     Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de lançar vendas.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Cascos retornáveis",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));})),
-    Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));})),
     Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
@@ -355,17 +361,17 @@ namespace ArmazemGratidao {
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
-   var shortcuts=new FlowLayoutPanel {Width=950,Height=360,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
+   var shortcuts=new FlowLayoutPanel {Width=950,Height=210,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
    foreach(var action in actions){
     var button=new Button {
-     Text=action.Item1,Tag="home-shortcut",Width=174,Height=94,Margin=new Padding(7),Padding=new Padding(5,7,5,5),
-     FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(10,52,145),
-     Font=new Font("Segoe UI",9,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
-     ImageAlign=ContentAlignment.TopCenter,TextAlign=ContentAlignment.BottomCenter,
-     TextImageRelation=TextImageRelation.ImageAboveText,AutoEllipsis=true
+     Text=action.Item1,Tag="home-shortcut",Width=158,Height=66,Margin=new Padding(5),Padding=new Padding(6,4,5,4),
+     FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
+     Font=new Font("Segoe UI",8.4f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
+     ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleLeft,
+     TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true
     };
-    button.FlatAppearance.BorderColor=Color.FromArgb(235,125,135);
-    button.Click+=action.Item2;RoundHomeControl(button,12);shortcuts.Controls.Add(button);
+    button.FlatAppearance.BorderColor=Color.FromArgb(198,214,235);button.FlatAppearance.BorderSize=1;
+    button.Click+=action.Item2;RoundHomeControl(button,11);shortcuts.Controls.Add(button);
    }
    home.Controls.Add(shortcuts);
    home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
@@ -417,10 +423,12 @@ namespace ArmazemGratidao {
    using(var g=Graphics.FromImage(image)){
     g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
     g.Clear(Color.Transparent);
-    Color blue=Color.FromArgb(22,75,160),red=Color.FromArgb(190,38,54);
-    using(var pen=new Pen(blue,3.2f))
-    using(var accent=new Pen(red,3.2f))
-    using(var fill=new SolidBrush(Color.FromArgb(232,242,255)))
+    Color blue=Color.FromArgb(14,58,151),red=Color.FromArgb(211,36,57);
+    using(var tile=new SolidBrush(Color.FromArgb(226,237,255)))
+     g.FillEllipse(tile,1,1,46,46);
+    using(var pen=new Pen(blue,4.0f))
+    using(var accent=new Pen(red,4.0f))
+    using(var fill=new SolidBrush(Color.FromArgb(205,225,253)))
     using(var redFill=new SolidBrush(red)){
      pen.StartCap=pen.EndCap=System.Drawing.Drawing2D.LineCap.Round;
      accent.StartCap=accent.EndCap=System.Drawing.Drawing2D.LineCap.Round;
@@ -466,7 +474,9 @@ namespace ArmazemGratidao {
      }
     }
    }
-   return image;
+   var compact=new Bitmap(image,new Size(36,36));
+   image.Dispose();
+   return compact;
   }
   // WhatsApp Business usa a janela nativa; nao altera os demais modulos.
   static void RoundHomeControl(Control control,int radius){
