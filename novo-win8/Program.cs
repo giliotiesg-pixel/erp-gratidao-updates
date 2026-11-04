@@ -763,7 +763,7 @@ namespace ArmazemGratidao {
   }
 Panel BuildEmbeddedCalculator(){
    var panel=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(234,242,253),Padding=new Padding(9)};
-   var display=new TextBox{Dock=DockStyle.Top,Height=60,ReadOnly=true,BorderStyle=BorderStyle.None,
+   var display=new TextBox{Name="embeddedCalculatorDisplay",Dock=DockStyle.Top,Height=60,ReadOnly=true,BorderStyle=BorderStyle.None,
     Text="0",TextAlign=HorizontalAlignment.Right,
     Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
@@ -1000,7 +1000,7 @@ Panel BuildEmbeddedCalculator(){
    Activated+=onActivated;
    page.Disposed+=(sender,args)=>Activated-=onActivated;
    page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
-   page.Controls.Add(tiles);page.Controls.Add(top);
+   page.Controls.Add(calculatorSide);page.Controls.Add(tiles);page.Controls.Add(top);
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
    BeginInvoke((Action)(()=>focusCalculator()));
