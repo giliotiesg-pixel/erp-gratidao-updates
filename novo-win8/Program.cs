@@ -843,23 +843,23 @@ Panel BuildEmbeddedCalculator(){
     var matches=buttons.Where(x=>ModuleSection(x.Text)==section).ToList();
     if(matches.Count==0)continue;
     bool maintenance=section=="SISTEMA E MANUTENÇÃO";
-    var block=new Panel{Width=405,Height=36+(maintenance?0:((matches.Count+2)/3)*44),
+    var block=new Panel{Width=405,Height=36+(maintenance?0:((matches.Count+1)/2)*42),
      Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
     var heading=new Label{Dock=DockStyle.Top,Height=31,
      Text=maintenance?"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)":section,
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
      ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
-    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,
-     RowCount=(matches.Count+2)/3,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
+    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
+     RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<3;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
-    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
+    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
     for(int n=0;n<matches.Count;n++){
      var button=matches[n];
      button.Dock=DockStyle.Fill;
      button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
      button.Margin=new Padding(2,2,2,3);
-     group.Controls.Add(button,n%3,n/3);
+     group.Controls.Add(button,n%2,n/2);
     }
     block.Controls.Add(group);block.Controls.Add(heading);
     if(maintenance){
@@ -868,7 +868,7 @@ Panel BuildEmbeddedCalculator(){
      heading.Click+=(sender,args)=>{
       bool expanded=!group.Visible;
       group.Visible=expanded;
-      block.Height=36+(expanded?group.RowCount*44:0);
+      block.Height=36+(expanded?group.RowCount*42:0);
       heading.Text=expanded?"▾ SISTEMA E MANUTENÇÃO  (clique para ocultar)":"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
      };
     }
@@ -924,7 +924,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.Right,Width=248,
+   var calculatorSide=new Panel{Dock=DockStyle.Right,Width=335,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
