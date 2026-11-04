@@ -13,7 +13,7 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms(); RoundedGridTheme.CheckOpenForms();}; Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms(); RoundedGridTheme.CheckOpenForms(); ModuleVisualTheme.CheckOpenForms();}; Application.Run(new MainForm()); }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
  static class WindowBoundsGuard {
@@ -128,6 +128,106 @@ namespace ArmazemGratidao {
     path.CloseFigure();
     graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
     using(var border=new Pen(color,weight))graphics.DrawPath(border,path);
+   }
+  }
+ }
+ // Tema visual nativo para cada módulo e para diálogos criados depois.
+ // Só altera acabamento de controles; nunca tamanho, posição, edição,
+ // DataSource, navegacao, eventos ou conteúdo de dados do cliente.
+ static class ModuleVisualTheme {
+  static readonly System.Collections.Generic.HashSet<Form> forms=new System.Collections.Generic.HashSet<Form>();
+  static readonly System.Collections.Generic.HashSet<Control> decorated=new System.Collections.Generic.HashSet<Control>();
+  static readonly Color outline=Color.FromArgb(178,201,232);
+  static readonly Color blue=Color.FromArgb(20,69,147);
+  static void Round(Control c,int radius){
+   if(c.IsDisposed||c.Width<radius*2+4||c.Height<radius*2+4)return;
+   var rect=new Rectangle(0,0,c.Width,c.Height);
+   int diameter=radius*2;
+   using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
+    path.AddArc(rect.Left,rect.Top,diameter,diameter,180,90);
+    path.AddArc(rect.Right-diameter-1,rect.Top,diameter,diameter,270,90);
+    path.AddArc(rect.Right-diameter-1,rect.Bottom-diameter-1,diameter,diameter,0,90);
+    path.AddArc(rect.Left,rect.Bottom-diameter-1,diameter,diameter,90,90);
+    path.CloseFigure();
+    var old=c.Region;
+    c.Region=new Region(path);
+    if(old!=null)old.Dispose();
+   }
+  }
+  static void Apply(Control control){
+   if(control.IsDisposed||!decorated.Add(control))return;
+   control.Disposed+=(sender,args)=>decorated.Remove(control);
+   var button=control as Button;
+   if(button!=null){
+    // Atalhos de Inicio e menu ja possuem moldura propria.
+    bool ownFrame=string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)
+       ||(button.Parent is FlowLayoutPanel && button.FindForm() is MainForm);
+    if(!ownFrame){
+     button.FlatStyle=FlatStyle.Flat;
+     button.FlatAppearance.BorderSize=0;
+     if(button.BackColor==SystemColors.Control)button.BackColor=Color.White;
+     if(button.ForeColor==SystemColors.ControlText)button.ForeColor=blue;
+     button.FlatAppearance.MouseOverBackColor=Color.FromArgb(225,238,254);
+     button.FlatAppearance.MouseDownBackColor=Color.FromArgb(201,222,252);
+     Action round=()=>Round(button,9);
+     button.Resize+=(sender,args)=>round();
+     button.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+      new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
+      9,outline,1.25f);
+     round();
+    }
+   }else if(control is TextBox){
+    var input=(TextBox)control;
+    if(!input.Multiline&&input.BorderStyle!=BorderStyle.None){
+     input.BorderStyle=BorderStyle.FixedSingle;
+     Action round=()=>Round(input,6);
+     input.Resize+=(sender,args)=>round();
+     round();
+    }
+   }else if(control is ComboBox){
+    var select=(ComboBox)control;
+    select.FlatStyle=FlatStyle.Flat;
+    Action round=()=>Round(select,6);
+    select.Resize+=(sender,args)=>round();
+    round();
+   }else if(control is NumericUpDown){
+    var number=(NumericUpDown)control;
+    number.BorderStyle=BorderStyle.FixedSingle;
+    Action round=()=>Round(number,6);
+    number.Resize+=(sender,args)=>round();
+    round();
+   }else if(control is DateTimePicker){
+    var date=(DateTimePicker)control;
+    Action round=()=>Round(date,6);
+    date.Resize+=(sender,args)=>round();
+    round();
+   }else if(control is GroupBox){
+    var group=(GroupBox)control;
+    group.ForeColor=blue;
+   }else if(control is Panel && !(control is FlowLayoutPanel) && !(control is TableLayoutPanel)){
+    var panel=(Panel)control;
+    if(panel.BorderStyle==BorderStyle.FixedSingle){
+     panel.BorderStyle=BorderStyle.None;
+     panel.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+      new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3),
+      10,outline,1.35f);
+    }
+   }
+   // Mudanças de campos dentro de uma janela também ganham o acabamento.
+   control.ControlAdded+=(sender,args)=>DecorateTree(args.Control);
+  }
+  static void DecorateTree(Control root){
+   if(root==null||root.IsDisposed)return;
+   Apply(root);
+   // O grid mantém seus próprios editores e é tratado separadamente.
+   if(root is DataGridView)return;
+   foreach(Control child in root.Controls)DecorateTree(child);
+  }
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms){
+    if(form==null||form.IsDisposed||!forms.Add(form))continue;
+    DecorateTree(form);
+    form.FormClosed+=(sender,args)=>forms.Remove(form);
    }
   }
  }
