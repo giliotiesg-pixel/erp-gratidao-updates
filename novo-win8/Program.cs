@@ -158,7 +158,9 @@ namespace ArmazemGratidao {
    AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));});
    AddSection(bar,"GESTÃO");
    foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ModuloConsultaForm(dbPath,module));});
-   Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);bar.Visible=false;Directory.CreateDirectory(dataDir);
+   Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);
+   EnableWheelScrolling(bar);
+   bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowHome(this,EventArgs.Empty);
    Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(false);}));
@@ -344,34 +346,35 @@ namespace ArmazemGratidao {
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));})),
-    Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de lançar vendas.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Cascos retornáveis",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));})),
     Tuple.Create("Fiado",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new FiadoClientesForm(dbPath));})),
     Tuple.Create("Produtos",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ProdutosForm(dbPath));})),
-    Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
     Tuple.Create("Estoque",(EventHandler)((s,a)=>OpenHomeModule("Estoque"))),
     Tuple.Create("Clientes",(EventHandler)((s,a)=>OpenHomeModule("Clientes"))),
     Tuple.Create("Compras",(EventHandler)((s,a)=>OpenHomeModule("Compras"))),
     Tuple.Create("Caixa",(EventHandler)((s,a)=>OpenHomeModule("Caixa"))),
-    Tuple.Create("Financeiro",(EventHandler)((s,a)=>OpenHomeModule("Financeiro"))),
     Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));})),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
-    Tuple.Create("Sistema",(EventHandler)((s,a)=>OpenHomeModule("Sistema"))),
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
-   var shortcuts=new FlowLayoutPanel {Width=950,Height=210,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
+   var shortcuts=new FlowLayoutPanel {Width=950,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,
+    WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
    foreach(var action in actions){
     var button=new Button {
-     Text=action.Item1,Tag="home-shortcut",Width=158,Height=66,Margin=new Padding(5),Padding=new Padding(6,4,5,4),
-     FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",8.4f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
-     ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleLeft,
+     Text=action.Item1,Tag="home-shortcut",Width=144,Height=65,
+     MinimumSize=new Size(144,65),MaximumSize=new Size(144,65),
+     Margin=new Padding(5,3,5,3),Padding=new Padding(5,3,5,3),
+     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(246,249,253),ForeColor=Color.FromArgb(15,55,128),
+     Font=new Font("Segoe UI",8.1f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
+     ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true
     };
-    button.FlatAppearance.BorderColor=Color.FromArgb(198,214,235);button.FlatAppearance.BorderSize=1;
-    button.Click+=action.Item2;RoundHomeControl(button,11);shortcuts.Controls.Add(button);
+    button.FlatAppearance.BorderSize=0;
+    button.FlatAppearance.MouseOverBackColor=Color.FromArgb(227,238,255);
+    button.FlatAppearance.MouseDownBackColor=Color.FromArgb(210,225,249);
+    button.Click+=action.Item2;shortcuts.Controls.Add(button);
    }
    home.Controls.Add(shortcuts);
    home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
@@ -414,7 +417,31 @@ namespace ArmazemGratidao {
      }
     }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
    }
-   Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+   Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();
+   EnableWheelScrolling(home);
+   status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+  }
+  // Garante rolagem pela roda do mouse tambem quando o ponteiro
+  // esta sobre atalhos, rotulos, indicadores ou itens do menu lateral.
+  // Grids de dados conservam sua propria rolagem.
+  static void EnableWheelScrolling(ScrollableControl viewport){
+   Action<Control> bind=null;
+   bind=control=>{
+    if(control is DataGridView)return;
+    control.MouseWheel+=(sender,args)=>{
+     if(!viewport.Visible||!viewport.IsHandleCreated)return;
+     int current=-viewport.AutoScrollPosition.Y;
+     int max=Math.Max(0,viewport.VerticalScroll.Maximum-viewport.VerticalScroll.LargeChange+1);
+     if(max<=0)return;
+     int lines=SystemInformation.MouseWheelScrollLines;
+     int step=lines<=0?60:Math.Max(42,lines*22);
+     int next=Math.Max(0,Math.Min(max,current-(args.Delta>0?step:-step)));
+     if(next==current)return;
+     viewport.AutoScrollPosition=new Point(-viewport.AutoScrollPosition.X,next);
+    };
+    foreach(Control child in control.Controls)bind(child);
+   };
+   bind(viewport);
   }
   // Icones nativos desenhados com GDI+, sem dependencia de fontes especiais,
   // internet, WebView ou recursos externos. Exibidos apenas nos atalhos do Inicio.
@@ -424,8 +451,7 @@ namespace ArmazemGratidao {
     g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
     g.Clear(Color.Transparent);
     Color blue=Color.FromArgb(14,58,151),red=Color.FromArgb(211,36,57);
-    using(var tile=new SolidBrush(Color.FromArgb(226,237,255)))
-     g.FillEllipse(tile,1,1,46,46);
+    // Sem circulo ou caixa atras da figura: icones livres e fortes.
     using(var pen=new Pen(blue,4.0f))
     using(var accent=new Pen(red,4.0f))
     using(var fill=new SolidBrush(Color.FromArgb(205,225,253)))
@@ -474,7 +500,7 @@ namespace ArmazemGratidao {
      }
     }
    }
-   var compact=new Bitmap(image,new Size(36,36));
+   var compact=new Bitmap(image,new Size(26,26));
    image.Dispose();
    return compact;
   }
