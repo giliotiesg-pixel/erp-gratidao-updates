@@ -802,7 +802,7 @@ Panel BuildEmbeddedCalculator(){
    for(int i=0;i<labels.Length;i++){
     string key=labels[i];
     var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3,4,3,4),
-     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,
+     Font=new Font("Segoe UI",12,FontStyle.Bold),FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,
      BackColor=(key=="=")?Color.FromArgb(22,75,160):(key=="C"?Color.FromArgb(184,55,69):((key=="+"||key=="−"||key=="×"||key=="÷")?Color.FromArgb(207,226,251):Color.White)),
      ForeColor=(key=="="||key=="C")?Color.White:Color.FromArgb(20,69,147)};
     b.FlatAppearance.BorderSize=0;
@@ -866,7 +866,8 @@ Panel BuildEmbeddedCalculator(){
      calculatorButtons[key].PerformClick();
     }
    };
-   panel.Controls.Add(keys);keys.BringToFront();
+   panel.Controls.Add(keys);keys.SendToBack();
+   display.BringToFront();
    updatePreview();
    return panel;
   }
@@ -979,7 +980,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.Fill,MinimumSize=new Size(240,0),
+   var calculatorSide=new Panel{Dock=DockStyle.None,Width=318,Height=405,Left=630,Top=85,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
@@ -1000,8 +1001,17 @@ Panel BuildEmbeddedCalculator(){
    Activated+=onActivated;
    page.Disposed+=(sender,args)=>Activated-=onActivated;
    page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
-   page.Controls.Add(calculatorSide);page.Controls.Add(tiles);page.Controls.Add(top);
-   calculatorSide.BringToFront();tiles.BringToFront();top.BringToFront();
+   page.Controls.Add(tiles);page.Controls.Add(top);page.Controls.Add(calculatorSide);
+   calculatorSide.BringToFront();
+   Action positionCalculator=()=>{
+    calculatorSide.Left=tiles.Right+8;
+    calculatorSide.Top=top.Bottom+8;
+    calculatorSide.Height=Math.Min(405,Math.Max(280,page.ClientSize.Height-calculatorSide.Top-12));
+    calculatorSide.Width=Math.Min(318,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
+    calculatorSide.Visible=page.ClientSize.Width-calculatorSide.Left>=210;
+   };
+   page.Resize+=(sender,args)=>positionCalculator();
+   positionCalculator();
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
    BeginInvoke((Action)(()=>focusCalculator()));
