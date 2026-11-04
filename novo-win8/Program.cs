@@ -1151,6 +1151,28 @@ Panel BuildEmbeddedCalculator(){
   }
   // Abrir os modulos sem bloquear a pagina inicial.
   // Mantem as janelas abertas de forma independente; nao usar 'using' com Show().
+  // Navegacao padronizada: a seta retorna ao menu sem encerrar o aplicativo.
+  // O fechamento normal da janela preserva validacoes de alteracoes pendentes.
+  void AddBackToMenu(Form form){
+   if(form==null||form.IsDisposed||form.Controls.Find("amzgBackBar",false).Length>0)return;
+   var backBar=new Panel{Name="amzgBackBar",Dock=DockStyle.Top,Height=37,
+    BackColor=Color.FromArgb(238,244,253)};
+   var back=new Button{Text="← Voltar ao Menu Principal",Left=8,Top=3,Width=193,Height=30,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   back.FlatAppearance.BorderSize=0;
+   RoundHomeControl(back,9);
+   back.Click+=(sender,args)=>{
+    form.Close();
+    if(!form.IsDisposed&&form.Visible)return;
+    ShowMainMenu();
+    WindowState=FormWindowState.Normal;
+    BringToFront();Activate();
+   };
+   backBar.Controls.Add(back);
+   form.Controls.Add(backBar);
+   backBar.BringToFront();
+  }
   void OpenModuleWindow(Form form){
    if(form==null)return;
    // Reutiliza a janela do mesmo módulo, mesmo se ela estiver minimizada.
@@ -1165,6 +1187,7 @@ Panel BuildEmbeddedCalculator(){
    }
    form.StartPosition=FormStartPosition.CenterScreen;
    form.ShowInTaskbar=true;
+   AddBackToMenu(form);
    // Janelas independentes: minimizar o programa principal não oculta o módulo.
    form.Show();
   }
