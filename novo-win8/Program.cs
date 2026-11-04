@@ -167,7 +167,7 @@ namespace ArmazemGratidao {
   bool checkingUpdates=false;
   int lastPromptedBuild=-1;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
-  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=255,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(11),BackColor=Color.FromArgb(234,241,251)};
+  readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
   readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
@@ -653,8 +653,26 @@ namespace ArmazemGratidao {
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
    OpenModuleWindow(new ModuloConsultaForm(dbPath,module));
   }
-  void AddSection(Control parent,string title){parent.Controls.Add(new Label {Text=title,Width=175,Height=29,TextAlign=ContentAlignment.BottomLeft,ForeColor=Color.FromArgb(188,209,245),Font=new Font("Segoe UI",8,FontStyle.Bold),Padding=new Padding(7,0,0,4),Margin=new Padding(3,11,3,2)});}
-  void AddButton(Control parent,string title,EventHandler click) {var b=new Button {Text=title,Width=175,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(12,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,3,3,3)};b.FlatAppearance.BorderSize=0;b.Click+=click;parent.Controls.Add(b);}
+  void AddSection(Control parent,string title){
+   var heading=new Label{Text=title,Width=209,Height=22,TextAlign=ContentAlignment.BottomLeft,
+    ForeColor=Color.FromArgb(26,79,154),Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
+    Padding=new Padding(7,0,0,3),Margin=new Padding(1,6,1,2)};
+   parent.Controls.Add(heading);
+  }
+  void AddButton(Control parent,string title,EventHandler click){
+   var b=new Button{Text=title,Width=209,Height=33,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(20,69,147),
+    TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(9,0,3,0),
+    Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(1,1,1,1),
+    UseMnemonic=false,AutoEllipsis=true};
+   b.FlatAppearance.BorderSize=0;
+   b.FlatAppearance.MouseOverBackColor=Color.FromArgb(213,231,253);
+   b.FlatAppearance.MouseDownBackColor=Color.FromArgb(192,218,250);
+   b.Paint+=(paintSender,paintArgs)=>RoundedVisuals.DrawOutline(paintArgs.Graphics,
+    new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),7,
+    Color.FromArgb(194,211,233),1.1f);
+   b.Click+=click;parent.Controls.Add(b);
+  }
   void BackupDatabase(object sender,EventArgs e) {
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
    using(var dlg=new SaveFileDialog {Title="Salvar copia de seguranca SQLite",Filter="Banco SQLite (*.db)|*.db",FileName="armazem-gratidao-backup-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".db"}) {
