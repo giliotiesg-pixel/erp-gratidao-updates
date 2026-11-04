@@ -809,11 +809,11 @@ namespace ArmazemGratidao {
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=128,Height=38,
      MinimumSize=new Size(128,38),MaximumSize=new Size(128,38),Margin=new Padding(3),
      Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
-     BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
+     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
      Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
      AutoEllipsis=true,UseMnemonic=false};
     tile.FlatAppearance.BorderSize=0;
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(65,91,139);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
     tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
      new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
      9,Color.FromArgb(92,117,155),1.3f);
@@ -876,13 +876,13 @@ namespace ArmazemGratidao {
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=116,Height=37,
      MinimumSize=new Size(116,37),MaximumSize=new Size(116,37),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
-     BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
+     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
      Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
      Image=HomeShortcutImage(item.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true};
     tile.FlatAppearance.BorderSize=0;
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(65,91,139);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
     tile.Paint+=(paintSender,paintArgs)=>RoundedVisuals.DrawOutline(paintArgs.Graphics,
      new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
      9,Color.FromArgb(92,117,155),1.3f);
