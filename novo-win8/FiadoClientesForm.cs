@@ -383,7 +383,7 @@ namespace ArmazemGratidao {
       try{
        long count;decimal debt;
        using(var cn=Open(true)){
-        using(var cmd=new SQLiteCommand("SELECT COUNT(*) AS quantity, COALESCE(SUM(CASE WHEN "+Balance+">0 THEN "+Balance+" ELSE 0 END),0) AS debt FROM sales s WHERE "+CreditFilter+" AND s.customer_name=@source COLLATE NOCASE",cn)){
+        using(var cmd=new SQLiteCommand("SELECT COUNT(*) AS quantity, COALESCE(SUM(CASE WHEN "+Balance+">0 THEN "+Balance+" ELSE 0 END),0) AS debt FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@source COLLATE NOCASE",cn)){
          cmd.Parameters.AddWithValue("@source",source);
          using(var rd=cmd.ExecuteReader()){
           if(!rd.Read())throw new Exception("Nao foi possivel calcular as vendas.");
@@ -431,8 +431,8 @@ namespace ArmazemGratidao {
          // CPF/CNPJ diferentes indicam cadastros distintos; nao unificar automaticamente.
          string docSource=document("customers",source),docDest=document("customers",destination);
          if(docSource.Length>0&&docDest.Length>0&&!string.Equals(
-             new string(docSource.Where(Char.IsDigit).ToArray()),
-             new string(docDest.Where(Char.IsDigit).ToArray()),StringComparison.Ordinal))
+             System.Text.RegularExpressions.Regex.Replace(docSource,@"[^0-9]",""),
+             System.Text.RegularExpressions.Regex.Replace(docDest,@"[^0-9]",""),StringComparison.Ordinal))
           throw new Exception("Os cadastros possuem CPF/CNPJ diferentes. Nenhuma unificacao foi feita.");
          using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE name=@dest COLLATE NOCASE",cn,tx)){
           check.Parameters.AddWithValue("@dest",destination);
