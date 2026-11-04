@@ -395,12 +395,17 @@ namespace ArmazemGratidao {
          if(Convert.ToInt64(cmd.ExecuteScalar())==0)throw new Exception("O cadastro de destino nao existe mais. Atualize a lista.");
         }
        }
-       if(count==0){MessageBox.Show("O nome de origem nao possui vendas fiadas para transferir.");return;}
-       string warning="Transferir "+count+" venda(s) fiada(s) de:\n"+source+"\n\nPara o cliente cadastrado:\n"+destination+
-        "\n\nSaldo em aberto destas vendas: R$ "+debt.ToString("N2")+
-        "\n\nOs pagamentos feitos continuam vinculados as mesmas vendas. O saldo do destino somara as dividas transferidas."+
-        "\n\nCredito depositado, limite de Fiado e cascos da origem NAO serao transferidos. Confirme somente se for a mesma pessoa.";
-       if(MessageBox.Show(warning,"CONFIRMAR TROCA DE CLIENTE",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+       if(count==0){MessageBox.Show("O nome anterior nao possui vendas fiadas. Selecione o nome antigo que possui as vendas.");return;}
+       // Confirma explicitamente que ambos os nomes se referem a mesma pessoa.
+       string warning="UNIFICAR DOIS NOMES DA MESMA PESSOA?\\n\\nNome antigo: "+source+
+        "\\nNome correto: "+destination+
+        "\\n\\nVendas fiadas da origem: "+count+
+        "\\nSaldo em aberto: R$ "+debt.ToString("N2")+
+        "\\n\\nTambem serao vinculadas ao nome correto as demais vendas, os cascos e o historico do credito depositado. Os valores de credito serao somados."+
+        "\\n\\nSe ambos tiverem limite de Fiado, sera mantido o limite do nome correto; o limite antigo ficara no registro da unificacao."+
+        "\\n\\nO cadastro antigo sera retirado da lista, SEM apagar vendas, pagamentos, valores ou historico."+
+        "\\n\\nCONFIRMA QUE E A MESMA PESSOA?";
+       if(MessageBox.Show(warning,"CONFIRMAR UNIFICACAO DE CLIENTE",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
        string backup=CreditBackupPath(db,"antes-transferir-fiado-");
        using(var cn=Open(false)){
         using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
@@ -410,22 +415,95 @@ namespace ArmazemGratidao {
         }
         if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio. Transferencia bloqueada.");
         using(var tx=cn.BeginTransaction()){
+         Func<string,bool> hasTable=table=>{
+          using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name",cn,tx)){
+           cmd.Parameters.AddWithValue("@name",table);
+           return Convert.ToInt64(cmd.ExecuteScalar())>0;
+          }
+         };
+         Func<string,string,string> document=(table,name)=>{
+          if(!hasTable(table))return "";
+          using(var cmd=new SQLiteCommand("SELECT COALESCE(document,'') FROM customers WHERE name=@name COLLATE NOCASE LIMIT 1",cn,tx)){
+           cmd.Parameters.AddWithValue("@name",name);
+           return Convert.ToString(cmd.ExecuteScalar()??"").Trim();
+          }
+         };
+         // CPF/CNPJ diferentes indicam cadastros distintos; nao unificar automaticamente.
+         string docSource=document("customers",source),docDest=document("customers",destination);
+         if(docSource.Length>0&&docDest.Length>0&&!string.Equals(
+             new string(docSource.Where(Char.IsDigit).ToArray()),
+             new string(docDest.Where(Char.IsDigit).ToArray()),StringComparison.Ordinal))
+          throw new Exception("Os cadastros possuem CPF/CNPJ diferentes. Nenhuma unificacao foi feita.");
          using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE name=@dest COLLATE NOCASE",cn,tx)){
           check.Parameters.AddWithValue("@dest",destination);
-          if(Convert.ToInt64(check.ExecuteScalar())==0)throw new Exception("Cliente de destino nao existe mais.");
+          if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new Exception("Cadastro de destino nao esta unico ou foi excluido.");
          }
          using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS fiado_customer_transfers(id INTEGER PRIMARY KEY AUTOINCREMENT,source_name TEXT NOT NULL,destination_name TEXT NOT NULL,sales_transferred INTEGER NOT NULL,changed_at TEXT NOT NULL,description TEXT NOT NULL)",cn,tx))
           create.ExecuteNonQuery();
-         int changed;
-         using(var cmd=new SQLiteCommand("UPDATE sales SET customer_name=@dest WHERE customer_name=@source COLLATE NOCASE AND (UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(status,'')) LIKE '%FIADO%')",cn,tx)){
-          cmd.Parameters.AddWithValue("@dest",destination);cmd.Parameters.AddWithValue("@source",source);
-          changed=cmd.ExecuteNonQuery();
+         // Somente tabelas com coluna customer_name; nao altera IDs de venda nem pagamentos.
+         Action<string> updateTable=table=>{
+          if(!hasTable(table))return;
+          using(var cmd=new SQLiteCommand("UPDATE \""+table+"\" SET customer_name=@dest WHERE TRIM(customer_name)=@source COLLATE NOCASE",cn,tx)){
+           cmd.Parameters.AddWithValue("@dest",destination);
+           cmd.Parameters.AddWithValue("@source",source);
+           cmd.ExecuteNonQuery();
+          }
+         };
+         int movedFiado;
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@source COLLATE NOCASE",cn,tx)){
+          check.Parameters.AddWithValue("@source",source);
+          if(Convert.ToInt64(check.ExecuteScalar())!=count)
+           throw new Exception("Vendas modificadas durante a unificacao. Atualize e tente novamente.");
          }
-         if(changed!=count)throw new Exception("O numero de vendas mudou durante a transferencia. Atualize a tela e tente novamente.");
+         // Registros nao fiados tambem precisam apontar para a pessoa correta.
+         updateTable("sales");
+         movedFiado=Convert.ToInt32(count);
+         updateTable("bottle_loans");
+         updateTable("customer_credit_entries");
+         updateTable("customer_fiado_limit_audit");
+         string limitNote="Sem limite anterior";
+         if(hasTable("customer_fiado_limits")){
+          bool oldLimit=false,newLimit=false;
+          decimal oldValue=0;string oldPeriod="";
+          using(var limits=new SQLiteCommand("SELECT customer_name,limit_amount,period FROM customer_fiado_limits WHERE customer_name IN (@old,@new) COLLATE NOCASE",cn,tx)){
+           limits.Parameters.AddWithValue("@old",source);limits.Parameters.AddWithValue("@new",destination);
+           using(var rd=limits.ExecuteReader())while(rd.Read()){
+            string n=Convert.ToString(rd[0]);
+            if(string.Equals(n,source,StringComparison.OrdinalIgnoreCase)){
+             oldLimit=true;oldValue=Convert.ToDecimal(rd[1]);oldPeriod=Convert.ToString(rd[2]);
+            }else if(string.Equals(n,destination,StringComparison.OrdinalIgnoreCase))newLimit=true;
+           }
+          }
+          if(oldLimit){
+           limitNote="Limite antigo: R$ "+oldValue.ToString("N2")+" / "+oldPeriod+
+             (newLimit?" (mantido limite do destino)":" (transferido para destino)");
+           if(newLimit){
+            using(var remove=new SQLiteCommand("DELETE FROM customer_fiado_limits WHERE customer_name=@name COLLATE NOCASE",cn,tx)){
+             remove.Parameters.AddWithValue("@name",source);
+             remove.ExecuteNonQuery();
+            }
+           }else updateTable("customer_fiado_limits");
+          }
+         }
+         // Eliminar apenas o cadastro duplicado; nao remover os dados das vendas.
+         if(hasTable("customers")){
+          using(var cmd=new SQLiteCommand("DELETE FROM customers WHERE name=@name COLLATE NOCASE",cn,tx)){
+           cmd.Parameters.AddWithValue("@name",source);
+           cmd.ExecuteNonQuery();
+          }
+         }
+         // Se anteriormente havia uma exclusao logica do destino, permitir que apareca.
+         if(hasTable("deleted_customer_names")){
+          using(var show=new SQLiteCommand("DELETE FROM deleted_customer_names WHERE customer_name=@name COLLATE NOCASE",cn,tx)){
+           show.Parameters.AddWithValue("@name",destination);show.ExecuteNonQuery();
+          }
+         }
          using(var audit=new SQLiteCommand("INSERT INTO fiado_customer_transfers(source_name,destination_name,sales_transferred,changed_at,description) VALUES(@source,@dest,@count,datetime('now','localtime'),@detail)",cn,tx)){
-          audit.Parameters.AddWithValue("@source",source);audit.Parameters.AddWithValue("@dest",destination);audit.Parameters.AddWithValue("@count",changed);
-          audit.Parameters.AddWithValue("@detail","Vendas e pagamentos mantidos nos mesmos IDs; carteira, limites e cascos nao transferidos. Saldo original R$ "+debt.ToString("N2"));
-          if(audit.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel auditar a transferencia.");
+          audit.Parameters.AddWithValue("@source",source);
+          audit.Parameters.AddWithValue("@dest",destination);
+          audit.Parameters.AddWithValue("@count",movedFiado);
+          audit.Parameters.AddWithValue("@detail","Mesma pessoa confirmada; vendas, cascos, credito depositado e auditoria reunificados. IDs e pagamentos preservados. "+limitNote);
+          if(audit.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel registrar auditoria da unificacao.");
          }
          tx.Commit();
         }
@@ -433,7 +511,7 @@ namespace ArmazemGratidao {
        customer=destination;
        dlg.DialogResult=DialogResult.OK;dlg.Close();
        clientSearch.Clear();LoadClients();SelectClient(destination);
-       MessageBox.Show(count+" vendas fiadas transferidas para "+destination+". Valores e pagamentos preservados.\nBackup: "+backup,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Information);
+       MessageBox.Show("Nomes unificados: "+source+" agora e "+destination+". Vendas e pagamentos preservados; credito e cascos vinculados ao cadastro correto.\nBackup: "+backup,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Information);
       }catch(Exception ex){MessageBox.Show("Transferencia nao realizada: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
      };
      choose.Click+=(sender,args)=>transfer();
