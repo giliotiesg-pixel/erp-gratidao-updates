@@ -413,7 +413,7 @@ namespace ArmazemGratidao {
     }
     if(remoteBuild<=InstalledBuild){
      status.Text="Versao atualizada: build "+InstalledBuild+".";
-     if(manual)MessageBox.Show("Versao instalada: "+InstalledBuild+"\\nUltima build publicada: "+remoteBuild+"\\nNenhuma atualizacao nova disponivel.","Verificar atualizacao");
+     if(manual)MessageBox.Show("Versão instalada: "+InstalledBuild+Environment.NewLine+"Última build publicada: "+remoteBuild+Environment.NewLine+Environment.NewLine+"Nenhuma atualização nova foi publicada no GitHub. Alterações em teste não são instaladas automaticamente.","Verificar atualização");
      return;
     }
     status.Text="Nova versao publicada: build "+remoteBuild+".";
@@ -430,7 +430,7 @@ namespace ArmazemGratidao {
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
-    if(MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
+    if(MessageBox.Show("Nova versão: build "+remoteBuild+Environment.NewLine+"Versão atual: build "+InstalledBuild+Environment.NewLine+Environment.NewLine+"Baixar, conferir e iniciar a instalação?"+Environment.NewLine+"O programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
     // Não fechar a venda em andamento ou módulos com dados não salvos.
     if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
      MessageBox.Show("Feche as demais janelas do Armazem antes da instalacao.","Atualizacao adiada");
