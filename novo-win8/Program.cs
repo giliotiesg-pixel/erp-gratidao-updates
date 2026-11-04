@@ -768,6 +768,11 @@ Panel BuildEmbeddedCalculator(){
     Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
    panel.Controls.Add(display);
+   var liveResult=new Label{Dock=DockStyle.Top,Height=43,TextAlign=ContentAlignment.MiddleRight,
+    Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
+    BackColor=Color.FromArgb(234,242,253),Text="Resultado: 0"};
+   panel.Controls.Add(liveResult);
+   display.BringToFront();
    display.TabStop=true;
    display.Cursor=Cursors.IBeam;
    display.ShortcutsEnabled=false;
@@ -778,6 +783,20 @@ Panel BuildEmbeddedCalculator(){
    decimal stored=0m;
    string operation=null;
    bool newNumber=true;
+   Action updatePreview=()=>{
+    decimal current;
+    if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
+       System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
+    if(operation==null){liveResult.Text="Resultado: "+current.ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));return;}
+    if(operation=="÷"&&current==0m){liveResult.Text="Aguardando divisor";return;}
+    try{
+     decimal result=operation=="+"?checked(stored+current):
+       operation=="−"?checked(stored-current):
+       operation=="×"?checked(stored*current):
+       operation=="÷"?stored/current:current;
+     liveResult.Text="Resultado: "+result.ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+    }catch(OverflowException){liveResult.Text="Valor muito grande";}
+   };
    string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
    var calculatorButtons=new System.Collections.Generic.Dictionary<string,Button>();
    for(int i=0;i<labels.Length;i++){
@@ -819,6 +838,7 @@ Panel BuildEmbeddedCalculator(){
        }
       }else{stored=current;operation=key;newNumber=true;}
      }catch(OverflowException){MessageBox.Show(panel.FindForm(),"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
+     updatePreview();
     };
     calculatorButtons[key]=b;
     b.Click+=(sender,args)=>display.Focus();
@@ -847,6 +867,7 @@ Panel BuildEmbeddedCalculator(){
     }
    };
    panel.Controls.Add(keys);keys.BringToFront();
+   updatePreview();
    return panel;
   }
   // Tela inicial única de navegação; preserva os handlers originais dos módulos.
