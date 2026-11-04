@@ -13,7 +13,7 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms();}; Application.Run(new MainForm()); }
+  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms(); RoundedGridTheme.CheckOpenForms();}; Application.Run(new MainForm()); }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
  static class WindowBoundsGuard {
@@ -75,6 +75,59 @@ namespace ArmazemGratidao {
     form.Controls.Add(strip);
     strip.BringToFront();
     form.FormClosed+=(sender,args)=>installed.Remove(form);
+   }
+  }
+ }
+ // Padrão visual global de tabelas: somente apresentação.
+ // Aplicado a controles criados dinamicamente e novas janelas, sem trocar
+ // DataSource, seleção, eventos, valores ou comportamento do editor.
+ static class RoundedGridTheme {
+  static readonly System.Collections.Generic.HashSet<DataGridView> styled=new System.Collections.Generic.HashSet<DataGridView>();
+  static void Apply(DataGridView table){
+   if(table.IsDisposed||!styled.Add(table))return;
+   table.BorderStyle=BorderStyle.None;
+   table.BackgroundColor=Color.White;
+   table.EnableHeadersVisualStyles=false;
+   table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+   table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   table.ColumnHeadersDefaultCellStyle.SelectionBackColor=Color.FromArgb(22,75,160);
+   table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.5f,FontStyle.Bold);
+   table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(215,232,252);
+   table.DefaultCellStyle.SelectionForeColor=Color.FromArgb(18,54,109);
+   table.GridColor=Color.FromArgb(227,235,248);
+   table.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   table.RowHeadersBorderStyle=DataGridViewHeaderBorderStyle.None;
+   table.ColumnHeadersBorderStyle=DataGridViewHeaderBorderStyle.None;
+   table.Paint+=(sender,args)=>{
+    if(table.ClientSize.Width<22||table.ClientSize.Height<22)return;
+    RoundedVisuals.DrawOutline(args.Graphics,
+     new Rectangle(1,1,table.ClientSize.Width-3,table.ClientSize.Height-3),
+     10,Color.FromArgb(172,194,228),1.6f);
+   };
+   table.Disposed+=(sender,args)=>styled.Remove(table);
+  }
+  static void Search(Control parent){
+   if(parent.IsDisposed)return;
+   var grid=parent as DataGridView;
+   if(grid!=null){Apply(grid);return;}
+   foreach(Control child in parent.Controls)Search(child);
+  }
+  public static void CheckOpenForms(){
+   foreach(Form f in Application.OpenForms)if(!f.IsDisposed)Search(f);
+  }
+ }
+ static class RoundedVisuals {
+  public static void DrawOutline(Graphics graphics,Rectangle area,int radius,Color color,float weight){
+   if(area.Width<radius*2+3||area.Height<radius*2+3)return;
+   int d=radius*2;
+   using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
+    path.AddArc(area.Left,area.Top,d,d,180,90);
+    path.AddArc(area.Right-d,area.Top,d,d,270,90);
+    path.AddArc(area.Right-d,area.Bottom-d,d,d,0,90);
+    path.AddArc(area.Left,area.Bottom-d,d,d,90,90);
+    path.CloseFigure();
+    graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+    using(var border=new Pen(color,weight))graphics.DrawPath(border,path);
    }
   }
  }
@@ -357,6 +410,10 @@ namespace ArmazemGratidao {
     indicators.Controls.Add(panel);
    }
    home.Controls.Add(indicators);
+   // Divisor discreto para distinguir indicadores da area de atalhos.
+   var divider=new Panel{Width=913,Height=2,BackColor=Color.FromArgb(201,215,234),
+    Margin=new Padding(5,10,5,8)};
+   home.Controls.Add(divider);
    home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
 
    var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
@@ -389,6 +446,11 @@ namespace ArmazemGratidao {
     button.FlatAppearance.BorderSize=0;
     button.FlatAppearance.MouseOverBackColor=Color.FromArgb(227,238,255);
     button.FlatAppearance.MouseDownBackColor=Color.FromArgb(210,225,249);
+    button.Paint+=(paintButton,paintArgs)=>{
+     RoundedVisuals.DrawOutline(paintArgs.Graphics,
+      new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
+      10,Color.FromArgb(166,191,226),1.6f);
+    };
     button.Click+=action.Item2;shortcuts.Controls.Add(button);
    }
    home.Controls.Add(shortcuts);
