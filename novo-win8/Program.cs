@@ -705,7 +705,7 @@ namespace ArmazemGratidao {
     MaximizeBox=false,ShowInTaskbar=true,Opacity=0.97};
    calculatorWindow=calc;
    calc.FormClosed+=(sender,args)=>{if(calculatorWindow==calc)calculatorWindow=null;};
-   var display=new TextBox{Dock=DockStyle.Top,Height=55,ReadOnly=true,
+   var display=new TextBox{Name="embeddedCalculatorDisplay",Dock=DockStyle.Top,Height=55,ReadOnly=true,
     Text="0",TextAlign=HorizontalAlignment.Right,
     Font=new Font("Segoe UI",24,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
@@ -770,6 +770,7 @@ Panel BuildEmbeddedCalculator(){
    panel.Controls.Add(display);
    display.TabStop=true;
    display.Cursor=Cursors.IBeam;
+   display.ShortcutsEnabled=false;
    var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
     Padding=new Padding(3,12,3,4),BackColor=Color.FromArgb(234,242,253)};
    for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
@@ -831,7 +832,8 @@ Panel BuildEmbeddedCalculator(){
     if(args.KeyCode==Keys.D5&&args.Shift)key="%";
     else if(args.KeyCode>=Keys.D0&&args.KeyCode<=Keys.D9)key=((int)(args.KeyCode-Keys.D0)).ToString();
     else if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
-    else if(args.KeyCode==Keys.Add||args.KeyCode==Keys.Oemplus)key="+";
+    else if(args.KeyCode==Keys.Add||(args.KeyCode==Keys.Oemplus&&args.Shift))key="+";
+    else if(args.KeyCode==Keys.Oemplus)key="=";
     else if(args.KeyCode==Keys.Subtract||args.KeyCode==Keys.OemMinus)key="−";
     else if(args.KeyCode==Keys.Multiply)key="×";
     else if(args.KeyCode==Keys.Divide||args.KeyCode==Keys.OemQuestion)key="÷";
@@ -964,9 +966,23 @@ Panel BuildEmbeddedCalculator(){
    var calcBody=BuildEmbeddedCalculator();
    calculatorSide.Controls.Add(calcBody);
    calculatorSide.Controls.Add(calcTitle);
-   page.Controls.Add(calculatorSide);page.Controls.Add(tiles);page.Controls.Add(top);
+   // A calculadora recebe foco ao abrir o menu e ao voltar a ele.
+   // Não desloca o ponteiro do mouse nem captura teclas em outros módulos.
+   Action focusCalculator=()=>{
+    if(!IsDisposed&&Visible&&Controls["homePanel"]==page&&
+       Form.ActiveForm==this&&calcBody.Visible){
+     var visor=calcBody.Controls.Find("embeddedCalculatorDisplay",true).FirstOrDefault();
+     if(visor!=null&&visor.CanFocus)visor.Focus();
+    }
+   };
+   EventHandler onActivated=(sender,args)=>BeginInvoke((Action)(()=>focusCalculator()));
+   Activated+=onActivated;
+   page.Disposed+=(sender,args)=>Activated-=onActivated;
+   page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
+   page.Controls.Add(tiles);page.Controls.Add(top);
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;EnableWheelScrolling(tiles);
+   BeginInvoke((Action)(()=>focusCalculator()));
    status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
   }
   // Janela independente de atalhos: os mais usados primeiro.
