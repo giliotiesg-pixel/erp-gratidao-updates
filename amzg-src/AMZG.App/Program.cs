@@ -26,6 +26,8 @@ public sealed class MainForm:Form{
    string name=modules[i];
    var button=new RoundedButton{Radius=14,Text=name,Dock=DockStyle.Fill,Margin=new Padding(6),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(15,61,102),Font=new Font("Segoe UI",11,FontStyle.Bold)};
    button.FlatAppearance.BorderColor=Color.FromArgb(205,218,233);
+   button.Enabled=name=="PDV" || name=="Início / Indicadores" || name=="Configurações";
+   if(!button.Enabled){button.ForeColor=Color.FromArgb(120,130,140);button.Text=name+" (em desenvolvimento)";}
    button.Click+=(_,_)=>OpenModule(name);
    grid.Controls.Add(button,i%4,i/4);
   }
