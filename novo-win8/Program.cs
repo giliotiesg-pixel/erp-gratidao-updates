@@ -571,7 +571,7 @@ namespace ArmazemGratidao {
     ranking.Width=w;
     if(rankingGrid.Columns.Contains("produto"))rankingGrid.Columns["produto"].MinimumWidth=220;
    };
-   home.SizeChanged+=(sender,args)=>fitHome();
+   home.SizeChanged+=(resizeSender,resizeArgs)=>fitHome();
    Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();
    fitHome();EnableWheelScrolling(home);
    status.Text="Início • Indicadores e ranking. Acesse as ferramentas em Módulos.";
