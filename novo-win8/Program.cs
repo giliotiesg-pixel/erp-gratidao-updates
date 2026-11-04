@@ -768,6 +768,8 @@ Panel BuildEmbeddedCalculator(){
     Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
    panel.Controls.Add(display);
+   display.TabStop=true;
+   display.Cursor=Cursors.IBeam;
    var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
     Padding=new Padding(3,12,3,4),BackColor=Color.FromArgb(234,242,253)};
    for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
@@ -776,6 +778,7 @@ Panel BuildEmbeddedCalculator(){
    string operation=null;
    bool newNumber=true;
    string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
+   var calculatorButtons=new System.Collections.Generic.Dictionary<string,Button>();
    for(int i=0;i<labels.Length;i++){
     string key=labels[i];
     var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3,4,3,4),
@@ -816,9 +819,31 @@ Panel BuildEmbeddedCalculator(){
       }else{stored=current;operation=key;newNumber=true;}
      }catch(OverflowException){MessageBox.Show(panel.FindForm(),"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
     };
+    calculatorButtons[key]=b;
+    b.Click+=(sender,args)=>display.Focus();
     keys.Controls.Add(b,i%4,i/4);
    }
 
+   // O teclado funciona somente com o visor da calculadora em foco.
+   // Não intercepta atalhos nem digitação dos outros módulos.
+   display.KeyDown+=(sender,args)=>{
+    string key=null;
+    if(args.KeyCode==Keys.D5&&args.Shift)key="%";
+    else if(args.KeyCode>=Keys.D0&&args.KeyCode<=Keys.D9)key=((int)(args.KeyCode-Keys.D0)).ToString();
+    else if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
+    else if(args.KeyCode==Keys.Add||args.KeyCode==Keys.Oemplus)key="+";
+    else if(args.KeyCode==Keys.Subtract||args.KeyCode==Keys.OemMinus)key="−";
+    else if(args.KeyCode==Keys.Multiply)key="×";
+    else if(args.KeyCode==Keys.Divide||args.KeyCode==Keys.OemQuestion)key="÷";
+    else if(args.KeyCode==Keys.Decimal||args.KeyCode==Keys.Oemcomma||args.KeyCode==Keys.OemPeriod)key=",";
+    else if(args.KeyCode==Keys.Enter)key="=";
+    else if(args.KeyCode==Keys.Back)key="⌫";
+    else if(args.KeyCode==Keys.Escape||args.KeyCode==Keys.Delete)key="C";
+    if(key!=null&&calculatorButtons.ContainsKey(key)){
+     args.Handled=true;args.SuppressKeyPress=true;
+     calculatorButtons[key].PerformClick();
+    }
+   };
    panel.Controls.Add(keys);keys.BringToFront();
    return panel;
   }
