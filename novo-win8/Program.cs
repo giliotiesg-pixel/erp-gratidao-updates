@@ -170,16 +170,22 @@ namespace ArmazemGratidao {
     if(!ownFrame){
      button.FlatStyle=FlatStyle.Flat;
      button.FlatAppearance.BorderSize=0;
-     if(button.BackColor==SystemColors.Control)button.BackColor=Color.White;
-     if(button.ForeColor==SystemColors.ControlText)button.ForeColor=blue;
-     button.FlatAppearance.MouseOverBackColor=Color.FromArgb(225,238,254);
-     button.FlatAppearance.MouseDownBackColor=Color.FromArgb(201,222,252);
-     Action round=()=>Round(button,9);
-     button.Resize+=(sender,args)=>round();
+     // Padrao visual unico: azul vivo, letras brancas, negrito e cantos arredondados.
+     // Preserva cores de alerta/exclusao e dimensoes dos formularios para nao cortar textos.
+     bool danger=button.Text!=null && (button.Text.IndexOf("Excluir",StringComparison.OrdinalIgnoreCase)>=0
+       ||button.Text.IndexOf("Apagar",StringComparison.OrdinalIgnoreCase)>=0
+       ||button.Text.IndexOf("Remover",StringComparison.OrdinalIgnoreCase)>=0);
+     if(!danger){
+      button.BackColor=Color.FromArgb(22,75,160);
+      button.ForeColor=Color.White;
+     }
+     if(button.Font!=null && !button.Font.Bold)
+      button.Font=new Font(button.Font,FontStyle.Bold);
+     button.FlatAppearance.MouseOverBackColor=danger?Color.FromArgb(180,53,65):Color.FromArgb(36,96,185);
+     button.FlatAppearance.MouseDownBackColor=danger?Color.FromArgb(150,39,52):Color.FromArgb(13,53,128);
      button.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
       new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
-      9,outline,1.25f);
-     round();
+      9,danger?Color.FromArgb(175,60,75):Color.FromArgb(72,119,194),1.25f);
     }
    }else if(control is TextBox){
     var input=(TextBox)control;
