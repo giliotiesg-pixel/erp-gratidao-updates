@@ -28,29 +28,51 @@ namespace ArmazemGratidao {
    decimal rate;if(!rates.TryGetValue(method,out rate))rate=0;
    return Math.Round(amount*rate/100m,2,MidpointRounding.AwayFromZero);
   }
+  static void RoundControl(Control control,int radius){
+   if(control.IsDisposed||control.Width<radius*2+4||control.Height<radius*2+4)return;
+   int d=radius*2;
+   var r=new Rectangle(0,0,control.Width-1,control.Height-1);
+   using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
+    path.AddArc(r.Left,r.Top,d,d,180,90);
+    path.AddArc(r.Right-d,r.Top,d,d,270,90);
+    path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);
+    path.AddArc(r.Left,r.Bottom-d,d,d,90,90);
+    path.CloseFigure();
+    var previous=control.Region;control.Region=new Region(path);
+    if(previous!=null)previous.Dispose();
+   }
+  }
+  static void Rounded(Control control,int radius){
+   control.Resize+=(sender,args)=>RoundControl(control,radius);
+   RoundControl(control,radius);
+  }
   public static void ShowEditor(string db,IWin32Window owner){
    if(!File.Exists(db)){MessageBox.Show("Banco de dados não encontrado.");return;}
    try{
     using(var c=Open(db)){Prepare(c);}
     using(var c=Open(db)){
      var rates=Load(c);
-     using(var dlg=new Form{Text="Configurar Taxas de Cartões e Pagamentos",Width=680,Height=780,MinimumSize=new Size(590,630),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
-      var intro=new Label{Dock=DockStyle.Top,Height=100,Padding=new Padding(15,10,15,0),Text="Configure o percentual cobrado pela operadora para cada forma.\n0,00% significa sem taxa. Cada bandeira pode ter taxa própria. A taxa reduz o valor líquido da loja; o cliente paga o mesmo total.",Font=new Font("Segoe UI",10,FontStyle.Bold)};
-      var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=Methods.Length,AutoScroll=true,Padding=new Padding(15),BackColor=Color.White};
-      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,36));
+     using(var dlg=new Form{Text="Configurar Taxas de Cartões e Pagamentos",Width=790,Height=740,MinimumSize=new Size(650,590),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var intro=new Label{Dock=DockStyle.Top,Height=92,Padding=new Padding(20,12,20,0),Text="Configure o percentual cobrado pela operadora para cada forma.\n0,00% significa sem taxa. Cada bandeira pode ter taxa própria. A taxa reduz o valor líquido da loja; o cliente paga o mesmo total.",Font=new Font("Segoe UI",10,FontStyle.Bold)};
+      var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=Methods.Length,AutoScroll=true,Padding=new Padding(20,12,20,12),BackColor=Color.White,CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
+      panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,39));
+      for(int row=0;row<Methods.Length;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,47));
       var fields=new Dictionary<string,NumericUpDown>();
       foreach(string name in Methods){
-       var label=new Label{Text=name,AutoSize=true,Anchor=AnchorStyles.Left,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-       var number=new NumericUpDown{DecimalPlaces=3,Increment=.1m,Minimum=0,Maximum=100,Width=155,Value=Math.Min(100,Math.Max(0,rates[name]))};
+       var label=new Label{Text=name.Replace("_","  •  "),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147),Margin=new Padding(5,4,4,4)};
+       var number=new NumericUpDown{DecimalPlaces=3,Increment=.1m,Minimum=0,Maximum=100,Dock=DockStyle.Fill,Margin=new Padding(6,8,10,8),Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.FromArgb(240,246,255),ForeColor=Color.FromArgb(20,69,147),BorderStyle=BorderStyle.FixedSingle,Value=Math.Min(100,Math.Max(0,rates[name]))};
        fields[name]=number;
-       var preview=new Label{AutoSize=true,Anchor=AnchorStyles.Left,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(22,75,160)};
+       Rounded(number,7);
+       var preview=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),Margin=new Padding(6,4,2,4)};
        Action refresh=()=>preview.Text="R$ 100,00 → taxa R$ "+(Math.Round(number.Value,2,MidpointRounding.AwayFromZero)).ToString("N2");
        number.ValueChanged+=(sender,args)=>refresh();refresh();
        panel.Controls.Add(label);panel.Controls.Add(number);panel.Controls.Add(preview);
       }
-      var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=64,Padding=new Padding(12),FlowDirection=FlowDirection.RightToLeft};
-      var save=new Button{Text="Salvar taxas",Width=180,Height=39,BackColor=Color.FromArgb(24,86,169),ForeColor=Color.White};
-      var cancel=new Button{Text="Cancelar",Width=115,Height=39};cancel.Click+=(s,e)=>dlg.Close();
+      var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=70,Padding=new Padding(14),BackColor=Color.FromArgb(238,245,255),FlowDirection=FlowDirection.RightToLeft};
+      var save=new Button{Text="Salvar taxas",Width=168,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+      var cancel=new Button{Text="Cancelar",Width=118,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(100,116,139),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};cancel.Click+=(s,e)=>dlg.Close();
+      save.FlatAppearance.BorderSize=0;cancel.FlatAppearance.BorderSize=0;
+      Rounded(save,11);Rounded(cancel,11);
       save.Click+=(s,e)=>{
        try{
         using(var target=Open(db)){
