@@ -264,13 +264,15 @@ namespace ArmazemGratidao {
   readonly string dbPath;
   MobileStockServer mobileStock;
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
+  readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*60*1000};
+  bool dailyBackupRunning=false;
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
-  readonly Button menuToggle=new Button {Text="▦  Módulos",Width=133,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+  readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
@@ -285,11 +287,11 @@ namespace ArmazemGratidao {
    menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
-   menuToggle.Click+=(s,e)=>ShowModulesWindow();
+   menuToggle.Click+=(s,e)=>ShowMainMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=165,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
-   AddButton(bar,"Início",ShowHome);
+   AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
@@ -320,11 +322,13 @@ namespace ArmazemGratidao {
    EnableWheelScrolling(bar);
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
-   ShowHome(this,EventArgs.Empty);
-   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(false);}));
+   ShowMainMenu();
+   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();EnsureDailyBackup();await CheckUpdates(false);}));
+   dailyBackupTimer.Tick+=(s,e)=>EnsureDailyBackup();
+   dailyBackupTimer.Start();
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
-   FormClosed+=(s,e)=>{updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
+   FormClosed+=(s,e)=>{dailyBackupTimer.Stop();dailyBackupTimer.Dispose();updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   public void OpenPdvFromModule(){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.","PDV");return;}
@@ -355,6 +359,31 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Nao foi possivel configurar o backup: "+ex.Message,"Backup",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  // Uma copia consistente por dia, ao abrir o sistema e enquanto permanecer aberto.
+  // Falhas ficam visiveis; nunca registrar sucesso sem validar a integridade.
+  void EnsureDailyBackup(){
+   if(dailyBackupRunning||!File.Exists(dbPath))return;
+   dailyBackupRunning=true;
+   try{
+    string folder=UpdateBackupDirectory();
+    string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
+    string today=DateTime.Now.ToString("yyyy-MM-dd");
+    if(File.Exists(marker)){
+     string[] lines=File.ReadAllLines(marker);
+     if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return;
+    }
+    string backup=CreateVerifiedPreUpdateBackup();
+    if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
+    string tmp=marker+".tmp";
+    File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
+    if(File.Exists(marker))File.Delete(marker);
+    File.Move(tmp,marker);
+    status.Text="Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+   }catch(Exception ex){
+    status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
+    // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
+   }finally{dailyBackupRunning=false;}
+  }
   string CreateVerifiedPreUpdateBackup(){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
@@ -377,6 +406,43 @@ namespace ArmazemGratidao {
     try{if(File.Exists(backup))File.Delete(backup);}catch{}
     throw;
    }
+  }
+  string UpdatesDirectory(){
+   string folder=Path.Combine(dataDir,"Atualizacoes");
+   Directory.CreateDirectory(folder);
+   return folder;
+  }
+  void OpenSavedUpdates(){
+   try{
+    string folder=UpdatesDirectory();
+    Process.Start("explorer.exe","\""+folder+"\"");
+   }catch(Exception ex){MessageBox.Show(this,ex.Message,"Atualizações Salvas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+  async Task<string> DownloadVerifiedInstaller(int build,string url,string digest){
+   string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-Novo-build-"+build+"-Setup.exe");
+   bool valid=false;
+   if(File.Exists(installer)){
+    using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())
+     valid=string.Equals(BitConverter.ToString(sha.ComputeHash(stream)).Replace("-",""),digest.Substring(7),StringComparison.OrdinalIgnoreCase);
+    if(!valid)File.Delete(installer);
+   }
+   if(!valid){
+    string temp=installer+".download";
+    try{
+     status.Text="Salvando atualização build "+build+"...";
+     using(var web=new WebClient()){
+      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+      await web.DownloadFileTaskAsync(new Uri(url),temp);
+     }
+     string actual;
+     using(var stream=File.OpenRead(temp))using(var sha=SHA256.Create())
+      actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
+     if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase))
+      throw new Exception("SHA-256 inválido. Atualização rejeitada.");
+     File.Move(temp,installer);
+    }finally{try{if(File.Exists(temp))File.Delete(temp);}catch{}}
+   }
+   return installer;
   }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
@@ -413,12 +479,10 @@ namespace ArmazemGratidao {
     }
     if(remoteBuild<=InstalledBuild){
      status.Text="Versao atualizada: build "+InstalledBuild+".";
-     if(manual)MessageBox.Show("Versao instalada: "+InstalledBuild+"\\nUltima build publicada: "+remoteBuild+"\\nNenhuma atualizacao nova disponivel.","Verificar atualizacao");
+     if(manual)MessageBox.Show("Versão instalada: "+InstalledBuild+Environment.NewLine+"Última build publicada: "+remoteBuild+Environment.NewLine+Environment.NewLine+"Nenhuma atualização nova foi publicada no GitHub. Alterações em teste não são instaladas automaticamente.","Verificar atualização");
      return;
     }
     status.Text="Nova versao publicada: build "+remoteBuild+".";
-    if(!manual&&lastPromptedBuild==remoteBuild)return;
-    lastPromptedBuild=remoteBuild;
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -430,24 +494,27 @@ namespace ArmazemGratidao {
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
-    if(MessageBox.Show("Nova versão: build "+remoteBuild+"\\nVersão atual: build "+InstalledBuild+"\\n\\nBaixar, conferir e iniciar a instalação?\\nO programa será fechado após iniciar o instalador.","Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){status.Text="Atualização cancelada.";return;}
-    // Não fechar a venda em andamento ou módulos com dados não salvos.
-    if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
-     MessageBox.Show("Feche as demais janelas do Armazem antes da instalacao.","Atualizacao adiada");
-     status.Text="Atualizacao adiada por janelas abertas.";return;
-    }
-    string dir=Path.Combine(Path.GetTempPath(),"ArmazemGratidaoNovo-Atualizacoes");
-    Directory.CreateDirectory(dir);
-    string installer=Path.Combine(dir,"Armazem-Gratidao-Novo-build-"+remoteBuild+"-Setup.exe");
-    status.Text="Baixando atualização build "+remoteBuild+"...";
-    using(var web=new WebClient())await web.DownloadFileTaskAsync(new Uri(url),installer);
-    string actual;
-    using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
-    if(!string.Equals(actual,digest.Substring(7),StringComparison.OrdinalIgnoreCase)){File.Delete(installer);throw new Exception("SHA-256 inválido. Instalador rejeitado.");}
-    // A instalação EXE também cria seu próprio backup, para cobrir atualizações manuais.
-    // Um backup validado agora é obrigatório antes de iniciar o instalador pelo programa.
+    // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
+    string installer=await DownloadVerifiedInstaller(remoteBuild,url,digest);
+    status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
+    if(!manual&&lastPromptedBuild==remoteBuild)return;
+    lastPromptedBuild=remoteBuild;
+    if(MessageBox.Show("Atualização build "+remoteBuild+" já baixada e verificada."+Environment.NewLine+
+     "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
+     Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
+     "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+    // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
     string backupPath=CreateVerifiedPreUpdateBackup();
     status.Text="Backup confirmado: "+backupPath;
+    // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
+    // de fechamento (por exemplo, uma venda em edição ainda não salva).
+    foreach(Form window in Application.OpenForms.Cast<Form>().Where(x=>x!=this&&!x.IsDisposed).ToArray()){
+     window.Close();
+    }
+    if(Application.OpenForms.Cast<Form>().Any(x=>x!=this&&!x.IsDisposed&&x.Visible)){
+     MessageBox.Show(this,"Uma janela impediu o fechamento. Salve a operação em andamento e tente novamente.","Atualização adiada",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+     return;
+    }
     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     Close();
    }catch(Exception ex){status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message,"Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
@@ -577,6 +644,144 @@ namespace ArmazemGratidao {
    status.Text="Início • Indicadores e ranking. Acesse as ferramentas em Módulos.";
   }
 
+  // Pasta persistente de suporte: fora do diretório de instalação e sem copiar dados privados automaticamente.
+  void OpenProgramFilesFolder(){
+   try{
+    string folder=Path.Combine(dataDir,"Arquivos do Programa");
+    Directory.CreateDirectory(folder);
+    string instructions=Path.Combine(folder,"LEIA-ME.txt");
+    if(!File.Exists(instructions)){
+     File.WriteAllText(instructions,
+      "ARMAZÉM GRATIDÃO NOVO - ARQUIVOS DO PROGRAMA"+Environment.NewLine+
+      "Esta pasta permanece no computador durante as atualizações."+Environment.NewLine+
+      "Use-a para guardar documentos de manutenção, instruções e arquivos de suporte."+Environment.NewLine+
+      "Código-fonte e documentação centralizados no GitHub:"+Environment.NewLine+
+      "https://github.com/giliotiesg-pixel/erp-gratidao-updates/tree/main/ARQUIVOS-DO-PROGRAMA"+Environment.NewLine+
+      "NÃO coloque senhas ou backups com dados de clientes em repositórios públicos."+Environment.NewLine+
+      "A pasta de backup do programa é configurada separadamente."+Environment.NewLine,
+      System.Text.Encoding.UTF8);
+    }
+    Process.Start("explorer.exe", "\""+folder+"\"");
+   }catch(Exception ex){
+    MessageBox.Show(this,"Não foi possível abrir a pasta de arquivos: "+ex.Message,
+     "Arquivos do Programa",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+   }
+  }
+  // Calculadora nativa, independente do PDV e sem acesso ao banco.
+  Form calculatorWindow;
+  void ShowCalculator(){
+   if(calculatorWindow!=null&&!calculatorWindow.IsDisposed){
+    if(calculatorWindow.WindowState==FormWindowState.Minimized)calculatorWindow.WindowState=FormWindowState.Normal;
+    calculatorWindow.BringToFront();calculatorWindow.Activate();return;
+   }
+   var calc=new Form{Text="Calculadora • Armazém Gratidão",Width=320,Height=420,
+    MinimumSize=new Size(290,385),StartPosition=FormStartPosition.CenterScreen,
+    BackColor=Color.FromArgb(242,247,255),FormBorderStyle=FormBorderStyle.FixedSingle,
+    MaximizeBox=false,ShowInTaskbar=true,Opacity=0.97};
+   calculatorWindow=calc;
+   calc.FormClosed+=(sender,args)=>{if(calculatorWindow==calc)calculatorWindow=null;};
+   var display=new TextBox{Dock=DockStyle.Top,Height=55,ReadOnly=true,
+    Text="0",TextAlign=HorizontalAlignment.Right,
+    Font=new Font("Segoe UI",24,FontStyle.Bold),BackColor=Color.White,
+    ForeColor=Color.FromArgb(20,69,147)};
+   calc.Controls.Add(display);
+   var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
+    Padding=new Padding(10),BackColor=Color.FromArgb(242,247,255)};
+   for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+   for(int i=0;i<5;i++)keys.RowStyles.Add(new RowStyle(SizeType.Percent,20));
+   decimal stored=0m;
+   string operation=null;
+   bool newNumber=true;
+   string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
+   for(int i=0;i<labels.Length;i++){
+    string key=labels[i];
+    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3),
+     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
+     BackColor=(key=="=")?Color.FromArgb(20,69,147):Color.White,
+     ForeColor=(key=="=")?Color.White:Color.FromArgb(20,69,147)};
+    b.FlatAppearance.BorderSize=0;
+    b.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),9,
+     Color.FromArgb(181,201,228),1.2f);
+    b.Click+=(sender,args)=>{
+     try{
+      decimal current;
+      if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
+        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
+      if(key.Length==1&&char.IsDigit(key[0])){
+       display.Text=newNumber?key:(display.Text=="0"?key:display.Text+key);
+       newNumber=false;
+      }else if(key==","){
+       if(newNumber){display.Text="0,";newNumber=false;}
+       else if(!display.Text.Contains(","))display.Text+=",";
+      }else if(key=="C"){stored=0m;operation=null;newNumber=true;display.Text="0";}
+      else if(key=="⌫"){display.Text=display.Text.Length<=1?"0":display.Text.Substring(0,display.Text.Length-1);newNumber=false;}
+      else if(key=="±"){display.Text=(-current).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));}
+      else if(key=="%"){display.Text=(current/100m).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));newNumber=true;}
+      else if(key=="="){
+       if(operation!=null){
+        decimal answer=current;
+        if(operation=="+")answer=stored+current;
+        else if(operation=="−")answer=stored-current;
+        else if(operation=="×")answer=stored*current;
+        else if(operation=="÷"){if(current==0m){MessageBox.Show(calc,"Não é possível dividir por zero.","Calculadora");return;}answer=stored/current;}
+        display.Text=answer.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        operation=null;newNumber=true;
+       }
+      }else{stored=current;operation=key;newNumber=true;}
+     }catch(OverflowException){MessageBox.Show(calc,"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
+    };
+    keys.Controls.Add(b,i%4,i/4);
+   }
+   calc.Controls.Add(keys);keys.BringToFront();
+   calc.Show();
+  }
+  // Tela inicial única de navegação; preserva os handlers originais dos módulos.
+  void ShowMainMenu(){
+   grid.Visible=false;
+   var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
+   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(246,249,253)};
+   var top=new Panel{Dock=DockStyle.Top,Height=76,BackColor=Color.White};
+   top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=40,
+    Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)});
+   top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
+    Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
+   var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
+    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
+   var actions=ModuleActions();
+   actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
+   actions.Insert(1,Tuple.Create("Calculadora",(EventHandler)((sender,args)=>ShowCalculator())));
+   actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
+   actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
+   actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
+   actions.Add(Tuple.Create("Pasta do backup das atualizações",(EventHandler)ConfigureUpdateBackupFolder));
+   actions.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
+   actions.Add(Tuple.Create("Preparar recuperação",(EventHandler)PrepareRecoveredSales));
+   actions.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
+   actions.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
+   actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
+   actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
+   actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
+   foreach(var item in actions){
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=162,Height=49,
+     MinimumSize=new Size(162,49),MaximumSize=new Size(162,49),Margin=new Padding(4),
+     Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
+     BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
+     Font=new Font("Segoe UI",9,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
+     AutoEllipsis=true,UseMnemonic=false};
+    tile.FlatAppearance.BorderSize=0;
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(226,238,253);
+    tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+     new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
+     9,Color.FromArgb(174,194,224),1.3f);
+    tile.Click+=item.Item2;
+    tiles.Controls.Add(tile);
+   }
+   page.Controls.Add(tiles);page.Controls.Add(top);
+   Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
+   sideMenu.Visible=false;EnableWheelScrolling(tiles);
+   status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
+  }
   // Janela independente de atalhos: os mais usados primeiro.
   // O menu lateral antigo continua acessível como alternativa de navegação.
   System.Collections.Generic.List<Tuple<string,EventHandler>> ModuleActions(){
@@ -609,26 +814,26 @@ namespace ArmazemGratidao {
     if(modulesWindow.WindowState==FormWindowState.Minimized)modulesWindow.WindowState=FormWindowState.Normal;
     modulesWindow.BringToFront();modulesWindow.Activate();return;
    }
-   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=780,Height=565,
-    MinimumSize=new Size(550,360),StartPosition=FormStartPosition.CenterParent,
+   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
+    MinimumSize=new Size(480,340),StartPosition=FormStartPosition.CenterParent,
     BackColor=Color.FromArgb(246,249,253),ShowInTaskbar=true,AutoScroll=false};
    modulesWindow=dialog;
    dialog.FormClosed+=(sender,args)=>{if(modulesWindow==dialog)modulesWindow=null;};
-   var top=new Panel{Dock=DockStyle.Top,Height=91,BackColor=Color.White};
-   var title=new Label{Text="MÓDULOS  •  ACESSO RÁPIDO",Left=17,Top=10,Width=715,Height=29,
-    Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)};
+   var top=new Panel{Dock=DockStyle.Top,Height=72,BackColor=Color.White};
+   var title=new Label{Text="MÓDULOS  •  ACESSO RÁPIDO",Left=14,Top=8,Width=665,Height=25,
+    Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)};
    var info=new Label{Text="Acessos mais usados primeiro. Outras ferramentas continuam no menu antigo.",
-    Left=17,Top=43,Width=720,Height=22,Font=new Font("Segoe UI",9,FontStyle.Regular),
+    Left=14,Top=36,Width=660,Height=20,Font=new Font("Segoe UI",9,FontStyle.Regular),
     ForeColor=Color.FromArgb(75,91,115)};
    top.Controls.Add(title);top.Controls.Add(info);
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
-    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(11),BackColor=Color.FromArgb(246,249,253)};
+    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
    foreach(var item in ModuleActions()){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=155,Height=55,
-     MinimumSize=new Size(155,55),MaximumSize=new Size(155,55),Margin=new Padding(3),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=132,Height=43,
+     MinimumSize=new Size(132,43),MaximumSize=new Size(132,43),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",9.1f,FontStyle.Bold),
+     Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
      Image=HomeShortcutImage(item.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true};
