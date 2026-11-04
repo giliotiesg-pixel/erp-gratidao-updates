@@ -328,17 +328,32 @@ namespace ArmazemGratidao {
      }
     }catch(Exception ex){metrics.Clear();metrics.Add(Tuple.Create("INDICADORES INDISPONÍVEIS","Verifique o banco: "+ex.Message));}
    }else metrics.Add(Tuple.Create("BANCO NÃO IMPORTADO","Use o botão Importar banco"));
-   // Quatro indicadores compactos e alinhados em uma faixa, com rolagem horizontal
-   // apenas se a area util da janela for pequena.
-   var indicators=new FlowLayoutPanel {Width=920,Height=91,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,
-    AutoScroll=true,Margin=new Padding(0,1,0,8),Padding=new Padding(0),BackColor=Color.FromArgb(246,249,253)};
+   // Indicadores menores, com contorno fechado pintado no proprio cartao.
+   // Evita o recorte das bordas causado pela combinacao Region+FixedSingle.
+   var indicators=new FlowLayoutPanel {
+    Width=920,Height=83,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,
+    AutoScroll=true,Margin=new Padding(0,1,0,5),Padding=new Padding(0),
+    BackColor=Color.FromArgb(246,249,253)
+   };
    foreach(var metric in metrics){
-    var panel=new Panel {Width=215,Height=78,BackColor=Color.White,Margin=new Padding(5,2,5,2),BorderStyle=BorderStyle.FixedSingle};
-    RoundHomeControl(panel,12);
-    panel.Controls.Add(new Label {Text=metric.Item2,Dock=DockStyle.Fill,Padding=new Padding(10,5,3,0),
-     ForeColor=Color.FromArgb(15,57,146),Font=new Font("Segoe UI",13,FontStyle.Bold),AutoEllipsis=true});
-    panel.Controls.Add(new Label {Text=metric.Item1,Dock=DockStyle.Top,Height=27,Padding=new Padding(10,7,4,0),
-     ForeColor=Color.FromArgb(180,38,56),Font=new Font("Segoe UI",8,FontStyle.Bold),AutoEllipsis=true});
+    var panel=new Panel {Width=183,Height=70,BackColor=Color.White,Margin=new Padding(5,2,5,2)};
+    panel.Paint+=(sender,args)=>{
+     var rect=new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3);
+     int r=10,diameter=r*2;
+     using(var outline=new System.Drawing.Drawing2D.GraphicsPath()){
+      outline.AddArc(rect.Left,rect.Top,diameter,diameter,180,90);
+      outline.AddArc(rect.Right-diameter,rect.Top,diameter,diameter,270,90);
+      outline.AddArc(rect.Right-diameter,rect.Bottom-diameter,diameter,diameter,0,90);
+      outline.AddArc(rect.Left,rect.Bottom-diameter,diameter,diameter,90,90);
+      outline.CloseFigure();
+      args.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+      using(var border=new Pen(Color.FromArgb(180,197,222),1.6f))args.Graphics.DrawPath(border,outline);
+     }
+    };
+    panel.Controls.Add(new Label {Text=metric.Item1,Left=11,Top=7,Width=163,Height=20,
+     ForeColor=Color.FromArgb(165,37,57),Font=new Font("Segoe UI",8,FontStyle.Bold),AutoEllipsis=true});
+    panel.Controls.Add(new Label {Text=metric.Item2,Left=11,Top=29,Width=163,Height=34,
+     ForeColor=Color.FromArgb(15,57,146),Font=new Font("Segoe UI",17,FontStyle.Bold),AutoEllipsis=true});
     indicators.Controls.Add(panel);
    }
    home.Controls.Add(indicators);
