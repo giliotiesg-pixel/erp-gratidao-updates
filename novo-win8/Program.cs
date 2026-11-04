@@ -849,7 +849,7 @@ Panel BuildEmbeddedCalculator(){
     Button button;
     if(calculatorButtons.TryGetValue(key,out button))button.PerformClick();
    };
-   display.KeyDown+=(sender,args)=>{
+   KeyEventHandler calculatorKeyDown=(sender,args)=>{
     string key=null;
     if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)
      key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
@@ -866,7 +866,7 @@ Panel BuildEmbeddedCalculator(){
      pressCalculatorKey(key);
     }
    };
-   display.KeyPress+=(sender,args)=>{
+   KeyPressEventHandler calculatorKeyPress=(sender,args)=>{
     string key=null;
     char ch=args.KeyChar;
     if(ch>='0'&&ch<='9')key=ch.ToString();
@@ -882,6 +882,23 @@ Panel BuildEmbeddedCalculator(){
      pressCalculatorKey(key);
     }
    };
+   // Captura na janela principal mesmo se o foco estiver em outro botão do menu.
+   // Só atua enquanto o menu principal e a calculadora estiverem visíveis.
+   var mainForm=this;
+   mainForm.KeyPreview=true;
+   KeyEventHandler guardedKeyDown=(sender,args)=>{
+    var home=mainForm.Controls["homePanel"];
+    if(home==null||!home.Visible||!panel.Visible||mainForm.ActiveControl is TextBox && mainForm.ActiveControl!=display)return;
+    calculatorKeyDown(sender,args);
+   };
+   KeyPressEventHandler guardedKeyPress=(sender,args)=>{
+    var home=mainForm.Controls["homePanel"];
+    if(home==null||!home.Visible||!panel.Visible||mainForm.ActiveControl is TextBox && mainForm.ActiveControl!=display)return;
+    calculatorKeyPress(sender,args);
+   };
+   mainForm.KeyDown+=guardedKeyDown;
+   mainForm.KeyPress+=guardedKeyPress;
+   panel.Disposed+=(sender,args)=>{mainForm.KeyDown-=guardedKeyDown;mainForm.KeyPress-=guardedKeyPress;};
    // Grade explicita impede que visor, resultado e teclas se sobreponham.
    var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty,Padding=Padding.Empty};
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
