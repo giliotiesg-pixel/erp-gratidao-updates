@@ -842,17 +842,17 @@ Panel BuildEmbeddedCalculator(){
    foreach(string section in order){
     var matches=buttons.Where(x=>ModuleSection(x.Text)==section).ToList();
     if(matches.Count==0)continue;
-    bool maintenance=section=="SISTEMA E MANUTENÇÃO";
+    bool maintenance=section=="SISTEMA E MANUTENÇÃO"||section=="CONSULTAS E RELATÓRIOS";
     var block=new Panel{Width=405,Height=36+(maintenance?0:((matches.Count+1)/2)*42),
      Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
     var heading=new Label{Dock=DockStyle.Top,Height=31,
-     Text=maintenance?"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)":section,
+     Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
      ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
     var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
      RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
+    for(int col=0;col<2;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50f));
     for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
     for(int n=0;n<matches.Count;n++){
      var button=matches[n];
@@ -869,7 +869,7 @@ Panel BuildEmbeddedCalculator(){
       bool expanded=!group.Visible;
       group.Visible=expanded;
       block.Height=36+(expanded?group.RowCount*42:0);
-      heading.Text=expanded?"▾ SISTEMA E MANUTENÇÃO  (clique para ocultar)":"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
+      heading.Text=expanded?"▾ "+section+"  (clique para ocultar)":"▸ "+section+"  (clique para abrir)";
      };
     }
     sections.Add(block);panel.Controls.Add(block);
@@ -894,7 +894,7 @@ Panel BuildEmbeddedCalculator(){
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
    var actions=ModuleActions();
-   actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
+
 
    actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
    actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
