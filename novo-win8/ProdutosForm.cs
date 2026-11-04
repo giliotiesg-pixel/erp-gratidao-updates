@@ -1222,6 +1222,40 @@ namespace ArmazemGratidao {
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
        barcode.Width=240;barcode.MaxLength=64;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
+    // Porcentagem de ganho calculada sobre o custo, sem nova coluna no banco.
+    var gainPercent=new NumericUpDown{DecimalPlaces=2,Minimum=-100,Maximum=100000,Increment=1,Width=110};
+    var gainValue=new Label{AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),Padding=new Padding(6,7,0,0)};
+    var pricingRow=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true,Margin=Padding.Empty};
+    pricingRow.Controls.Add(price);
+    pricingRow.Controls.Add(new Label{Text="Ganho %",AutoSize=true,Padding=new Padding(12,7,0,0)});
+    pricingRow.Controls.Add(gainPercent);
+    pricingRow.Controls.Add(gainValue);
+    panel.Controls.Remove(price);
+    panel.Controls.Add(pricingRow,1,4);
+    bool changingPricing=false;
+    Action updateGain=()=>{
+     if(changingPricing)return;
+     changingPricing=true;
+     try{
+      decimal gain=price.Value-cost.Value;
+      decimal percentage=cost.Value>0?gain*100m/cost.Value:0m;
+      gainPercent.Value=Math.Max(gainPercent.Minimum,Math.Min(gainPercent.Maximum,Math.Round(percentage,2)));
+      gainValue.Text="Ganho: "+gain.ToString("C2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))+
+       (cost.Value==0?" (informe o custo)":"");
+     }finally{changingPricing=false;}
+    };
+    cost.ValueChanged+=(sender,args)=>updateGain();
+    price.ValueChanged+=(sender,args)=>updateGain();
+    gainPercent.ValueChanged+=(sender,args)=>{
+     if(changingPricing)return;
+     changingPricing=true;
+     try{
+      decimal calculated=Math.Round(cost.Value*(1m+gainPercent.Value/100m),2,MidpointRounding.AwayFromZero);
+      price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,calculated));
+      gainValue.Text="Ganho: "+(price.Value-cost.Value).ToString("C2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+     }finally{changingPricing=false;}
+    };
+    updateGain();
     panel.Controls.Add(ownCode,1,12);
     var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
     var lookupStatus=new Label {Text="Aceita código original ou próprio. A pesquisa online é opcional para códigos comerciais.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
