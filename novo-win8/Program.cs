@@ -265,11 +265,12 @@ namespace ArmazemGratidao {
   MobileStockServer mobileStock;
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
   bool checkingUpdates=false;
+  Form modulesWindow;
   int lastPromptedBuild=-1;
   int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
-  readonly Button menuToggle=new Button {Text="☰  Menu",Width=120,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
+  readonly Button menuToggle=new Button {Text="▦  Módulos",Width=133,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
@@ -284,9 +285,9 @@ namespace ArmazemGratidao {
    menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
-   menuToggle.Click+=(s,e)=>{sideMenu.Visible=!sideMenu.Visible;};
+   menuToggle.Click+=(s,e)=>ShowModulesWindow();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=155,Top=17};header.Controls.Add(brand);
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=165,Top=17};header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -455,18 +456,17 @@ namespace ArmazemGratidao {
   void ShowHome(object sender,EventArgs e){
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
-   var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(24),BackColor=Color.FromArgb(246,249,253)};
-   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=940,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(10,52,145)};
+   var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,10,12,10),BackColor=Color.FromArgb(246,249,253)};
+   var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=920,Height=36,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(10,52,145)};
    home.Controls.Add(title);
-   var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=940,Height=36,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
+   var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=920,Height=25,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
    home.Controls.Add(date);
-   var refresh=new Button {Text="Atualizar indicadores",Width=200,Height=40,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold),Margin=new Padding(8)};
+   var refresh=new Button {Text="Atualizar indicadores",Width=185,Height=34,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,69,147),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold),Margin=new Padding(8)};
    refresh.FlatAppearance.BorderSize=0;
    refresh.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    refresh.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
    RoundHomeControl(refresh,11);
    refresh.Click+=ShowHome;home.Controls.Add(refresh);
-   home.Controls.Add(new Label {Text="",Width=680,Height=40});
    var metrics=new System.Collections.Generic.List<Tuple<string,string>>();
    if(File.Exists(dbPath)){
     try{
@@ -518,13 +518,69 @@ namespace ArmazemGratidao {
     indicators.Controls.Add(panel);
    }
    home.Controls.Add(indicators);
-   // Divisor discreto para distinguir indicadores da area de atalhos.
-   var divider=new Panel{Width=913,Height=2,BackColor=Color.FromArgb(201,215,234),
-    Margin=new Padding(5,10,5,8)};
-   home.Controls.Add(divider);
-   home.Controls.Add(new Label {Text="ACESSO RÁPIDO",Width=940,Height=35,ForeColor=Color.FromArgb(20,69,147),Font=new Font("Segoe UI",12,FontStyle.Bold)});
+   home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=920,Height=29,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",11,FontStyle.Bold)});
+   var ranking=new Panel {Width=920,Height=355,BackColor=Color.White,Margin=new Padding(0,2,0,5),AutoScroll=false};
+   RoundHomeControl(ranking,12);
+   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(14,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
+   var rankingGrid=new DataGridView {Dock=DockStyle.Fill,Visible=false,BackgroundColor=Color.White,BorderStyle=BorderStyle.None,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AllowUserToResizeRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both,ColumnHeadersHeight=40,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing};
+   rankingGrid.Font=new Font("Segoe UI",10.5f,FontStyle.Regular);rankingGrid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
+   rankingGrid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
+   rankingGrid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(226,238,251);
+   rankingGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.EnableHeadersVisualStyles=false;
+   rankingGrid.DefaultCellStyle.BackColor=Color.White;
+   rankingGrid.DefaultCellStyle.ForeColor=Color.FromArgb(20,40,75);
+   rankingGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(230,239,250);
+   rankingGrid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(10,52,145);
+   rankingGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(247,250,255);
+   rankingGrid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   rankingGrid.GridColor=Color.FromArgb(232,237,245);
+   rankingGrid.RowTemplate.Height=39;
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="posicao",HeaderText="Nº",Width=49,SortMode=DataGridViewColumnSortMode.NotSortable});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="produto",HeaderText="Produto",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=300,SortMode=DataGridViewColumnSortMode.NotSortable});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="quantidade",HeaderText="Qtd.",Width=96,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="N3"}});
+   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="valor",HeaderText="Total vendido",Width=134,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="C2"}});
+   ranking.Controls.Add(rankingText);ranking.Controls.Add(rankingGrid);home.Controls.Add(ranking);
+   if(File.Exists(dbPath)){
+    try{using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+     conn.Open();
+     string sql="SELECT si.name, SUM(si.quantity) quantidade, SUM(si.total) valor FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY quantidade DESC,valor DESC LIMIT 10";
+     using(var cmd=new SQLiteCommand(sql,conn)){
+      cmd.Parameters.AddWithValue("@month",DateTime.Today.ToString("yyyy-MM"));
+      using(var reader=cmd.ExecuteReader()){
+       int position=0;
+       while(reader.Read()){
+        position++;
+        rankingGrid.Rows.Add(position.ToString("00"),Convert.ToString(reader["name"]),Convert.ToDecimal(reader["quantidade"]),Convert.ToDecimal(reader["valor"]));
+       }
+       if(position>0){rankingText.Visible=false;rankingGrid.Visible=true;rankingGrid.ClearSelection();rankingGrid.AutoResizeRows(DataGridViewAutoSizeRowsMode.AllCells);}
+      }
+     }
+    }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
+   }
+   Action fitHome=()=>{
+    if(home.IsDisposed)return;
+    int w=Math.Max(560,home.ClientSize.Width-home.Padding.Horizontal-24);
+    title.Width=w;date.Width=w;indicators.Width=w;
+    foreach(Control c in indicators.Controls){
+     c.Width=Math.Max(125,(w-16)/4-10);
+     foreach(Control field in c.Controls)field.Width=Math.Max(105,c.Width-20);
+    }
+    foreach(Control c in home.Controls)
+     if(c is Label && c!=title && c!=date)c.Width=w;
+    ranking.Width=w;
+    if(rankingGrid.Columns.Contains("produto"))rankingGrid.Columns["produto"].MinimumWidth=220;
+   };
+   home.SizeChanged+=(sender,args)=>fitHome();
+   Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();
+   fitHome();EnableWheelScrolling(home);
+   status.Text="Início • Indicadores e ranking. Acesse as ferramentas em Módulos.";
+  }
 
-   var actions=new System.Collections.Generic.List<Tuple<string,EventHandler>>{
+  // Janela independente de atalhos: os mais usados primeiro.
+  // O menu lateral antigo continua acessível como alternativa de navegação.
+  System.Collections.Generic.List<Tuple<string,EventHandler>> ModuleActions(){
+   return new System.Collections.Generic.List<Tuple<string,EventHandler>>{
     Tuple.Create("PDV  •  Nova venda",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.");return;}OpenModuleWindow(new PdvForm(dbPath));})),
     Tuple.Create("Vendas",(EventHandler)((s,a)=>OpenConsult(false))),
     Tuple.Create("Cascos retornáveis",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de controlar cascos.");return;}OpenModuleWindow(new CascosForm(dbPath));})),
@@ -539,72 +595,58 @@ namespace ArmazemGratidao {
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
-   var shortcuts=new FlowLayoutPanel {Width=950,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,
-    WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
-   foreach(var action in actions){
-    var button=new Button {
-     Text=action.Item1,Tag="home-shortcut",Width=144,Height=60,
-     MinimumSize=new Size(144,60),MaximumSize=new Size(144,60),
-     Margin=new Padding(2,2,2,2),Padding=new Padding(3,2,2,2),
-     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(246,249,253),ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",9.3f,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
+  }
+  void ShowModulesWindow(){
+   if(modulesWindow!=null&&!modulesWindow.IsDisposed){
+    if(modulesWindow.WindowState==FormWindowState.Minimized)modulesWindow.WindowState=FormWindowState.Normal;
+    modulesWindow.BringToFront();modulesWindow.Activate();return;
+   }
+   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=780,Height=565,
+    MinimumSize=new Size(550,360),StartPosition=FormStartPosition.CenterParent,
+    BackColor=Color.FromArgb(246,249,253),ShowInTaskbar=true,AutoScroll=false};
+   modulesWindow=dialog;
+   dialog.FormClosed+=(sender,args)=>{if(modulesWindow==dialog)modulesWindow=null;};
+   var top=new Panel{Dock=DockStyle.Top,Height=91,BackColor=Color.White};
+   var title=new Label{Text="MÓDULOS  •  ACESSO RÁPIDO",Left=17,Top=10,Width=715,Height=29,
+    Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)};
+   var info=new Label{Text="Acessos mais usados primeiro. Outras ferramentas continuam no menu antigo.",
+    Left=17,Top=43,Width=720,Height=22,Font=new Font("Segoe UI",9,FontStyle.Regular),
+    ForeColor=Color.FromArgb(75,91,115)};
+   top.Controls.Add(title);top.Controls.Add(info);
+   var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
+    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(11),BackColor=Color.FromArgb(246,249,253)};
+   foreach(var item in ModuleActions()){
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=155,Height=55,
+     MinimumSize=new Size(155,55),MaximumSize=new Size(155,55),Margin=new Padding(3),
+     Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
+     BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
+     Font=new Font("Segoe UI",9.1f,FontStyle.Bold),
+     Image=HomeShortcutImage(item.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
-     TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true
-    };
-    button.FlatAppearance.BorderSize=0;
-    button.FlatAppearance.MouseOverBackColor=Color.FromArgb(227,238,255);
-    button.FlatAppearance.MouseDownBackColor=Color.FromArgb(210,225,249);
-    button.Paint+=(paintButton,paintArgs)=>{
-     RoundedVisuals.DrawOutline(paintArgs.Graphics,
-      new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
-      10,Color.FromArgb(166,191,226),1.6f);
-    };
-    button.Click+=action.Item2;shortcuts.Controls.Add(button);
+     TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true};
+    tile.FlatAppearance.BorderSize=0;
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(226,238,253);
+    tile.Paint+=(paintSender,paintArgs)=>RoundedVisuals.DrawOutline(paintArgs.Graphics,
+     new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
+     9,Color.FromArgb(174,194,224),1.3f);
+    tile.Click+=item.Item2;
+    tiles.Controls.Add(tile);
    }
-   home.Controls.Add(shortcuts);
-   home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
-   var ranking=new Panel {Width=920,Height=270,BackColor=Color.White,Margin=new Padding(7,4,7,14),AutoScroll=true};
-   RoundHomeControl(ranking,16);
-   var rankingText=new Label {Dock=DockStyle.Fill,Padding=new Padding(14,12,12,8),ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoSize=false,Text="Nenhuma venda encontrada neste mês."};
-   var rankingGrid=new DataGridView {Dock=DockStyle.Fill,Visible=false,BackgroundColor=Color.White,BorderStyle=BorderStyle.None,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AllowUserToResizeRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Vertical,ColumnHeadersHeight=32,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing};
-   rankingGrid.Font=new Font("Segoe UI",10,FontStyle.Regular);
-   rankingGrid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
-   rankingGrid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(226,238,251);
-   rankingGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(10,52,145);
-   rankingGrid.EnableHeadersVisualStyles=false;
-   rankingGrid.DefaultCellStyle.BackColor=Color.White;
-   rankingGrid.DefaultCellStyle.ForeColor=Color.FromArgb(20,40,75);
-   rankingGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(230,239,250);
-   rankingGrid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(10,52,145);
-   rankingGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(247,250,255);
-   rankingGrid.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
-   rankingGrid.GridColor=Color.FromArgb(232,237,245);
-   rankingGrid.RowTemplate.Height=27;
-   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="posicao",HeaderText="Nº",Width=54,SortMode=DataGridViewColumnSortMode.NotSortable});
-   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="produto",HeaderText="Produto",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=200,SortMode=DataGridViewColumnSortMode.NotSortable});
-   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="quantidade",HeaderText="Quantidade",Width=125,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="N3"}});
-   rankingGrid.Columns.Add(new DataGridViewTextBoxColumn {Name="valor",HeaderText="Total vendido",Width=146,SortMode=DataGridViewColumnSortMode.NotSortable,DefaultCellStyle=new DataGridViewCellStyle {Alignment=DataGridViewContentAlignment.MiddleRight,Format="C2"}});
-   ranking.Controls.Add(rankingText);ranking.Controls.Add(rankingGrid);home.Controls.Add(ranking);
-   if(File.Exists(dbPath)){
-    try{using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
-     conn.Open();
-     string sql="SELECT si.name, SUM(si.quantity) quantidade, SUM(si.total) valor FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY quantidade DESC,valor DESC LIMIT 10";
-     using(var cmd=new SQLiteCommand(sql,conn)){
-      cmd.Parameters.AddWithValue("@month",DateTime.Today.ToString("yyyy-MM"));
-      using(var reader=cmd.ExecuteReader()){
-       int position=0;
-       while(reader.Read()){
-        position++;
-        rankingGrid.Rows.Add(position.ToString("00"),Convert.ToString(reader["name"]),Convert.ToDecimal(reader["quantidade"]),Convert.ToDecimal(reader["valor"]));
-       }
-       if(position>0){rankingText.Visible=false;rankingGrid.Visible=true;rankingGrid.ClearSelection();}
-      }
-     }
-    }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
-   }
-   Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();
-   EnableWheelScrolling(home);
-   status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+   var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
+   var previous=new Button{Text="Abrir menu antigo",Width=179,Height=35,Top=10,Left=17,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   previous.FlatAppearance.BorderSize=0;RoundHomeControl(previous,9);
+   previous.Click+=(sender,args)=>{sideMenu.Visible=true;dialog.Close();};
+   var dashboard=new Button{Text="Início / Indicadores",Width=179,Height=35,Top=10,Left=205,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(22,75,160),
+    Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   dashboard.FlatAppearance.BorderSize=0;RoundHomeControl(dashboard,9);
+   dashboard.Click+=(sender,args)=>{ShowHome(sender,args);dialog.Close();};
+   bottom.Controls.Add(previous);bottom.Controls.Add(dashboard);
+   dialog.Controls.Add(tiles);dialog.Controls.Add(bottom);dialog.Controls.Add(top);
+   EnableWheelScrolling(tiles);
+   dialog.Show(this);
   }
   // Garante rolagem pela roda do mouse tambem quando o ponteiro
   // esta sobre atalhos, rotulos, indicadores ou itens do menu lateral.
