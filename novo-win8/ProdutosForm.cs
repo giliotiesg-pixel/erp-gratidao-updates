@@ -1230,7 +1230,8 @@ namespace ArmazemGratidao {
     int lookupGeneration=0;
     Func<System.Threading.Tasks.Task> fetchProduct=async ()=>{
      string code=barcode.Text.Trim();
-     if(lookingUp||code==lastLookupCode)return;
+     if(lookingUp)return;
+     if(code==lastLookupCode&&!string.IsNullOrWhiteSpace(name.Text))return;
      if(ownCode.Checked){lookupStatus.Text="Código interno próprio: consulta online desativada.";return;}
      if(!System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$")){lookupStatus.Text="Código próprio aceito; consulta online disponível para códigos numéricos de 8 a 14 dígitos.";return;}
      int thisLookup=++lookupGeneration;
@@ -1261,7 +1262,7 @@ namespace ArmazemGratidao {
       if(category.Enabled&&!string.IsNullOrWhiteSpace(data.Category))category.Text=data.Category.Length>120?data.Category.Substring(0,120).Trim():data.Category;
       lookupStatus.Text="Preenchido pela base pública. Confira os dados e informe preço, custo e estoque antes de salvar.";
       lastLookupCode=code;
-     }catch(Exception ex){lookupStatus.Text="Busca indisponível. Cadastro manual liberado.";MessageBox.Show("Consulta online indisponível: "+ex.Message,"Busca de produto");}
+     }catch(Exception ex){lastLookupCode="";lookupStatus.Text="Falha na consulta online. Confira a conexão e clique em Buscar dados do código para tentar novamente.";MessageBox.Show("Não foi possível consultar o catálogo online.\n\nDetalhes: "+ex.Message+"\n\nO cadastro manual permanece disponível e nenhum produto foi alterado.","Busca de produto");}
      finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";if(!form.IsDisposed&&barcode.Text.Trim()!=code)lookupStatus.Text="Código alterado. Pressione Enter para pesquisar o novo código.";}}
     };
     barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
