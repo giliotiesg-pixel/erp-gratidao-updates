@@ -577,6 +577,29 @@ namespace ArmazemGratidao {
    status.Text="Início • Indicadores e ranking. Acesse as ferramentas em Módulos.";
   }
 
+  // Pasta persistente de suporte: fora do diretório de instalação e sem copiar dados privados automaticamente.
+  void OpenProgramFilesFolder(){
+   try{
+    string folder=Path.Combine(dataDir,"Arquivos do Programa");
+    Directory.CreateDirectory(folder);
+    string instructions=Path.Combine(folder,"LEIA-ME.txt");
+    if(!File.Exists(instructions)){
+     File.WriteAllText(instructions,
+      "ARMAZÉM GRATIDÃO NOVO - ARQUIVOS DO PROGRAMA"+Environment.NewLine+
+      "Esta pasta permanece no computador durante as atualizações."+Environment.NewLine+
+      "Use-a para guardar documentos de manutenção, instruções e arquivos de suporte."+Environment.NewLine+
+      "Código-fonte e documentação centralizados no GitHub:"+Environment.NewLine+
+      "https://github.com/giliotiesg-pixel/erp-gratidao-updates/tree/main/ARQUIVOS-DO-PROGRAMA"+Environment.NewLine+
+      "NÃO coloque senhas ou backups com dados de clientes em repositórios públicos."+Environment.NewLine+
+      "A pasta de backup do programa é configurada separadamente."+Environment.NewLine,
+      System.Text.Encoding.UTF8);
+    }
+    Process.Start("explorer.exe", "\""+folder+"\"");
+   }catch(Exception ex){
+    MessageBox.Show(this,"Não foi possível abrir a pasta de arquivos: "+ex.Message,
+     "Arquivos do Programa",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+   }
+  }
   // Calculadora nativa, independente do PDV e sem acesso ao banco.
   Form calculatorWindow;
   void ShowCalculator(){
@@ -661,6 +684,7 @@ namespace ArmazemGratidao {
    var actions=ModuleActions();
    actions.Insert(0,Tuple.Create("Início / Indicadores",(EventHandler)ShowHome));
    actions.Insert(1,Tuple.Create("Calculadora",(EventHandler)((sender,args)=>ShowCalculator())));
+   actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
    actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
    actions.Add(Tuple.Create("Pasta do backup das atualizações",(EventHandler)ConfigureUpdateBackupFolder));
    actions.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
