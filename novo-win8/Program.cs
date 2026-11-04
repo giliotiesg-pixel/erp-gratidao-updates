@@ -802,7 +802,9 @@ namespace ArmazemGratidao {
    actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
    actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
-   actions.RemoveAll(x=>x.Item1=="Verificar atualização");
+   // Ferramentas do sistema ficam somente no menu lateral ocultavel.
+   actions.RemoveAll(x=>ModuleSection(x.Item1)=="SISTEMA E MANUTENÇÃO");
+   actions.Add(Tuple.Create("Sistema / Manutenção",(EventHandler)((sender,args)=>{sideMenu.Visible=!sideMenu.Visible;})));
    foreach(var item in actions){
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=128,Height=38,
      MinimumSize=new Size(128,38),MaximumSize=new Size(128,38),Margin=new Padding(3),
@@ -870,7 +872,7 @@ namespace ArmazemGratidao {
    top.Controls.Add(title);top.Controls.Add(info);
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
-   foreach(var item in ModuleActions().Where(x=>x.Item1!="Verificar atualização")){
+   foreach(var item in ModuleActions().Where(x=>ModuleSection(x.Item1)!="SISTEMA E MANUTENÇÃO")){
     var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=116,Height=37,
      MinimumSize=new Size(116,37),MaximumSize=new Size(116,37),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
@@ -889,7 +891,7 @@ namespace ArmazemGratidao {
    }
    GroupModuleButtons(tiles);
    var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
-   var previous=new Button{Text="Mostrar/ocultar menu antigo",Width=218,Height=35,Top=10,Left=17,
+   var previous=new Button{Text="Sistema / Manutenção",Width=218,Height=35,Top=10,Left=17,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9,FontStyle.Bold)};
    previous.FlatAppearance.BorderSize=0;RoundHomeControl(previous,9);
