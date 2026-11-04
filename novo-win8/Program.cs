@@ -834,37 +834,52 @@ Panel BuildEmbeddedCalculator(){
   void GroupModuleButtons(FlowLayoutPanel panel){
    var buttons=panel.Controls.OfType<Button>().ToList();
    panel.SuspendLayout();panel.Controls.Clear();
+   panel.WrapContents=false;
+   panel.FlowDirection=FlowDirection.TopDown;
+   panel.Padding=new Padding(7,5,5,5);
    var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
+   var sections=new System.Collections.Generic.List<Panel>();
    foreach(string section in order){
     var matches=buttons.Where(x=>ModuleSection(x.Text)==section).ToList();
     if(matches.Count==0)continue;
-    var heading=new Label{Text=section,AutoSize=false,Height=30,
-     Width=Math.Max(300,panel.ClientSize.Width-32),Margin=new Padding(3,12,3,3),
+    bool maintenance=section=="SISTEMA E MANUTENÇÃO";
+    var block=new Panel{Width=405,Height=36+(maintenance?0:((matches.Count+2)/3)*44),
+     Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
+    var heading=new Label{Dock=DockStyle.Top,Height=31,
+     Text=maintenance?"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)":section,
      Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
      ForeColor=Color.FromArgb(15,57,146),BackColor=Color.FromArgb(229,237,249)};
-    if(section=="SISTEMA E MANUTENÇÃO"){
-     heading.Text="▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
-     heading.Cursor=Cursors.Hand;
+    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,
+     RowCount=(matches.Count+2)/3,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
+     BackColor=Color.FromArgb(246,249,253)};
+    for(int col=0;col<3;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
+    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+    for(int n=0;n<matches.Count;n++){
+     var button=matches[n];
+     button.Dock=DockStyle.Fill;
+     button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
+     button.Margin=new Padding(2,2,2,3);
+     group.Controls.Add(button,n%3,n/3);
+    }
+    block.Controls.Add(group);block.Controls.Add(heading);
+    if(maintenance){
+     group.Visible=false;heading.Cursor=Cursors.Hand;
      heading.BackColor=Color.FromArgb(218,231,250);
-     bool expanded=false;
      heading.Click+=(sender,args)=>{
-      expanded=!expanded;
+      bool expanded=!group.Visible;
+      group.Visible=expanded;
+      block.Height=36+(expanded?group.RowCount*44:0);
       heading.Text=expanded?"▾ SISTEMA E MANUTENÇÃO  (clique para ocultar)":"▸ SISTEMA E MANUTENÇÃO  (clique para abrir)";
-      panel.SuspendLayout();
-      foreach(Button button in matches)button.Visible=expanded;
-      panel.ResumeLayout(true);
      };
     }
-    panel.Controls.Add(heading);
-    foreach(Button button in matches){
-     if(section=="SISTEMA E MANUTENÇÃO")button.Visible=false;
-     panel.Controls.Add(button);
-    }
+    sections.Add(block);panel.Controls.Add(block);
    }
-   panel.Resize+=(sender,args)=>{
-    int width=Math.Max(300,panel.ClientSize.Width-32);
-    foreach(Label heading in panel.Controls.OfType<Label>())heading.Width=width;
+   Action resize=()=>{
+    int width=Math.Max(260,panel.ClientSize.Width-20);
+    foreach(Panel block in sections)block.Width=width;
    };
+   panel.Resize+=(sender,args)=>resize();
+   resize();
    panel.ResumeLayout(true);
   }
   void ShowMainMenu(){
@@ -894,8 +909,8 @@ Panel BuildEmbeddedCalculator(){
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
    // Sistema e manutencao ficam na mesma faixa dos demais modulos, recolhidos inicialmente.
    foreach(var item in actions){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=128,Height=38,
-     MinimumSize=new Size(128,38),MaximumSize=new Size(128,38),Margin=new Padding(3),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=120,Height=38,
+     MinimumSize=new Size(120,38),MaximumSize=new Size(120,38),Margin=new Padding(3),
      Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
      Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
@@ -909,7 +924,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.Right,Width=264,
+   var calculatorSide=new Panel{Dock=DockStyle.Right,Width=248,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
