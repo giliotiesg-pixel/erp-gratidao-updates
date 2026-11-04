@@ -814,26 +814,26 @@ namespace ArmazemGratidao {
     if(modulesWindow.WindowState==FormWindowState.Minimized)modulesWindow.WindowState=FormWindowState.Normal;
     modulesWindow.BringToFront();modulesWindow.Activate();return;
    }
-   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=780,Height=565,
-    MinimumSize=new Size(550,360),StartPosition=FormStartPosition.CenterParent,
+   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
+    MinimumSize=new Size(480,340),StartPosition=FormStartPosition.CenterParent,
     BackColor=Color.FromArgb(246,249,253),ShowInTaskbar=true,AutoScroll=false};
    modulesWindow=dialog;
    dialog.FormClosed+=(sender,args)=>{if(modulesWindow==dialog)modulesWindow=null;};
-   var top=new Panel{Dock=DockStyle.Top,Height=91,BackColor=Color.White};
-   var title=new Label{Text="MÓDULOS  •  ACESSO RÁPIDO",Left=17,Top=10,Width=715,Height=29,
-    Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)};
+   var top=new Panel{Dock=DockStyle.Top,Height=72,BackColor=Color.White};
+   var title=new Label{Text="MÓDULOS  •  ACESSO RÁPIDO",Left=14,Top=8,Width=665,Height=25,
+    Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.FromArgb(15,57,146)};
    var info=new Label{Text="Acessos mais usados primeiro. Outras ferramentas continuam no menu antigo.",
-    Left=17,Top=43,Width=720,Height=22,Font=new Font("Segoe UI",9,FontStyle.Regular),
+    Left=14,Top=36,Width=660,Height=20,Font=new Font("Segoe UI",9,FontStyle.Regular),
     ForeColor=Color.FromArgb(75,91,115)};
    top.Controls.Add(title);top.Controls.Add(info);
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
-    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(11),BackColor=Color.FromArgb(246,249,253)};
+    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
    foreach(var item in ModuleActions()){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=155,Height=55,
-     MinimumSize=new Size(155,55),MaximumSize=new Size(155,55),Margin=new Padding(3),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=132,Height=43,
+     MinimumSize=new Size(132,43),MaximumSize=new Size(132,43),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.White,ForeColor=Color.FromArgb(15,55,128),
-     Font=new Font("Segoe UI",9.1f,FontStyle.Bold),
+     Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
      Image=HomeShortcutImage(item.Item1),
      ImageAlign=ContentAlignment.MiddleLeft,TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText,AutoEllipsis=true};
