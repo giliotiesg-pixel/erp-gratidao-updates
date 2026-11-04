@@ -804,8 +804,8 @@ namespace ArmazemGratidao {
    actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
    actions.RemoveAll(x=>x.Item1=="Verificar atualização");
    foreach(var item in actions){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=143,Height=42,
-     MinimumSize=new Size(143,42),MaximumSize=new Size(143,42),Margin=new Padding(3),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=128,Height=38,
+     MinimumSize=new Size(128,38),MaximumSize=new Size(128,38),Margin=new Padding(3),
      Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
      Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
@@ -871,8 +871,8 @@ namespace ArmazemGratidao {
    var tiles=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,
     FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(7),BackColor=Color.FromArgb(246,249,253)};
    foreach(var item in ModuleActions().Where(x=>x.Item1!="Verificar atualização")){
-    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=126,Height=40,
-     MinimumSize=new Size(126,40),MaximumSize=new Size(126,40),Margin=new Padding(2),
+    var tile=new Button{Text=item.Item1,Tag="home-shortcut",Width=116,Height=37,
+     MinimumSize=new Size(116,37),MaximumSize=new Size(116,37),Margin=new Padding(2),
      Padding=new Padding(4,2,2,2),FlatStyle=FlatStyle.Flat,
      BackColor=Color.FromArgb(45,68,108),ForeColor=Color.White,
      Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
