@@ -264,6 +264,8 @@ namespace ArmazemGratidao {
   readonly string dbPath;
   MobileStockServer mobileStock;
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
+  readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*60*1000};
+  bool dailyBackupRunning=false;
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
@@ -321,10 +323,12 @@ namespace ArmazemGratidao {
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowMainMenu();
-   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();await CheckUpdates(false);}));
+   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();EnsureDailyBackup();await CheckUpdates(false);}));
+   dailyBackupTimer.Tick+=(s,e)=>EnsureDailyBackup();
+   dailyBackupTimer.Start();
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
-   FormClosed+=(s,e)=>{updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
+   FormClosed+=(s,e)=>{dailyBackupTimer.Stop();dailyBackupTimer.Dispose();updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   public void OpenPdvFromModule(){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.","PDV");return;}
@@ -354,6 +358,31 @@ namespace ArmazemGratidao {
      MessageBox.Show("Pasta de backup configurada: "+dlg.SelectedPath+"\\nAs atualizacoes serao bloqueadas se o backup falhar.","Armazem Gratidao");
     }
    }catch(Exception ex){MessageBox.Show("Nao foi possivel configurar o backup: "+ex.Message,"Backup",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  // Uma copia consistente por dia, ao abrir o sistema e enquanto permanecer aberto.
+  // Falhas ficam visiveis; nunca registrar sucesso sem validar a integridade.
+  void EnsureDailyBackup(){
+   if(dailyBackupRunning||!File.Exists(dbPath))return;
+   dailyBackupRunning=true;
+   try{
+    string folder=UpdateBackupDirectory();
+    string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
+    string today=DateTime.Now.ToString("yyyy-MM-dd");
+    if(File.Exists(marker)){
+     string[] lines=File.ReadAllLines(marker);
+     if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return;
+    }
+    string backup=CreateVerifiedPreUpdateBackup();
+    if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
+    string tmp=marker+".tmp";
+    File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
+    if(File.Exists(marker))File.Delete(marker);
+    File.Move(tmp,marker);
+    status.Text="Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+   }catch(Exception ex){
+    status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
+    // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
+   }finally{dailyBackupRunning=false;}
   }
   string CreateVerifiedPreUpdateBackup(){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
