@@ -767,12 +767,10 @@ Panel BuildEmbeddedCalculator(){
     Text="0",TextAlign=HorizontalAlignment.Right,
     Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
     ForeColor=Color.FromArgb(20,69,147)};
-   panel.Controls.Add(display);
    var liveResult=new Label{Dock=DockStyle.Top,Height=43,TextAlign=ContentAlignment.MiddleRight,
     Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
     BackColor=Color.FromArgb(234,242,253),Text="Resultado: 0"};
-   panel.Controls.Add(liveResult);
-   display.BringToFront();
+
    display.TabStop=true;
    display.Cursor=Cursors.IBeam;
    display.ShortcutsEnabled=false;
@@ -866,8 +864,15 @@ Panel BuildEmbeddedCalculator(){
      calculatorButtons[key].PerformClick();
     }
    };
-   panel.Controls.Add(keys);keys.SendToBack();
-   display.BringToFront();
+   // Grade explicita impede que visor, resultado e teclas se sobreponham.
+   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty,Padding=Padding.Empty};
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,60));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   display.Dock=DockStyle.Fill;liveResult.Dock=DockStyle.Fill;
+   layout.Controls.Add(display,0,0);layout.Controls.Add(liveResult,0,1);layout.Controls.Add(keys,0,2);
+   panel.Controls.Add(layout);
    updatePreview();
    return panel;
   }
@@ -980,7 +985,7 @@ Panel BuildEmbeddedCalculator(){
     tiles.Controls.Add(tile);
    }
    GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.None,Width=318,Height=405,Left=630,Top=85,
+   var calculatorSide=new Panel{Dock=DockStyle.None,Width=365,Height=485,Left=630,Top=85,
     BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
@@ -1006,8 +1011,8 @@ Panel BuildEmbeddedCalculator(){
    Action positionCalculator=()=>{
     calculatorSide.Left=tiles.Right+8;
     calculatorSide.Top=top.Bottom+8;
-    calculatorSide.Height=Math.Min(405,Math.Max(280,page.ClientSize.Height-calculatorSide.Top-12));
-    calculatorSide.Width=Math.Min(318,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
+    calculatorSide.Height=Math.Min(485,Math.Max(360,page.ClientSize.Height-calculatorSide.Top-12));
+    calculatorSide.Width=Math.Min(365,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
     calculatorSide.Visible=page.ClientSize.Width-calculatorSide.Left>=210;
    };
    page.Resize+=(sender,args)=>positionCalculator();
