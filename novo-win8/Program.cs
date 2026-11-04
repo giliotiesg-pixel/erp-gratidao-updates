@@ -97,7 +97,7 @@ namespace ArmazemGratidao {
        button.AutoSize=false;button.Width=desired;
       }
       button.AutoEllipsis=true;
-      button.TextAlign=ContentAlignment.MiddleCenter;
+      if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal))button.TextAlign=ContentAlignment.MiddleCenter;
       button.UseMnemonic=false;
       inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
      }
@@ -355,10 +355,17 @@ namespace ArmazemGratidao {
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates()))
    };
-   var shortcuts=new FlowLayoutPanel {Width=950,Height=260,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
+   var shortcuts=new FlowLayoutPanel {Width=950,Height=360,AutoSize=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,Margin=new Padding(0)};
    foreach(var action in actions){
-    var button=new Button {Text=action.Item1,Width=174,Height=49,Margin=new Padding(7),FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",9,FontStyle.Bold)};
-    button.FlatAppearance.BorderColor=Color.FromArgb(235,125,135);button.Click+=action.Item2;RoundHomeControl(button,12);shortcuts.Controls.Add(button);
+    var button=new Button {
+     Text=action.Item1,Tag="home-shortcut",Width=174,Height=94,Margin=new Padding(7),Padding=new Padding(5,7,5,5),
+     FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Color.FromArgb(10,52,145),
+     Font=new Font("Segoe UI",9,FontStyle.Bold),Image=HomeShortcutImage(action.Item1),
+     ImageAlign=ContentAlignment.TopCenter,TextAlign=ContentAlignment.BottomCenter,
+     TextImageRelation=TextImageRelation.ImageAboveText,AutoEllipsis=true
+    };
+    button.FlatAppearance.BorderColor=Color.FromArgb(235,125,135);
+    button.Click+=action.Item2;RoundHomeControl(button,12);shortcuts.Controls.Add(button);
    }
    home.Controls.Add(shortcuts);
    home.Controls.Add(new Label {Text="RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",Width=940,Height=39,ForeColor=Color.FromArgb(10,52,145),Font=new Font("Segoe UI",12,FontStyle.Bold)});
@@ -402,6 +409,64 @@ namespace ArmazemGratidao {
     }}catch(Exception ex){rankingText.Text="Ranking indisponível: "+ex.Message;}
    }
    Controls.Add(home);home.BringToFront();header.BringToFront();sideMenu.BringToFront();status.BringToFront();status.Text="Início • Acesso rápido aos módulos. Banco de dados preservado.";
+  }
+  // Icones nativos desenhados com GDI+, sem dependencia de fontes especiais,
+  // internet, WebView ou recursos externos. Exibidos apenas nos atalhos do Inicio.
+  static Image HomeShortcutImage(string title){
+   var image=new Bitmap(48,48);
+   using(var g=Graphics.FromImage(image)){
+    g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    Color blue=Color.FromArgb(22,75,160),red=Color.FromArgb(190,38,54);
+    using(var pen=new Pen(blue,3.2f))
+    using(var accent=new Pen(red,3.2f))
+    using(var fill=new SolidBrush(Color.FromArgb(232,242,255)))
+    using(var redFill=new SolidBrush(red)){
+     pen.StartCap=pen.EndCap=System.Drawing.Drawing2D.LineCap.Round;
+     accent.StartCap=accent.EndCap=System.Drawing.Drawing2D.LineCap.Round;
+     string key=title.ToLowerInvariant();
+     if(key.Contains("pdv")||key.Contains("compras")||key.Contains("venda")||key.Contains("anotadas")||key.Contains("integrar")){
+      // Carrinho de compras: a operacao de venda e identificada pelo carrinho.
+      g.DrawLine(pen,5,11,10,11);g.DrawLine(pen,10,11,16,33);
+      g.DrawLine(pen,16,33,39,33);g.DrawLine(pen,13,16,43,16);
+      g.DrawLine(pen,43,16,38,29);g.DrawLine(pen,38,29,15,29);
+      g.FillEllipse(redFill,17,36,7,7);g.FillEllipse(redFill,33,36,7,7);
+     }else if(key.Contains("clientes")||key.Contains("fiado")){
+      // Pessoas e ficha de cliente.
+      g.DrawEllipse(pen,17,5,14,14);g.DrawArc(pen,9,20,30,23,190,160);
+      if(key.Contains("fiado")){g.DrawLine(accent,35,9,44,9);g.DrawLine(accent,40,4,40,15);}
+      else{g.DrawEllipse(accent,3,13,10,10);g.DrawArc(accent,1,23,13,15,200,140);}
+     }else if(key.Contains("produtos")||key.Contains("estoque")){
+      g.FillRectangle(fill,8,13,32,29);g.DrawRectangle(pen,8,13,32,29);
+      g.DrawLine(pen,8,13,24,5);g.DrawLine(pen,40,13,24,5);
+      g.DrawLine(pen,24,5,24,29);g.DrawLine(pen,8,13,24,22);g.DrawLine(pen,40,13,24,22);
+      g.DrawLine(accent,18,30,30,30);
+     }else if(key.Contains("cascos")){
+      g.DrawLine(pen,19,4,29,4);g.DrawLine(pen,19,4,19,12);g.DrawLine(pen,29,4,29,12);
+      g.DrawLine(pen,19,12,13,19);g.DrawLine(pen,29,12,35,19);
+      g.DrawRectangle(pen,13,19,22,23);g.DrawLine(accent,17,30,31,30);
+     }else if(key.Contains("caixa")||key.Contains("financeiro")||key.Contains("lucro")){
+      g.DrawRectangle(pen,5,15,38,27);g.DrawLine(pen,5,22,43,22);
+      g.DrawEllipse(accent,18,24,12,12);
+      g.DrawLine(accent,10,9,23,4);g.DrawLine(accent,23,4,35,9);
+     }else if(key.Contains("relat")){
+      g.DrawLine(pen,7,41,42,41);g.DrawLine(pen,7,41,7,6);
+      g.FillRectangle(fill,12,25,7,15);g.DrawRectangle(pen,12,25,7,15);
+      g.FillRectangle(fill,23,17,7,23);g.DrawRectangle(pen,23,17,7,23);
+      g.FillRectangle(redFill,34,8,7,32);
+     }else if(key.Contains("backup")){
+      g.DrawEllipse(pen,5,5,38,38);g.DrawArc(accent,11,10,25,25,205,275);
+      g.DrawLine(accent,32,10,39,14);g.DrawLine(accent,32,10,33,19);
+     }else if(key.Contains("atualiza")||key.Contains("sistema")){
+      g.DrawArc(pen,7,7,34,34,40,265);g.DrawArc(accent,7,7,34,34,225,190);
+      g.DrawLine(pen,9,7,11,18);g.DrawLine(pen,9,7,20,9);
+     }else{
+      g.DrawRectangle(pen,11,8,28,32);g.DrawLine(accent,17,18,33,18);
+      g.DrawLine(pen,17,25,33,25);g.DrawLine(pen,17,32,29,32);
+     }
+    }
+   }
+   return image;
   }
   // WhatsApp Business usa a janela nativa; nao altera os demais modulos.
   static void RoundHomeControl(Control control,int radius){
