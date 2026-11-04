@@ -29,4 +29,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AMZG-Setup
-          path: installer/Output/AMZG-Setup.exe
+          path: amzg-src/installer/Output/AMZG-Setup.exe
+          if-no-files-found: error
