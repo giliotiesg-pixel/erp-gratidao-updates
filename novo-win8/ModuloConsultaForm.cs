@@ -38,7 +38,7 @@ namespace ArmazemGratidao {
     Func<string,int,EventHandler,Button> stockButton=(title,width,action)=>{
      var button=new Button{Text=title,Width=width,Height=32,Margin=new Padding(3,2,3,2),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
      button.FlatAppearance.BorderSize=0;button.Click+=action;return button;
-    }
+    };
     stockSearchRow.Controls.Add(stockButton("Atualizar",105,(s,e)=>LoadData()));
     stockActionsRow.Controls.Add(stockButton("Inserir QTD",115,(s,e)=>StockEntry()));
     stockActionsRow.Controls.Add(stockButton("Editar / Salvar",135,(s,e)=>StockEdit()));
