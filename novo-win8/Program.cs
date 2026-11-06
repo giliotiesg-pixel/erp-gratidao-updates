@@ -461,7 +461,7 @@ namespace ArmazemGratidao {
     string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string updatesRoot=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
-    var pending=new Stack<string>();
+    var pending=new System.Collections.Generic.Stack<string>();
     pending.Push(dataDir);
     while(pending.Count>0){
      string current=pending.Pop();
