@@ -532,7 +532,13 @@ namespace ArmazemGratidao {
      string manifestJson;
      using(var web=new WebClient()){
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
-      manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
+      // O manifesto novo entrega ZIP e usa o atualizador independente.
+       // O manifesto antigo permanece fixo no instalador UNICO para versões legadas.
+       try{
+        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json"));
+       }catch(WebException){
+        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
+       }
      }
      var manifest=new JavaScriptSerializer().DeserializeObject(manifestJson) as System.Collections.Generic.Dictionary<string,object>;
      if(manifest==null||!manifest.ContainsKey("build")||!manifest.ContainsKey("tag")||!manifest.ContainsKey("asset")||!manifest.ContainsKey("url")||!manifest.ContainsKey("sha256"))
