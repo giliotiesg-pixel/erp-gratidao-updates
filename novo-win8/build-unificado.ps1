@@ -22,6 +22,21 @@ try {
  if(!(Get-Command python -ErrorAction SilentlyContinue)){throw 'Python nao instalado / nao encontrado.'}
  nuget restore (Join-Path $project 'packages.config') -PackagesDirectory $packageDir -NonInteractive
  Assert-Exit 'Restaurar pacotes'
+ # O pacote System.Data.SQLite.Core e somente um metapacote.
+ # Procurar a DLL real do Stub NetFramework, sem presumir pasta net46 fixa.
+ $managed=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'System.Data.SQLite.dll' |
+  Where-Object {$_.FullName -match 'Stub.System.Data.SQLite.Core.NetFramework'} |
+  Sort-Object @{Expression={if($_.FullName -match 'net46'){0}elseif($_.FullName -match 'net40'){1}else{2}}} |
+  Select-Object -First 1
+ if($null -eq $managed){
+  Get-ChildItem -Path $packageDir -Recurse -File -Filter '*.dll' |
+   Select-Object -First 30 -ExpandProperty FullName | ForEach-Object {Write-Host $_}
+  throw 'System.Data.SQLite.dll nao encontrada. Nao distribuir um aplicativo incompleto.'
+ }
+ $deps=Join-Path $project 'dependencias'
+ New-Item -ItemType Directory -Path $deps -Force|Out-Null
+ Copy-Item $managed.FullName (Join-Path $deps 'System.Data.SQLite.dll') -Force
+ Write-Host "Assembly SQLite: $($managed.FullName)"
  python (Join-Path $project 'gerar-icone.py')
  Assert-Exit 'Gerar icone'
  $version="1.0.0.$Build"
