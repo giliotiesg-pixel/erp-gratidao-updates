@@ -47,6 +47,35 @@ jobs:
           if(!(Test-Path dist/Armazem-Gratidao-Novo-Setup.exe)){throw 'Setup unico ausente.'}
           if((Get-Item dist/Armazem-Gratidao-Novo-Setup.exe).Length -lt 100000){throw 'Setup suspeitamente pequeno.'}
           Write-Host "Pacote compilado e manifesto verificados. Validacao funcional em Windows ainda necessaria."
+      - name: Teste automatico de instalacao, reparo e backup SQLite descartavel
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $testDir=Join-Path $env:RUNNER_TEMP 'AMZG-Instalacao-Temp'
+          $setup=(Resolve-Path 'dist/Armazem-Gratidao-Novo-Setup.exe').Path
+          $args=@('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',("/DIR=`""+$testDir+"`""))
+          $install=Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if($install.ExitCode -ne 0){throw "Instalacao falhou: $($install.ExitCode)"}
+          foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe',
+                             'Reparar-Armazem-Gratidao.exe','System.Data.SQLite.dll')){
+            if(!(Test-Path (Join-Path $testDir $name))){throw "Arquivo instalado ausente: $name"}
+          }
+          $dataDir=Join-Path $env:LOCALAPPDATA 'ArmazemGratidaoNovo'
+          New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+          $db=Join-Path $dataDir 'armazem-gratidao.db'
+          $code='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("create table teste_integridade (valor text)"); c.execute("insert into teste_integridade values (?)",("preservado",)); c.commit(); c.close()'
+          python -c $code $db
+          if($LASTEXITCODE -ne 0){throw 'Falhou criacao do banco descartavel'}
+          $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
+          $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
+          if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
+          $backups=Join-Path $testDir 'Arquivos/Backups'
+          $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
+          if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
+          $check='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); assert c.execute("pragma integrity_check").fetchone()[0]=="ok"; assert c.execute("select valor from teste_integridade").fetchone()[0]=="preservado"; c.close()'
+          python -c $check $db
+          if($LASTEXITCODE -ne 0){throw 'Banco alterado ou corrompido apos reparo'}
+          Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
       - uses: actions/upload-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
