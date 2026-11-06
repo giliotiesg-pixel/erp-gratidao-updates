@@ -1261,19 +1261,19 @@ namespace ArmazemGratidao {
      using(var rd=cmd.ExecuteReader())if(rd.Read()){existing=Convert.ToDecimal(rd[0]);existingPeriod=Convert.ToString(rd[1]);}
     }
     using(var dialog=new Form{Text="Limite de Fiado - "+customer,Width=480,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-     var label=new Label{Text="Limite de compras fiadas (R$):",Left=16,Top=18,Width=290,Height=28};
+     var label=new Label{Text="Limite atual / novo (R$):",Left=16,Top=18,Width=290,Height=28};
      var value=new NumericUpDown{Left=16,Top=51,Width=195,DecimalPlaces=2,Maximum=100000000,Value=Math.Max(0,Math.Min(existing,100000000))};
      var periodLabel=new Label{Text="Renovacao do limite:",Left=235,Top=18,Width=190,Height=28};
      var period=new ComboBox{Left=235,Top=51,Width=195,DropDownStyle=ComboBoxStyle.DropDownList};
      period.Items.AddRange(new object[]{"SEMANAL","MENSAL"});period.SelectedItem=existingPeriod;
-     var hint=new Label{Text="Semanal: segunda a domingo. Mensal: do dia 1 ao ultimo dia. Limite 0 bloqueia novas vendas fiadas.",Left=16,Top=97,Width=420,Height=52};
+     var hint=new Label{Text="Mostra somente o limite vigente. Altere o valor e salve. Semanal: segunda a domingo; mensal: dia 1 ao ultimo dia. Zero bloqueia novas vendas fiadas.",Left=16,Top=97,Width=420,Height=52};
      var save=new Button{Text="Salvar limite do cliente",Left=16,Top=164,Width=220,Height=36,DialogResult=DialogResult.OK};
      var cancel=new Button{Text="Cancelar",Left=250,Top=164,Width=140,Height=36,DialogResult=DialogResult.Cancel};
      dialog.Controls.AddRange(new Control[]{label,value,periodLabel,period,hint,save,cancel});
      if(dialog.ShowDialog(this)!=DialogResult.OK)return;
      string selectedPeriod=Convert.ToString(period.SelectedItem);
      decimal selectedLimit=value.Value;
-     if(MessageBox.Show("Confirmar limite "+selectedPeriod+" de R$ "+selectedLimit.ToString("N2")+" para "+customer+"?","Limite do Fiado",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+     // Salvar diretamente o valor atual informado, sem pedir motivo ou confirmacao adicional.
      using(var cn=Open(false)){
       string backup=CreditBackupPath(db,"antes-mudar-limite-");
       using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
