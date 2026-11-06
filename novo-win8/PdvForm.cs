@@ -71,9 +71,8 @@ namespace ArmazemGratidao {
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    if(manualEntry){
-    var inventory=new Button{Text="TODOS OS PRODUTOS NO PDV",Width=235,Height=36,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
-    inventory.Click+=(s,e)=>ShowStockInPdv();
-    rapidInventoryBar.Controls.Add(inventory);
+    // No lançamento anotado o catálogo é aberto pelo botão original "Editar Qtd. / Preço".
+    // O botão extra "Todos os Produtos" foi removido para manter o layout anterior.
     var back=new Button{Text="VOLTAR AOS ITENS DA VENDA",Width=228,Height=36,BackColor=Color.FromArgb(175,35,48),ForeColor=Color.White};
     back.Click+=(s,e)=>ShowSaleCart();
     rapidInventoryBar.Controls.Add(back);
@@ -103,7 +102,7 @@ namespace ArmazemGratidao {
    customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=38,Width=165,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
-   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>{if(manualEntry&&stockViewOpen)EditSelectedStockInPdv();else ChooseEditAction();};footer.Controls.Add(edit);
+   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>{if(manualEntry){if(stockViewOpen)EditSelectedStockInPdv();else ShowStockInPdv();}else ChooseEditAction();};footer.Controls.Add(edit);
    var remove=new Button {Text="REMOVER ITEM",Width=125,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="EXCLUIR TODOS",Width=135,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
    footer.SetFlowBreak(clear,true);
@@ -488,7 +487,7 @@ namespace ArmazemGratidao {
     foreach(string column in new[]{"Em estoque","Preço","Custo","Qtd. lançada"})
      if(stockView.Columns.Contains(column))
       stockView.Columns[column].DefaultCellStyle.Format=(column=="Em estoque"||column=="Qtd. lançada")?"N3":"N2";
-    stockHint.Text=table.Rows.Count+" produtos | Editar Qtd. / Preço";
+    stockHint.Text=table.Rows.Count+" produtos | Selecione e clique em Editar Qtd. / Preço (ou dê duplo clique)";
     if(beforeSelection>0){
      foreach(DataGridViewRow row in stockView.Rows)if(Convert.ToInt64(row.Cells["ID"].Value)==beforeSelection){
       stockView.CurrentCell=row.Cells["Descrição"];break;
