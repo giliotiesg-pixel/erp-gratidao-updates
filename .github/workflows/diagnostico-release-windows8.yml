@@ -1,5 +1,9 @@
 name: Diagnosticar releases do atualizador Windows 8
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/diagnostico-release-windows8.yml'
+      - 'novo-win8/Program.cs'
   push:
     branches:
       - fix/amzg-release-assets-windows8
