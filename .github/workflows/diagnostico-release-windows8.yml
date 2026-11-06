@@ -22,7 +22,7 @@ jobs:
         run: |
           set -euo pipefail
           echo 'RELEASES DO ARMAZEM GRATIDAO WINDOWS8'
-          gh api "repos/${{ github.repository }}/releases?per_page=100" --jq '.[] | select(.tag_name|startswith("amzg-novo-win8-build-")) | "\(.tag_name) draft=\(.draft) prerelease=\(.prerelease) assets=[\([.assets[].name]|join(","))]"' | head -70
+          gh api "repos/${{ github.repository }}/releases?per_page=100" --jq '.[] | select(.tag_name|startswith("amzg-novo-win8-build-")) | "\(.tag_name) draft=\(.draft) prerelease=\(.prerelease) assets=[\([.assets[].name]|join(","))]"' | sed -n '1,25p'
           echo 'MANIFESTO OFICIAL'
           gh api "repos/${{ github.repository }}/contents/atualizacao-novo-win8-pacote.json" --jq '.content' | base64 -d
           echo
