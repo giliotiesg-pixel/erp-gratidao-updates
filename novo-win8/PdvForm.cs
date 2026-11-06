@@ -426,7 +426,11 @@ namespace ArmazemGratidao {
    if(!manualEntry)return;
    try{
     lookupDelay.Stop();suggestions.Visible=false;
-    using(var products=new ProdutosForm(db,true))products.ShowDialog(this);
+    long selectedStockProductId=0;
+    using(var products=new ProdutosForm(db,true)){
+     if(products.ShowDialog(this)==DialogResult.OK)
+      selectedStockProductId=products.SelectedQuickSaleProductId;
+    }
     // Atualizar apenas os dados dos itens ja presentes no carrinho ainda nao finalizado.
     // Os itens e quantidades permanecem; alteracoes feitas no cadastro refletem no lancamento.
     int changed=0;
@@ -447,8 +451,47 @@ namespace ArmazemGratidao {
     }
     Render();
     if(changed>0)MessageBox.Show(changed+" item(ns) do carrinho foram atualizados com nome, custo e preco cadastrados. Confira os totais antes de finalizar.","Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    if(selectedStockProductId>0)AddQuickInventoryProduct(selectedStockProductId);
     code.Focus();
    }catch(Exception ex){MessageBox.Show("Nao foi possivel abrir ou atualizar o estoque: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  // Usa o ID exato selecionado no Estoque Completo; assim o produto vira item
+  // da venda anotada, passando pelas mesmas validacoes de quantidade e estoque do PDV.
+  void AddQuickInventoryProduct(long productId){
+   if(!manualEntry||productId<=0)return;
+   try{
+    Item selected=null;decimal available=0m;
+    using(var cn=Open())
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE id=@id",cn)){
+     cmd.Parameters.AddWithValue("@id",productId);
+     using(var rd=cmd.ExecuteReader()){
+      if(rd.Read()){
+       selected=new Item{Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),Price=Dec(rd["price"]),Cost=Dec(rd["cost"])};
+       available=Dec(rd["stock"]);
+      }
+     }
+    }
+    if(selected==null){MessageBox.Show("Produto nao encontrado no estoque. Consulte o cadastro.");return;}
+    decimal? entered=AskProductQuantity(selected,qty.Value);
+    if(!entered.HasValue)return;
+    decimal quantity=entered.Value;
+    string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
+    decimal required=quantity+cart.Where(x=>x.Id==selected.Id).Sum(x=>x.Qty);
+    if(available<required){
+     if(!AdjustEmptyStock(selected,available,required))return;
+     using(var cn=Open())
+     using(var cmd=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",cn)){
+      cmd.Parameters.AddWithValue("@id",selected.Id);
+      available=Dec(cmd.ExecuteScalar());
+     }
+     if(available<required){MessageBox.Show("Estoque insuficiente para a quantidade informada.");return;}
+    }
+    var existing=cart.FirstOrDefault(x=>x.Id==selected.Id&&x.Unit==unit);
+    if(existing!=null)existing.Qty+=quantity;
+    else{selected.Qty=quantity;selected.Unit=unit;cart.Add(selected);}
+    qty.Value=1;Render();
+    MessageBox.Show(selected.Name+" adicionado a venda anotada. Para alterar a quantidade ou o preco apenas desta venda, use Editar Qtd./Preco.","Lancamento rapido",MessageBoxButtons.OK,MessageBoxIcon.Information);
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel adicionar o produto: "+ex.Message,"Lancamento rapido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void AddProduct(bool askQuantity=false) {
    string search=code.Text.Trim();if(search.Length==0)return;
