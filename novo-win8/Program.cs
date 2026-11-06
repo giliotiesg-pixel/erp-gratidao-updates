@@ -497,17 +497,17 @@ namespace ArmazemGratidao {
      if(!int.TryParse(Convert.ToString(manifest["build"]),out version)||version<1)throw new Exception("Versao invalida no manifesto.");
      string tag=Convert.ToString(manifest["tag"]);
      string assetName=Convert.ToString(manifest["asset"]);
-     string url=Convert.ToString(manifest["url"]);
+     string manifestDownloadUrl=Convert.ToString(manifest["url"]);
      string sha256=Convert.ToString(manifest["sha256"]);
-     if(tag!=prefix+version||(assetName!=officialSetup&&assetName!=legacySetup)||url!=updateRepo+tag+"/"+assetName||
+     if(tag!=prefix+version||(assetName!=officialSetup&&assetName!=legacySetup)||manifestDownloadUrl!=updateRepo+tag+"/"+assetName||
        sha256==null||sha256.Length!=64||!sha256.All(ch=>Uri.IsHexDigit(ch)))
       throw new Exception("Manifesto de atualizacao nao passou na validacao.");
-     var asset=new System.Collections.Generic.Dictionary<string,object>();
-     asset["name"]=assetName;
-     asset["digest"]="sha256:"+sha256;
-     asset["browser_download_url"]=url;
+     var manifestAsset=new System.Collections.Generic.Dictionary<string,object>();
+     manifestAsset["name"]=assetName;
+     manifestAsset["digest"]="sha256:"+sha256;
+     manifestAsset["browser_download_url"]=manifestDownloadUrl;
      release=new System.Collections.Generic.Dictionary<string,object>();
-     release["assets"]=new object[]{asset};
+     release["assets"]=new object[]{manifestAsset};
      remoteBuild=version;
     }catch(WebException ex){
      alternativeError=ex.Message;
