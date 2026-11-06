@@ -1,0 +1,50 @@
+name: Diagnosticar releases do atualizador Windows 8
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/diagnostico-release-windows8.yml'
+      - 'novo-win8/Program.cs'
+  push:
+    branches:
+      - fix/amzg-release-assets-windows8
+    paths:
+      - '.github/workflows/diagnostico-release-windows8.yml'
+  workflow_dispatch:
+jobs:
+  diagnosticar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar selecao de arquivo valido no codigo
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s = Path("novo-win8/Program.cs").read_text(encoding="utf-8")
+          assert "Nunca escolher a maior build ANTES de confirmar o formato publicado." in s
+          assert "if(!compatible)continue;" in s
+          assert "hash.Length==71" in s
+          print("Codigo: descarta releases sem arquivo compativel e sem SHA-256.")
+          PY
+      - name: Conferir releases e nomes de instalador
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo 'RELEASES DO ARMAZEM GRATIDAO WINDOWS8'
+          gh api "repos/${{ github.repository }}/releases?per_page=100" --jq '.[] | select(.tag_name|startswith("amzg-novo-win8-build-")) | "\(.tag_name) draft=\(.draft) prerelease=\(.prerelease) assets=[\([.assets[].name]|join(","))]"' | sed -n '1,25p'
+          echo 'VALIDACAO DO INSTALADOR ESTAVEL MAIS RECENTE'
+          gh api "repos/${{ github.repository }}/releases/tags/amzg-novo-win8-build-564" --jq '{tag:.tag_name,prerelease:.prerelease,assets:[.assets[]|{name:.name,digest:.digest,size:.size}]}'
+          echo 'COMPORTAMENTO REAL DA API USADA PELO ATUALIZADOR ANTIGO (20 releases)'
+          gh api "repos/${{ github.repository }}/releases?per_page=20" --jq '.[] | {tag:.tag_name,prerelease:.prerelease,draft:.draft,files:[.assets[].name]}'
+          echo 'CONFERIR SE EXISTE BUILD MAIS NOVA SEM EXE ESTAVEL'
+          gh api "repos/${{ github.repository }}/releases?per_page=20" --jq '[.[] | select(.draft==false and .prerelease==false and (.tag_name|startswith("amzg-novo-win8-build-"))) | {build:(.tag_name|sub("amzg-novo-win8-build-";"")|tonumber), tag:.tag_name,files:[.assets[].name]}] | sort_by(.build) | reverse | .[:10]'
+          echo 'MANIFESTO LEGADO INSTALADOR EXE'
+          gh api "repos/${{ github.repository }}/contents/atualizacao-novo-win8.json" --jq '.content' | base64 -d
+          echo
+          echo 'MANIFESTO OFICIAL'
+          gh api "repos/${{ github.repository }}/contents/atualizacao-novo-win8-pacote.json" --jq '.content' | base64 -d
+          echo
