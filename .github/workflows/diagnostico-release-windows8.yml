@@ -16,6 +16,19 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@v4
+      - name: Verificar selecao de arquivo valido no codigo
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s = Path("novo-win8/Program.cs").read_text(encoding="utf-8")
+          assert "Nunca escolher a maior build ANTES de confirmar o formato publicado." in s
+          assert "if(!compatible)continue;" in s
+          assert "hash.Length==71" in s
+          print("Codigo: descarta releases sem arquivo compativel e sem SHA-256.")
+          PY
       - name: Conferir releases e nomes de instalador
         env:
           GH_TOKEN: ${{ github.token }}
