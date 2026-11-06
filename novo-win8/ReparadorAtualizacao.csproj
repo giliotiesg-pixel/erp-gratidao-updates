@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<PropertyGroup>
+<OutputType>WinExe</OutputType>
+<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+<RootNamespace>ArmazemGratidaoReparo</RootNamespace>
+<AssemblyName>Reparador-Atualizacao-Armazem-Gratidao</AssemblyName>
+<PlatformTarget>x64</PlatformTarget>
+<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+<ApplicationIcon>Armazem-Gratidao.ico</ApplicationIcon>
+<ApplicationManifest>reparo.app.manifest</ApplicationManifest>
+</PropertyGroup>
+<ItemGroup>
+<Reference Include="System"/>
+<Reference Include="System.Core"/>
+<Reference Include="System.Drawing"/>
+<Reference Include="System.Windows.Forms"/>
+</ItemGroup>
+<ItemGroup>
+<Compile Include="ReparadorAtualizacao.cs"/>
+<EmbeddedResource Include="bin\x64\Release\ArmazemGratidaoNovo.exe"><LogicalName>AMZG.Payload.Program</LogicalName></EmbeddedResource>
+<EmbeddedResource Include="bin\x64\Release\QRCoder.dll"><LogicalName>AMZG.Payload.Qr</LogicalName></EmbeddedResource>
+<EmbeddedResource Include="bin\x64\Release\zxing.dll"><LogicalName>AMZG.Payload.Barcode</LogicalName></EmbeddedResource>
+<EmbeddedResource Include="bin\x64\Release\System.Data.SQLite.dll"><LogicalName>AMZG.Payload.SQLite</LogicalName></EmbeddedResource>
+<EmbeddedResource Include="bin\x64\Release\x64\SQLite.Interop.dll"><LogicalName>AMZG.Payload.Native</LogicalName></EmbeddedResource>
+<EmbeddedResource Include="bin\x64\Release\AtualizadorGratidao.exe"><LogicalName>AMZG.Payload.Updater</LogicalName></EmbeddedResource>
+</ItemGroup>
+<Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

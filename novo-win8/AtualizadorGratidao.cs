@@ -64,7 +64,7 @@ namespace ArmazemGratidaoAtualizador {
    int parentPid;
    if(!int.TryParse(args[5],out parentPid))throw new Exception("Identificador do programa inválido.");
    string dir=Path.GetDirectoryName(app);
-   if(!File.Exists(zip)||!File.Exists(backup)||new FileInfo(backup).Length<512)
+   if(!File.Exists(zip)||!File.Exists(Directory.Exists(backup)?Path.Combine(backup,"Dados","armazem-gratidao.db"):backup))
     throw new Exception("Pacote ou backup completo não encontrado. Nenhum arquivo será substituído.");
    if(expected.Length!=64||!expected.All(Uri.IsHexDigit))throw new Exception("SHA-256 inválido.");
    Report("Conferindo integridade do pacote de atualização...",10);
@@ -86,19 +86,7 @@ namespace ArmazemGratidaoAtualizador {
    var created=new List<string>();
    try{
     Report("Preparando arquivos com segurança...",35);
-    using(var archive=ZipFile.OpenRead(zip)){
-     foreach(var entry in archive.Entries){
-      string name=entry.FullName.Replace('\\','/');
-      if(string.IsNullOrWhiteSpace(entry.Name))continue;
-      if(!Allowed(name))throw new Exception("O pacote contém arquivo não autorizado: "+name);
-      string target=Path.GetFullPath(Path.Combine(staging,name.Replace('/',Path.DirectorySeparatorChar)));
-      if(!target.StartsWith(staging+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))
-       throw new Exception("Caminho inseguro no pacote.");
-      Directory.CreateDirectory(Path.GetDirectoryName(target));
-      entry.ExtractToFile(target,true);
-      targets.Add(name);
-     }
-    }
+    targets.AddRange(ZipCompat.Extract(zip,staging,Allowed));
     if(!targets.Contains("ArmazemGratidaoNovo.exe",StringComparer.OrdinalIgnoreCase))
      throw new Exception("Pacote incompleto: executável não encontrado.");
     foreach(string name in targets){
