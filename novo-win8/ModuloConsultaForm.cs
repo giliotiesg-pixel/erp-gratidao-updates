@@ -10,7 +10,7 @@ namespace ArmazemGratidao {
   readonly string db;readonly string module;
   readonly TextBox stockSearch=new TextBox {Width=220,Font=new Font("Segoe UI",10)};
   readonly TextBox clientSearch=new TextBox {Width=205,Font=new Font("Segoe UI",10)};
-  readonly Label stockValuation=new Label {Dock=DockStyle.Top,Height=68,Padding=new Padding(12,9,8,4),BackColor=Color.FromArgb(227,240,255),ForeColor=Color.FromArgb(17,57,110),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Apuração financeira do estoque"};
+  readonly Label stockValuation=new Label {Dock=DockStyle.Top,Height=54,Padding=new Padding(9,4,6,2),BackColor=Color.FromArgb(227,240,255),ForeColor=Color.FromArgb(17,57,110),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Apuração financeira do estoque"};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
   readonly Label status=new Label {Dock=DockStyle.Bottom,Height=35,TextAlign=ContentAlignment.MiddleLeft};
   public ModuloConsultaForm(string path,string name) {
@@ -24,12 +24,12 @@ namespace ArmazemGratidao {
    }
    if(module=="Estoque"){
     top.BackColor=Color.FromArgb(218,233,250);
-    top.Height=94;
+    top.Height=86;
     top.WrapContents=false;
     top.AutoScroll=false;
     top.FlowDirection=FlowDirection.TopDown;
     top.Padding=new Padding(6,5,6,4);
-    var stockSearchRow=new FlowLayoutPanel{Width=1040,Height=39,Margin=new Padding(0),WrapContents=false,BackColor=Color.Transparent};
+    var stockSearchRow=new FlowLayoutPanel{Width=1040,Height=36,Margin=new Padding(0),WrapContents=false,BackColor=Color.Transparent};
     var stockActionsRow=new FlowLayoutPanel{Width=1040,Height=39,Margin=new Padding(0),WrapContents=false,AutoScroll=true,BackColor=Color.Transparent};
     stockSearchRow.Controls.Add(new Label{Text="Buscar produto:",AutoSize=true,Padding=new Padding(3,9,1,0),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10,FontStyle.Bold)});
     stockSearch.Width=310;
@@ -249,6 +249,12 @@ namespace ArmazemGratidao {
        table.Columns.Add("Código",typeof(int)).SetOrdinal(0);
        foreach(DataRow row in table.Rows){int code;if(codes.TryGetValue(Convert.ToInt64(row["Código interno"]),out code))row["Código"]=code;else row["Código"]=DBNull.Value;}
        grid.DataSource=table;
+       // Sempre mostrar o cabecalho e a primeira linha ao abrir/atualizar.
+       if(grid.Rows.Count>0){
+        grid.ClearSelection();
+        grid.FirstDisplayedScrollingRowIndex=0;
+       }
+       grid.HorizontalScrollingOffset=0;
        if(grid.Columns.Contains("Código interno"))grid.Columns["Código interno"].Visible=false;
        foreach(DataGridViewColumn col in grid.Columns){
         col.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
