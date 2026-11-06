@@ -1173,6 +1173,22 @@ namespace ArmazemGratidao {
        row["Produtos"]=descriptions.Count>0?string.Join("; ",descriptions.ToArray()):"Venda sem itens localizados";
       }
      }
+     decimal deposited=0m,debited=0m,available=0m;
+     foreach(DataRow entry in data.Rows){
+      decimal movement=Convert.ToDecimal(entry["Valor"]);
+      if(movement>0)deposited+=movement;
+      else debited+=Math.Abs(movement);
+     }
+     available=deposited-debited;
+     string limitDisplay="Nao configurado";
+     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_fiado_limits'",cn)){
+      if(Convert.ToInt32(check.ExecuteScalar())>0){
+       using(var limit=new SQLiteCommand("SELECT limit_amount,period FROM customer_fiado_limits WHERE customer_name=@client COLLATE NOCASE LIMIT 1",cn)){
+        limit.Parameters.AddWithValue("@client",customer.Trim());
+        using(var rd=limit.ExecuteReader())if(rd.Read())limitDisplay="R$ "+Convert.ToDecimal(rd[0]).ToString("N2")+" ("+Convert.ToString(rd[1])+")";
+       }
+      }
+     }
      using(var dlg=new Form{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White};
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
@@ -1198,7 +1214,11 @@ namespace ArmazemGratidao {
       show.Click+=(sender,args)=>inspect();
       grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)inspect();};
       bar.Controls.Add(show);
-      dlg.Controls.Add(grid);dlg.Controls.Add(hint);dlg.Controls.Add(bar);
+      var totals=new Label{Dock=DockStyle.Top,Height=66,Padding=new Padding(12,9,8,5),BackColor=Color.FromArgb(218,233,250),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Credito inserido: R$ "+deposited.ToString("N2")+"    |    Credito abatido: R$ "+debited.ToString("N2")+"\nSaldo atual: R$ "+available.ToString("N2")+"    |    Limite de Fiado atual: "+limitDisplay};
+      var adjust=new Button{Text="Ajustar saldo manualmente",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+      adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
+      bar.Controls.Add(adjust);
+      dlg.Controls.Add(grid);dlg.Controls.Add(hint);dlg.Controls.Add(totals);dlg.Controls.Add(bar);
       dlg.ShowDialog(this);
      }
     }
