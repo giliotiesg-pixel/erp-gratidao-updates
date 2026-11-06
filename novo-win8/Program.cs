@@ -526,7 +526,8 @@ namespace ArmazemGratidao {
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
      var item=obj as System.Collections.Generic.Dictionary<string,object>;
-     if(item!=null&&Convert.ToString(item["name"])=="Armazem-Gratidao-Novo-Windows8-Setup.exe"){asset=item;break;}
+     if(item!=null&&string.Equals(Convert.ToString(item["name"]),"Armazem-Gratidao-Novo-Setup.exe",StringComparison.OrdinalIgnoreCase)){asset=item;break;}
+     if(item!=null&&asset==null&&string.Equals(Convert.ToString(item["name"]),"Armazem-Gratidao-Novo-Windows8-Setup.exe",StringComparison.OrdinalIgnoreCase))asset=item;
     }
     if(asset==null)throw new Exception("O release não contém o instalador Windows.");
     string digest=asset.ContainsKey("digest")?Convert.ToString(asset["digest"]):"";
