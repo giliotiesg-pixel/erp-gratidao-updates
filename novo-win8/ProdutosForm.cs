@@ -62,6 +62,9 @@ namespace ArmazemGratidao {
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
    if(rapidInventoryMode){
+    var correctValues=new Button{Text="CORRIGIR QTD / CUSTO / VENDA",Width=255,Height=35,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    correctValues.Click+=(sender,args)=>CorrectQuickInventoryValues();
+    bar.Controls.Add(correctValues);
     var correctQty=new Button{Text="Corrigir quantidade atual",Width=220,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     correctQty.Click+=(sender,args)=>CorrectCurrentQuantity();
     bar.Controls.Add(correctQty);
@@ -74,7 +77,7 @@ namespace ArmazemGratidao {
    searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
    search.TextChanged+=(s,e)=>{searchDelay.Stop();if(listVisible)searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
-   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];EditProduct();}};
+   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];if(rapidInventoryMode)CorrectQuickInventoryValues();else EditProduct();}};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty&&grid.CurrentCell!=null&&grid.Columns[grid.CurrentCell.ColumnIndex].Name=="selecionar")grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
    grid.CellValueChanged+=(s,e)=>{if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name!="selecionar")return;long id;if(long.TryParse(Convert.ToString(grid.Rows[e.RowIndex].Cells["codigo_interno"].Value),out id)){if(Convert.ToBoolean(grid.Rows[e.RowIndex].Cells["selecionar"].Value))checkedProducts.Add(id);else checkedProducts.Remove(id);}};
 
@@ -702,14 +705,14 @@ namespace ArmazemGratidao {
      count.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
      total=Convert.ToInt64(count.ExecuteScalar());
     }
-    int pages=(int)Math.Max(1,(total+PageSize-1)/PageSize);
+    int pages=rapidInventoryMode?1:(int)Math.Max(1,(total+PageSize-1)/PageSize);
     if(currentPage>=pages)currentPage=pages-1;
     previousPage.Enabled=currentPage>0;
     nextPage.Enabled=currentPage<pages-1;
     using(var cmd=new SQLiteCommand("SELECT id AS codigo_interno,barcode AS codigo_barras,name AS descricao"+extraSelect+",price AS preco,cost AS custo,ROUND(COALESCE(price,0)-COALESCE(cost,0),2) AS lucro_unitario,CASE WHEN COALESCE(cost,0)>0 THEN ROUND(((COALESCE(price,0)-cost)/cost)*100,2) ELSE NULL END AS margem_percentual,stock AS estoque FROM products WHERE ("+searchColumns+")"+filter+" ORDER BY name COLLATE NOCASE,id LIMIT @limit OFFSET @offset",c)){
      cmd.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
-     cmd.Parameters.AddWithValue("@limit",PageSize);
-     cmd.Parameters.AddWithValue("@offset",currentPage*PageSize);
+     cmd.Parameters.AddWithValue("@limit",rapidInventoryMode?Math.Max(1,total):PageSize);
+     cmd.Parameters.AddWithValue("@offset",rapidInventoryMode?0:currentPage*PageSize);
      var dt=new DataTable();using(var a=new SQLiteDataAdapter(cmd))a.Fill(dt);
      // Código alfabético global: mantém o mesmo número mesmo durante pesquisas ou paginação.
      var order=ProductAlphabeticalNumbers(c,activeColumn);
@@ -733,7 +736,7 @@ namespace ArmazemGratidao {
      if(grid.Columns.Contains("custo")){grid.Columns["custo"].HeaderText="Custo (R$)";grid.Columns["custo"].DefaultCellStyle.Format="N2";}
      if(grid.Columns.Contains("preco")){grid.Columns["preco"].HeaderText="Preço de venda (R$)";grid.Columns["preco"].DefaultCellStyle.Format="N2";}
      if(grid.Columns.Contains("Código")){grid.Columns["Código"].HeaderText="Código interno";grid.Columns["Código"].Width=90;}
-     info.Text="  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
+     info.Text=rapidInventoryMode?"  Estoque completo: "+dt.Rows.Count+" produtos | Duplo clique para ajustar quantidade, custo ou preço.":"  Página "+(currentPage+1)+" de "+pages+" | "+dt.Rows.Count+" exibidos nesta página | "+total+" produtos encontrados. Cadastro preservado.";
      // Indicadores completos somente sob demanda, evitando uma varredura extra a cada pesquisa.
      if(calculateMetrics)using(var totals=new SQLiteCommand("SELECT SUM(CASE WHEN COALESCE(stock,0)<=0 THEN 1 ELSE 0 END), COALESCE(SUM(COALESCE(stock,0)),0), COALESCE(SUM(COALESCE(stock,0)*COALESCE(cost,0)),0) FROM products WHERE ("+searchColumns+")"+filter,c)){
       totals.Parameters.AddWithValue("@q","%"+SearchFold(search.Text.Trim())+"%");
