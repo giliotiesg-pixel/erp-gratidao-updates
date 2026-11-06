@@ -4,7 +4,7 @@
 Um unico instalador: `Armazem-Gratidao-Novo-Setup.exe`.
 A instalacao guarda uma copia dele como `Reparar-Armazem-Gratidao.exe`.
 O atualizador grafico `AtualizadorGratidao.exe` acompanha o mesmo instalador.
-O aplicativo continua nativo C# WinForms + SQLite (.NET Framework 4.8, x64).
+O aplicativo continua nativo C# WinForms + SQLite (.NET Framework 4.5 (compativel com Windows 8), x64).
 
 ## Organizacao
 Novas instalacoes utilizam `C:\ERP-Gratidao\` por padrao.
