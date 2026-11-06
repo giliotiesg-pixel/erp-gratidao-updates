@@ -381,7 +381,7 @@ namespace ArmazemGratidao {
    Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{
     // Manter a janela responsiva durante o backup e a procura de vendas antigas.
     await EnsureDailyBackupAsync();
-    if(!IsDisposed)await Task.Run(()=>AutoRecoverSales());
+    if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
     if(!IsDisposed)await CheckUpdates(false);
    }));
    dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
@@ -1699,6 +1699,17 @@ Panel BuildEmbeddedCalculator(){
      }finally{if(File.Exists(staged))File.Delete(staged);}
     }catch(Exception ex){MessageBox.Show("Recuperação não aplicada: "+ex.Message,"Recuperação bloqueada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
+  }
+  void AutoRecoverSalesIfDue(){
+   if(!File.Exists(dbPath))return;
+   // Evita vasculhar vendas antigas e discos inteiros toda vez que o PDV abre.
+   string marker=Path.Combine(dataDir,"ultima-varredura-recuperacao.txt");
+   string today=DateTime.Now.ToString("yyyy-MM-dd");
+   try{
+    if(File.Exists(marker)&&File.ReadAllText(marker).Trim()==today)return;
+   }catch(IOException){}catch(UnauthorizedAccessException){}
+   AutoRecoverSales();
+   try{File.WriteAllText(marker,today);}catch(IOException){}catch(UnauthorizedAccessException){}
   }
   void AutoRecoverSales(){
    // Nunca altera o banco ativo: somente produz uma copia de teste.
