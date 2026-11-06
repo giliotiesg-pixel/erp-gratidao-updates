@@ -608,9 +608,28 @@ namespace ArmazemGratidao {
       if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
       string tag=Convert.ToString(candidate["tag_name"]);
       int build;
-      if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
-       remoteBuild=build;release=candidate;
+      if(!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)||
+         !int.TryParse(tag.Substring(prefix.Length),out build)||build<=remoteBuild)continue;
+      // Nunca escolher a maior build ANTES de confirmar o formato publicado.
+      // Releases sem instalador/ZIP utilizavel nao devem causar erro no PDV.
+      var candidateAssets=candidate.ContainsKey("assets")?candidate["assets"] as object[]:null;
+      if(candidateAssets==null)continue;
+      bool compatible=false;
+      foreach(object fileObj in candidateAssets){
+       var file=fileObj as System.Collections.Generic.Dictionary<string,object>;
+       if(file==null||!file.ContainsKey("name")||!file.ContainsKey("digest"))continue;
+       string name=Convert.ToString(file["name"]);
+       string hash=Convert.ToString(file["digest"]);
+       if((string.Equals(name,patchZip,StringComparison.OrdinalIgnoreCase)||
+           string.Equals(name,officialSetup,StringComparison.OrdinalIgnoreCase)||
+           string.Equals(name,legacySetup,StringComparison.OrdinalIgnoreCase))&&
+          hash!=null&&hash.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)&&
+          hash.Length==71&&hash.Substring(7).All(ch=>Uri.IsHexDigit(ch))){
+        compatible=true;break;
+       }
       }
+      if(!compatible)continue;
+      remoteBuild=build;release=candidate;
      }
     }
     if(release==null){
