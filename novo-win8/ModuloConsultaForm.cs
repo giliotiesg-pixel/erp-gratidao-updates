@@ -73,7 +73,31 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(207,227,248);grid.DefaultCellStyle.SelectionForeColor=Color.Black;
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){string n=column.Name.ToLowerInvariant();if(n=="name"||n.Contains("descri")||n=="produto"||n=="cliente"){column.MinimumWidth=240;column.FillWeight=230;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;};
    Shown+=(s,e)=>{var bounds=Screen.FromControl(this).WorkingArea;Width=Math.Min(Width,Math.Max(360,bounds.Width-24));Height=Math.Min(Height,Math.Max(300,bounds.Height-24));};
-   Controls.Add(grid);Controls.Add(status);if(module=="Estoque")Controls.Add(stockValuation);Controls.Add(top);LoadData();
+   if(module=="Estoque"){
+    // Evita sobreposicao de Grid, indicadores, comandos e atalhos quando a janela e reduzida.
+    // As barras globais de Menu/PDV devem usar a area dedicada stockNavigation.
+    var stockLayout=new TableLayoutPanel{Name="stockLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=new Padding(0),Padding=new Padding(0),BackColor=Color.FromArgb(229,242,255),GrowStyle=TableLayoutPanelGrowStyle.FixedSize};
+    stockLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,35)); // Menu Principal / PDV
+    stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,87)); // Busca e acoes
+    stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,68)); // Indicadores
+    stockLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100)); // Produtos
+    stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,35)); // Rodape
+    var navigation=new Panel{Name="stockNavigation",Dock=DockStyle.Fill,Margin=new Padding(0),BackColor=Color.FromArgb(238,244,253)};
+    top.Dock=DockStyle.Fill;top.Margin=new Padding(0);
+    stockValuation.Dock=DockStyle.Fill;stockValuation.Margin=new Padding(0);
+    grid.Dock=DockStyle.Fill;grid.Margin=new Padding(0);
+    status.Dock=DockStyle.Fill;status.Margin=new Padding(0);
+    stockLayout.Controls.Add(navigation,0,0);
+    stockLayout.Controls.Add(top,0,1);
+    stockLayout.Controls.Add(stockValuation,0,2);
+    stockLayout.Controls.Add(grid,0,3);
+    stockLayout.Controls.Add(status,0,4);
+    Controls.Add(stockLayout);
+   }else{
+    Controls.Add(grid);Controls.Add(status);Controls.Add(top);
+   }
+   LoadData();
   }
   void LoadData() {
    if(!File.Exists(db)){status.Text="Importe o banco antes de consultar.";return;}
