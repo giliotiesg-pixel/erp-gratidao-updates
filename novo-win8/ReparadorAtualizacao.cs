@@ -30,7 +30,6 @@ namespace ArmazemGratidaoReparo {
   string installDir=@"C:\ERP-Gratidao";
   static readonly string[,] files={
    {"AMZG.Payload.Program","ArmazemGratidaoNovo.exe"},
-   {"AMZG.Payload.Config","ArmazemGratidaoNovo.exe.config"},
    {"AMZG.Payload.Qr","QRCoder.dll"},
    {"AMZG.Payload.Barcode","zxing.dll"},
    {"AMZG.Payload.SQLite","System.Data.SQLite.dll"},
