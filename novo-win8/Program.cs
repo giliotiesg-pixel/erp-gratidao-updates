@@ -450,11 +450,12 @@ namespace ArmazemGratidao {
     // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
    }finally{dailyBackupRunning=false;}
   }
-  string CreateVerifiedPreUpdateBackup(){
+  string CreateVerifiedPreUpdateBackup(string destination=null){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
-   string backup=Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   string backup=destination??Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    try{
+    Directory.CreateDirectory(Path.GetDirectoryName(backup));
     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
@@ -478,14 +479,14 @@ namespace ArmazemGratidao {
   // O banco e copiado pelo SQLite BackupDatabase, nunca pela copia bruta em uso.
   string CreateVerifiedFullUpdateBackup(){
    if(!File.Exists(dbPath))throw new Exception("Banco nao encontrado. Atualizacao bloqueada.");
-   string snapshot=CreateVerifiedPreUpdateBackup();
+   // O backup integral gera apenas UMA copia SQLite verificada, diretamente na pasta final.
    string folder=Path.Combine(UpdateBackupDirectory(),
     "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6));
    string dataBackup=Path.Combine(folder,"Dados");
    try{
     Directory.CreateDirectory(dataBackup);
     string dbCopy=Path.Combine(dataBackup,"armazem-gratidao.db");
-    File.Copy(snapshot,dbCopy);
+    CreateVerifiedPreUpdateBackup(dbCopy);
     if(new FileInfo(dbCopy).Length<=0)throw new Exception("Backup do banco ficou vazio.");
     string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
