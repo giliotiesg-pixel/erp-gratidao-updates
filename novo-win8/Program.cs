@@ -13,7 +13,23 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms(); RoundedGridTheme.CheckOpenForms(); ModuleVisualTheme.CheckOpenForms();}; Application.Run(new MainForm()); }
+  static DateTime nextVisualScanUtc=DateTime.MinValue;
+  [STAThread] static void Main() {
+   Application.EnableVisualStyles();
+   Application.SetCompatibleTextRenderingDefault(false);
+   // Nao percorrer todas as janelas a cada mensagem ociosa do Windows: em PCs lentos isso consome CPU.
+   Application.Idle+=(sender,args)=>{
+    var now=DateTime.UtcNow;
+    if(now<nextVisualScanUtc)return;
+    nextVisualScanUtc=now.AddMilliseconds(1500);
+    ButtonTextVisibility.CheckOpenForms();
+    PdvShortcutButtons.CheckOpenForms();
+    WindowBoundsGuard.CheckOpenForms();
+    RoundedGridTheme.CheckOpenForms();
+    ModuleVisualTheme.CheckOpenForms();
+   };
+   Application.Run(new MainForm());
+  }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
  static class WindowBoundsGuard {
@@ -289,6 +305,7 @@ namespace ArmazemGratidao {
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
   readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*60*1000};
   bool dailyBackupRunning=false;
+  readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
@@ -360,8 +377,13 @@ namespace ArmazemGratidao {
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowMainMenu();
-   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();EnsureDailyBackup();await CheckUpdates(false);}));
-   dailyBackupTimer.Tick+=(s,e)=>EnsureDailyBackup();
+   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{
+    // Manter a janela responsiva durante o backup e a procura de vendas antigas.
+    await EnsureDailyBackupAsync();
+    if(!IsDisposed)await Task.Run(()=>AutoRecoverSales());
+    if(!IsDisposed)await CheckUpdates(false);
+   }));
+   dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
    dailyBackupTimer.Start();
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
@@ -398,34 +420,42 @@ namespace ArmazemGratidao {
   }
   // Uma copia consistente por dia, ao abrir o sistema e enquanto permanecer aberto.
   // Falhas ficam visiveis; nunca registrar sucesso sem validar a integridade.
-  void EnsureDailyBackup(){
+  async Task EnsureDailyBackupAsync(){
    if(dailyBackupRunning||!File.Exists(dbPath))return;
    dailyBackupRunning=true;
    try{
-    string folder=UpdateBackupDirectory();
-    string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
-    string today=DateTime.Now.ToString("yyyy-MM-dd");
-    if(File.Exists(marker)){
-     string[] lines=File.ReadAllLines(marker);
-     if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return;
-    }
-    string backup=CreateVerifiedPreUpdateBackup();
-    if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
-    string tmp=marker+".tmp";
-    File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
-    if(File.Exists(marker))File.Delete(marker);
-    File.Move(tmp,marker);
-    status.Text="Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+    await backupGate.WaitAsync();
+    try{
+     // Copia e verificacao SQLite feitas fora da thread de interface.
+     string report=await Task.Run(()=>{
+      string folder=UpdateBackupDirectory();
+      string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
+      string today=DateTime.Now.ToString("yyyy-MM-dd");
+      if(File.Exists(marker)){
+       string[] lines=File.ReadAllLines(marker);
+       if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return null;
+      }
+      string backup=CreateVerifiedPreUpdateBackup();
+      if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
+      string tmp=marker+".tmp";
+      File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
+      if(File.Exists(marker))File.Delete(marker);
+      File.Move(tmp,marker);
+      return "Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+     });
+     if(report!=null&&!IsDisposed)status.Text=report;
+    }finally{backupGate.Release();}
    }catch(Exception ex){
-    status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
+    if(!IsDisposed)status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
     // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
    }finally{dailyBackupRunning=false;}
   }
-  string CreateVerifiedPreUpdateBackup(){
+  string CreateVerifiedPreUpdateBackup(string destination=null){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
-   string backup=Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   string backup=destination??Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    try{
+    Directory.CreateDirectory(Path.GetDirectoryName(backup));
     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
@@ -449,14 +479,14 @@ namespace ArmazemGratidao {
   // O banco e copiado pelo SQLite BackupDatabase, nunca pela copia bruta em uso.
   string CreateVerifiedFullUpdateBackup(){
    if(!File.Exists(dbPath))throw new Exception("Banco nao encontrado. Atualizacao bloqueada.");
-   string snapshot=CreateVerifiedPreUpdateBackup();
+   // O backup integral gera apenas UMA copia SQLite verificada, diretamente na pasta final.
    string folder=Path.Combine(UpdateBackupDirectory(),
     "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6));
    string dataBackup=Path.Combine(folder,"Dados");
    try{
     Directory.CreateDirectory(dataBackup);
     string dbCopy=Path.Combine(dataBackup,"armazem-gratidao.db");
-    File.Copy(snapshot,dbCopy);
+    CreateVerifiedPreUpdateBackup(dbCopy);
     if(new FileInfo(dbCopy).Length<=0)throw new Exception("Backup do banco ficou vazio.");
     string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
@@ -650,7 +680,13 @@ namespace ArmazemGratidao {
      Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
      "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
-    string backupPath=isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup();
+    // Aguardar qualquer backup diario e copiar em segundo plano, evitando travar a interface.
+    status.Text="Criando e conferindo o backup antes da atualização...";
+    string backupPath;
+    await backupGate.WaitAsync();
+    try{
+     backupPath=await Task.Run(()=>isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup());
+    }finally{backupGate.Release();}
     status.Text="Backup confirmado: "+backupPath;
     // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
     // de fechamento (por exemplo, uma venda em edição ainda não salva).
@@ -1723,9 +1759,20 @@ Panel BuildEmbeddedCalculator(){
      }
      using(var q=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Integridade da cópia recuperada inválida.");
     }
-    status.Text="Recuperação automática: "+bestMissing+" vendas ausentes preparadas em cópia de teste.";
-    MessageBox.Show("Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.","Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
-   }catch(Exception ex){status.Text="Recuperação automática não concluída: "+ex.Message;}
+    string report="Recuperação automática: "+bestMissing+" vendas ausentes preparadas em cópia de teste.";
+    string prompt="Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.";
+    if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)(()=>{
+     if(IsDisposed)return;
+     status.Text=report;
+     MessageBox.Show(this,prompt,"Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }));
+   }catch(Exception ex){
+    string report="Recuperação automática não concluída: "+ex.Message;
+    if(!IsDisposed&&IsHandleCreated){
+     try{BeginInvoke((Action)(()=>{if(!IsDisposed)status.Text=report;}));}
+     catch(InvalidOperationException){} // janela encerrada durante a recuperação
+    }
+   }
   }
   void IntegrateHistoricalSales(object sender,EventArgs e){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}
