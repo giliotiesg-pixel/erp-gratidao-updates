@@ -1147,13 +1147,13 @@ namespace ArmazemGratidao {
     EnsureCustomerCredit(db);
     using(var cn=Open(true)){
      var data=new DataTable();
-     using(var cmd=new SQLiteCommand("SELECT created_at AS Data,entry_type AS Operacao,amount AS Valor,method AS Forma,sale_id AS Venda,details AS Detalhes FROM customer_credit_entries WHERE customer_name=@client COLLATE NOCASE ORDER BY id DESC LIMIT 1000",cn)){
+     using(var cmd=new SQLiteCommand("SELECT id AS Registro,created_at AS Data,entry_type AS Operacao,amount AS Valor,method AS Forma,sale_id AS Venda,details AS Detalhes FROM customer_credit_entries WHERE customer_name=@client COLLATE NOCASE ORDER BY id DESC LIMIT 1000",cn)){
       cmd.Parameters.AddWithValue("@client",customer.Trim());
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
      }
      // Produtos exibidos na propria linha do extrato, sem modificar lancamentos.
      data.Columns.Add("Produtos",typeof(string));
-     data.Columns["Produtos"].SetOrdinal(2);
+     data.Columns["Produtos"].SetOrdinal(3);
      using(var products=new SQLiteCommand("SELECT si.name,si.quantity FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE si.sale_id=@sale AND s.customer_name=@client COLLATE NOCASE ORDER BY si.id",cn)){
       var saleParam=products.Parameters.Add("@sale",DbType.Int64);
       products.Parameters.AddWithValue("@client",customer.Trim());
@@ -1195,6 +1195,7 @@ namespace ArmazemGratidao {
       // As colunas podem ser geradas somente apos o DataGridView receber o binding.
       grid.AutoGenerateColumns=true;
       grid.DataBindingComplete+=(sender,args)=>{
+       if(grid.Columns["Registro"]!=null)grid.Columns["Registro"].Visible=false;
        var detailsColumn=grid.Columns["Detalhes"];
        if(detailsColumn!=null)detailsColumn.FillWeight=130;
        var productsColumn=grid.Columns["Produtos"];
@@ -1214,6 +1215,13 @@ namespace ArmazemGratidao {
       show.Click+=(sender,args)=>inspect();
       grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)inspect();};
       bar.Controls.Add(show);
+      var correct=new Button{Text="Corrigir / retirar lancamento",Width=230,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+      correct.Click+=(sender,args)=>{
+       if(grid.CurrentRow==null)return;
+       long entryId=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
+       if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
+      };
+      bar.Controls.Add(correct);
       var totals=new Label{Dock=DockStyle.Top,Height=66,Padding=new Padding(12,9,8,5),BackColor=Color.FromArgb(218,233,250),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Credito inserido: R$ "+deposited.ToString("N2")+"    |    Credito abatido: R$ "+debited.ToString("N2")+"\nSaldo atual: R$ "+available.ToString("N2")+"    |    Limite de Fiado atual: "+limitDisplay};
       var adjust=new Button{Text="Ajustar saldo manualmente",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
@@ -1223,6 +1231,57 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+  bool CorrectCreditHistoryEntry(long entryId){
+   if(string.IsNullOrWhiteSpace(customer))return false;
+   try{
+    EnsureCustomerCredit(db);
+    decimal original;string kind;object sale;
+    using(var cn=Open(true))
+    using(var cmd=new SQLiteCommand("SELECT amount,entry_type,sale_id FROM customer_credit_entries WHERE id=@id AND customer_name=@client COLLATE NOCASE",cn)){
+     cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@client",customer.Trim());
+     using(var rd=cmd.ExecuteReader()){
+      if(!rd.Read()){MessageBox.Show("Lancamento nao localizado.");return false;}
+      original=Convert.ToDecimal(rd[0]);kind=Convert.ToString(rd[1]);sale=rd[2];
+     }
+    }
+    if(sale!=DBNull.Value||!(kind=="DEPOSITO"||kind=="AJUSTE_AUDITADO")){
+     MessageBox.Show("Por seguranca, esta correcao so permite depositos e ajustes sem venda vinculada. Abatimentos de vendas exigem estorno da venda.");return false;
+    }
+    using(var dlg=new Form{Text="Corrigir lancamento - "+customer,Width=480,Height=260,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+     var title=new Label{Left=16,Top=14,Width=430,Height=44,Text="Valor registrado: R$ "+original.ToString("N2")+"\nInforme o valor correto. Zero retira o lancamento do extrato."};
+     var value=new NumericUpDown{Left=16,Top=66,Width=200,DecimalPlaces=2,Minimum=-100000000,Maximum=100000000,Value=original};
+     var confirm=new Button{Left=16,Top=122,Width=205,Height=36,Text="Salvar correcao",DialogResult=DialogResult.OK};
+     var cancel=new Button{Left=235,Top=122,Width=150,Height=36,Text="Cancelar",DialogResult=DialogResult.Cancel};
+     dlg.Controls.AddRange(new Control[]{title,value,confirm,cancel});
+     if(dlg.ShowDialog(this)!=DialogResult.OK||value.Value==original)return false;
+     decimal corrected=value.Value;
+     if(kind=="DEPOSITO"&&corrected<0){MessageBox.Show("Deposito nao pode ser negativo.");return false;}
+     if(MessageBox.Show("Corrigir registro "+entryId+" de R$ "+original.ToString("N2")+" para R$ "+corrected.ToString("N2")+"?\nO saldo sera recalculado e a alteracao sera auditada.","Confirmar correcao",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return false;
+     string backup=CreditBackupPath(db,"antes-corrigir-historico-");
+     using(var cn=Open(false)){
+      using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+       dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+       using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido.");
+      }
+      if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio.");
+      using(var tx=cn.BeginTransaction()){
+       using(var audit=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_credit_corrections(id INTEGER PRIMARY KEY AUTOINCREMENT,entry_id INTEGER NOT NULL,customer_name TEXT NOT NULL,old_amount NUMERIC NOT NULL,new_amount NUMERIC NOT NULL,corrected_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))audit.ExecuteNonQuery();
+       using(var cmd=new SQLiteCommand("UPDATE customer_credit_entries SET amount=@amount WHERE id=@id AND customer_name=@client COLLATE NOCASE AND amount=@old AND sale_id IS NULL AND entry_type IN ('DEPOSITO','AJUSTE_AUDITADO')",cn,tx)){
+        cmd.Parameters.AddWithValue("@amount",corrected);cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@client",customer.Trim());cmd.Parameters.AddWithValue("@old",original);
+        // A tabela original proibe valor zero; retirar equivale a excluir apos auditar.
+        if(corrected==0)cmd.CommandText="DELETE FROM customer_credit_entries WHERE id=@id AND customer_name=@client COLLATE NOCASE AND amount=@old AND sale_id IS NULL AND entry_type IN ('DEPOSITO','AJUSTE_AUDITADO')";
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Registro foi alterado por outra operacao. Atualize a tela.");
+       }
+       using(var audit=new SQLiteCommand("INSERT INTO customer_credit_corrections(entry_id,customer_name,old_amount,new_amount) VALUES(@id,@client,@old,@new)",cn,tx)){
+        audit.Parameters.AddWithValue("@id",entryId);audit.Parameters.AddWithValue("@client",customer.Trim());audit.Parameters.AddWithValue("@old",original);audit.Parameters.AddWithValue("@new",corrected);audit.ExecuteNonQuery();
+       }
+       tx.Commit();
+      }
+     }
+     LoadClients();SelectClient(customer);return true;
+    }
+   }catch(Exception ex){MessageBox.Show("Correcao nao realizada: "+ex.Message);return false;}
   }
   void ShowCreditSaleItems(long saleId,string operation,decimal entryAmount){
    try{
