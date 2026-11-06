@@ -1317,6 +1317,13 @@ Panel BuildEmbeddedCalculator(){
     WindowState=FormWindowState.Normal;
     BringToFront();Activate();
    };
+   if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")){
+    backBar.Height=32;
+    back.Width=132;back.Height=26;back.Top=3;
+    back.Text="← Menu Principal";
+    back.Anchor=AnchorStyles.Top|AnchorStyles.Right;
+    backBar.Resize+=(sender,args)=>{back.Left=Math.Max(8,backBar.ClientSize.Width-back.Width-10);};
+   }
    backBar.Controls.Add(back);
    form.Controls.Add(backBar);
    backBar.BringToFront();
