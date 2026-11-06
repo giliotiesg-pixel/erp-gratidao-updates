@@ -71,9 +71,21 @@ namespace ArmazemGratidao {
      if(main!=null)main.OpenPdvFromModule();
      else MessageBox.Show("A janela principal não está disponível.","PDV");
     };
-    strip.Controls.Add(shortcut);
-    form.Controls.Add(strip);
-    strip.BringToFront();
+    // No estoque, usar a barra ja reservada no layout. Nao adicionar outro Dock.Top
+    // diretamente no formulario, pois ele escondia o cabecalho e os primeiros produtos.
+    var stockNavigation=form.Controls.Find("amzgBackBar",true).FirstOrDefault() as Panel;
+    if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")&&stockNavigation!=null){
+     shortcut.Width=150;shortcut.Height=27;shortcut.Top=3;
+     shortcut.Anchor=AnchorStyles.Right|AnchorStyles.Top;
+     stockNavigation.Controls.Add(shortcut);
+     Action position=()=>{shortcut.Left=Math.Max(8,stockNavigation.ClientSize.Width-132-shortcut.Width-25);};
+     stockNavigation.Resize+=(sender,args)=>position();
+     position();
+    }else{
+     strip.Controls.Add(shortcut);
+     form.Controls.Add(strip);
+     strip.BringToFront();
+    }
     form.FormClosed+=(sender,args)=>installed.Remove(form);
    }
   }
@@ -1339,7 +1351,7 @@ Panel BuildEmbeddedCalculator(){
   // Navegacao padronizada: a seta retorna ao menu sem encerrar o aplicativo.
   // O fechamento normal da janela preserva validacoes de alteracoes pendentes.
   void AddBackToMenu(Form form){
-   if(form==null||form.IsDisposed||form.Controls.Find("amzgBackBar",false).Length>0)return;
+   if(form==null||form.IsDisposed||form.Controls.Find("amzgBackBar",true).Length>0)return;
    var backBar=new Panel{Name="amzgBackBar",Dock=DockStyle.Top,Height=37,
     BackColor=Color.FromArgb(238,244,253)};
    var back=new Button{Text="← Voltar ao Menu Principal",Left=8,Top=3,Width=193,Height=30,
@@ -1362,7 +1374,14 @@ Panel BuildEmbeddedCalculator(){
     backBar.Resize+=(sender,args)=>{back.Left=Math.Max(8,backBar.ClientSize.Width-back.Width-10);};
    }
    backBar.Controls.Add(back);
-   form.Controls.Add(backBar);
+   var stockArea=form.Controls.Find("stockNavigation",true).FirstOrDefault() as Panel;
+   if(stockArea!=null){
+    backBar.Dock=DockStyle.Fill;
+    backBar.Margin=new Padding(0);
+    stockArea.Controls.Add(backBar);
+   }else{
+    form.Controls.Add(backBar);
+   }
    backBar.BringToFront();
   }
   void OpenModuleWindow(Form form){
