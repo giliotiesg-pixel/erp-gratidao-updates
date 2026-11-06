@@ -50,6 +50,7 @@ namespace ArmazemGratidao {
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
    var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
+   FlowLayoutPanel rapidInventoryBar=manualEntry?new FlowLayoutPanel{Dock=DockStyle.Top,Height=47,Padding=new Padding(10,4,6,3),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(229,242,255)}:null;
    if(manualEntry){
     Text="Armazem Gratidao - Lançamento rápido de vendas anotadas";
     // A data será conferida somente depois que todos os produtos forem lançados.
@@ -62,9 +63,10 @@ namespace ArmazemGratidao {
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    if(manualEntry){
-    var inventory=new Button{Text="ESTOQUE COMPLETO / EDITAR",Width=245,Height=40,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(174,48,67),ForeColor=Color.White};
+    var inventory=new Button{Text="ABRIR TODO O ESTOQUE / CORRIGIR VALORES",Width=335,Height=36,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     inventory.Click+=(sender,args)=>OpenFullInventoryForManualSales();
-    header.Controls.Add(inventory);
+    rapidInventoryBar.Controls.Add(inventory);
+    rapidInventoryBar.Controls.Add(new Label{Text="Quantidade real  |  Custo  |  Preco de venda",AutoSize=true,Padding=new Padding(12,8,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156)});
    }
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
@@ -115,6 +117,7 @@ namespace ArmazemGratidao {
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&e.Value!=null){string name=grid.Columns[e.ColumnIndex].Name.ToLowerInvariant();if(name.Contains("descri")||name.Contains("nome")||name.Contains("name")){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}}};
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){if(column.Name.ToLowerInvariant().Contains("descri")||column.Name.ToLowerInvariant().Contains("nome")||column.Name.ToLowerInvariant().Contains("name")){column.MinimumWidth=260;column.FillWeight=240;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
    Controls.Add(grid);Controls.Add(footer);Controls.Add(header);
+   if(rapidInventoryBar!=null)Controls.Add(rapidInventoryBar);
    suggestions.Parent=this;
    if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
    PositionSuggestions();
