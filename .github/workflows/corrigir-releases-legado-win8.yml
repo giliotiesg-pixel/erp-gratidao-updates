@@ -1,0 +1,44 @@
+name: Corrigir selecao de releases no atualizador legado do Windows 8
+on:
+  push:
+    branches:
+      - fix/amzg-release-assets-windows8
+    paths:
+      - '.github/workflows/corrigir-releases-legado-win8.yml'
+  workflow_dispatch:
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validar e classificar releases ZIP-only para o cliente EXE antigo
+        shell: bash
+        run: |
+          set -euo pipefail
+          tags=(amzg-novo-win8-build-566 amzg-novo-win8-build-567 amzg-novo-win8-build-580 amzg-novo-win8-build-582)
+          echo "Conferindo previamente os quatro releases antigos."
+          for tag in "${tags[@]}"; do
+            assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '[.assets[].name] | join(",")')"
+            if [[ -z "$assets" || "$assets" != *Armazem-Gratidao-Atualizacao.zip* ]]; then
+              echo "::error::$tag nao contem ZIP verificado. Nao modificar releases."
+              exit 1
+            fi
+            if [[ "$assets" == *Armazem-Gratidao-Novo-Setup.exe* || "$assets" == *Armazem-Gratidao-Novo-Windows8-Setup.exe* ]]; then
+              echo "::error::$tag ja contem instalador compativel. Nao modificar releases."
+              exit 1
+            fi
+            echo "Requer modo prerelease para clientes EXE antigos: $tag ($assets)"
+          done
+          echo "Todos os releases especificados possuem somente pacote ZIP, sem instalador Windows antigo."
+          for tag in "${tags[@]}"; do
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease
+            state="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.prerelease')"
+            if [[ "$state" != true ]]; then echo "::error::Nao confirmou prerelease: $tag"; exit 1; fi
+            echo "Corrigido: $tag, marcado prerelease sem excluir nenhum asset."
+          done
+          echo "VERIFICACAO FINAL"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select(.draft==false and .prerelease==false and (.tag_name|startswith("amzg-novo-win8-build-"))) | {tag:.tag_name,assets:[.assets[].name]}] | .[:15]'
+          echo "Manifestos no branch main permanecem sem alteracoes."
