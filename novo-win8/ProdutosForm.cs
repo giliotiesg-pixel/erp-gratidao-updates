@@ -11,6 +11,7 @@ namespace ArmazemGratidao {
  public sealed class ProdutosForm:Form {
   readonly string db;
   readonly bool rapidInventoryMode;
+  public long SelectedQuickSaleProductId {get;private set;}
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=false,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None};
   readonly TextBox search=new TextBox {Width=240};
   bool showInactive=false;
@@ -112,7 +113,17 @@ namespace ArmazemGratidao {
    metrics.BackColor=Color.FromArgb(229,242,255);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
-   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);grid.Visible=false;info.Text="  Lista de produtos oculta para abertura rápida. Clique em Mostrar lista de produtos.";previousPage.Enabled=false;nextPage.Enabled=false;
+   Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);grid.Visible=false;
+   if(rapidInventoryMode){
+    // Botao fixo na parte inferior: selecionar produto do estoque e voltar ao carrinho.
+    var saleBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=52,Padding=new Padding(10,6,6,5),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(218,233,250)};
+    var addToSale=new Button{Text="ADICIONAR SELECIONADO A VENDA ANOTADA",Width=350,Height=36,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    addToSale.Click+=(sender,args)=>ChooseQuickInventoryForSale();
+    var correct=new Button{Text="CORRIGIR ESTOQUE / CUSTO / PRECO",Width=285,Height=36,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    correct.Click+=(sender,args)=>CorrectQuickInventoryValues();
+    saleBar.Controls.Add(addToSale);saleBar.Controls.Add(correct);
+    Controls.Add(saleBar);
+   }info.Text="  Lista de produtos oculta para abertura rápida. Clique em Mostrar lista de produtos.";previousPage.Enabled=false;nextPage.Enabled=false;
    if(rapidInventoryMode){
     Text="Lançamento rápido | Estoque completo - editar produtos";
     listVisible=true;grid.Visible=true;showList.Text="Ocultar lista de produtos";
@@ -779,6 +790,41 @@ namespace ArmazemGratidao {
    panel.Controls.Add(desired);panel.Controls.Add(apply);panel.Controls.Add(preview);
    update();return panel;
   }
+  // O cadastro permanece aberto para edicoes; a selecao fecha o dialogo e retorna
+  // somente o ID real do produto, evitando ambiguidade com codigos duplicados.
+  void ChooseQuickInventoryForSale(){
+   if(!rapidInventoryMode)return;
+   if(grid.CurrentRow==null||!grid.Columns.Contains("codigo_interno")){
+    MessageBox.Show("Selecione um produto na lista para adicionar a venda anotada.");return;
+   }
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id)||id<=0){
+    MessageBox.Show("Produto selecionado invalido.");return;
+   }
+   SelectedQuickSaleProductId=id;
+   DialogResult=DialogResult.OK;
+   Close();
+  }
+
+  // Opcao clara para corrigir o cadastro sem confundir com editar apenas esta venda.
+  // Reutiliza as rotinas existentes, inclusive backup e auditoria da quantidade real.
+  void CorrectQuickInventoryValues(){
+   if(!rapidInventoryMode)return;
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione o produto antes de corrigir.");return;}
+   using(var dlg=new Form{Text="Corrigir dados do produto",Width=530,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var message=new Label{Text="Escolha o que deseja corrigir no cadastro:",Left=17,Top=18,Width=460,Height=34,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    var quantity=new Button{Text="Quantidade REAL do estoque",Left=17,Top=73,Width=235,Height=43,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var price=new Button{Text="Custo e preco de venda",Left=263,Top=73,Width=235,Height=43,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var cancel=new Button{Text="Voltar",Left=332,Top=139,Width=166,Height=34,DialogResult=DialogResult.Cancel};
+    quantity.Click+=(sender,args)=>{dlg.DialogResult=DialogResult.Yes;};
+    price.Click+=(sender,args)=>{dlg.DialogResult=DialogResult.No;};
+    dlg.Controls.AddRange(new Control[]{message,quantity,price,cancel});
+    var choice=dlg.ShowDialog(this);
+    if(choice==DialogResult.Yes)CorrectCurrentQuantity();
+    else if(choice==DialogResult.No)EditProduct();
+   }
+  }
+
   // Acesso exclusivo a partir de Vendas Anotadas: corrige o saldo real, inclusive para menos.
   // A alteração é individual, auditada e nunca reescreve itens de vendas já registradas.
   void CorrectCurrentQuantity(){
