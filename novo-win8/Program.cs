@@ -476,10 +476,24 @@ namespace ArmazemGratidao {
     status.Text="Consultando versão publicada...";
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
     string json;
-    using(var web=new WebClient()){
-     web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
-     web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
-     json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=100"));
+    // Uma falha temporaria (502/503/504) do GitHub nao deve impedir novas tentativas.
+    json=null;
+    for(int attempt=1;attempt<=3;attempt++){
+     try{
+      using(var web=new WebClient()){
+       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+       web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
+       json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=20"));
+      }
+      break;
+     }catch(WebException ex){
+      var response=ex.Response as HttpWebResponse;
+      int code=response==null?0:(int)response.StatusCode;
+      if(attempt==3||(code!=502&&code!=503&&code!=504&&code!=429))
+       throw new Exception("Nao foi possivel consultar as atualizacoes no GitHub ("+(code==0?ex.Message:code.ToString())+"). Tente novamente mais tarde; o programa e seus dados permanecem intactos.",ex);
+      status.Text="Servidor temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
+      await Task.Delay(1500*attempt);
+     }
     }
     var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
     if(releases==null)throw new Exception("Lista de versoes invalida.");
