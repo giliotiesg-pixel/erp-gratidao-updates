@@ -63,8 +63,25 @@ jobs:
           $dataDir=Join-Path $env:LOCALAPPDATA 'ArmazemGratidaoNovo'
           New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
           $db=Join-Path $dataDir 'armazem-gratidao.db'
-          $code='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("create table teste_integridade (valor text)"); c.execute("insert into teste_integridade values (?)",("preservado",)); c.commit(); c.close()'
-          python -c $code $db
+          $pyFile=Join-Path $env:RUNNER_TEMP 'amzg-teste-sqlite.py'
+          $py=@'
+          import sqlite3
+          import sys
+          action, path = sys.argv[1], sys.argv[2]
+          c=sqlite3.connect(path)
+          if action == 'create':
+              c.execute('create table teste_integridade (valor text)')
+              c.execute('insert into teste_integridade values (?)',('preservado',))
+              c.commit()
+          elif action == 'check':
+              assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
+              assert c.execute('select valor from teste_integridade').fetchone()[0]=='preservado'
+          else:
+              raise ValueError('operacao invalida')
+          c.close()
+          '@
+          [System.IO.File]::WriteAllText($pyFile,$py,(New-Object System.Text.UTF8Encoding($false)))
+          python $pyFile create $db
           if($LASTEXITCODE -ne 0){throw 'Falhou criacao do banco descartavel'}
           $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
           $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
@@ -72,8 +89,7 @@ jobs:
           $backups=Join-Path $testDir 'Arquivos/Backups'
           $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
           if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
-          $check='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); assert c.execute("pragma integrity_check").fetchone()[0]=="ok"; assert c.execute("select valor from teste_integridade").fetchone()[0]=="preservado"; c.close()'
-          python -c $check $db
+          python $pyFile check $db
           if($LASTEXITCODE -ne 0){throw 'Banco alterado ou corrompido apos reparo'}
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
       - uses: actions/upload-artifact@v4
