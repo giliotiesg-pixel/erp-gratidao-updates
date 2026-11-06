@@ -1,5 +1,5 @@
 param(
- [ValidateRange(583,65000)][int]$Build=583
+ [ValidateRange(584,65000)][int]$Build=584
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -26,7 +26,7 @@ try {
  # Procurar a DLL real do Stub NetFramework, sem presumir pasta net46 fixa.
  $managed=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'System.Data.SQLite.dll' |
   Where-Object {$_.FullName -match 'Stub.System.Data.SQLite.Core.NetFramework'} |
-  Sort-Object @{Expression={if($_.FullName -match 'net46'){0}elseif($_.FullName -match 'net40'){1}else{2}}} |
+  Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
   Select-Object -First 1
  if($null -eq $managed){
   Get-ChildItem -Path $packageDir -Recurse -File -Filter '*.dll' |
@@ -49,7 +49,7 @@ try {
  }
  $native=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'SQLite.Interop.dll' |
   Where-Object {$_.FullName -match '[\\/]x64[\\/]'} |
-  Sort-Object @{Expression={if($_.FullName -match 'net46'){0}else{1}}} |
+  Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
   Select-Object -First 1
  if($null -eq $native){throw 'DLL SQLite.Interop.dll (x64) nao encontrada nos pacotes NuGet.'}
  $x64=Join-Path $bin 'x64'
