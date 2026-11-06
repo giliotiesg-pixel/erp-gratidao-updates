@@ -3,7 +3,6 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Diagnostics;
@@ -445,35 +444,52 @@ namespace ArmazemGratidao {
     throw;
    }
   }
-  // Backup integral do perfil antes do ZIP, com banco SQLite consistente.
+  // Backup integral em PASTA: evita dependencias System.IO.Compression
+  // nao disponiveis em alguns computadores Windows 8.
+  // O banco e copiado pelo SQLite BackupDatabase, nunca pela copia bruta em uso.
   string CreateVerifiedFullUpdateBackup(){
-   if(!File.Exists(dbPath))throw new Exception("Banco não encontrado; atualização bloqueada.");
+   if(!File.Exists(dbPath))throw new Exception("Banco nao encontrado. Atualizacao bloqueada.");
    string snapshot=CreateVerifiedPreUpdateBackup();
-   string backup=Path.Combine(UpdateBackupDirectory(),
-    "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".zip");
+   string folder=Path.Combine(UpdateBackupDirectory(),
+    "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6));
+   string dataBackup=Path.Combine(folder,"Dados");
    try{
-    using(var archive=ZipFile.Open(backup,ZipArchiveMode.Create)){
-     archive.CreateEntryFromFile(snapshot,"Dados/armazem-gratidao.db",CompressionLevel.Optimal);
-     string dataRoot=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
-     string backups=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
-     string updates=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
-     foreach(string item in Directory.GetFiles(dataDir,"*",SearchOption.AllDirectories)){
-      string path=Path.GetFullPath(item);
-      if(path.StartsWith(backups,StringComparison.OrdinalIgnoreCase)||
-         path.StartsWith(updates,StringComparison.OrdinalIgnoreCase)||
-         string.Equals(path,dbPath,StringComparison.OrdinalIgnoreCase)||
-         path.EndsWith(".db-wal",StringComparison.OrdinalIgnoreCase)||
-         path.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase))continue;
-      archive.CreateEntryFromFile(path,"Dados/"+path.Substring(dataRoot.Length).Replace(Path.DirectorySeparatorChar,'/'),CompressionLevel.Optimal);
+    Directory.CreateDirectory(dataBackup);
+    string dbCopy=Path.Combine(dataBackup,"armazem-gratidao.db");
+    File.Copy(snapshot,dbCopy);
+    if(new FileInfo(dbCopy).Length<=0)throw new Exception("Backup do banco ficou vazio.");
+    string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string updatesRoot=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    var pending=new Stack<string>();
+    pending.Push(dataDir);
+    while(pending.Count>0){
+     string current=pending.Pop();
+     foreach(string sub in Directory.GetDirectories(current)){
+      string full=Path.GetFullPath(sub).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+      if(full.StartsWith(backupRoot,StringComparison.OrdinalIgnoreCase)||
+         full.StartsWith(updatesRoot,StringComparison.OrdinalIgnoreCase))continue;
+      pending.Push(sub);
+     }
+     foreach(string file in Directory.GetFiles(current)){
+      string full=Path.GetFullPath(file);
+      if(string.Equals(full,dbPath,StringComparison.OrdinalIgnoreCase)||
+         full.EndsWith(".db-wal",StringComparison.OrdinalIgnoreCase)||
+         full.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase))continue;
+      string relative=full.Substring(root.Length);
+      string target=Path.Combine(dataBackup,relative);
+      Directory.CreateDirectory(Path.GetDirectoryName(target));
+      File.Copy(file,target);
+      if(new FileInfo(target).Length!=new FileInfo(file).Length)
+       throw new Exception("Falha ao validar copia de "+relative);
      }
     }
-    if(new FileInfo(backup).Length<512)throw new Exception("Backup integral vazio.");
-    using(var test=ZipFile.OpenRead(backup)){
-     if(!test.Entries.Any(e=>e.FullName=="Dados/armazem-gratidao.db"&&e.Length>0))
-      throw new Exception("O backup integral não contém o banco de dados.");
-    }
-    return backup;
-   }catch{try{if(File.Exists(backup))File.Delete(backup);}catch{}throw;}
+    if(!File.Exists(dbCopy)||new FileInfo(dbCopy).Length<=0)throw new Exception("Backup completo invalido.");
+    return folder;
+   }catch{
+    try{if(Directory.Exists(folder))Directory.Delete(folder,true);}catch{}
+    throw;
+   }
   }
   string UpdatesDirectory(){
    string folder=Path.Combine(dataDir,"Atualizacoes");
