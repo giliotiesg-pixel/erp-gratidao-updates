@@ -1151,6 +1151,28 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@client",customer.Trim());
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
      }
+     // Produtos exibidos na propria linha do extrato, sem modificar lancamentos.
+     data.Columns.Add("Produtos",typeof(string));
+     data.Columns["Produtos"].SetOrdinal(2);
+     using(var products=new SQLiteCommand("SELECT si.name,si.quantity FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE si.sale_id=@sale AND s.customer_name=@client COLLATE NOCASE ORDER BY si.id",cn)){
+      var saleParam=products.Parameters.Add("@sale",DbType.Int64);
+      products.Parameters.AddWithValue("@client",customer.Trim());
+      foreach(DataRow row in data.Rows){
+       if(row["Venda"]==DBNull.Value)continue;
+       long saleId;
+       if(!long.TryParse(Convert.ToString(row["Venda"]),out saleId))continue;
+       saleParam.Value=saleId;
+       var descriptions=new System.Collections.Generic.List<string>();
+       using(var reader=products.ExecuteReader()){
+        while(reader.Read()){
+         string itemName=Convert.ToString(reader[0]);
+         string quantity=Convert.ToDecimal(reader[1]).ToString("0.###");
+         descriptions.Add(quantity+"x "+itemName);
+        }
+       }
+       row["Produtos"]=descriptions.Count>0?string.Join("; ",descriptions.ToArray()):"Venda sem itens localizados";
+      }
+     }
      using(var dlg=new Form{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White};
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
@@ -1158,7 +1180,9 @@ namespace ArmazemGratidao {
       grid.AutoGenerateColumns=true;
       grid.DataBindingComplete+=(sender,args)=>{
        var detailsColumn=grid.Columns["Detalhes"];
-       if(detailsColumn!=null)detailsColumn.FillWeight=180;
+       if(detailsColumn!=null)detailsColumn.FillWeight=130;
+       var productsColumn=grid.Columns["Produtos"];
+       if(productsColumn!=null){productsColumn.FillWeight=260;productsColumn.MinimumWidth=180;}
       };
       var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Selecione um abatimento e clique em Ver produtos da venda, ou dê dois cliques na linha.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
       var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,Padding=new Padding(8),BackColor=Color.FromArgb(218,233,250)};
