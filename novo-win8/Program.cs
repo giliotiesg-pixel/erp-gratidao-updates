@@ -351,6 +351,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
+   AddButton(bar,"Central de manutencao", (sender,args)=>OpenProgramFilesFolder());
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
@@ -858,7 +859,8 @@ namespace ArmazemGratidao {
   // Pasta persistente de suporte: fora do diretório de instalação e sem copiar dados privados automaticamente.
   void OpenProgramFilesFolder(){
    try{
-    string folder=Path.Combine(dataDir,"Arquivos do Programa");
+    string unified=Path.Combine(Application.StartupPath,"Arquivos");
+    string folder=Directory.Exists(unified)?unified:Path.Combine(dataDir,"Arquivos do Programa");
     Directory.CreateDirectory(folder);
     string instructions=Path.Combine(folder,"LEIA-ME.txt");
     if(!File.Exists(instructions)){
@@ -866,10 +868,13 @@ namespace ArmazemGratidao {
       "ARMAZÉM GRATIDÃO NOVO - ARQUIVOS DO PROGRAMA"+Environment.NewLine+
       "Esta pasta permanece no computador durante as atualizações."+Environment.NewLine+
       "Use-a para guardar documentos de manutenção, instruções e arquivos de suporte."+Environment.NewLine+
-      "Código-fonte e documentação centralizados no GitHub:"+Environment.NewLine+
-      "https://github.com/giliotiesg-pixel/erp-gratidao-updates/tree/main/ARQUIVOS-DO-PROGRAMA"+Environment.NewLine+
-      "NÃO coloque senhas ou backups com dados de clientes em repositórios públicos."+Environment.NewLine+
-      "A pasta de backup do programa é configurada separadamente."+Environment.NewLine,
+      "Atualizacoes: pacotes baixados e verificados SHA-256."+Environment.NewLine+
+      "Backups: copia de seguranca antes de atualizar, exceto quando voce configurou outra pasta."+Environment.NewLine+
+      "Logs: registros de falhas e execucao do atualizador."+Environment.NewLine+
+      "Rollback: arquivos antigos para reparacao em caso de falha."+Environment.NewLine+
+      "Codigo-fonte e compilacao: https://github.com/giliotiesg-pixel/erp-gratidao-updates"+Environment.NewLine+
+      "Dados ativos permanecem na pasta AppData do usuario para preservar o historico."+Environment.NewLine+
+      "NUNCA envie bancos de clientes, fiados ou vendas ao GitHub publico."+Environment.NewLine,
       System.Text.Encoding.UTF8);
     }
     Process.Start("explorer.exe", "\""+folder+"\"");
