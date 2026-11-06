@@ -173,3 +173,33 @@ jobs:
           $paths = @($files | ForEach-Object { $_.FullName })
           gh release create $tag @paths --title "Armazem Gratidao Novo - compilacao ${{ github.run_number }}" --notes "Instalador Windows x64 gerado automaticamente. O instalador executa backup SQLite automatico antes de atualizar e bloqueia a instalacao se a copia nao for validada. Os dados de vendas, produtos, estoque e fiado sao preservados." --target "${{ github.sha }}" --latest
           if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador no Releases" }
+      # Manifesto fora de novo-win8/ nao dispara compilacao em loop.
+      - name: Publicar manifesto de atualizacao independente da API
+        if: success() && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = @(Get-ChildItem 'novo-win8/installer' -Filter '*.exe' -File)
+          if ($setup.Count -ne 1) { throw 'Instalador oficial nao encontrado ou duplicado.' }
+          $file = $setup[0]
+          $build = [int]'${{ github.run_number }}'
+          $tag = "amzg-novo-win8-build-$build"
+          $sha256 = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = [ordered]@{
+            build = $build
+            tag = $tag
+            asset = $file.Name
+            url = "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/$tag/$($file.Name)"
+            sha256 = $sha256
+          }
+          $json = $manifest | ConvertTo-Json -Depth 3 -Compress
+          $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+          $path = 'atualizacao-novo-win8.json'
+          $payload = @{ message = "build: publicar manifesto da versao $build [skip ci]"; branch = 'main'; content = $content }
+          $oldSha = & gh api "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --jq '.sha' 2>$null
+          if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($oldSha)) { $payload.sha = $oldSha.Trim() }
+          $payload | ConvertTo-Json -Compress | gh api --method PUT "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --input -
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar manifesto de atualizacao.' }
+
