@@ -475,40 +475,76 @@ namespace ArmazemGratidao {
    try{
     status.Text="Consultando versão publicada...";
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-    string json;
-    // Uma falha temporaria (502/503/504) do GitHub nao deve impedir novas tentativas.
-    json=null;
-    for(int attempt=1;attempt<=3;attempt++){
-     try{
-      using(var web=new WebClient()){
-       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
-       web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
-       json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=20"));
-      }
-      break;
-     }catch(WebException ex){
-      var response=ex.Response as HttpWebResponse;
-      int code=response==null?0:(int)response.StatusCode;
-      if(attempt==3||(code!=502&&code!=503&&code!=504&&code!=429))
-       throw new Exception("Nao foi possivel consultar as atualizacoes no GitHub ("+(code==0?ex.Message:code.ToString())+"). Tente novamente mais tarde; o programa e seus dados permanecem intactos.",ex);
-      status.Text="Servidor temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
-      await Task.Delay(1500*attempt);
-     }
-    }
-    var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
-    if(releases==null)throw new Exception("Lista de versoes invalida.");
+    const string updateRepo="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/";
+    const string officialSetup="Armazem-Gratidao-Novo-Setup.exe";
+    const string legacySetup="Armazem-Gratidao-Novo-Windows8-Setup.exe";
     const string prefix="amzg-novo-win8-build-";
     System.Collections.Generic.Dictionary<string,object> release=null;
     int remoteBuild=-1;
-    foreach(object obj in releases){
-     var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
-     if(candidate==null||!candidate.ContainsKey("tag_name"))continue;
-     if(candidate.ContainsKey("draft")&&Convert.ToBoolean(candidate["draft"]))continue;
-     if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
-     string tag=Convert.ToString(candidate["tag_name"]);
-     int build;
-     if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
-      remoteBuild=build;release=candidate;
+    string alternativeError="";
+    // Primeiro consultar manifesto estatico (CDN raw). Evita depender da API que pode responder 504.
+    try{
+     status.Text="Consultando manifesto oficial de atualizacoes...";
+     string manifestJson;
+     using(var web=new WebClient()){
+      web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+      manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
+     }
+     var manifest=new JavaScriptSerializer().DeserializeObject(manifestJson) as System.Collections.Generic.Dictionary<string,object>;
+     if(manifest==null||!manifest.ContainsKey("build")||!manifest.ContainsKey("tag")||!manifest.ContainsKey("asset")||!manifest.ContainsKey("url")||!manifest.ContainsKey("sha256"))
+      throw new Exception("Manifesto de atualizacao incompleto.");
+     int version;
+     if(!int.TryParse(Convert.ToString(manifest["build"]),out version)||version<1)throw new Exception("Versao invalida no manifesto.");
+     string tag=Convert.ToString(manifest["tag"]);
+     string assetName=Convert.ToString(manifest["asset"]);
+     string url=Convert.ToString(manifest["url"]);
+     string sha256=Convert.ToString(manifest["sha256"]);
+     if(tag!=prefix+version||(assetName!=officialSetup&&assetName!=legacySetup)||url!=updateRepo+tag+"/"+assetName||
+       sha256==null||sha256.Length!=64||!sha256.All(ch=>Uri.IsHexDigit(ch)))
+      throw new Exception("Manifesto de atualizacao nao passou na validacao.");
+     var asset=new System.Collections.Generic.Dictionary<string,object>();
+     asset["name"]=assetName;
+     asset["digest"]="sha256:"+sha256;
+     asset["browser_download_url"]=url;
+     release=new System.Collections.Generic.Dictionary<string,object>();
+     release["assets"]=new object[]{asset};
+     remoteBuild=version;
+    }catch(WebException ex){
+     alternativeError=ex.Message;
+    }
+    // Compatibilidade: se o manifesto nao estiver acessivel, usar API de Releases.
+    if(release==null){
+     status.Text="Consultando versoes no GitHub...";
+     string json=null;
+     for(int attempt=1;attempt<=3;attempt++){
+      try{
+       using(var web=new WebClient()){
+        web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+        web.Headers[HttpRequestHeader.Accept]="application/vnd.github+json";
+        json=await web.DownloadStringTaskAsync(new Uri("https://api.github.com/repos/giliotiesg-pixel/erp-gratidao-updates/releases?per_page=20"));
+       }
+       break;
+      }catch(WebException ex){
+       var response=ex.Response as HttpWebResponse;
+       int code=response==null?0:(int)response.StatusCode;
+       if(attempt==3||(code!=502&&code!=503&&code!=504&&code!=429))
+        throw new Exception("Falharam a consulta alternativa e a API do GitHub ("+(code==0?ex.Message:code.ToString())+"). Consulte as versoes pelo navegador; o programa e seus dados permanecem intactos.",ex);
+       status.Text="Servidor temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
+       await Task.Delay(1500*attempt);
+      }
+     }
+     var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
+     if(releases==null)throw new Exception("Lista de versoes invalida.");
+     foreach(object obj in releases){
+      var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
+      if(candidate==null||!candidate.ContainsKey("tag_name"))continue;
+      if(candidate.ContainsKey("draft")&&Convert.ToBoolean(candidate["draft"]))continue;
+      if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
+      string tag=Convert.ToString(candidate["tag_name"]);
+      int build;
+      if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
+       remoteBuild=build;release=candidate;
+      }
      }
     }
     if(release==null){
