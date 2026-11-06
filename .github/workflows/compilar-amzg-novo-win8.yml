@@ -238,7 +238,7 @@ jobs:
           } | ConvertTo-Json -Depth 3 -Compress
           $content=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($manifest))
           $path='atualizacao-novo-win8-pacote.json'
-          $payload=@{message="atualizacao $build: publicar pacote ZIP [skip ci]";branch='main';content=$content}
+          $payload=@{message="atualizacao ${build}: publicar pacote ZIP [skip ci]";branch='main';content=$content}
           $oldSha=& gh api "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --jq '.sha' 2>$null
           if($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($oldSha)){$payload.sha=$oldSha.Trim()}
           $payload | ConvertTo-Json -Compress | gh api --method PUT "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --input -
