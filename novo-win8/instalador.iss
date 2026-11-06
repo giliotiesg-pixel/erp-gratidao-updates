@@ -4,10 +4,15 @@
 AppId={{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-DefaultDirName={autopf}\Armazem Gratidao Novo
+DefaultDirName=C:\ERP-Gratidao
 DefaultGroupName={#MyAppName}
 OutputDir=installer
-OutputBaseFilename=Armazem-Gratidao-Novo-Windows8-Setup
+OutputBaseFilename=Armazem-Gratidao-Novo-Setup
+AppPublisher=Armazem Gratidao
+AppPublisherURL=https://github.com/giliotiesg-pixel/erp-gratidao-updates
+VersionInfoCompany=Armazem Gratidao
+VersionInfoDescription=Instalador oficial do Armazem Gratidao Novo
+VersionInfoProductName=Armazem Gratidao Novo
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64
