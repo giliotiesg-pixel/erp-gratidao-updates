@@ -68,6 +68,12 @@ jobs:
           if (!$ref) { throw "Referencia SQLite ausente no projeto" }
           $ref.InnerText = $dll.FullName
           $xml.Save((Resolve-Path $proj).Path)
+      - name: Gerar icone nativo do aplicativo e instalador
+        shell: pwsh
+        run: |
+          & "novo-win8/gerar-icone.ps1"
+          if (!(Test-Path "novo-win8/Armazem-Gratidao.ico")) { throw "Icone Windows nao foi gerado" }
+          if ((Get-Item "novo-win8/Armazem-Gratidao.ico").Length -lt 1000) { throw "Icone invalido" }
       - name: Gravar versao real da compilacao no executavel
         shell: pwsh
         run: |
@@ -98,6 +104,12 @@ jobs:
         shell: pwsh
         run: |
           & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/ArmazemGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal /fl "/flp:logfile=novo-win8/build-diagnostics.log;verbosity=normal"
+      - name: Compilar atualizador independente do instalador
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/AtualizadorGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao do atualizador visual" }
+          if (!(Test-Path "novo-win8/bin/x64/Release/AtualizadorGratidao.exe")) { throw "Executavel do atualizador ausente" }
       - name: Guardar diagnostico de compilacao quando falhar
         if: failure()
         uses: actions/upload-artifact@v4
