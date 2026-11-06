@@ -124,6 +124,21 @@ jobs:
           if (!$dll) { throw "SQLite.Interop.dll x64 nao encontrado" }
           New-Item -ItemType Directory -Force novo-win8/bin/x64/Release/x64 | Out-Null
           Copy-Item $dll.FullName novo-win8/bin/x64/Release/x64/SQLite.Interop.dll
+      - name: Compilar reparador autonomo sem instalar programa
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $builder="${env:ProgramFiles}\\Microsoft Visual Studio\\2022\\Enterprise\\MSBuild\\Current\\Bin\\MSBuild.exe"
+          & $builder novo-win8/ReparadorAtualizacao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\\x64\\Release\\ /v:minimal
+          if($LASTEXITCODE -ne 0){throw "Reparador nao compilou"}
+          $path='novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe'
+          if(!(Test-Path $path) -or (Get-Item $path).Length -lt 100000){throw "Reparador incompleto"}
+          foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe')){
+            $asm=[System.Reflection.Assembly]::ReflectionOnlyLoadFrom((Resolve-Path "novo-win8/bin/x64/Release/$name").Path)
+            if($asm.GetReferencedAssemblies() | Where-Object { $_.Name -eq 'System.IO.Compression' }){
+              throw "Dependencia System.IO.Compression permanece no $name"
+            }
+          }
       - name: Testar backup automatico antes do instalador
         shell: pwsh
         run: |
@@ -208,6 +223,12 @@ jobs:
           name: Armazem-Gratidao-Atualizacao-ZIP
           path: novo-win8/Armazem-Gratidao-Atualizacao.zip
           if-no-files-found: error
+      - name: Guardar reparador emergencial sem instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-Reparador-Atualizacao
+          path: novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe
+          if-no-files-found: error
       - name: Publicar ZIP no Releases (sem novo Setup)
         if: success() && github.ref == 'refs/heads/main'
         shell: pwsh
@@ -215,7 +236,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag="amzg-novo-win8-build-${{ github.run_number }}"
-          gh release create $tag "novo-win8/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao - atualizacao ${{ github.run_number }}" --notes "Pacote automatico ZIP verificado por SHA-256, aplicado pelo AtualizadorGratidao.exe instalado junto do unico instalador completo. Antes de atualizar, o programa verifica o banco e salva backup completo dos dados e configuracoes. Nao exige reinstalar." --target "${{ github.sha }}" --latest
+          gh release create $tag "novo-win8/Armazem-Gratidao-Atualizacao.zip" "novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe" --title "Armazem Gratidao - atualizacao ${{ github.run_number }}" --notes "Pacote automatico ZIP verificado por SHA-256, aplicado pelo AtualizadorGratidao.exe instalado junto do unico instalador completo. Antes de atualizar, o programa verifica o banco e salva backup completo dos dados e configuracoes. Nao exige reinstalar." --target "${{ github.sha }}" --latest
           if($LASTEXITCODE -ne 0){ throw "Falha ao publicar a atualizacao" }
       - name: Atualizar somente o manifesto ZIP (preservar instalador legado)
         if: success() && github.ref == 'refs/heads/main'
