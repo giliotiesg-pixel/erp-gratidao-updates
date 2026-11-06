@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 using System.Windows.Forms;
 
 namespace ArmazemGratidaoReparo {
@@ -27,7 +28,7 @@ namespace ArmazemGratidaoReparo {
   readonly Button cancel=new Button{Left=312,Top=210,Width=120,Height=49,Text="FECHAR"};
   readonly Button browse=new Button{Left=504,Top=77,Width=93,Height=28,Text="Localizar"};
   readonly ProgressBar progress=new ProgressBar{Left=18,Top=279,Width=579,Height=22,Minimum=0,Maximum=100};
-  string installDir=@"C:\ERP-Gratidao";
+  string installDir=FindInstallationDirectory();
   static readonly string[,] files={
    {"AMZG.Payload.Program","ArmazemGratidaoNovo.exe"},
    {"AMZG.Payload.Qr","QRCoder.dll"},
@@ -36,6 +37,72 @@ namespace ArmazemGratidaoReparo {
    {"AMZG.Payload.Native","x64/SQLite.Interop.dll"},
    {"AMZG.Payload.Updater","AtualizadorGratidao.exe"}
   };
+  static string FindInstallationDirectory(){
+   string defaultDir=@"C:\ERP-Gratidao";
+   var paths=new List<string>();
+   // O instalador Inno guarda a pasta efetivamente escolhida pelo usuario.
+   try{
+    foreach(RegistryKey root in new[]{Registry.LocalMachine,Registry.CurrentUser}){
+     foreach(string viewPath in new[]{
+      @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}_is1",
+      @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}_is1"
+     }){
+      using(var key=root.OpenSubKey(viewPath)){
+       string value=key==null?"":Convert.ToString(key.GetValue("InstallLocation"));
+       if(!string.IsNullOrWhiteSpace(value))paths.Add(value.Trim('"'));
+      }
+     }
+    }
+   }catch(System.Security.SecurityException){}catch(UnauthorizedAccessException){}
+   paths.Add(defaultDir);
+   paths.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Armazem Gratidao Novo"));
+   paths.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),"Armazem Gratidao Novo"));
+   foreach(string path in paths.Where(x=>!string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase)){
+    try{if(File.Exists(Path.Combine(path,"ArmazemGratidaoNovo.exe")))return Path.GetFullPath(path);}
+    catch(ArgumentException){}catch(NotSupportedException){}
+   }
+   return defaultDir;
+  }
+  static string FindUserDataDirectory(){
+   string local=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
+   if(File.Exists(Path.Combine(local,"armazem-gratidao.db")))return local;
+   // Windows pode elevar o reparador com uma conta de administrador diferente.
+   // Procura SOMENTE a pasta oficial do ERP, sem tocar em arquivos de outros apps.
+   var matches=new List<string>();
+   try{
+    string users=Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    if(!string.IsNullOrWhiteSpace(users)&&Directory.Exists(users)){
+     foreach(string profile in Directory.GetDirectories(users)){
+      string candidate=Path.Combine(profile,"AppData","Local","ArmazemGratidaoNovo");
+      try{if(File.Exists(Path.Combine(candidate,"armazem-gratidao.db")))matches.Add(candidate);}
+      catch(UnauthorizedAccessException){}
+     }
+    }
+   }catch(UnauthorizedAccessException){}catch(IOException){}
+   if(matches.Count==1)return matches[0];
+   // Em caso de multiplos usuarios, o reparador nao seleciona banco de terceiros.
+   return local;
+  }
+  string SelectDataDirectory(){
+   string detected=FindUserDataDirectory();
+   if(File.Exists(Path.Combine(detected,"armazem-gratidao.db")))return detected;
+   MessageBox.Show(this,
+    "Nao encontrei o banco de dados na pasta padrao deste usuario. Isso pode acontecer se o reparador foi aberto como outra conta do Windows."+
+    Environment.NewLine+"Escolha a pasta ArmazemGratidaoNovo que contem armazem-gratidao.db."+
+    Environment.NewLine+"Nenhum dado sera apagado.",
+    "Localizar dados sem alterar o programa",MessageBoxButtons.OK,MessageBoxIcon.Information);
+   using(var dialog=new FolderBrowserDialog{
+    Description="Selecione a pasta de dados que contem armazem-gratidao.db",
+    SelectedPath=Directory.Exists(detected)?detected:Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}){
+    if(dialog.ShowDialog(this)!=DialogResult.OK)return null;
+    if(!File.Exists(Path.Combine(dialog.SelectedPath,"armazem-gratidao.db"))){
+     MessageBox.Show(this,"Essa pasta nao contem o banco armazem-gratidao.db. Reparo cancelado sem alterar arquivos.",
+       "Dados nao encontrados",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+     return null;
+    }
+    return dialog.SelectedPath;
+   }
+  }
   public RepairWindow(){
    Text="Armazem Gratidao - Reparar Atualizacao";StartPosition=FormStartPosition.CenterScreen;
    Size=new Size(640,365);MinimumSize=new Size(640,365);MaximumSize=new Size(640,365);
@@ -56,12 +123,30 @@ namespace ArmazemGratidaoReparo {
     repair.Enabled=false;browse.Enabled=false;cancel.Enabled=false;
     try{
      string target=installDir;
-     await Task.Run(()=>Repair(target));
+     if(!File.Exists(Path.Combine(target,"ArmazemGratidaoNovo.exe"))){
+      MessageBox.Show(this,
+       "O programa nao esta nesta pasta: "+target+Environment.NewLine+
+       "Clique em Localizar e selecione a pasta onde existe ArmazemGratidaoNovo.exe."+
+       Environment.NewLine+"O reparador nao alterou nenhum arquivo.",
+       "Localizar instalacao",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+      return;
+     }
+     if(Process.GetProcessesByName("ArmazemGratidaoNovo").Any()){
+      MessageBox.Show(this,
+       "O Armazem Gratidao ainda esta em execucao. Feche o programa completamente antes de reparar. Se continuar, confira no Gerenciador de Tarefas.",
+       "Feche o programa antes do reparo",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+      return;
+     }
+     string data=SelectDataDirectory();
+     if(data==null)return;
+     await Task.Run(()=>Repair(target,data));
      SetStatus("Reparo concluido. O programa ja pode ser aberto normalmente.",100);
      MessageBox.Show(this,"Atualizador corrigido. O Armazem Gratidao nao foi desinstalado e nenhum dado foi apagado. Abra o programa e use Verificar Atualizacao normalmente.","Reparo concluido",MessageBoxButtons.OK,MessageBoxIcon.Information);
     }catch(Exception ex){
      SetStatus("Reparo bloqueado. Confira a mensagem antes de tentar novamente.",0);
-     MessageBox.Show(this,ex.Message,"Reparo nao concluido",MessageBoxButtons.OK,MessageBoxIcon.Error);
+     MessageBox.Show(this,ex.Message+Environment.NewLine+Environment.NewLine+
+      "Instalacao nao foi desinstalada. Nao exclua nenhuma pasta.",
+      "Reparo nao concluido",MessageBoxButtons.OK,MessageBoxIcon.Error);
     }finally{repair.Enabled=true;browse.Enabled=true;cancel.Enabled=true;}
    };
   }
@@ -118,15 +203,14 @@ namespace ArmazemGratidaoReparo {
     throw new Exception("Backup completo de vendas e estoque nao foi confirmado. Reparo cancelado.");
    return baseDir;
   }
-  void Repair(string install){
+  void Repair(string install,string data){
    install=Path.GetFullPath(install);
    string app=Path.Combine(install,"ArmazemGratidaoNovo.exe");
    if(!File.Exists(app))throw new Exception("Programa nao encontrado em "+install+". Escolha a pasta correta. Nenhum arquivo foi alterado.");
    if(Process.GetProcessesByName("ArmazemGratidaoNovo").Any())
     throw new Exception("Feche todas as janelas do Armazem Gratidao antes do reparo. Nenhum arquivo foi alterado.");
-   string data=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
    string database=Path.Combine(data,"armazem-gratidao.db");
-   if(!File.Exists(database))throw new Exception("Banco de dados nao encontrado. Reparo bloqueado para preservar suas vendas e fiado.");
+   if(!File.Exists(database))throw new Exception("Banco de dados nao localizado em: "+data+". Reparo bloqueado, sem perda de vendas e fiado.");
    SetStatus("Conferindo dados e preparando backup completo...",15);
    string root=BackupRoot(data);
    string backup=MakeBackup(data,app,root);
