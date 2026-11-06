@@ -156,62 +156,90 @@ jobs:
             if ($check.ExecuteScalar() -ne "TESTE PROTECAO") { throw "O backup nao preservou os dados" }
             $check.Dispose()
           } finally { $test.Dispose() }
-      - name: Instalar Inno Setup
+      # ATUALIZACAO CONTINUA: gera ZIP, NUNCA outro instalador.
+      # O instalador completo fica publicado uma unica vez em release legado.
+      - name: Conferir backup integral
         shell: pwsh
-        run: choco install innosetup --yes --no-progress
-      - name: Gerar Setup EXE
-        shell: pwsh
-        working-directory: novo-win8
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (!(Test-Path $iscc)) { throw "Inno Setup nao encontrado" }
-          & $iscc instalador.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Publicar instalador como artefato
+          $folder=Join-Path $env:RUNNER_TEMP "teste-backup-amzg"
+          $zipFiles=@(Get-ChildItem $folder -Filter 'armazem-gratidao-completo-*.zip')
+          if($zipFiles.Count -ne 1) { throw "Backup completo obrigatorio nao foi gerado" }
+          Add-Type -AssemblyName System.IO.Compression
+          $z=[System.IO.Compression.ZipFile]::OpenRead($zipFiles[0].FullName)
+          try {
+            $found=$z.GetEntry('Dados/armazem-gratidao.db')
+            if(!$found -or $found.Length -lt 100) { throw "Arquivo SQLite ausente do backup completo" }
+          } finally { $z.Dispose() }
+      - name: Criar pacote de atualizacao ZIP (sem instalacao)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='novo-win8/bin/x64/Release'
+          $temp=Join-Path $env:RUNNER_TEMP 'amzg-atualizacao'
+          New-Item -ItemType Directory -Force "$temp/x64" | Out-Null
+          foreach($name in @('ArmazemGratidaoNovo.exe','QRCoder.dll','System.Data.SQLite.dll','zxing.dll')){
+            if(!(Test-Path "$root/$name")) { throw "Componente obrigatorio ausente: $name" }
+            Copy-Item "$root/$name" "$temp/$name"
+          }
+          if(Test-Path "$root/ArmazemGratidaoNovo.exe.config") {
+            Copy-Item "$root/ArmazemGratidaoNovo.exe.config" "$temp/ArmazemGratidaoNovo.exe.config"
+          }
+          Copy-Item "$root/x64/SQLite.Interop.dll" "$temp/x64/SQLite.Interop.dll"
+          $zip='novo-win8/Armazem-Gratidao-Atualizacao.zip'
+          Compress-Archive -Path "$temp/*" -DestinationPath $zip -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression
+          $archive=[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
+          try {
+            $exe=$archive.GetEntry('ArmazemGratidaoNovo.exe')
+            if(!$exe -or $exe.Length -lt 10000) { throw "Executavel nao encontrado ou incompleto no ZIP" }
+            $expected=@('ArmazemGratidaoNovo.exe','ArmazemGratidaoNovo.exe.config','QRCoder.dll','System.Data.SQLite.dll','zxing.dll','x64/SQLite.Interop.dll')
+            foreach($entry in $archive.Entries) {
+              if($entry.Name -and $entry.FullName.Replace('\\','/') -notin $expected) {
+                throw "Arquivo nao autorizado no pacote: $($entry.FullName)"
+              }
+            }
+          } finally { $archive.Dispose() }
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Pacote ZIP pronto: $zip"
+          Write-Host "SHA-256: $hash"
+      - name: Guardar pacote de atualizacao sem instalador
         uses: actions/upload-artifact@v4
         with:
-          name: Armazem-Gratidao-Novo-Windows8-Setup
-          path: novo-win8/installer/*.exe
+          name: Armazem-Gratidao-Atualizacao-ZIP
+          path: novo-win8/Armazem-Gratidao-Atualizacao.zip
           if-no-files-found: error
-      - name: Publicar instalador EXE no Releases
+      - name: Publicar ZIP no Releases (sem novo Setup)
         if: success() && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem "novo-win8/installer" -Filter *.exe -File)
-          if ($files.Count -eq 0) { throw "Nenhum instalador EXE foi gerado" }
-          $tag = "amzg-novo-win8-build-${{ github.run_number }}"
-          $paths = @($files | ForEach-Object { $_.FullName })
-          gh release create $tag @paths --title "Armazem Gratidao Novo - compilacao ${{ github.run_number }}" --notes "Instalador Windows x64 gerado automaticamente. O instalador executa backup SQLite automatico antes de atualizar e bloqueia a instalacao se a copia nao for validada. Os dados de vendas, produtos, estoque e fiado sao preservados." --target "${{ github.sha }}" --latest
-          if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador no Releases" }
-      # Manifesto fora de novo-win8/ nao dispara compilacao em loop.
-      - name: Publicar manifesto de atualizacao independente da API
+          $tag="amzg-novo-win8-build-${{ github.run_number }}"
+          gh release create $tag "novo-win8/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao - atualizacao ${{ github.run_number }}" --notes "Pacote automatico ZIP verificado por SHA-256, aplicado pelo AtualizadorGratidao.exe instalado junto do unico instalador completo. Antes de atualizar, o programa verifica o banco e salva backup completo dos dados e configuracoes. Nao exige reinstalar." --target "${{ github.sha }}" --latest
+          if($LASTEXITCODE -ne 0){ throw "Falha ao publicar a atualizacao" }
+      - name: Atualizar somente o manifesto ZIP (preservar instalador legado)
         if: success() && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $setup = @(Get-ChildItem 'novo-win8/installer' -Filter '*.exe' -File)
-          if ($setup.Count -ne 1) { throw 'Instalador oficial nao encontrado ou duplicado.' }
-          $file = $setup[0]
-          $build = [int]'${{ github.run_number }}'
-          $tag = "amzg-novo-win8-build-$build"
-          $sha256 = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          $manifest = [ordered]@{
-            build = $build
-            tag = $tag
-            asset = $file.Name
-            url = "https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/$tag/$($file.Name)"
-            sha256 = $sha256
-          }
-          $json = $manifest | ConvertTo-Json -Depth 3 -Compress
-          $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
-          $path = 'atualizacao-novo-win8.json'
-          $payload = @{ message = "build: publicar manifesto da versao $build [skip ci]"; branch = 'main'; content = $content }
-          $oldSha = & gh api "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --jq '.sha' 2>$null
-          if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($oldSha)) { $payload.sha = $oldSha.Trim() }
+          $ErrorActionPreference='Stop'
+          $build=[int]'${{ github.run_number }}'
+          $file='novo-win8/Armazem-Gratidao-Atualizacao.zip'
+          $name='Armazem-Gratidao-Atualizacao.zip'
+          $tag="amzg-novo-win8-build-$build"
+          $digest=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest=[ordered]@{
+            build=$build
+            tag=$tag
+            asset=$name
+            url="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/$tag/$name"
+            sha256=$digest
+          } | ConvertTo-Json -Depth 3 -Compress
+          $content=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($manifest))
+          $path='atualizacao-novo-win8-pacote.json'
+          $payload=@{message="atualizacao $build: publicar pacote ZIP [skip ci]";branch='main';content=$content}
+          $oldSha=& gh api "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --jq '.sha' 2>$null
+          if($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($oldSha)){$payload.sha=$oldSha.Trim()}
           $payload | ConvertTo-Json -Compress | gh api --method PUT "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --input -
-          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar manifesto de atualizacao.' }
-
+          if($LASTEXITCODE -ne 0){throw "Manifesto ZIP nao publicado"}
