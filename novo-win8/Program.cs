@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Diagnostics;
@@ -444,6 +445,36 @@ namespace ArmazemGratidao {
     throw;
    }
   }
+  // Backup integral do perfil antes do ZIP, com banco SQLite consistente.
+  string CreateVerifiedFullUpdateBackup(){
+   if(!File.Exists(dbPath))throw new Exception("Banco não encontrado; atualização bloqueada.");
+   string snapshot=CreateVerifiedPreUpdateBackup();
+   string backup=Path.Combine(UpdateBackupDirectory(),
+    "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".zip");
+   try{
+    using(var archive=ZipFile.Open(backup,ZipArchiveMode.Create)){
+     archive.CreateEntryFromFile(snapshot,"Dados/armazem-gratidao.db",CompressionLevel.Optimal);
+     string dataRoot=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+     string backups=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+     string updates=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+     foreach(string item in Directory.GetFiles(dataDir,"*",SearchOption.AllDirectories)){
+      string path=Path.GetFullPath(item);
+      if(path.StartsWith(backups,StringComparison.OrdinalIgnoreCase)||
+         path.StartsWith(updates,StringComparison.OrdinalIgnoreCase)||
+         string.Equals(path,dbPath,StringComparison.OrdinalIgnoreCase)||
+         path.EndsWith(".db-wal",StringComparison.OrdinalIgnoreCase)||
+         path.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase))continue;
+      archive.CreateEntryFromFile(path,"Dados/"+path.Substring(dataRoot.Length).Replace(Path.DirectorySeparatorChar,'/'),CompressionLevel.Optimal);
+     }
+    }
+    if(new FileInfo(backup).Length<512)throw new Exception("Backup integral vazio.");
+    using(var test=ZipFile.OpenRead(backup)){
+     if(!test.Entries.Any(e=>e.FullName=="Dados/armazem-gratidao.db"&&e.Length>0))
+      throw new Exception("O backup integral não contém o banco de dados.");
+    }
+    return backup;
+   }catch{try{if(File.Exists(backup))File.Delete(backup);}catch{}throw;}
+  }
   string UpdatesDirectory(){
    string folder=Path.Combine(dataDir,"Atualizacoes");
    Directory.CreateDirectory(folder);
@@ -455,8 +486,8 @@ namespace ArmazemGratidao {
     Process.Start("explorer.exe","\""+folder+"\"");
    }catch(Exception ex){MessageBox.Show(this,ex.Message,"Atualizações Salvas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
   }
-  async Task<string> DownloadVerifiedInstaller(int build,string url,string digest){
-   string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-Novo-build-"+build+"-Setup.exe");
+  async Task<string> DownloadVerifiedUpdate(int build,string url,string digest,bool zipPackage){
+   string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-build-"+build+"-Atualizacao"+(zipPackage?".zip":".exe"));
    bool valid=false;
    if(File.Exists(installer)){
     using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())
@@ -490,6 +521,7 @@ namespace ArmazemGratidao {
     const string updateRepo="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/";
     const string officialSetup="Armazem-Gratidao-Novo-Setup.exe";
     const string legacySetup="Armazem-Gratidao-Novo-Windows8-Setup.exe";
+    const string patchZip="Armazem-Gratidao-Atualizacao.zip";
     const string prefix="amzg-novo-win8-build-";
     System.Collections.Generic.Dictionary<string,object> release=null;
     int remoteBuild=-1;
@@ -500,7 +532,13 @@ namespace ArmazemGratidao {
      string manifestJson;
      using(var web=new WebClient()){
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
-      manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
+      // O manifesto novo entrega ZIP e usa o atualizador independente.
+       // O manifesto antigo permanece fixo no instalador UNICO para versões legadas.
+       try{
+        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json"));
+       }catch(WebException){
+        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
+       }
      }
      var manifest=new JavaScriptSerializer().DeserializeObject(manifestJson) as System.Collections.Generic.Dictionary<string,object>;
      if(manifest==null||!manifest.ContainsKey("build")||!manifest.ContainsKey("tag")||!manifest.ContainsKey("asset")||!manifest.ContainsKey("url")||!manifest.ContainsKey("sha256"))
@@ -511,7 +549,7 @@ namespace ArmazemGratidao {
      string assetName=Convert.ToString(manifest["asset"]);
      string manifestDownloadUrl=Convert.ToString(manifest["url"]);
      string sha256=Convert.ToString(manifest["sha256"]);
-     if(tag!=prefix+version||(assetName!=officialSetup&&assetName!=legacySetup)||manifestDownloadUrl!=updateRepo+tag+"/"+assetName||
+     if(tag!=prefix+version||(assetName!=officialSetup&&assetName!=legacySetup&&assetName!=patchZip)||manifestDownloadUrl!=updateRepo+tag+"/"+assetName||
        sha256==null||sha256.Length!=64||!sha256.All(ch=>Uri.IsHexDigit(ch)))
       throw new Exception("Manifesto de atualizacao nao passou na validacao.");
      var manifestAsset=new System.Collections.Generic.Dictionary<string,object>();
@@ -570,20 +608,24 @@ namespace ArmazemGratidao {
      return;
     }
     status.Text="Nova versao publicada: build "+remoteBuild+".";
-    var assets=release["assets"] as object[];if(assets==null)throw new Exception("Instalador não encontrado.");
+    var assets=release["assets"] as object[];if(assets==null)throw new Exception("Pacote de atualização não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
      var item=obj as System.Collections.Generic.Dictionary<string,object>;
-     if(item!=null&&string.Equals(Convert.ToString(item["name"]),"Armazem-Gratidao-Novo-Setup.exe",StringComparison.OrdinalIgnoreCase)){asset=item;break;}
-     if(item!=null&&asset==null&&string.Equals(Convert.ToString(item["name"]),"Armazem-Gratidao-Novo-Windows8-Setup.exe",StringComparison.OrdinalIgnoreCase))asset=item;
+     if(item!=null&&string.Equals(Convert.ToString(item["name"]),patchZip,StringComparison.OrdinalIgnoreCase)){asset=item;break;}
+     if(item!=null&&asset==null&&string.Equals(Convert.ToString(item["name"]),officialSetup,StringComparison.OrdinalIgnoreCase))asset=item;
+     if(item!=null&&asset==null&&string.Equals(Convert.ToString(item["name"]),legacySetup,StringComparison.OrdinalIgnoreCase))asset=item;
     }
-    if(asset==null)throw new Exception("O release não contém o instalador Windows.");
+    if(asset==null)throw new Exception("O release não contém atualização compatível.");
     string digest=asset.ContainsKey("digest")?Convert.ToString(asset["digest"]):"";
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
     // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
-    string installer=await DownloadVerifiedInstaller(remoteBuild,url,digest);
+    bool isZip=string.Equals(Convert.ToString(asset["name"]),patchZip,StringComparison.OrdinalIgnoreCase);
+    if(isZip&&!File.Exists(Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe")))
+     throw new Exception("O atualizador visual não está instalado. Utilize uma única vez o instalador completo.");
+    string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
     status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
     if(!manual&&lastPromptedBuild==remoteBuild)return;
     lastPromptedBuild=remoteBuild;
@@ -592,7 +634,7 @@ namespace ArmazemGratidao {
      Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
      "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
-    string backupPath=CreateVerifiedPreUpdateBackup();
+    string backupPath=isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup();
     status.Text="Backup confirmado: "+backupPath;
     // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
     // de fechamento (por exemplo, uma venda em edição ainda não salva).
@@ -603,7 +645,19 @@ namespace ArmazemGratidao {
      MessageBox.Show(this,"Uma janela impediu o fechamento. Salve a operação em andamento e tente novamente.","Atualização adiada",MessageBoxButtons.OK,MessageBoxIcon.Warning);
      return;
     }
-    Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
+    if(isZip){
+     string updater=Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe");
+     Func<string,string> quote=value=>"\""+value.Replace("\"","")+"\"";
+     var start=new ProcessStartInfo(updater){
+      Arguments="--apply-zip "+quote(installer)+" "+quote(digest.Substring(7))+" "+
+        quote(Application.ExecutablePath)+" "+quote(backupPath)+" "+Process.GetCurrentProcess().Id,
+      WorkingDirectory=Application.StartupPath,UseShellExecute=true,Verb="runas"
+     };
+     Process.Start(start);
+    }else{
+     // O instalador completo é reservado para a migração inicial do atualizador.
+     Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
+    }
     Close();
    }catch(Exception ex){status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message,"Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
    finally{checkingUpdates=false;}

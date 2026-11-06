@@ -13,6 +13,10 @@ AppPublisherURL=https://github.com/giliotiesg-pixel/erp-gratidao-updates
 VersionInfoCompany=Armazem Gratidao
 VersionInfoDescription=Instalador oficial do Armazem Gratidao Novo
 VersionInfoProductName=Armazem Gratidao Novo
+SetupIconFile=Armazem-Gratidao.ico
+UninstallDisplayIcon={app}\ArmazemGratidaoNovo.exe
+CloseApplications=yes
+RestartApplications=no
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64
@@ -22,6 +26,8 @@ PrivilegesRequired=admin
 Source: "bin\x64\Release\ArmazemGratidaoNovo.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bin\x64\Release\ArmazemGratidaoNovo.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "bin\x64\Release\QRCoder.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\x64\Release\zxing.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\x64\Release\AtualizadorGratidao.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bin\x64\Release\System.Data.SQLite.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{app}\x64"; Flags: ignoreversion
 ; Auxiliares extraidos apenas antes da instalacao: nao alteram o banco de dados.
@@ -31,6 +37,7 @@ Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{tmp}"; Flags: dontc
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
+Name: "{group}\Reparar Armazem Gratidao"; Filename: "{app}\Reparar-Armazem-Gratidao.exe"; Parameters: "/REPARAR"; Comment: "Reinstala apenas os arquivos do programa, preservando seus dados e criando backup"
 [Run]
 Filename: "{app}\ArmazemGratidaoNovo.exe"; Description: "Abrir Armazem Gratidao"; Flags: nowait postinstall skipifsilent
 [Code]
@@ -89,4 +96,32 @@ begin
       'O instalador nao continuara sem uma copia de seguranca valida.';
     Exit;
   end;
+end;
+
+// O instalador completo fica guardado uma vez e oferece reparacao local,
+// sem nova descarga, sem desinstalacao e sem mexer nos dados do usuario.
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  SourceSetup, RepairSetup: string;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    SourceSetup := ExpandConstant('{srcexe}');
+    RepairSetup := ExpandConstant('{app}\Reparar-Armazem-Gratidao.exe');
+    if CompareText(SourceSetup, RepairSetup) <> 0 then
+    begin
+      if not FileCopy(SourceSetup, RepairSetup, False) then
+        MsgBox('O programa foi instalado, mas nao foi possivel guardar o reparador. Guarde uma copia deste instalador para reparar os arquivos futuramente.',
+          mbError, MB_OK);
+    end;
+  end;
+end;
+
+procedure InitializeWizard();
+begin
+  WizardForm.WelcomeLabel2.Caption :=
+   'Este instalador completo instala ou repara os arquivos do Armazem Gratidao.'+#13#10+
+   'Nenhuma venda, fiado, estoque ou configuracao sera apagada.'+#13#10+
+   'Antes de atualizar ou reparar, o backup automatico deve ser validado.'+#13#10+
+   'Para reparar futuramente, use o atalho Reparar Armazem Gratidao.';
 end;
