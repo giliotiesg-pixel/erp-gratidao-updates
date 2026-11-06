@@ -78,7 +78,7 @@ namespace ArmazemGratidao {
    searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
    search.TextChanged+=(s,e)=>{searchDelay.Stop();if(listVisible)searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
-   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];if(rapidInventoryMode)CorrectQuickInventoryValues();else EditProduct();}};
+   grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];if(rapidInventoryMode)ChooseQuickInventoryForSale();else EditProduct();}};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty&&grid.CurrentCell!=null&&grid.Columns[grid.CurrentCell.ColumnIndex].Name=="selecionar")grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
    grid.CellValueChanged+=(s,e)=>{if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name!="selecionar")return;long id;if(long.TryParse(Convert.ToString(grid.Rows[e.RowIndex].Cells["codigo_interno"].Value),out id)){if(Convert.ToBoolean(grid.Rows[e.RowIndex].Cells["selecionar"].Value))checkedProducts.Add(id);else checkedProducts.Remove(id);}};
 
