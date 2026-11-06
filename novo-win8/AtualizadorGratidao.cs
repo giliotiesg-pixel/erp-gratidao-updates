@@ -31,10 +31,21 @@ namespace ArmazemGratidaoAtualizador {
    Controls.Add(message);Controls.Add(progress);Controls.Add(close);
    close.Click+=(s,e)=>Close();
   }
+  void WriteLog(string text){
+   try{
+    if(args.Length<4)return;
+    string directory=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[3])),"Arquivos","Logs");
+    Directory.CreateDirectory(directory);
+    string name=Path.Combine(directory,"atualizador-"+DateTime.Now.ToString("yyyyMMdd")+".log");
+    lock(logLock)File.AppendAllText(name,DateTime.Now.ToString("o")+" "+text+Environment.NewLine);
+   }catch(IOException){}catch(UnauthorizedAccessException){}
+  }
+  static readonly object logLock=new object();
   void Report(string text,int percent){
    if(IsDisposed)return;
    if(InvokeRequired){BeginInvoke(new Action<string,int>(Report),text,percent);return;}
    message.Text=text;
+   WriteLog(text);
    progress.Value=Math.Max(0,Math.Min(100,percent));
   }
   protected override async void OnShown(EventArgs e){
@@ -45,6 +56,7 @@ namespace ArmazemGratidaoAtualizador {
     await Task.Delay(700);
     Close();
    }catch(Exception ex){
+    WriteLog("ERRO: "+ex.ToString());
     Report("Não foi possível atualizar. A versão anterior foi preservada ou restaurada.",0);
     MessageBox.Show(this,ex.Message,"Atualização não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);
     close.Visible=true;
@@ -79,7 +91,10 @@ namespace ArmazemGratidaoAtualizador {
     if(!process.WaitForExit(60000))throw new Exception("O Armazém Gratidão continua aberto. Feche todas as janelas e tente novamente.");
    }catch(ArgumentException){} // O processo já foi encerrado.
    string staging=Path.Combine(Path.GetTempPath(),"amzg-stage-"+Guid.NewGuid().ToString("N"));
-   string rollback=Path.Combine(Path.GetDirectoryName(zip),"RollbackArquivos",
+   string rollbackRoot=Path.Combine(dir,"Arquivos","Rollback");
+   if(!Directory.Exists(rollbackRoot))
+    rollbackRoot=Path.Combine(Path.GetDirectoryName(zip),"RollbackArquivos");
+   string rollback=Path.Combine(rollbackRoot,
     DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,5));
    Directory.CreateDirectory(staging);Directory.CreateDirectory(rollback);
    var targets=new List<string>();
