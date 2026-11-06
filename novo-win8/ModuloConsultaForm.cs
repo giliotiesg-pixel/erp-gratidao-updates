@@ -23,15 +23,32 @@ namespace ArmazemGratidao {
     bottles.Click+=(s,e)=>{using(var dialog=new CascosForm(db))dialog.ShowDialog(this);LoadData();};top.Controls.Add(bottles);
    }
    if(module=="Estoque"){
-    top.Height=65;
-    top.Controls.Add(new Label {Text="Buscar produto:",AutoSize=true,Padding=new Padding(3,8,1,0),ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)});
-    stockSearch.TextChanged+=(s,e)=>LoadStock();top.Controls.Add(stockSearch);
-    var entry=new Button {Text="Inserir QTD",Width=115,Height=34};entry.Click+=(s,e)=>StockEntry();top.Controls.Add(entry);
-    var edit=new Button {Text="Editar / Salvar",Width=130,Height=34};edit.Click+=(s,e)=>StockEdit();top.Controls.Add(edit);
-    var minimum=new Button {Text="Estoque mínimo",AutoSize=true,Height=34};minimum.Click+=(s,e)=>StockEditMinimum();top.Controls.Add(minimum);
-    var history=new Button {Text="Auditoria",Width=115,Height=34};history.Click+=(s,e)=>StockHistory();top.Controls.Add(history);
-    var verify=new Button {Text="Conferir baixas",AutoSize=true,Height=34};verify.Click+=(s,e)=>CheckStockLosses();top.Controls.Add(verify);
-    var valuation=new Button {Text="Auditoria financeira",AutoSize=true,Height=34};valuation.Click+=(s,e)=>StockValuationAudit();top.Controls.Add(valuation);
+    top.BackColor=Color.FromArgb(218,233,250);
+    top.Height=94;
+    top.WrapContents=false;
+    top.AutoScroll=false;
+    top.FlowDirection=FlowDirection.TopDown;
+    top.Padding=new Padding(6,5,6,4);
+    var stockSearchRow=new FlowLayoutPanel{Width=1040,Height=39,Margin=new Padding(0),WrapContents=false,BackColor=Color.Transparent};
+    var stockActionsRow=new FlowLayoutPanel{Width=1040,Height=39,Margin=new Padding(0),WrapContents=false,AutoScroll=true,BackColor=Color.Transparent};
+    stockSearchRow.Controls.Add(new Label{Text="Buscar produto:",AutoSize=true,Padding=new Padding(3,9,1,0),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10,FontStyle.Bold)});
+    stockSearch.Width=310;
+    stockSearchRow.Controls.Add(stockSearch);
+    stockSearch.TextChanged+=(s,e)=>LoadStock();
+    Func<string,int,EventHandler,Button> stockButton=(title,width,action)=>{
+     var button=new Button{Text=title,Width=width,Height=32,Margin=new Padding(3,2,3,2),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+     button.FlatAppearance.BorderSize=0;button.Click+=action;return button;
+    }
+    stockSearchRow.Controls.Add(stockButton("Atualizar",105,(s,e)=>LoadData()));
+    stockActionsRow.Controls.Add(stockButton("Inserir QTD",115,(s,e)=>StockEntry()));
+    stockActionsRow.Controls.Add(stockButton("Editar / Salvar",135,(s,e)=>StockEdit()));
+    stockActionsRow.Controls.Add(stockButton("Estoque mínimo",145,(s,e)=>StockEditMinimum()));
+    stockActionsRow.Controls.Add(stockButton("Auditoria",110,(s,e)=>StockHistory()));
+    stockActionsRow.Controls.Add(stockButton("Conferir baixas",145,(s,e)=>CheckStockLosses()));
+    stockActionsRow.Controls.Add(stockButton("Auditoria financeira",170,(s,e)=>StockValuationAudit()));
+    top.Controls.Clear();
+    top.Controls.Add(stockSearchRow);top.Controls.Add(stockActionsRow);
+    top.SizeChanged+=(s,e)=>{int w=Math.Max(300,top.ClientSize.Width-top.Padding.Horizontal-2);stockSearchRow.Width=w;stockActionsRow.Width=w;};
     grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];StockEdit();}};
    }
    if(module=="Clientes"){
