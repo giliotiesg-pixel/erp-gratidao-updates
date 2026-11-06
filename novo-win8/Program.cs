@@ -403,8 +403,12 @@ namespace ArmazemGratidao {
   }
   string UpdateBackupDirectory(){
    string file=Path.Combine(dataDir,"backup-location.txt");
-   string directory=File.Exists(file)?File.ReadAllText(file).Trim():Path.Combine(dataDir,"Backups");
-   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))throw new Exception("A pasta de backup configurada e invalida.");
+   string unified=Path.Combine(Application.StartupPath,"Arquivos","Backups");
+   // NUNCA trocar a pasta que o usuario ja configurou.
+   string directory=File.Exists(file)?File.ReadAllText(file).Trim():
+    (Directory.Exists(unified)?unified:Path.Combine(dataDir,"Backups"));
+   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))
+    throw new Exception("A pasta de backup configurada e invalida.");
    Directory.CreateDirectory(directory);
    return directory;
   }
@@ -522,7 +526,9 @@ namespace ArmazemGratidao {
    }
   }
   string UpdatesDirectory(){
-   string folder=Path.Combine(dataDir,"Atualizacoes");
+   // O instalador unico prepara esta pasta com permissoes de escrita para o usuario.
+   string unified=Path.Combine(Application.StartupPath,"Arquivos","Atualizacoes");
+   string folder=Directory.Exists(unified)?unified:Path.Combine(dataDir,"Atualizacoes");
    Directory.CreateDirectory(folder);
    return folder;
   }
@@ -534,6 +540,17 @@ namespace ArmazemGratidao {
   }
   async Task<string> DownloadVerifiedUpdate(int build,string url,string digest,bool zipPackage){
    string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-build-"+build+"-Atualizacao"+(zipPackage?".zip":".exe"));
+   // Aproveitar versoes baixadas antes de unificar as pastas, sem redownload.
+   if(!File.Exists(installer)){
+    string legacy=Path.Combine(dataDir,"Atualizacoes",Path.GetFileName(installer));
+    if(!string.Equals(legacy,installer,StringComparison.OrdinalIgnoreCase)&&File.Exists(legacy)){
+     using(var old=File.OpenRead(legacy))using(var sha=SHA256.Create()){
+      string hash=BitConverter.ToString(sha.ComputeHash(old)).Replace("-","").ToLowerInvariant();
+      if(string.Equals(hash,digest.Substring(7),StringComparison.OrdinalIgnoreCase))
+       File.Copy(legacy,installer,false);
+     }
+    }
+   }
    bool valid=false;
    if(File.Exists(installer)){
     using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())
