@@ -40,6 +40,7 @@ public static class BackupNativeDll {
   $test.Close();$test.Dispose();$test=$null
   # Gerar tambem um backup completo com banco consistente e configuracoes.
   # A pasta de backup/atualizacoes nao pode ser incluída dentro dela propria.
+  Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $archivePath=Join-Path $TargetDirectory ("armazem-gratidao-completo-"+(Get-Date -Format "yyyyMMdd-HHmmssfff")+"-"+[guid]::NewGuid().ToString("N").Substring(0,6)+".zip")
   $archive=$null
