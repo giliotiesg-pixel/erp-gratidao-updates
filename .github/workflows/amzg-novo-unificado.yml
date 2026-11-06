@@ -1,0 +1,137 @@
+name: AMZG Novo - instalador unico e reparo
+on:
+  pull_request:
+    paths:
+      - 'novo-win8/**'
+      - 'GERAR-AMZG-CI.bat'
+      - '.github/workflows/amzg-novo-unificado.yml'
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Numero da build a compilar'
+        required: true
+        default: '583'
+      publicar_release:
+        description: 'Publicar somente depois de testar o pacote em Windows'
+        type: boolean
+        default: false
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      AMZG_BUILD: ${{ inputs.build || '583' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - uses: NuGet/setup-nuget@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preparar Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+      - name: Compilar PDV, atualizador, instalador e reparador integrado
+        shell: powershell
+        run: .\novo-win8\build-unificado.ps1 -Build ([int]$env:AMZG_BUILD)
+      - name: Validar integridade do instalador, manifesto e pacote
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $manifest=Get-Content dist/manifesto-proposto.json -Raw | ConvertFrom-Json
+          if($manifest.build -ne [int]$env:AMZG_BUILD){throw 'Build do manifesto divergente.'}
+          $actual=(Get-FileHash dist/Armazem-Gratidao-Atualizacao.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($actual -ne $manifest.sha256){throw 'SHA-256 divergente. Publicacao proibida.'}
+          if(!(Test-Path dist/Armazem-Gratidao-Novo-Setup.exe)){throw 'Setup unico ausente.'}
+          if((Get-Item dist/Armazem-Gratidao-Novo-Setup.exe).Length -lt 100000){throw 'Setup suspeitamente pequeno.'}
+          Write-Host "Pacote compilado e manifesto verificados. Validacao funcional em Windows ainda necessaria."
+      - name: Teste automatico de instalacao, reparo e backup SQLite descartavel
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $testDir=Join-Path $env:RUNNER_TEMP 'AMZG-Instalacao-Temp'
+          $setup=(Resolve-Path 'dist/Armazem-Gratidao-Novo-Setup.exe').Path
+          $args=@('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',("/DIR=`""+$testDir+"`""))
+          $install=Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if($install.ExitCode -ne 0){throw "Instalacao falhou: $($install.ExitCode)"}
+          foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe',
+                             'Reparar-Armazem-Gratidao.exe','System.Data.SQLite.dll')){
+            if(!(Test-Path (Join-Path $testDir $name))){throw "Arquivo instalado ausente: $name"}
+          }
+          $dataDir=Join-Path $env:LOCALAPPDATA 'ArmazemGratidaoNovo'
+          New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+          $db=Join-Path $dataDir 'armazem-gratidao.db'
+          $pyFile=Join-Path $env:RUNNER_TEMP 'amzg-teste-sqlite.py'
+          $py=@'
+          import sqlite3
+          import sys
+          action, path = sys.argv[1], sys.argv[2]
+          c=sqlite3.connect(path)
+          if action == 'create':
+              c.execute('create table teste_integridade (valor text)')
+              c.execute('insert into teste_integridade values (?)',('preservado',))
+              c.commit()
+          elif action == 'check':
+              assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
+              assert c.execute('select valor from teste_integridade').fetchone()[0]=='preservado'
+          else:
+              raise ValueError('operacao invalida')
+          c.close()
+          '@
+          [System.IO.File]::WriteAllText($pyFile,$py,(New-Object System.Text.UTF8Encoding($false)))
+          python $pyFile create $db
+          if($LASTEXITCODE -ne 0){throw 'Falhou criacao do banco descartavel'}
+          $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
+          $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
+          if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
+          $backups=Join-Path $testDir 'Arquivos/Backups'
+          $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
+          if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
+          python $pyFile check $db
+          if($LASTEXITCODE -ne 0){throw 'Banco alterado ou corrompido apos reparo'}
+          Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
+          path: |
+            dist/Armazem-Gratidao-Novo-Setup.exe
+            dist/Armazem-Gratidao-Atualizacao.zip
+            dist/manifesto-proposto.json
+            dist/VALIDACAO-SHA256.txt
+          retention-days: 30
+
+  publicar_release:
+    needs: compilar
+    if: github.event_name == 'workflow_dispatch' && inputs.publicar_release == true && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AMZG_BUILD: ${{ inputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
+          path: dist
+      - name: Publicar somente os arquivos verificados no release
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
+          gh release create $tag "dist/Armazem-Gratidao-Novo-Setup.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao Build $env:AMZG_BUILD" --notes "Instalador unico com reparo local, atualizador visual e backup obrigatorio."
+          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
+          gh release view $tag --json assets | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
+          $manifest=(Get-Content dist/manifesto-proposto.json -Raw)
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifest,(New-Object System.Text.UTF8Encoding($false)))
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add atualizacao-novo-win8-pacote.json
+          git commit -m "Atualizar manifesto oficial para build $env:AMZG_BUILD"
+          if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
+          git push origin HEAD:main
+          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar manifesto.'}

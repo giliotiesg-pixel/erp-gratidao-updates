@@ -1,12 +1,15 @@
 #define MyAppName "Armazem Gratidao Novo"
-#define MyAppVersion "0.1.0"
+#ifndef BuildNumber
+#define BuildNumber "583"
+#endif
+#define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
 AppId={{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName=C:\ERP-Gratidao
 DefaultGroupName={#MyAppName}
-OutputDir=installer
+OutputDir=..\dist
 OutputBaseFilename=Armazem-Gratidao-Novo-Setup
 AppPublisher=Armazem Gratidao
 AppPublisherURL=https://github.com/giliotiesg-pixel/erp-gratidao-updates
@@ -22,6 +25,13 @@ SolidCompression=yes
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
+[Dirs]
+; Uma unica pasta de manutencao. Dados de vendas continuam no perfil atual.
+Name: "{app}\Arquivos"
+Name: "{app}\Arquivos\Atualizacoes"; Permissions: users-modify
+Name: "{app}\Arquivos\Backups"; Permissions: users-modify
+Name: "{app}\Arquivos\Logs"; Permissions: users-modify
+Name: "{app}\Arquivos\Rollback"; Permissions: users-modify
 [Files]
 Source: "bin\x64\Release\ArmazemGratidaoNovo.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bin\x64\Release\ArmazemGratidaoNovo.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -37,7 +47,8 @@ Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{tmp}"; Flags: dontc
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
-Name: "{group}\Reparar Armazem Gratidao"; Filename: "{app}\Reparar-Armazem-Gratidao.exe"; Parameters: "/REPARAR"; Comment: "Reinstala apenas os arquivos do programa, preservando seus dados e criando backup"
+Name: "{group}\Reparar Armazem Gratidao"; Filename: "{app}\Reparar-Armazem-Gratidao.exe"; Comment: "Repara os arquivos do programa, com backup e sem apagar os dados"
+Name: "{group}\Arquivos e manutencao"; Filename: "{app}\Arquivos"
 [Run]
 Filename: "{app}\ArmazemGratidaoNovo.exe"; Description: "Abrir Armazem Gratidao"; Flags: nowait postinstall skipifsilent
 [Code]
@@ -52,10 +63,16 @@ begin
   DataDir := ExpandConstant('{localappdata}\ArmazemGratidaoNovo');
   DbFile := DataDir + '\armazem-gratidao.db';
   if not FileExists(DbFile) then
+  begin
+    { Instalacao nova pode nao ter banco; reparo de uma instalacao existente nao. }
+    if FileExists(ExpandConstant('{app}\ArmazemGratidaoNovo.exe')) then
+      Result := 'Reparo bloqueado: o banco do usuario atual nao foi localizado.'+#13#10+
+        'Confira o perfil do Windows e o banco antes de modificar o programa.';
     Exit;
+  end;
 
   { Usar a mesma pasta de backup definida no menu do Armazem. }
-  BackupDir := DataDir + '\Backups';
+  BackupDir := ExpandConstant('{app}\Arquivos\Backups');
   BackupConfig := DataDir + '\backup-location.txt';
   if FileExists(BackupConfig) then
   begin
