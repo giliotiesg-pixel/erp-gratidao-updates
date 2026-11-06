@@ -29,6 +29,14 @@ namespace ArmazemGratidao {
   readonly NumericUpDown qty=new NumericUpDown {Minimum=0.001M,Maximum=999999,DecimalPlaces=3,Increment=1M,Value=1,Width=95};
   readonly ComboBox saleUnit=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=80};
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
+  // Catálogo do estoque exibido dentro do PDV, separado do carrinho de vendas.
+  readonly DataGridView stockView=new DataGridView{Dock=DockStyle.Fill,Visible=false,ReadOnly=true,
+   AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+   MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,
+   ScrollBars=ScrollBars.Both,RowHeadersVisible=false,BackgroundColor=Color.White};
+  readonly TextBox stockSearch=new TextBox{Width=185,Font=new Font("Segoe UI",10)};
+  readonly Label stockHint=new Label{AutoSize=true,Padding=new Padding(8,8,0,0),ForeColor=Color.FromArgb(22,75,160)};
+  bool stockViewOpen=false;
   readonly Label total=new Label {AutoSize=true,Font=new Font("Segoe UI",23,FontStyle.Bold),ForeColor=Color.FromArgb(175,25,45)};
   readonly Label discountLabel=new Label {AutoSize=true,Padding=new Padding(0,9,0,0)};
   readonly ComboBox discountMode=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=58};
@@ -63,10 +71,16 @@ namespace ArmazemGratidao {
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    if(manualEntry){
-    var inventory=new Button{Text="ABRIR TODO O ESTOQUE / CORRIGIR VALORES",Width=335,Height=36,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
-    inventory.Click+=(sender,args)=>OpenFullInventoryForManualSales();
+    var inventory=new Button{Text="TODOS OS PRODUTOS NO PDV",Width=235,Height=36,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    inventory.Click+=(s,e)=>ShowStockInPdv();
     rapidInventoryBar.Controls.Add(inventory);
-    rapidInventoryBar.Controls.Add(new Label{Text="Quantidade real  |  Custo  |  Preco de venda",AutoSize=true,Padding=new Padding(12,8,0,0),Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156)});
+    var back=new Button{Text="VOLTAR AOS ITENS DA VENDA",Width=228,Height=36,BackColor=Color.FromArgb(175,35,48),ForeColor=Color.White};
+    back.Click+=(s,e)=>ShowSaleCart();
+    rapidInventoryBar.Controls.Add(back);
+    rapidInventoryBar.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(7,10,0,0)});
+    stockSearch.TextChanged+=(s,e)=>{if(stockViewOpen)LoadStockInPdv();};
+    rapidInventoryBar.Controls.Add(stockSearch);
+    rapidInventoryBar.Controls.Add(stockHint);
    }
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
    code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
@@ -89,7 +103,7 @@ namespace ArmazemGratidao {
    customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=38,Width=165,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
-   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>ChooseEditAction();footer.Controls.Add(edit);
+   var edit=new Button {Text="EDITAR QTD. / PREÇO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};edit.Click+=(s,e)=>{if(manualEntry&&stockViewOpen)EditSelectedStockInPdv();else ChooseEditAction();};footer.Controls.Add(edit);
    var remove=new Button {Text="REMOVER ITEM",Width=125,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="EXCLUIR TODOS",Width=135,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
    footer.SetFlowBreak(clear,true);
@@ -116,7 +130,19 @@ namespace ArmazemGratidao {
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(40,100,170);grid.DefaultCellStyle.SelectionForeColor=Color.White;
    grid.CellFormatting+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&e.Value!=null){string name=grid.Columns[e.ColumnIndex].Name.ToLowerInvariant();if(name.Contains("descri")||name.Contains("nome")||name.Contains("name")){e.CellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;e.CellStyle.Padding=new Padding(7,4,7,4);}}};
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){if(column.Name.ToLowerInvariant().Contains("descri")||column.Name.ToLowerInvariant().Contains("nome")||column.Name.ToLowerInvariant().Contains("name")){column.MinimumWidth=260;column.FillWeight=240;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;};
-   Controls.Add(grid);Controls.Add(footer);Controls.Add(header);
+   var listArea=new Panel{Dock=DockStyle.Fill};
+   listArea.Controls.Add(grid);
+   listArea.Controls.Add(stockView);
+   stockView.Font=new Font("Segoe UI",10);
+   stockView.RowTemplate.Height=35;
+   stockView.EnableHeadersVisualStyles=false;
+   stockView.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+   stockView.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   stockView.ColumnHeadersHeight=38;
+   stockView.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
+   stockView.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)EditSelectedStockInPdv();};
+   stockView.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;EditSelectedStockInPdv();}};
+   Controls.Add(listArea);Controls.Add(footer);Controls.Add(header);
    if(rapidInventoryBar!=null)Controls.Add(rapidInventoryBar);
    suggestions.Parent=this;
    if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
@@ -419,6 +445,116 @@ namespace ArmazemGratidao {
     dialog.Shown+=(sender,args)=>{amount.Focus();amount.Select(0,amount.Text.Length);};
     return dialog.ShowDialog(this)==DialogResult.OK?(decimal?)amount.Value:null;
    }
+  }
+  // Uma lista completa, sem paginação nem janela adicional. Consultar não movimenta o banco.
+  void ShowStockInPdv(){
+   if(!manualEntry)return;
+   lookupDelay.Stop();suggestions.Visible=false;stockViewOpen=true;
+   grid.Visible=false;stockView.Visible=true;LoadStockInPdv();stockSearch.Focus();
+  }
+  void ShowSaleCart(){
+   if(!manualEntry)return;
+   stockViewOpen=false;stockView.Visible=false;grid.Visible=true;code.Focus();
+  }
+  long StockSelectionId(){
+   if(stockView.CurrentRow==null||!stockView.Columns.Contains("ID"))return 0L;
+   var value=stockView.CurrentRow.Cells["ID"].Value;
+   return value==null||value==DBNull.Value?0L:Convert.ToInt64(value);
+  }
+  void LoadStockInPdv(){
+   if(!manualEntry||!stockViewOpen)return;
+   try{
+    long beforeSelection=StockSelectionId();
+    var table=new DataTable();
+    table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");
+    table.Columns.Add("Código de barras");table.Columns.Add("Descrição");
+    table.Columns.Add("Em estoque",typeof(decimal));table.Columns.Add("Preço",typeof(decimal));
+    table.Columns.Add("Custo",typeof(decimal));table.Columns.Add("Qtd. lançada",typeof(decimal));
+    string term=stockSearch.Text.Trim();
+    using(var cn=Open())
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,stock,price,cost FROM products WHERE (@term='' OR name LIKE @search OR barcode LIKE @search OR internal_code LIKE @search) ORDER BY name COLLATE NOCASE,id",cn)){
+     cmd.Parameters.AddWithValue("@term",term);
+     cmd.Parameters.AddWithValue("@search","%"+term+"%");
+     using(var rd=cmd.ExecuteReader())while(rd.Read()){
+      long id=Convert.ToInt64(rd["id"]);
+      table.Rows.Add(id,Convert.ToString(rd["internal_code"]),Convert.ToString(rd["barcode"]),
+       Convert.ToString(rd["name"]),Dec(rd["stock"]),Dec(rd["price"]),Dec(rd["cost"]),
+       cart.Where(x=>x.Id==id).Sum(x=>x.Qty));
+     }
+    }
+    stockView.DataSource=table;
+    if(stockView.Columns.Contains("ID"))stockView.Columns["ID"].Visible=false;
+    if(stockView.Columns.Contains("Descrição"))stockView.Columns["Descrição"].MinimumWidth=295;
+    foreach(string column in new[]{"Em estoque","Preço","Custo","Qtd. lançada"})
+     if(stockView.Columns.Contains(column))
+      stockView.Columns[column].DefaultCellStyle.Format=(column=="Em estoque"||column=="Qtd. lançada")?"N3":"N2";
+    stockHint.Text=table.Rows.Count+" produtos | Editar Qtd. / Preço";
+    if(beforeSelection>0){
+     foreach(DataGridViewRow row in stockView.Rows)if(Convert.ToInt64(row.Cells["ID"].Value)==beforeSelection){
+      stockView.CurrentCell=row.Cells["Descrição"];break;
+     }
+    }
+   }catch(Exception ex){
+    stockHint.Text="Erro ao carregar";
+    MessageBox.Show("Erro ao listar produtos no PDV: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);
+   }
+  }
+  // Inclui ou altera somente o produto escolhido. Nenhuma venda é gravada ao listar o catálogo.
+  void EditSelectedStockInPdv(){
+   if(!manualEntry||!stockViewOpen)return;
+   long id=StockSelectionId();
+   if(id<=0){MessageBox.Show("Selecione um produto no estoque.");return;}
+   try{
+    Item selected=null;decimal available=0;
+    using(var cn=Open())
+    using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,stock,price,cost FROM products WHERE id=@id",cn)){
+     cmd.Parameters.AddWithValue("@id",id);
+     using(var rd=cmd.ExecuteReader())if(rd.Read()){
+      selected=new Item{Id=id,Barcode=Convert.ToString(rd["barcode"]),InternalCode=Convert.ToString(rd["internal_code"]),
+       Name=Convert.ToString(rd["name"]),Price=Dec(rd["price"]),Cost=Dec(rd["cost"])};
+      available=Dec(rd["stock"]);
+     }
+    }
+    if(selected==null){MessageBox.Show("Produto não encontrado.");return;}
+    string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
+    Item existing=cart.FirstOrDefault(x=>x.Id==id&&x.Unit==unit);
+    using(var dialog=new Form{Text="Lançamento rápido | Quantidade e preço",
+     Width=510,Height=300,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,
+     MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+     var name=new Label{Text=selected.Name,Left=16,Top=16,Width=465,Height=45,Font=new Font("Segoe UI",11,FontStyle.Bold)};
+     var quantity=new NumericUpDown{Left=175,Top=75,Width=200,Minimum=unit=="KG"?0.001m:1m,
+      Maximum=999999,DecimalPlaces=unit=="KG"?3:0,Increment=unit=="KG"?0.001m:1m,Value=existing==null?1m:existing.Qty};
+     var price=new NumericUpDown{Left=175,Top=118,Width=200,Minimum=0,Maximum=99999999,
+      DecimalPlaces=2,Value=existing==null?selected.Price:existing.Price};
+     var preview=new Label{Left=17,Top=166,Width=460,Height=28,Font=new Font("Segoe UI",11,FontStyle.Bold),
+      ForeColor=Color.FromArgb(22,75,160)};
+     Action refresh=()=>preview.Text="Subtotal: R$ "+Math.Round(quantity.Value*price.Value,2).ToString("N2");
+     quantity.ValueChanged+=(s,e)=>refresh();price.ValueChanged+=(s,e)=>refresh();refresh();
+     var ok=new Button{Text=existing==null?"INCLUIR NA VENDA":"SALVAR ALTERAÇÕES",Left=175,Top=209,Width=200,Height=36,
+      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Left=385,Top=209,Width=100,Height=36};
+     ok.Click+=(s,e)=>{if(price.Value<=0){MessageBox.Show("Preço deve ser maior que zero.");return;}dialog.DialogResult=DialogResult.OK;};
+     cancel.Click+=(s,e)=>dialog.DialogResult=DialogResult.Cancel;
+     dialog.Controls.AddRange(new Control[]{name,
+      new Label{Text="Quantidade da venda:",Left=16,Top=80,Width=155},
+      new Label{Text="Preço desta venda:",Left=16,Top=123,Width=155},
+      quantity,price,preview,ok,cancel});
+     dialog.AcceptButton=ok;dialog.CancelButton=cancel;
+     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+     decimal required=quantity.Value+cart.Where(x=>x.Id==id&&!object.ReferenceEquals(x,existing)).Sum(x=>x.Qty);
+     if(available<required){
+      if(!AdjustEmptyStock(selected,available,required))return;
+      using(var cn=Open())
+      using(var cmd=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",cn)){
+       cmd.Parameters.AddWithValue("@id",id);available=Dec(cmd.ExecuteScalar());
+      }
+      if(available<required){MessageBox.Show("Estoque insuficiente. Item não incluído.");return;}
+     }
+     if(existing==null){selected.Qty=quantity.Value;selected.Price=price.Value;selected.Unit=unit;cart.Add(selected);}
+     else{existing.Qty=quantity.Value;existing.Price=price.Value;}
+     Render();LoadStockInPdv();stockView.Focus();
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível editar o item: "+ex.Message,"Lançamento rápido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   // Abrir o mesmo cadastro de produtos do Armazem, com estoque inteiro e edicao auditada.
   // Nao recria cadastros nem altera historico de vendas anotadas.
