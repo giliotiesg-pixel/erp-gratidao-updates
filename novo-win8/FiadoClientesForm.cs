@@ -1151,12 +1151,59 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@client",customer.Trim());
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
      }
-     using(var dlg=new Form{Text="Historico de credito - "+customer,Width=860,Height=530,StartPosition=FormStartPosition.CenterParent}){
-      dlg.Controls.Add(new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill});
+     using(var dlg=new Form{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White};
+      grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
+      grid.Columns["Detalhes"].FillWeight=180;
+      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Selecione um abatimento e clique em Ver produtos da venda, ou dê dois cliques na linha.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,Padding=new Padding(8),BackColor=Color.FromArgb(218,233,250)};
+      var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+      Action inspect=()=>{
+       if(grid.CurrentRow==null)return;
+       object sale=grid.CurrentRow.Cells["Venda"].Value;
+       if(sale==null||sale==DBNull.Value||string.IsNullOrWhiteSpace(Convert.ToString(sale))){MessageBox.Show("Este lancamento nao possui venda vinculada. O historico original foi preservado.");return;}
+       long saleId;
+       if(!long.TryParse(Convert.ToString(sale),out saleId)){MessageBox.Show("Numero da venda invalido.");return;}
+       ShowCreditSaleItems(saleId,Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value),Convert.ToDecimal(grid.CurrentRow.Cells["Valor"].Value));
+      };
+      show.Click+=(sender,args)=>inspect();
+      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)inspect();};
+      bar.Controls.Add(show);
+      dlg.Controls.Add(grid);dlg.Controls.Add(hint);dlg.Controls.Add(bar);
       dlg.ShowDialog(this);
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+  void ShowCreditSaleItems(long saleId,string operation,decimal entryAmount){
+   try{
+    using(var cn=Open(true)){
+     string saleCustomer="";
+     decimal total=0m;
+     using(var cmd=new SQLiteCommand("SELECT customer_name,COALESCE(gross_total,0) FROM sales WHERE id=@sale LIMIT 1",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);
+      using(var reader=cmd.ExecuteReader()){
+       if(!reader.Read()){MessageBox.Show("A venda "+saleId+" nao foi localizada. O abatimento continua registrado no historico.");return;}
+       saleCustomer=Convert.ToString(reader[0]);total=Convert.ToDecimal(reader[1]);
+      }
+     }
+     if(!string.Equals((saleCustomer??"").Trim(),(customer??"").Trim(),StringComparison.OrdinalIgnoreCase)){
+      MessageBox.Show("A venda vinculada pertence a outro cadastro de cliente. Consulte a auditoria antes de associar produtos.");return;
+     }
+     var items=new DataTable();
+     using(var cmd=new SQLiteCommand("SELECT name AS Produto,quantity AS Quantidade,unit_price AS [Preco unitario],total AS [Total] FROM sale_items WHERE sale_id=@sale ORDER BY id",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);
+      using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(items);
+     }
+     using(var dlg=new Form{Text="Produtos da venda "+saleId+" - "+customer,Width=780,Height=470,MinimumSize=new Size(600,350),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var summary=new Label{Dock=DockStyle.Top,Height=78,Padding=new Padding(12),Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156),Text="Venda "+saleId+"  |  Total: R$ "+total.ToString("N2")+"\nOperacao: "+operation+"  |  Valor do movimento: R$ "+entryAmount.ToString("N2")};
+      var table=new DataGridView{Dock=DockStyle.Fill,DataSource=items,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+      table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+      var note=new Label{Dock=DockStyle.Bottom,Height=42,Padding=new Padding(12,8,8,0),Text=items.Rows.Count==0?"Nenhum item encontrado para esta venda.":"Produtos da venda vinculada ao movimento de credito. Consulta sem alterar valores.",ForeColor=Color.FromArgb(21,75,156)};
+      dlg.Controls.Add(table);dlg.Controls.Add(summary);dlg.Controls.Add(note);dlg.ShowDialog(this);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel consultar os produtos: "+ex.Message);}
   }
 
   // Limite de novas compras fiadas por periodo (semanal ou mensal), separado do saldo pago antecipadamente.
