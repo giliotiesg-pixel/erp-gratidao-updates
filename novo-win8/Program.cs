@@ -1332,23 +1332,26 @@ Panel BuildEmbeddedCalculator(){
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
-   var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White,
-     Padding=new Padding(14,6,8,4)};
-   var pageStart=new Button{Name="amzgStartButton",Text="⊞  Iniciar",Dock=DockStyle.Left,Width=112,Height=42,
-    Margin=new Padding(0),BackColor=Color.FromArgb(25,75,149),
-    ForeColor=Color.White,FlatStyle=FlatStyle.Flat,UseMnemonic=false,
+   var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White};
+   var pageStart=new Button{Name="amzgStartButton",Text="⊞  Iniciar",
+    Left=8,Top=9,Width=112,Height=40,Anchor=AnchorStyles.Left|AnchorStyles.Top,
+    BackColor=Color.FromArgb(25,75,149),ForeColor=Color.White,
+    FlatStyle=FlatStyle.Flat,UseMnemonic=false,
     Font=new Font("Segoe UI",10,FontStyle.Bold),Cursor=Cursors.Hand};
    pageStart.FlatAppearance.BorderSize=0;
    pageStart.Click+=(sender,args)=>ToggleStartMenu();
-   heading.Controls.Add(pageStart);
-   heading.Controls.Add(new Label{Dock=DockStyle.Top,Height=28,
-    Padding=new Padding(10,0,0,0),
+   var pageTitle=new Label{Left=133,Top=5,Width=900,Height=27,
     Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   BUILD "+InstalledBuild,
     Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
-    TextAlign=ContentAlignment.MiddleLeft});
-   heading.Controls.Add(new Label{Dock=DockStyle.Bottom,Height=18,
+    TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
+   var pageTip=new Label{Left=134,Top=34,Width=870,Height=18,
     Text="Clique em Iniciar para recolher os atalhos. Os módulos continuam organizados por seção.",
-    Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(90,103,124)});
+    Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(90,103,124),AutoEllipsis=true};
+   heading.Controls.Add(pageStart);heading.Controls.Add(pageTitle);heading.Controls.Add(pageTip);
+   heading.Resize+=(sender,args)=>{
+    int available=Math.Max(160,heading.ClientSize.Width-148);
+    pageTitle.Width=available;pageTip.Width=available;
+   };
    var area=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
 
    var start=new Panel{Name="amzgStartPanel",Dock=DockStyle.Left,Width=248,
