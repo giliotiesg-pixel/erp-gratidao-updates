@@ -34,7 +34,11 @@ namespace ArmazemGratidao {
     stockSearchRow.Controls.Add(new Label{Text="Buscar produto:",AutoSize=true,Padding=new Padding(3,9,1,0),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10,FontStyle.Bold)});
     stockSearch.Width=310;
     stockSearchRow.Controls.Add(stockSearch);
-    stockSearch.TextChanged+=(s,e)=>LoadStock();
+    // Evitar consulta SQLite a cada caractere: só pesquisar após pausa curta.
+    var stockSearchDelay=new System.Windows.Forms.Timer{Interval=280};
+    stockSearchDelay.Tick+=(s,e)=>{stockSearchDelay.Stop();if(!IsDisposed)LoadStock();};
+    stockSearch.TextChanged+=(s,e)=>{stockSearchDelay.Stop();stockSearchDelay.Start();};
+    FormClosed+=(s,e)=>{stockSearchDelay.Stop();stockSearchDelay.Dispose();};
     Func<string,int,EventHandler,Button> stockButton=(title,width,action)=>{
      var button=new Button{Text=title,Width=width,Height=32,Margin=new Padding(3,2,3,2),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
      button.FlatAppearance.BorderSize=0;button.Click+=action;return button;
