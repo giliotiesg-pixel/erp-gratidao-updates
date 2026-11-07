@@ -96,7 +96,7 @@ namespace ArmazemGratidao {
    int row=0;
 
    var branding=new Panel{Name="amzgPdvBrand",Dock=DockStyle.Fill,
-    BackColor=DeepNavy,Margin=new Padding(-12,0,-12,0)};
+    BackColor=DeepNavy,Margin=new Padding(0)};
    branding.Paint+=(sender,args)=>{
     using(var brush=new LinearGradientBrush(branding.ClientRectangle,
       Color.FromArgb(14,68,157),Color.FromArgb(9,43,102),0f))
@@ -240,10 +240,15 @@ namespace ArmazemGratidao {
     BackColor=Surface,Margin=Padding.Empty,Padding=new Padding(2,1,1,1)};
    side.Controls.Add(buttons);
    ButtonTheme(finish,"▣  Finalizar Venda",Navy,Color.White,51);
+   finish.Name="amzgPdvFinish";
    ButtonTheme(edit,"✎  Editar Qtd./Preço",Color.FromArgb(223,234,250),DeepNavy,44);
+   edit.Name="amzgPdvEdit";
    ButtonTheme(chooseCustomer,"♙  Cliente / Cadastrar",Color.FromArgb(223,234,250),DeepNavy,44);
+   chooseCustomer.Name="amzgPdvChooseCustomer";
    ButtonTheme(remove,"▤  Remover Item",Color.FromArgb(253,234,238),Red,44);
+   remove.Name="amzgPdvRemove";
    ButtonTheme(clear,"▤  Excluir Todos",Color.FromArgb(224,235,249),DeepNavy,38);
+   clear.Name="amzgPdvClear";
    foreach(Button btn in new[]{finish,edit,chooseCustomer,remove,clear}){
     btn.Dock=DockStyle.None;
     btn.Margin=new Padding(3,3,3,3);
