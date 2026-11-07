@@ -353,7 +353,7 @@ namespace ArmazemGratidao {
    }
   }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
-  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.FromArgb(15,61,128)};
   readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
@@ -365,16 +365,17 @@ namespace ArmazemGratidao {
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
 
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
-   status.BackColor=Color.FromArgb(234,238,247);status.ForeColor=Color.FromArgb(30,40,55);status.Padding=new Padding(12,0,0,0);
+   status.BackColor=Color.FromArgb(14,54,116);status.ForeColor=Color.White;status.Padding=new Padding(12,0,0,0);
    menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
    menuToggle.Text="⊞  Iniciar";
+   menuToggle.BackColor=Color.FromArgb(200,34,54);
    menuToggle.Click+=(sender,args)=>ToggleStartMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    // Atualização sempre acessível no cabeçalho, independentemente do módulo aberto.
    var updateHeader=new Button{Text="Verificar Atualização",Left=181,Top=13,Width=177,Height=40,
-    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(62,76,99),ForeColor=Color.White,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(35,84,154),ForeColor=Color.White,
     Font=new Font("Segoe UI",9.5f,FontStyle.Bold)};
    updateHeader.FlatAppearance.BorderSize=0;
    updateHeader.Click+=async (sender,args)=>await CheckUpdates();
@@ -395,7 +396,7 @@ namespace ArmazemGratidao {
    calculatorHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(200,52,79);
    calculatorHeader.Click+=(sender,args)=>{CloseStartMenu();ShowCalculator();};
    RoundHomeControl(calculatorHeader,11);header.Controls.Add(calculatorHeader);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(180,35,50),
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.White,
     Font=new Font("Segoe UI",15,FontStyle.Bold),AutoSize=true,Left=642,Top=17};
    header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
@@ -1230,47 +1231,252 @@ namespace ArmazemGratidao {
    return list;
   }
 
-  // Area principal livre: menu Iniciar e calculadora sao janelas independentes.
-  // Marca d'agua vetorial no fundo, sem criar imagens ou ler banco de dados.
+  // Inicio inspirado no painel aprovado: cards, botoes compactos e marca d'agua leve.
+  // O menu Iniciar permanece FLUTUANTE e a calculadora so aparece se solicitada.
+  // Usa os mesmos handlers dos modulos, sem escrever nem migrar dados.
   void ShowMainMenu(){
    CloseStartMenu();
    grid.Visible=false;
    var old=Controls["homePanel"];
    if(old!=null){Controls.Remove(old);old.Dispose();}
-   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,
+   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,
+    BackColor=Color.FromArgb(244,248,254)};
+   var canvas=new BrandedHomePanel{Name="amzgDashboardCanvas",
+    Left=0,Top=0,Width=1050,Height=680,
     BackColor=Color.FromArgb(246,249,253)};
-   var welcome=new BrandedHomePanel{Dock=DockStyle.Fill,
-    BackColor=Color.FromArgb(246,249,253),Padding=new Padding(23,23,18,18)};
-   var title=new Label{Dock=DockStyle.Top,Height=59,
-    Text="ARMAZÉM GRATIDÃO",
-    ForeColor=Color.FromArgb(32,82,155),
-    Font=new Font("Segoe UI",18,FontStyle.Bold),
-    TextAlign=ContentAlignment.MiddleLeft};
-   var tip=new Label{Dock=DockStyle.Top,Height=112,
-    Text="Use  ⊞  INICIAR  para abrir os módulos do programa.\n"+
-         "Clique em  ▦  CALCULADORA  no topo para abrir a janela móvel.\n"+
-         "O menu se fecha ao selecionar um módulo ou clicar fora.",
-    Font=new Font("Segoe UI",11,FontStyle.Regular),
-    ForeColor=Color.FromArgb(65,78,99),
-    Padding=new Padding(3,14,6,0),
-    TextAlign=ContentAlignment.MiddleLeft};
-   var version=new Label{Dock=DockStyle.Bottom,Height=47,
-    Text="Versão "+InstalledVersion+"  |  Build "+InstalledBuild+
-         "    •    Menu flutuante com ícones",
-    Font=new Font("Segoe UI",9,FontStyle.Bold),
-    ForeColor=Color.FromArgb(155,39,58),
-    TextAlign=ContentAlignment.MiddleLeft};
-   welcome.Controls.Add(tip);
-   welcome.Controls.Add(title);
-   welcome.Controls.Add(version);
-   page.Controls.Add(welcome);
-   // Sem calculadora fixa: toda a area central e utilizada pelo inicio.
+   page.Controls.Add(canvas);
+
+   var stripe=new Panel{Left=27,Top=26,Width=5,Height=109,
+    BackColor=Color.FromArgb(214,39,58)};
+   canvas.Controls.Add(stripe);
+   var intro=new Label{Text="Bem-vindo ao",Left=48,Top=22,Width=430,Height=34,
+    Font=new Font("Segoe UI",17f),ForeColor=Color.FromArgb(35,69,113)};
+   canvas.Controls.Add(intro);
+   var brandFirst=new Label{Text="Armazém",Left=47,Top=54,Width=242,Height=51,
+    Font=new Font("Segoe UI",27f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(16,57,117)};
+   var brandSecond=new Label{Text="Gratidão",Left=251,Top=54,Width=265,Height=51,
+    Font=new Font("Segoe UI",27f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(204,31,53)};
+   canvas.Controls.Add(brandFirst);canvas.Controls.Add(brandSecond);
+   var subtitle=new Label{Text="Mercearia  •  Bebidas  •  Gelo  •  PDV",
+    Left=49,Top=110,Width=480,Height=26,Font=new Font("Segoe UI",10f),
+    ForeColor=Color.FromArgb(80,100,132)};
+   canvas.Controls.Add(subtitle);
+
+   var start=new Button{Name="amzgDashboardStart",Text="⊞  Iniciar   ▾",
+    Left=29,Top=155,Width=180,Height=43,FlatStyle=FlatStyle.Flat,
+    BackColor=Color.FromArgb(207,32,52),ForeColor=Color.White,
+    Font=new Font("Segoe UI",12f,FontStyle.Bold),Cursor=Cursors.Hand};
+   start.FlatAppearance.BorderSize=0;
+   start.FlatAppearance.MouseOverBackColor=Color.FromArgb(233,48,69);
+   start.Click+=(sender,args)=>ToggleStartMenu();
+   RoundHomeControl(start,12);canvas.Controls.Add(start);
+   var openCalcNote=new Label{Text="Calculadora oculta: use o botão no topo para abrir.",
+    Left=222,Top=164,Width=490,Height=28,
+    Font=new Font("Segoe UI",9f),ForeColor=Color.FromArgb(93,110,136)};
+   canvas.Controls.Add(openCalcNote);
+
+   var metrics=new Panel{Name="amzgDashboardMetrics",Left=24,Top=226,
+    Width=1000,Height=92,BackColor=Color.Transparent};
+   canvas.Controls.Add(metrics);
+   string[] titles={"TOTAL HOJE","PRODUTOS","TOTAL MÊS","RANKING DO MÊS"};
+   string[] placeholders={"—","—","—","—"};
+   var metricLabels=new Label[4];
+   var metricCards=new Panel[4];
+   Color[] accents={
+    Color.FromArgb(213,41,59),Color.FromArgb(24,100,188),
+    Color.FromArgb(24,130,120),Color.FromArgb(103,70,184)};
+   for(int i=0;i<4;i++){
+    var card=new Panel{Name="amzgDashboardMetric"+i,BackColor=Color.White,
+     Height=87,Width=228,Top=1};
+    RoundHomeControl(card,13);
+    var bar=new Panel{Left=0,Top=0,Width=7,Height=87,BackColor=accents[i]};
+    var heading=new Label{Text=titles[i],Left=19,Top=10,Width=195,Height=20,
+     Font=new Font("Segoe UI",9f,FontStyle.Bold),
+     ForeColor=Color.FromArgb(152,36,57),AutoEllipsis=true};
+    var value=new Label{Text=placeholders[i],Left=19,Top=34,Width=195,Height=43,
+     Font=new Font("Segoe UI",i==3?14f:18f,FontStyle.Bold),
+     ForeColor=Color.FromArgb(22,62,120),AutoEllipsis=true};
+    card.Controls.Add(bar);card.Controls.Add(heading);card.Controls.Add(value);
+    metrics.Controls.Add(card);metricCards[i]=card;metricLabels[i]=value;
+   }
+   var quickTitle=new Label{Text="ACESSO RÁPIDO",Left=28,Top=332,
+    Width=450,Height=31,Font=new Font("Segoe UI",14f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(22,64,128)};
+   canvas.Controls.Add(quickTitle);
+   var tiles=new Panel{Name="amzgDashboardTiles",Left=24,Top=374,
+    Width=1000,Height=183,BackColor=Color.Transparent};
+   canvas.Controls.Add(tiles);
+   var shortcuts=new[]{
+    Tuple.Create("PDV","PDV  •  Nova venda"),
+    Tuple.Create("Vendas","Vendas"),
+    Tuple.Create("Produtos","Produtos"),
+    Tuple.Create("Estoque","Estoque"),
+    Tuple.Create("Clientes","Clientes"),
+    Tuple.Create("Fiado","Fiado"),
+    Tuple.Create("Caixa","Caixa"),
+    Tuple.Create("Relatórios","Relatórios"),
+    Tuple.Create("Backup","Backup do banco"),
+    Tuple.Create("Atualização","Verificar atualização")
+   };
+   var menuItems=ModuleActions();
+   var tileButtons=new System.Collections.Generic.List<Button>();
+   for(int i=0;i<shortcuts.Length;i++){
+    var shortcut=shortcuts[i];
+    var item=menuItems.FirstOrDefault(a=>a.Item1==shortcut.Item2);
+    if(item==null)continue;
+    bool red=i==1||i==3||i==5||i==7||i==9;
+    var tile=new Button{Name="amzgDashboardTile"+i,Text=shortcut.Item1,
+     Tag=shortcut.Item2,Height=78,Width=177,FlatStyle=FlatStyle.Flat,
+     BackColor=red?Color.FromArgb(189,32,49):Color.FromArgb(18,70,147),
+     ForeColor=Color.White,Font=new Font("Segoe UI",11f,FontStyle.Bold),
+     Cursor=Cursors.Hand,TextAlign=ContentAlignment.MiddleCenter,
+     ImageAlign=ContentAlignment.MiddleLeft,
+     TextImageRelation=TextImageRelation.ImageBeforeText,
+     UseMnemonic=false,AutoEllipsis=true,Padding=new Padding(9,0,4,0)};
+    tile.FlatAppearance.BorderSize=0;
+    tile.FlatAppearance.MouseOverBackColor=red?
+     Color.FromArgb(218,49,66):Color.FromArgb(30,97,190);
+    tile.Image=HomeWhiteTileIcon(shortcut.Item1);
+    tile.Disposed+=(sender,args)=>{if(tile.Image!=null){tile.Image.Dispose();tile.Image=null;}};
+    tile.Click+=(sender,args)=>{CloseStartMenu();item.Item2(this,EventArgs.Empty);};
+    RoundHomeControl(tile,13);
+    tiles.Controls.Add(tile);tileButtons.Add(tile);
+   }
+
+   var footer=new Panel{Left=27,Top=576,Height=59,Width=990,
+    BackColor=Color.FromArgb(231,239,250)};
+   RoundHomeControl(footer,12);
+   var footerLabel=new Label{Text="Indicadores reais do banco de dados • Nenhuma venda é alterada nesta tela.",
+    Left=15,Top=14,Width=625,Height=30,Font=new Font("Segoe UI",9.3f),
+    ForeColor=Color.FromArgb(51,79,121),TextAlign=ContentAlignment.MiddleLeft};
+   footer.Controls.Add(footerLabel);
+   var refresh=new Button{Name="amzgDashboardRefresh",Text="↻  Atualizar indicadores",
+    Width=219,Height=38,FlatStyle=FlatStyle.Flat,
+    BackColor=Color.FromArgb(23,75,153),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
+    Cursor=Cursors.Hand};
+   refresh.FlatAppearance.BorderSize=0;RoundHomeControl(refresh,10);
+   footer.Controls.Add(refresh);canvas.Controls.Add(footer);
+   var ranking=new Button{Name="amzgDashboardRanking",
+    Text="Ver ranking completo  ›",Left=27,Top=644,Width=237,Height=29,
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(231,239,250),
+    ForeColor=Color.FromArgb(174,35,55),Cursor=Cursors.Hand,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+   ranking.FlatAppearance.BorderSize=0;RoundHomeControl(ranking,8);
+   ranking.Click+=ShowHome;canvas.Controls.Add(ranking);
+
+   bool arranging=false;
+   Action arrange=()=>{
+    if(arranging||page.IsDisposed)return;
+    arranging=true;
+    try{
+     int width=Math.Max(910,page.ClientSize.Width-2);
+     canvas.Width=width;
+     metrics.Width=width-50;
+     int gap=12;
+     int metricWidth=(metrics.Width-3*gap)/4;
+     for(int i=0;i<4;i++){
+      metricCards[i].Left=i*(metricWidth+gap);
+      metricCards[i].Width=metricWidth;
+      foreach(Control child in metricCards[i].Controls)
+       if(child is Label)child.Width=Math.Max(90,metricWidth-30);
+     }
+     tiles.Width=width-50;
+     int tileGap=11;
+     int tileWidth=(tiles.Width-tileGap*4)/5;
+     for(int i=0;i<tileButtons.Count;i++){
+      int col=i%5,row=i/5;
+      tileButtons[i].Left=col*(tileWidth+tileGap);
+      tileButtons[i].Top=row*89;
+      tileButtons[i].Width=tileWidth;
+     }
+     footer.Width=width-54;
+     footerLabel.Width=Math.Max(220,footer.Width-260);
+     refresh.Left=footer.Width-refresh.Width-12;
+     page.AutoScrollMinSize=new Size(width,680);
+    }finally{arranging=false;}
+   };
+   page.Resize+=(sender,args)=>arrange();
    Controls.Add(page);
    page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;
-   status.Text="Menu Iniciar flutuante. Clique em Iniciar para abrir as secoes.";
+   arrange();
+   // Leitura dos indicadores em segundo plano: nao bloquear a abertura do caixa.
+   bool loading=false;
+   Action load=async ()=>{
+    if(loading||page.IsDisposed)return;
+    loading=true;refresh.Enabled=false;
+    try{
+     var figures=await Task.Run(()=>ReadHomeDashboardSummary());
+     if(!page.IsDisposed)
+      for(int i=0;i<metricLabels.Length;i++)metricLabels[i].Text=figures[i];
+    }catch(Exception){
+     if(!page.IsDisposed)
+      foreach(var label in metricLabels)label.Text="Indisponível";
+    }finally{
+     loading=false;
+     if(!page.IsDisposed)refresh.Enabled=true;
+    }
+   };
+   refresh.Click+=(sender,args)=>load();
+   if(page.IsHandleCreated)load();
+   else{
+    EventHandler onCreated=null;
+    onCreated=(sender,args)=>{page.HandleCreated-=onCreated;load();};
+    page.HandleCreated+=onCreated;
+   }
+   status.Text="Início • Acesso rápido e indicadores. Calculadora oculta até clicar no botão.";
   }
 
+  // Consulta somente de leitura e fora da thread da interface.
+  string[] ReadHomeDashboardSummary(){
+   if(!File.Exists(dbPath))return new[]{"Sem banco","—","Sem banco","Sem dados"};
+   try{
+    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+     DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+     conn.Open();
+     string day=DateTime.Today.ToString("yyyy-MM-dd");
+     string month=DateTime.Today.ToString("yyyy-MM");
+     decimal today=0,monthly=0;
+     long products=0;
+     using(var cmd=new SQLiteCommand(
+      "SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,10)=@period AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
+      cmd.Parameters.AddWithValue("@period",day);
+      today=Convert.ToDecimal(cmd.ExecuteScalar());
+      cmd.Parameters["@period"].Value=month;
+      cmd.CommandText="SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,7)=@period AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'";
+      monthly=Convert.ToDecimal(cmd.ExecuteScalar());
+     }
+     using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM products",conn))
+      products=Convert.ToInt64(cmd.ExecuteScalar());
+     string first="Sem vendas";
+     using(var cmd=new SQLiteCommand(
+      "SELECT si.name FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY SUM(si.quantity) DESC,SUM(si.total) DESC LIMIT 1",conn)){
+      cmd.Parameters.AddWithValue("@month",month);
+      var top=cmd.ExecuteScalar();
+      if(top!=null&&top!=DBNull.Value)first=Convert.ToString(top);
+     }
+     var br=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+     return new[]{"R$ "+today.ToString("N2",br),products.ToString("N0",br),
+      "R$ "+monthly.ToString("N2",br),first};
+    }
+   }catch(Exception){return new[]{"Indisponível","—","Indisponível","Sem dados"};}
+  }
+
+  // Icones claros nos atalhos azul/vermelho: preserva o desenho que o programa ja usa.
+  static Image HomeWhiteTileIcon(string name){
+   using(var original=HomeShortcutImage(name)){
+    var output=new Bitmap(original);
+    for(int y=0;y<output.Height;y++)
+     for(int x=0;x<output.Width;x++){
+      Color pixel=output.GetPixel(x,y);
+      if(pixel.A>0)output.SetPixel(x,y,Color.FromArgb(pixel.A,255,255,255));
+     }
+    return output;
+   }
+  }
   static string NormalizeMenuSearch(string value){
    if(string.IsNullOrEmpty(value))return "";
    var decomposed=value.Normalize(System.Text.NormalizationForm.FormD);
