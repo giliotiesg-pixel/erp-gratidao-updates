@@ -1,5 +1,10 @@
 name: AMZG Novo - instalador unico e reparo
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'novo-win8/**'
+      - '.github/workflows/amzg-novo-unificado.yml'
   pull_request:
     paths:
       - 'novo-win8/**'
@@ -279,7 +284,7 @@ jobs:
 
   publicar_release:
     needs: compilar
-    if: github.event_name == 'workflow_dispatch' && inputs.publicar_release == true && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publicar_release == true))
     runs-on: windows-latest
     permissions:
       contents: write
@@ -307,9 +312,17 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
-          $setup=Join-Path 'dist' ("Instalador-Armazem-Gratidao-v"+$env:AMZG_VERSION+".exe")
-          if(!(Test-Path $setup)){throw 'Instalador numerado indisponivel.'}
-          gh release create $tag $setup "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Versao unica do programa, instalador e atualizador. Atualizacao incremental com backup e rollback."
+          # Somente ZIP e atualizador: nao publicar outro instalador por versao.
+          $zip='dist/Armazem-Gratidao-Atualizacao.zip'
+          $updater='dist/AtualizadorGratidao.exe'
+          $manifest=Get-Content 'dist/manifesto-proposto.json' -Raw | ConvertFrom-Json
+          if($manifest.build -ne [int]$env:AMZG_BUILD -or $manifest.tag -ne $tag -or $manifest.asset -ne 'Armazem-Gratidao-Atualizacao.zip'){
+            throw 'Manifesto nao corresponde ao pacote aprovado.'
+          }
+          if(!(Test-Path $zip) -or !(Test-Path $updater)){throw 'ZIP ou atualizador verificado ausente.'}
+          $sha=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne $manifest.sha256){throw 'SHA-256 incorreto, nao publicar.'}
+          gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --latest
           if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           gh release view $tag --json assets | Out-Null
           if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
