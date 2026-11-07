@@ -231,8 +231,8 @@ namespace ArmazemGratidao {
     label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp");
     var tile=new Button{Name="amzgStartModule"+modules.Controls.Count,
      AccessibleDescription=item.Item1,Tag=item.Item1,
-     Text=label,Size=new Size(236,79),
-     MinimumSize=new Size(236,79),MaximumSize=new Size(236,79),
+     Text=label,Size=new Size(228,79),
+     MinimumSize=new Size(228,79),MaximumSize=new Size(228,79),
      Margin=new Padding(5,5,5,5),Padding=new Padding(6,0,6,0),
      BackColor=Color.White,ForeColor=Color.FromArgb(25,61,116),
      FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,AutoEllipsis=true,
