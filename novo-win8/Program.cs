@@ -615,6 +615,16 @@ namespace ArmazemGratidao {
      status.Text="Salvando atualização build "+build+"...";
      using(var web=new WebClient()){
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
+      int lastReported=-10;
+      web.DownloadProgressChanged+=(sender,args)=>{
+       if(IsDisposed||Disposing)return;
+       int percent=args.ProgressPercentage;
+       if(percent>=lastReported+5||percent==100){
+        lastReported=percent;
+        status.Text="Baixando pacote completo da build "+build+": "+percent+"%"+
+         (args.TotalBytesToReceive>0?" de "+(args.TotalBytesToReceive/1024)+" KB":"");
+       }
+      };
       await web.DownloadFileTaskAsync(new Uri(url),temp);
      }
      string actual;
@@ -792,18 +802,26 @@ namespace ArmazemGratidao {
     if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
     string url=Convert.ToString(asset["browser_download_url"]);
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
-    // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
+    // Verificacao automatica consulta SOMENTE o manifesto. Nao baixar
+    // pacotes grandes durante vendas ou ao abrir a tela inicial.
+    if(!manual){
+     if(lastPromptedBuild!=remoteBuild){
+      lastPromptedBuild=remoteBuild;
+      status.Text="Nova "+remoteLabel+" disponível. Clique em Verificar atualização para instalar.";
+     }
+     return;
+    }
+    if(MessageBox.Show(this,"Nova "+remoteLabel+" disponível."+Environment.NewLine+
+       "O programa, o atualizador e as bibliotecas serão atualizados juntos."+
+       Environment.NewLine+"Deseja baixar e instalar agora?"+
+       Environment.NewLine+"Um backup completo será verificado antes de fechar o PDV.",
+       "Atualização completa do Armazém Gratidão",
+       MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     bool isZip=string.Equals(Convert.ToString(asset["name"]),patchZip,StringComparison.OrdinalIgnoreCase);
-    // O ZIP é baixado e validado por SHA-256 antes de conferir o atualizador.
-    // A ausência do auxiliar não deve impedir a recuperação automática.
+    // O download só começa após consentimento; o SHA-256 é verificado.
+    status.Text="Preparando download da "+remoteLabel+"...";
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
-    status.Text="Atualização "+remoteLabel+" salva em Atualizações Salvas.";
-    if(!manual&&lastPromptedBuild==remoteBuild)return;
-    lastPromptedBuild=remoteBuild;
-    if(MessageBox.Show("Atualização "+remoteLabel+" já baixada e verificada."+Environment.NewLine+
-     "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
-     Environment.NewLine+"O programa será fechado somente ao iniciar o atualizador.",
-     "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+    status.Text="Download 100% verificado. Preparando backup obrigatório...";
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
     // Aguardar qualquer backup diario e copiar em segundo plano, evitando travar a interface.
     status.Text="Criando e conferindo o backup antes da atualização...";
