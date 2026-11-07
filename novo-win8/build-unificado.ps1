@@ -1,5 +1,5 @@
 param(
- [ValidateRange(588,65000)][int]$Build=588
+ [ValidateRange(589,65000)][int]$Build=589
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -51,7 +51,16 @@ try {
  Copy-Item $managed.FullName (Join-Path $deps 'System.Data.SQLite.dll') -Force
  Write-Host "Assembly SQLite: $($managed.FullName)"
  python (Join-Path $project 'gerar-icone.py')
- Assert-Exit 'Gerar icone'
+ Assert-Exit 'Gerar icones distintos para instalador e programa'
+ $programIcon=Join-Path $project 'Armazem-Gratidao.ico'
+ $installerIcon=Join-Path $project 'Instalador-Armazem-Gratidao.ico'
+ if(!(Test-Path $programIcon) -or !(Test-Path $installerIcon)){
+  throw 'Icone do programa ou do instalador nao foi criado.'
+ }
+ $appIconSha=(Get-FileHash $programIcon -Algorithm SHA256).Hash
+ $setupIconSha=(Get-FileHash $installerIcon -Algorithm SHA256).Hash
+ if($appIconSha -eq $setupIconSha){throw 'ERRO: instalador e programa com o mesmo icone.'}
+ Write-Host 'Icones separados: carrinho do PDV e caixa do instalador.'
  $version="1.0.0.$Build"
  $versionFile=Join-Path $project 'BuildVersion.cs'
  "[assembly: System.Reflection.AssemblyVersion(`"$version`")]`r`n[assembly: System.Reflection.AssemblyFileVersion(`"$version`")]" |
@@ -109,7 +118,7 @@ try {
  if(-not $inno){throw 'Inno Setup 6 nao encontrado.'}
  & $inno "/DBuildNumber=$Build" (Join-Path $project 'instalador.iss')
  Assert-Exit 'Gerar instalador completo'
- $setup=Join-Path $dist 'Armazem-Gratidao-Novo-Setup.exe'
+ $setup=Join-Path $dist 'Instalador-Armazem-Gratidao.exe'
  if(!(Test-Path $setup)){throw 'Instalador unico nao foi gerado.'}
  $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
  $repo='https://github.com/giliotiesg-pixel/erp-gratidao-updates'
