@@ -334,7 +334,7 @@ namespace ArmazemGratidao {
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
-  int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
+  int InstalledBuild { get { return typeof(MainForm).Assembly.GetName().Version.Build; } }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
   readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
@@ -1327,9 +1327,17 @@ Panel BuildEmbeddedCalculator(){
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
    var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White,
      Padding=new Padding(14,6,8,4)};
+   var pageStart=new Button{Text="⊞  Iniciar",Dock=DockStyle.Left,Width=112,Height=42,
+    Margin=new Padding(0),BackColor=Color.FromArgb(25,75,149),
+    ForeColor=Color.White,FlatStyle=FlatStyle.Flat,UseMnemonic=false,
+    Font=new Font("Segoe UI",10,FontStyle.Bold),Cursor=Cursors.Hand};
+   pageStart.FlatAppearance.BorderSize=0;
+   pageStart.Click+=(sender,args)=>ToggleStartMenu();
+   heading.Controls.Add(pageStart);
    heading.Controls.Add(new Label{Dock=DockStyle.Top,Height=28,
+    Padding=new Padding(10,0,0,0),
     Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   BUILD "+InstalledBuild,
-    Font=new Font("Segoe UI",13.5f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
+    Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
     TextAlign=ContentAlignment.MiddleLeft});
    heading.Controls.Add(new Label{Dock=DockStyle.Bottom,Height=18,
     Text="Clique em Iniciar para recolher os atalhos. Os módulos continuam organizados por seção.",
@@ -1447,7 +1455,7 @@ Panel BuildEmbeddedCalculator(){
      block.Visible=found;
      if(query.Length>0&&found){
       row.Visible=true;
-      var bar=block.Controls.OfType<Panel>().FirstOrDefault();
+      var bar=block.Controls.OfType<Panel>().FirstOrDefault(p=>p.Dock==DockStyle.Top);
       if(bar!=null){
        foreach(var toggle in bar.Controls.OfType<Button>())toggle.Text="Ocultar ▲";
       }
