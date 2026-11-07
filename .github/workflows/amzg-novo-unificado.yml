@@ -217,6 +217,11 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Banco mudou ao repor apenas o atualizador'}
           Write-Host 'Teste OK: atualizador ausente recuperado com unico EXE; SQLite intacto.'
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
+      - name: Testar ZIP de atualizacao completa com o extrator real do PDV
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-pacote-unico.ps1 -Updater 'dist/AtualizadorGratidao.exe' -Zip 'dist/Armazem-Gratidao-Atualizacao.zip' -ExpectedVersion $env:AMZG_FILEVERSION
       - name: Testar bloqueio de versao antiga no atualizador
         shell: powershell
         run: |
