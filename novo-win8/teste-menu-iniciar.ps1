@@ -32,17 +32,17 @@ try{
  if($calcButton.Count -ne 1 -or !$calcButton[0].Visible){
   throw 'Botao especial Calculadora ausente no cabecalho.'
  }
- $home=@($form.Controls.Find('homePanel',$true)) | Select-Object -First 1
- if($null -eq $home -or @($home.Controls | Where-Object {
+ $homePanel=@($form.Controls.Find('homePanel',$true)) | Select-Object -First 1
+ if($null -eq $homePanel -or @($homePanel.Controls | Where-Object {
     $_.GetType().Name -eq 'BrandedHomePanel'
    }).Count -ne 1){throw 'Marca d agua com carrinho ausente no fundo do Inicio.'}
  $folder=[IO.Path]::GetDirectoryName($preview)
  [IO.Directory]::CreateDirectory($folder) | Out-Null
  $homePreview=Join-Path $folder 'Previa-Inicio-Marca-Dagua.png'
- $homeBitmap=[System.Drawing.Bitmap]::new($home.ClientSize.Width,$home.ClientSize.Height)
+ $homeBitmap=[System.Drawing.Bitmap]::new($homePanel.ClientSize.Width,$homePanel.ClientSize.Height)
  try{
-  $home.DrawToBitmap($homeBitmap,[System.Drawing.Rectangle]::new(
-    [System.Drawing.Point]::Empty,$home.ClientSize))
+  $homePanel.DrawToBitmap($homeBitmap,[System.Drawing.Rectangle]::new(
+    [System.Drawing.Point]::Empty,$homePanel.ClientSize))
   $homeBitmap.Save($homePreview,[System.Drawing.Imaging.ImageFormat]::Png)
  }finally{$homeBitmap.Dispose()}
  if((Get-Item -LiteralPath $homePreview).Length -lt 5000){
