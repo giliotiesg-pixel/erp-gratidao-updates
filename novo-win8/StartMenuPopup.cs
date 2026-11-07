@@ -20,8 +20,8 @@ namespace ArmazemGratidao {
   readonly Label branchTitle;
   readonly TextBox search;
   readonly Dictionary<string,Button> sectionButtons=new Dictionary<string,Button>();
-  const int CompactWidth=263;
-  const int ExpandedWidth=727;
+  const int CompactWidth=296;
+  const int ExpandedWidth=804;
   string selectedSection=null;
   bool closing=false;
 
@@ -38,8 +38,8 @@ namespace ArmazemGratidao {
    ShowInTaskbar=false;
    StartPosition=FormStartPosition.Manual;
    BackColor=Color.FromArgb(236,241,250);
-   Size=new Size(CompactWidth,454);
-   MinimumSize=new Size(CompactWidth,320);
+   Size=new Size(CompactWidth,550);
+   MinimumSize=new Size(CompactWidth,365);
    KeyPreview=true;
    DoubleBuffered=true;
 
@@ -48,7 +48,7 @@ namespace ArmazemGratidao {
     Visible=false,BackColor=Color.FromArgb(249,251,255),
     Padding=new Padding(10,9,9,7)};
    branchTitle=new Label{Name="amzgBranchTitle",Dock=DockStyle.Top,Height=48,
-    Font=new Font("Segoe UI",11.3f,FontStyle.Bold),
+    Font=new Font("Segoe UI",12f,FontStyle.Bold),
     ForeColor=Color.FromArgb(184,38,62),TextAlign=ContentAlignment.MiddleLeft};
    modules=new FlowLayoutPanel{Name="amzgStartModules",Dock=DockStyle.Fill,
     AutoScroll=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,
@@ -64,12 +64,12 @@ namespace ArmazemGratidao {
     Width=CompactWidth,BackColor=Color.FromArgb(29,47,79)};
    var branding=new Label{Dock=DockStyle.Top,Height=62,
     Text="  ⊞  ARMAZÉM GRATIDÃO\n        INICIAR",
-    Font=new Font("Segoe UI",11f,FontStyle.Bold),
+    Font=new Font("Segoe UI",11.6f,FontStyle.Bold),
     ForeColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,
     BackColor=Color.FromArgb(20,37,67)};
    var instructions=new Label{Dock=DockStyle.Top,Height=31,
     Text="  SEÇÕES DO PROGRAMA",
-    Font=new Font("Segoe UI",8.4f,FontStyle.Bold),
+    Font=new Font("Segoe UI",9f,FontStyle.Bold),
     ForeColor=Color.FromArgb(193,211,238),
     TextAlign=ContentAlignment.MiddleLeft};
    categories=new FlowLayoutPanel{Name="amzgStartCategories",Dock=DockStyle.Fill,
@@ -110,12 +110,12 @@ namespace ArmazemGratidao {
      section.StartsWith("CONSULTAS")?"Relatórios":"Sistema";
     var btn=new Button{Name="amzgCategory"+sectionButtons.Count,
      Tag=section,Text="  "+section+"   ›",
-     Size=new Size(240,57),MinimumSize=new Size(240,57),
-     MaximumSize=new Size(240,57),Margin=new Padding(0,1,0,2),
-     Font=new Font("Segoe UI",8.9f,FontStyle.Bold),
+     Size=new Size(272,66),MinimumSize=new Size(272,66),
+     MaximumSize=new Size(272,66),Margin=new Padding(0,2,0,3),
+     Font=new Font("Segoe UI",10f,FontStyle.Bold),
      BackColor=Color.FromArgb(29,47,79),ForeColor=Color.White,
      FlatStyle=FlatStyle.Flat,TextAlign=ContentAlignment.MiddleLeft,
-     Image=ManagedIcon(categoryIcon),ImageAlign=ContentAlignment.MiddleLeft,
+     Image=ManagedIcon(categoryIcon,40),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      AutoEllipsis=true,Cursor=Cursors.Hand,UseMnemonic=false};
     btn.FlatAppearance.BorderSize=0;
@@ -149,10 +149,17 @@ namespace ArmazemGratidao {
    };
   }
 
-  Image ManagedIcon(string name){
-   var image=iconFor(name);
-   allocatedIcons.Add(image);
-   return image;
+  Image ManagedIcon(string name,int size){
+   using(var original=iconFor(name)){
+    var icon=new Bitmap(size,size);
+    using(var graphics=Graphics.FromImage(icon)){
+     graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+     graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+     graphics.DrawImage(original,new Rectangle(0,0,size,size));
+    }
+    allocatedIcons.Add(icon);
+    return icon;
+   }
   }
 
   public int CategoryCount {get{return sectionButtons.Count;}}
@@ -166,11 +173,20 @@ namespace ArmazemGratidao {
    PopulateModules(actions.Where(a=>categoryOf(a.Item1)==section));
    branchTitle.Text=section+"   ›";
    branchPane.Visible=true;
-   Width=ExpandedWidth;
+   ResizeExpanded();
    foreach(var entry in sectionButtons)
     entry.Value.BackColor=entry.Key==section?Color.FromArgb(52,89,151):Color.FromArgb(29,47,79);
    branchPane.BringToFront();
    modules.PerformLayout();
+  }
+
+  void ResizeExpanded(){
+   Rectangle work=Screen.FromControl(this).WorkingArea;
+   int maxWidth=Math.Max(CompactWidth+210,work.Width-16);
+   int targetWidth=Math.Min(ExpandedWidth,maxWidth);
+   if(Left+targetWidth>work.Right-8)
+    Left=Math.Max(work.Left+8,work.Right-targetWidth-8);
+   Width=targetWidth;
   }
 
   void SearchModules(){
@@ -183,14 +199,14 @@ namespace ArmazemGratidao {
    var result=actions.Where(a=>Normalize(a.Item1).Contains(query)).ToList();
    branchTitle.Text="RESULTADOS DA PESQUISA";
    PopulateModules(result);
-   branchPane.Visible=true;Width=ExpandedWidth;
+   branchPane.Visible=true;ResizeExpanded();
    foreach(var button in sectionButtons.Values)button.BackColor=Color.FromArgb(29,47,79);
   }
 
   void SelectSectionContents(string section){
    PopulateModules(actions.Where(a=>categoryOf(a.Item1)==section));
    branchTitle.Text=section+"   ›";
-   branchPane.Visible=true;Width=ExpandedWidth;
+   branchPane.Visible=true;ResizeExpanded();
   }
 
   public void CollapseBranch(){
@@ -210,13 +226,13 @@ namespace ArmazemGratidao {
     label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp");
     var tile=new Button{Name="amzgStartModule"+modules.Controls.Count,
      AccessibleDescription=item.Item1,Tag=item.Item1,
-     Text=label,Size=new Size(200,63),
-     MinimumSize=new Size(200,63),MaximumSize=new Size(200,63),
-     Margin=new Padding(4,5,4,4),Padding=new Padding(6,0,6,0),
+     Text=label,Size=new Size(236,79),
+     MinimumSize=new Size(236,79),MaximumSize=new Size(236,79),
+     Margin=new Padding(5,5,5,5),Padding=new Padding(6,0,6,0),
      BackColor=Color.White,ForeColor=Color.FromArgb(25,61,116),
      FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,AutoEllipsis=true,
-     UseMnemonic=false,Font=new Font("Segoe UI",9.3f,FontStyle.Bold),
-     Image=ManagedIcon(item.Item1),ImageAlign=ContentAlignment.MiddleLeft,
+     UseMnemonic=false,Font=new Font("Segoe UI",10f,FontStyle.Bold),
+     Image=ManagedIcon(item.Item1,40),ImageAlign=ContentAlignment.MiddleLeft,
      TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText};
     tile.FlatAppearance.BorderColor=Color.FromArgb(218,227,241);
