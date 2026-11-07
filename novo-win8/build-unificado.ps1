@@ -78,6 +78,13 @@ try {
   throw "Build incorreta no EXE. Esperado=$version arquivo=$actualFile assembly=$actualAssembly"
  }
  Write-Host "EXE verificado: $exe, FileVersion=$actualFile, AssemblyVersion=$actualAssembly"
+ $updaterExe=Join-Path $bin 'AtualizadorGratidao.exe'
+ $updaterFileVersion=(Get-Item $updaterExe).VersionInfo.FileVersion
+ $updaterAssemblyVersion=[System.Reflection.AssemblyName]::GetAssemblyName($updaterExe).Version.ToString()
+ if($updaterFileVersion -ne $version -or $updaterAssemblyVersion -ne $version){
+  throw "Versao incorreta no atualizador: esperado=$version arquivo=$updaterFileVersion assembly=$updaterAssemblyVersion"
+ }
+ Write-Host "Atualizador independente verificado: $updaterExe, FileVersion=$updaterFileVersion"
  $native=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'SQLite.Interop.dll' |
   Where-Object {$_.FullName -match '[\\/]x64[\\/]'} |
   Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
