@@ -269,11 +269,11 @@ namespace ArmazemGratidao {
    others.FlatAppearance.BorderSize=0;
    Rounded(others,9);
    var options=new ContextMenuStrip();
-   options.Items.Add("Selecionar cliente",(sender,args)=>chooseCustomer.PerformClick());
-   options.Items.Add("Ajustar desconto",(sender,args)=>discountInput.Focus());
-   options.Items.Add("Excluir todos os itens",(sender,args)=>clear.PerformClick());
+   options.Items.Add("Selecionar cliente",null,(sender,args)=>chooseCustomer.PerformClick());
+   options.Items.Add("Ajustar desconto",null,(sender,args)=>discountInput.Focus());
+   options.Items.Add("Excluir todos os itens",null,(sender,args)=>clear.PerformClick());
    if(manualEntry&&rapidInventoryBar!=null)
-    options.Items.Add("Todos os Produtos no PDV",(sender,args)=>{
+    options.Items.Add("Todos os Produtos no PDV",null,(sender,args)=>{
      foreach(Control child in rapidInventoryBar.Controls)
       if(child is Button&&child.Text.IndexOf("TODOS OS PRODUTOS",StringComparison.OrdinalIgnoreCase)>=0){
        ((Button)child).PerformClick();break;
