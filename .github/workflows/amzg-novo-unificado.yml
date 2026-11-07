@@ -136,9 +136,12 @@ jobs:
           $fv=(Get-Item $exe).VersionInfo.FileVersion
           if($fv -ne $expected){throw "Reparo manteve versao antiga $fv"}
           $commonDesktop=[Environment]::GetFolderPath('CommonDesktopDirectory')
+          # Windows PowerShell 5.1 pode ler o arquivo temporario sem BOM como ANSI,
+          # corrompendo nomes com acentos. Montar o nome pelo codigo Unicode.
+          $shortcutName='Armaz'+[char]0x00E9+'m Gratid'+[char]0x00E3+'o.lnk'
           $shortcutCandidates=@(
-            (Join-Path $desktop 'Armazém Gratidão.lnk'),
-            (Join-Path $commonDesktop 'Armazém Gratidão.lnk')
+            (Join-Path $desktop $shortcutName),
+            (Join-Path $commonDesktop $shortcutName)
           )
           $found=@($shortcutCandidates | Where-Object {Test-Path -LiteralPath $_})
           if($found.Count -eq 0){
