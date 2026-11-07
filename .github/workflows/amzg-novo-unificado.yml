@@ -278,6 +278,8 @@ jobs:
             dist/AtualizadorGratidao.exe
             dist/Armazem-Gratidao-Atualizacao.zip
             dist/Previa-Menu-Iniciar.png
+            dist/Previa-Calculadora.png
+            dist/Previa-Inicio-Marca-Dagua.png
             dist/manifesto-proposto.json
             dist/VALIDACAO-SHA256.txt
           retention-days: 30
