@@ -1,0 +1,49 @@
+name: Disponibilizar teste Windows 8 Build 586
+on:
+  push:
+    branches:
+      - fix/amzg-desempenho-backup-instalacao-build586
+    paths:
+      - '.github/workflows/distribuir-teste-win8-586.yml'
+jobs:
+  disponibilizar:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Baixar artefato previamente compilado e testado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          gh run download 42326800955 --repo giliotiesg-pixel/erp-gratidao-updates --name Armazem-Gratidao-Unico-build-586 --dir distribuicao
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel baixar artefato validado.'}
+          $setup='distribuicao/Armazem-Gratidao-Novo-Setup.exe'
+          $zip='distribuicao/Armazem-Gratidao-Atualizacao.zip'
+          if(!(Test-Path $setup) -or !(Test-Path $zip)){throw 'Pacote incompleto.'}
+          $actualSetup=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $actualZip=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $validation=(Get-Content 'distribuicao/VALIDACAO-SHA256.txt' -Raw)
+          if($validation -notmatch [regex]::Escape($actualSetup)){throw 'SHA256 do instalador diverge do registro validado!'}
+          if($validation -notmatch [regex]::Escape($actualZip)){throw 'SHA256 do patch diverge do registro validado!'}
+          Write-Host 'Integridade confirmada.'
+      - name: Criar release de TESTE sem alterar atualizador oficial
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='amzg-teste-windows8-586'
+          $notes='VERSAO DE TESTE para Windows 8 64 bits, .NET 4.5. Correcoes de desempenho no menu, inicio, buscas e instalacao; backup completo obrigatorio e reparador integrado. Testado apenas no Windows moderno com dados descartaveis. NAO DESINSTALE a versao atual. Este prerelease nao altera o manifesto oficial de atualizacoes.'
+          $params=@('release','create',$tag,
+            'distribuicao/Armazem-Gratidao-Novo-Setup.exe',
+            'distribuicao/Armazem-Gratidao-Atualizacao.zip',
+            'distribuicao/VALIDACAO-SHA256.txt',
+            '--repo','giliotiesg-pixel/erp-gratidao-updates',
+            '--target','fix/amzg-desempenho-backup-instalacao-build586',
+            '--title','Armazem Gratidao Windows 8 - Teste Build 586',
+            '--notes',$notes,'--prerelease')
+          gh @params
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel publicar release de teste.'}
+          gh release view $tag --repo giliotiesg-pixel/erp-gratidao-updates --json url,name,assets,isPrerelease
+          if($LASTEXITCODE -ne 0){throw 'Release de teste indisponivel.'}

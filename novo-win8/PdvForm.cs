@@ -81,7 +81,11 @@ namespace ArmazemGratidao {
     back.Click+=(s,e)=>ShowSaleCart();
     rapidInventoryBar.Controls.Add(back);
     rapidInventoryBar.Controls.Add(new Label{Text="Buscar:",AutoSize=true,Padding=new Padding(7,10,0,0)});
-    stockSearch.TextChanged+=(s,e)=>{if(stockViewOpen)LoadStockInPdv();};
+    // Pesquisa de estoque grande: não executar SELECT a cada tecla pressionada.
+    var stockSearchDelay=new System.Windows.Forms.Timer{Interval=280};
+    stockSearchDelay.Tick+=(s,e)=>{stockSearchDelay.Stop();if(stockViewOpen&&!IsDisposed)LoadStockInPdv();};
+    stockSearch.TextChanged+=(s,e)=>{stockSearchDelay.Stop();if(stockViewOpen)stockSearchDelay.Start();};
+    FormClosed+=(s,e)=>{stockSearchDelay.Stop();stockSearchDelay.Dispose();};
     rapidInventoryBar.Controls.Add(stockSearch);
     rapidInventoryBar.Controls.Add(stockHint);
    }

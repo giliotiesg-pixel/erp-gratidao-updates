@@ -10,7 +10,7 @@ on:
       build:
         description: 'Numero da build a compilar'
         required: true
-        default: '585'
+        default: '586'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AMZG_BUILD: ${{ inputs.build || '585' }}
+      AMZG_BUILD: ${{ inputs.build || '586' }}
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
@@ -83,12 +83,30 @@ jobs:
           [System.IO.File]::WriteAllText($pyFile,$py,(New-Object System.Text.UTF8Encoding($false)))
           python $pyFile create $db
           if($LASTEXITCODE -ne 0){throw 'Falhou criacao do banco descartavel'}
+          # Regressão: backups antigos grandes no perfil NÃO podem ser colocados
+          # dentro de novos backups (crescimento recursivo que travava PCs lentos).
+          $legacyBackups=Join-Path $dataDir 'Backups'
+          New-Item -ItemType Directory -Path $legacyBackups -Force | Out-Null
+          [System.IO.File]::WriteAllBytes((Join-Path $legacyBackups 'backup-antigo-grande.zip'),(New-Object byte[] (6MB)))
+          [System.IO.File]::WriteAllText((Join-Path $dataDir 'configuracao-teste.txt'),'configuracao-preservada')
           $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
+          $started=Get-Date
           $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
+          Write-Host ('Tempo de reparo e backup: {0:N2}s' -f ((Get-Date)-$started).TotalSeconds)
           if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
           $backups=Join-Path $testDir 'Arquivos/Backups'
           $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
           if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive=[System.IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
+          try{
+            $entryNames=@($archive.Entries | ForEach-Object {$_.FullName})
+            if($entryNames -notcontains 'Dados/armazem-gratidao.db'){throw 'Backup nao incluiu SQLite'}
+            if($entryNames -notcontains 'Dados/configuracao-teste.txt'){throw 'Backup nao incluiu configuracoes'}
+            if(@($entryNames | Where-Object {$_ -match '^Dados/Backups/'}).Count -gt 0){
+              throw 'Backup incorreto: incluiu backups antigos, causando lentidao'
+            }
+          }finally{$archive.Dispose()}
           python $pyFile check $db
           if($LASTEXITCODE -ne 0){throw 'Banco alterado ou corrompido apos reparo'}
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
