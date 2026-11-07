@@ -162,7 +162,6 @@ namespace ArmazemGratidao {
   public void SelectSection(string section){
    if(IsDisposed)return;
    selectedSection=section;
-   search.TextChanged-=IgnoreSearchChanged; // No-op safe; see SearchModules.
    search.Clear();
    PopulateModules(actions.Where(a=>categoryOf(a.Item1)==section));
    branchTitle.Text=section+"   ›";
@@ -173,8 +172,6 @@ namespace ArmazemGratidao {
    branchPane.BringToFront();
    modules.PerformLayout();
   }
-
-  void IgnoreSearchChanged(object sender,EventArgs args){}
 
   void SearchModules(){
    string query=Normalize(search.Text);
