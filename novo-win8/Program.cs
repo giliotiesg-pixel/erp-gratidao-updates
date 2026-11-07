@@ -37,7 +37,7 @@ namespace ArmazemGratidao {
   static readonly System.Collections.Generic.HashSet<Form> initialized=new System.Collections.Generic.HashSet<Form>();
   public static void CheckOpenForms(){
    foreach(Form form in Application.OpenForms.Cast<Form>().ToArray()){
-    if(form==null||form.IsDisposed)continue;
+    if(form==null||form.IsDisposed||form is StartMenuPopup)continue;
     if(initialized.Add(form)){
      form.ShowInTaskbar=true;
      form.Resize+=(sender,args)=>{if(form.WindowState==FormWindowState.Normal)KeepVisible(form);};
@@ -333,6 +333,7 @@ namespace ArmazemGratidao {
   readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
   bool checkingUpdates=false;
   Form modulesWindow;
+  StartMenuPopup startMenuPopup;
   int lastPromptedBuild=-1;
   int InstalledBuild {
    get {
@@ -888,6 +889,7 @@ namespace ArmazemGratidao {
    finally{checkingUpdates=false;}
   }
   void ShowHome(object sender,EventArgs e){
+   CloseStartMenu();
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,10,12,10),BackColor=Color.FromArgb(246,249,253)};
@@ -1367,226 +1369,119 @@ Panel BuildEmbeddedCalculator(){
    panel.ResumeLayout(true);
    arrange();
   }
-  // Abre/recolhe o menu como o botão Iniciar do Windows.
-  // Não cria uma nova janela nem exige navegador/WebView.
+  // Botao Iniciar funciona de verdade como o do Windows:
+  // janela flutuante que some ao clicar fora, nunca sidebar fixa.
   void ToggleStartMenu(){
-   var page=Controls["homePanel"] as Panel;
-   if(page==null||page.IsDisposed||!page.Visible){
-    ShowMainMenu();
+   if(startMenuPopup!=null&&!startMenuPopup.IsDisposed){
+    CloseStartMenu();
+    status.Text="Menu Iniciar fechado.";
     return;
    }
-   var start=page.Controls.Find("amzgStartPanel",true).FirstOrDefault();
-   if(start==null||start.IsDisposed){ShowMainMenu();return;}
-   start.Visible=!start.Visible;
-   status.Text=start.Visible?
-    "Menu Iniciar aberto. Pesquise ou selecione um módulo.":
-    "Menu Iniciar recolhido. Clique em Iniciar para exibir os acessos rápidos.";
+   ShowStartMenuPopup();
   }
 
-  // Layout nativo tipo Windows Start: barra vertical de atalhos à esquerda,
-  // pesquisa integrada, grupos recolhíveis e botões compactos à direita.
-  // O lado esquerdo pode ser ocultado para devolver toda a largura à área de trabalho.
-  void ShowMainMenu(){
-   grid.Visible=false;
-   var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
-   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
-   var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White};
-   var pageStart=new Button{Name="amzgStartButton",Text="⊞  Iniciar",
-    Left=8,Top=9,Width=112,Height=40,Anchor=AnchorStyles.Left|AnchorStyles.Top,
-    BackColor=Color.FromArgb(25,75,149),ForeColor=Color.White,
-    FlatStyle=FlatStyle.Flat,UseMnemonic=false,
-    Font=new Font("Segoe UI",10,FontStyle.Bold),Cursor=Cursors.Hand};
-   pageStart.FlatAppearance.BorderSize=0;
-   pageStart.Click+=(sender,args)=>ToggleStartMenu();
-   var pageTitle=new Label{Left=133,Top=5,Width=900,Height=27,
-    Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   VERSÃO "+InstalledVersion+" (build "+InstalledBuild+")",
-    Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
-    TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
-   var pageTip=new Label{Left=134,Top=34,Width=870,Height=18,
-    Text="Clique em Iniciar para recolher os atalhos. Os módulos continuam organizados por seção.",
-    Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(90,103,124),AutoEllipsis=true};
-   heading.Controls.Add(pageStart);heading.Controls.Add(pageTitle);heading.Controls.Add(pageTip);
-   heading.Resize+=(sender,args)=>{
-    int available=Math.Max(160,heading.ClientSize.Width-148);
-    pageTitle.Width=available;pageTip.Width=available;
+  void CloseStartMenu(){
+   var popup=startMenuPopup;
+   startMenuPopup=null;
+   if(popup!=null&&!popup.IsDisposed)popup.Close();
+  }
+
+  void ShowStartMenuPopup(){
+   if(IsDisposed||Disposing)return;
+   var popup=new StartMenuPopup(AllStartActions(),ModuleSection,HomeShortcutImage,
+    item=>{
+     // O menu fecha ANTES de executar o modulo e volta a ficar disponivel
+     // no botao Iniciar de qualquer tela do programa.
+     if(!IsDisposed&&!Disposing)item.Item2(this,EventArgs.Empty);
+    });
+   popup.FormClosed+=(sender,args)=>{
+    if(ReferenceEquals(startMenuPopup,popup))startMenuPopup=null;
    };
-   var area=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
+   startMenuPopup=popup;
+   Rectangle working=Screen.FromControl(this).WorkingArea;
+   Point start=menuToggle.PointToScreen(new Point(0,menuToggle.Height+5));
+   int x=Math.Max(working.Left+4,Math.Min(start.X,working.Right-740));
+   int y=Math.Max(working.Top+4,Math.Min(start.Y,working.Bottom-325));
+   popup.Location=new Point(x,y);
+   popup.Height=Math.Max(325,Math.Min(478,working.Bottom-y-8));
+   popup.Show(this);
+   popup.Activate();
+   status.Text="Menu Iniciar aberto. Escolha uma secao para ver os modulos com icones.";
+  }
 
-   var start=new Panel{Name="amzgStartPanel",Dock=DockStyle.Left,Width=248,
-    BackColor=Color.FromArgb(30,45,71),Padding=new Padding(0)};
-   var startTop=new Panel{Dock=DockStyle.Top,Height=94,BackColor=Color.FromArgb(23,38,64)};
-   var startBrand=new Label{Text="⊞   ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=43,
-    Padding=new Padding(13,10,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
-    ForeColor=Color.White};
-   var quickLabel=new Label{Text="MAIS USADOS  •  ACESSO RÁPIDO",Dock=DockStyle.Bottom,Height=22,
-    Padding=new Padding(12,3,0,0),Font=new Font("Segoe UI",7.8f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(181,198,228)};
-   var search=new TextBox{Name="amzgStartSearch",Dock=DockStyle.Bottom,
-    Font=new Font("Segoe UI",10),BorderStyle=BorderStyle.FixedSingle,
-    ForeColor=Color.FromArgb(25,53,91),Height=25,TabStop=true};
-   var searchHolder=new Panel{Dock=DockStyle.Bottom,Height=32,Padding=new Padding(9,0,9,5),
-    BackColor=Color.FromArgb(23,38,64)};
-   searchHolder.Controls.Add(search);
-   startTop.Controls.Add(quickLabel);startTop.Controls.Add(startBrand);
-   startTop.Controls.Add(searchHolder);
-   var leftFooter=new Panel{Dock=DockStyle.Bottom,Height=48,
-    BackColor=Color.FromArgb(23,38,64),Padding=new Padding(8,7,8,7)};
-   var indicators=new Button{Text="▤  Início / Indicadores",Dock=DockStyle.Fill,
-    BackColor=Color.FromArgb(42,66,103),ForeColor=Color.White,
-    FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),
-    Cursor=Cursors.Hand,TextAlign=ContentAlignment.MiddleLeft};
-   indicators.FlatAppearance.BorderSize=0;
-   indicators.Click+=ShowHome;leftFooter.Controls.Add(indicators);
-   var quick=new FlowLayoutPanel{Name="amzgQuickActions",Dock=DockStyle.Fill,
-    FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
-    Padding=new Padding(6,7,5,6),BackColor=Color.FromArgb(30,45,71)};
-   start.Controls.Add(quick);start.Controls.Add(leftFooter);start.Controls.Add(startTop);
-
-   var content=new FlowLayoutPanel{Name="amzgStartWorkspace",Dock=DockStyle.Fill,
-    AutoScroll=true,WrapContents=false,FlowDirection=FlowDirection.TopDown,
-    Padding=new Padding(12,8,12,8),BackColor=Color.FromArgb(247,249,253)};
-   var sectionTitle=new Label{Width=715,Height=31,Margin=new Padding(0),
-    Text="TODOS OS MÓDULOS     |     Seções com Mostrar / Ocultar",
-    Font=new Font("Segoe UI",10.2f,FontStyle.Bold),ForeColor=Color.FromArgb(185,44,68),
-    TextAlign=ContentAlignment.MiddleLeft};
-   var tiles=new FlowLayoutPanel{Name="amzgStartSections",Width=700,Height=270,
-    WrapContents=false,FlowDirection=FlowDirection.TopDown,Margin=new Padding(0),
-    Padding=new Padding(2),AutoScroll=false,BackColor=Color.FromArgb(247,249,253)};
-   var actions=ModuleActions();
-   // Mantém as funções existentes, sem criar módulos fictícios.
-   actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
-   actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
-   actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
-   actions.Add(Tuple.Create("Pasta do backup das atualizações",(EventHandler)ConfigureUpdateBackupFolder));
-   actions.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
-   actions.Add(Tuple.Create("Preparar recuperação",(EventHandler)PrepareRecoveredSales));
-   actions.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
-   actions.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
-   actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
-   actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>
+  // Exatamente os handlers dos modulos atuais, sem recriar janelas de PDV
+  // ou cadastro dentro do menu. Todos os recursos antigos permanecem.
+  System.Collections.Generic.List<Tuple<string,EventHandler>> AllStartActions(){
+   var list=ModuleActions();
+   list.Insert(2,Tuple.Create("Arquivos do Programa",
+    (EventHandler)((sender,args)=>OpenProgramFilesFolder())));
+   list.Insert(3,Tuple.Create("Atualizações Salvas",
+    (EventHandler)((sender,args)=>OpenSavedUpdates())));
+   list.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
+   list.Add(Tuple.Create("Pasta do backup das atualizações",
+    (EventHandler)ConfigureUpdateBackupFolder));
+   list.Add(Tuple.Create("Localizar vendas",(EventHandler)CompareSales));
+   list.Add(Tuple.Create("Preparar recuperação",(EventHandler)PrepareRecoveredSales));
+   list.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
+   list.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
+   list.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
+   list.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>
     ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
-   actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{
+   list.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{
     if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}
     OpenModuleWindow(new StockCountQuickForm(dbPath));
    })));
+   return list;
+  }
 
-   var favs=new[]{"PDV  •  Nova venda","Vendas","Lançar vendas anotadas",
-    "Produtos","Consulta de preços","Estoque","Clientes","Fiado","Caixa",
-    "Cascos retornáveis","Relatórios","Compras","Backup do banco"};
-   foreach(var item in actions){
-    string label=System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(
-     item.Item1.ToLower(System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
-    label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp")
-     .Replace("Pix","PIX").Replace("Qr","QR");
-    var button=new Button{Text=label,AccessibleDescription=item.Item1,
-     Tag="home-shortcut",Width=105,Height=20,MinimumSize=Size.Empty,
-     MaximumSize=Size.Empty,Margin=new Padding(2,1,2,1),Padding=new Padding(2,0,2,0),
-     Font=new Font("Segoe UI",7.8f,FontStyle.Bold),AutoEllipsis=true,
-     ForeColor=Color.White,BackColor=Color.FromArgb(27,79,151),
-     FlatStyle=FlatStyle.Flat,UseMnemonic=false,Cursor=Cursors.Hand};
-    button.FlatAppearance.BorderSize=0;
-    button.FlatAppearance.MouseOverBackColor=Color.FromArgb(49,108,184);
-    button.Click+=item.Item2;tiles.Controls.Add(button);
-    if(!favs.Contains(item.Item1))continue;
-    var quickButton=new Button{Text="  "+label,AccessibleDescription=item.Item1,
-     Tag="start-quick",Width=228,Height=31,Margin=new Padding(2,1,2,1),
-     Padding=new Padding(6,0,1,0),AutoEllipsis=true,
-     FlatStyle=FlatStyle.Flat,UseMnemonic=false,Cursor=Cursors.Hand,
-     BackColor=item.Item1==favs[0]?Color.FromArgb(35,93,175):Color.FromArgb(30,45,71),
-     ForeColor=Color.White,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),
-     TextAlign=ContentAlignment.MiddleLeft};
-    quickButton.FlatAppearance.BorderSize=0;
-    quickButton.FlatAppearance.MouseOverBackColor=Color.FromArgb(48,95,164);
-    quickButton.Click+=item.Item2;
-    quick.Controls.Add(quickButton);
-   }
-   GroupModuleButtons(tiles,true);
-
-   // Pesquisa por nome (sem diferenciar maiúsculas, minúsculas e acentos).
-   // Filtra a lista lateral e os botões das seções, sem tocar no SQLite.
-   Action filter=()=>{
-    string query=NormalizeMenuSearch(search.Text.Trim());
-    foreach(var quickButton in quick.Controls.OfType<Button>()){
-     quickButton.Visible=query.Length==0||
-      NormalizeMenuSearch(quickButton.AccessibleDescription).Contains(query);
-    }
-    foreach(var block in tiles.Controls.OfType<Panel>()){
-     block.Visible=true; // restaurar antes de examinar filhos de grupo oculto
-     var row=block.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
-     if(row==null)continue;
-     bool found=false;
-     foreach(var btn in row.Controls.OfType<Button>()){
-      bool visible=query.Length==0||NormalizeMenuSearch(btn.AccessibleDescription).Contains(query);
-      btn.Visible=visible;
-      found|=visible;
-     }
-     block.Visible=found;
-     if(query.Length>0&&found){
-      row.Visible=true;
-      var bar=block.Controls.OfType<Panel>().FirstOrDefault(p=>p.Dock==DockStyle.Top);
-      if(bar!=null){
-       foreach(var toggle in bar.Controls.OfType<Button>())toggle.Text="Ocultar ▲";
-      }
-     }
-    }
-    var layout=tiles.Tag as Action;
-    if(layout!=null)layout();
-   };
-   search.TextChanged+=(sender,args)=>filter();
-   search.KeyDown+=(sender,args)=>{
-    if(args.KeyCode!=Keys.Enter)return;
-    var selected=quick.Controls.OfType<Button>().FirstOrDefault(x=>x.Visible);
-    if(selected==null){
-     selected=tiles.Controls.OfType<Panel>()
-      .SelectMany(x=>x.Controls.OfType<FlowLayoutPanel>())
-      .SelectMany(x=>x.Controls.OfType<Button>()).FirstOrDefault(x=>x.Visible);
-    }
-    if(selected!=null)selected.PerformClick();
-    args.Handled=true;args.SuppressKeyPress=true;
-   };
-
-   var calculatorSide=new Panel{Width=330,Height=390,
-    BackColor=Color.FromArgb(236,243,252),
-    Padding=new Padding(7),Margin=new Padding(0,7,0,10)};
-   calculatorSide.Controls.Add(BuildEmbeddedCalculator());
-   calculatorSide.Controls.Add(new Label{Dock=DockStyle.Top,Height=30,Text="CALCULADORA",
-    TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(180,35,50),
-    Font=new Font("Segoe UI",10,FontStyle.Bold)});
-   var calcBody=calculatorSide.Controls.OfType<Panel>().FirstOrDefault();
-   Action focusCalculator=()=>{
-    if(!IsDisposed&&Visible&&Controls["homePanel"]==page&&
-       Form.ActiveForm==this&&!search.Focused&&calcBody!=null&&calcBody.Visible){
-     var visor=calcBody.Controls.Find("embeddedCalculatorDisplay",true).FirstOrDefault();
-     if(visor!=null&&visor.CanFocus)visor.Focus();
-    }
-   };
-   EventHandler onActivated=(sender,args)=>BeginInvoke((Action)(()=>focusCalculator()));
-   Activated+=onActivated;
-   page.Disposed+=(sender,args)=>Activated-=onActivated;
-
-   content.Controls.Add(sectionTitle);content.Controls.Add(tiles);
-   content.Controls.Add(calculatorSide);
-   area.Controls.Add(content);area.Controls.Add(start);
-   page.Controls.Add(area);page.Controls.Add(heading);
-   Action resize=()=>{
-    int width=Math.Max(310,content.ClientSize.Width-content.Padding.Horizontal-19);
-    if(sectionTitle.Width!=width)sectionTitle.Width=width;
-    if(tiles.Width!=width)tiles.Width=width;
-    int calcWidth=Math.Min(330,width);
-    if(calculatorSide.Width!=calcWidth)calculatorSide.Width=calcWidth;
-    calculatorSide.Margin=new Padding(Math.Max(0,width-calcWidth),7,0,10);
-    int quickWidth=Math.Max(120,start.ClientSize.Width-17);
-    foreach(var button in quick.Controls.OfType<Button>())if(button.Width!=quickWidth)button.Width=quickWidth;
-    var layout=tiles.Tag as Action;if(layout!=null)layout();
-   };
-   content.Resize+=(sender,args)=>resize();
-   start.VisibleChanged+=(sender,args)=>resize();
-   Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
+  // A area principal fica livre de menus fixos: o popup fica por cima, como
+  // no Windows, e a calculadora continua acessivel na propria pagina.
+  void ShowMainMenu(){
+   CloseStartMenu();
+   grid.Visible=false;
+   var old=Controls["homePanel"];
+   if(old!=null){Controls.Remove(old);old.Dispose();}
+   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,
+    BackColor=Color.FromArgb(246,249,253)};
+   var calculatorPanel=new Panel{Name="amzgHomeCalculator",
+    Dock=DockStyle.Right,Width=356,Padding=new Padding(10,12,14,18),
+    BackColor=Color.FromArgb(232,240,252)};
+   calculatorPanel.Controls.Add(BuildEmbeddedCalculator());
+   calculatorPanel.Controls.Add(new Label{
+    Dock=DockStyle.Top,Height=39,
+    Text="CALCULADORA",TextAlign=ContentAlignment.MiddleCenter,
+    ForeColor=Color.FromArgb(184,37,62),
+    Font=new Font("Segoe UI",11,FontStyle.Bold)});
+   var welcome=new Panel{Dock=DockStyle.Fill,
+    BackColor=Color.FromArgb(246,249,253),Padding=new Padding(23,23,18,18)};
+   var title=new Label{Dock=DockStyle.Top,Height=59,
+    Text="ARMAZÉM GRATIDÃO",
+    ForeColor=Color.FromArgb(32,82,155),
+    Font=new Font("Segoe UI",18,FontStyle.Bold),
+    TextAlign=ContentAlignment.MiddleLeft};
+   var tip=new Label{Dock=DockStyle.Top,Height=112,
+    Text="Acesse o botão  ⊞  INICIAR  no alto da tela.\n"+
+         "Escolha uma seção, depois o módulo desejado.\n"+
+         "O menu abre sobre a tela e fecha quando você seleciona ou clica fora.",
+    Font=new Font("Segoe UI",11,FontStyle.Regular),
+    ForeColor=Color.FromArgb(65,78,99),
+    Padding=new Padding(3,14,6,0),
+    TextAlign=ContentAlignment.MiddleLeft};
+   var version=new Label{Dock=DockStyle.Bottom,Height=47,
+    Text="Versão "+InstalledVersion+"  |  Build "+InstalledBuild+
+         "    •    Menu flutuante com ícones",
+    Font=new Font("Segoe UI",9,FontStyle.Bold),
+    ForeColor=Color.FromArgb(155,39,58),
+    TextAlign=ContentAlignment.MiddleLeft};
+   welcome.Controls.Add(tip);
+   welcome.Controls.Add(title);
+   welcome.Controls.Add(version);
+   page.Controls.Add(welcome);
+   page.Controls.Add(calculatorPanel);
+   Controls.Add(page);
+   page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;
-   resize();
-   EnableWheelScrolling(content);
-   BeginInvoke((Action)(()=>focusCalculator()));
-   status.Text="Menu Iniciar | Pesquisa, atalhos rápidos e seções recolhíveis. A calculadora permanece disponível.";
+   status.Text="Menu Iniciar flutuante. Clique em Iniciar para abrir as secoes.";
   }
 
   static string NormalizeMenuSearch(string value){
