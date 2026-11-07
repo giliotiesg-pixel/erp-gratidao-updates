@@ -270,6 +270,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-menu-iniciar.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Menu-Iniciar.png'
+      - name: Testar visual do PDV exatamente na disposicao aprovada
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-pdv-layout.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-PDV.png'
       - uses: actions/upload-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
@@ -280,6 +285,7 @@ jobs:
             dist/Previa-Menu-Iniciar.png
             dist/Previa-Calculadora.png
             dist/Previa-Inicio-Marca-Dagua.png
+            dist/Previa-PDV.png
             dist/manifesto-proposto.json
             dist/VALIDACAO-SHA256.txt
           retention-days: 30

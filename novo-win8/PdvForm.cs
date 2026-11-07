@@ -151,8 +151,14 @@ namespace ArmazemGratidao {
    stockView.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;EditSelectedStockInPdv();}};
    Controls.Add(listArea);Controls.Add(footer);Controls.Add(header);
    if(rapidInventoryBar!=null)Controls.Add(rapidInventoryBar);
+   suggestions.Name="pdvSuggestions";
    suggestions.Parent=this;
    if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
+   // Mover os MESMOS controles e seus eventos para o layout aprovado na previa.
+   PdvModernLayout.Apply(this,header,footer,listArea,rapidInventoryBar,
+    code,qty,saleUnit,add,finish,edit,chooseCustomer,remove,clear,
+    customer,received,changeLabel,discountLabel,discountMode,discountInput,total,
+    grid,stockView,manualEntry);
    PositionSuggestions();
    LoadDraft();
    FormClosing+=(sender,args)=>SaveDraft();

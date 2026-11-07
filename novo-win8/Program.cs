@@ -189,7 +189,8 @@ namespace ArmazemGratidao {
   }
   static void Apply(Control control){
    // A calculadora possui tema proprio: preservar as cores e dimensoes das teclas.
-   if(control is ModernCalculatorForm || control.FindForm() is ModernCalculatorForm)return;
+   if(control is ModernCalculatorForm || control.FindForm() is ModernCalculatorForm ||
+      control is PdvForm || control.FindForm() is PdvForm)return;
    if(control.IsDisposed||!decorated.Add(control))return;
    control.Disposed+=(sender,args)=>decorated.Remove(control);
    var button=control as Button;
@@ -1519,8 +1520,17 @@ namespace ArmazemGratidao {
     backBar.Resize+=(sender,args)=>{back.Left=Math.Max(8,backBar.ClientSize.Width-back.Width-10);};
    }
    backBar.Controls.Add(back);
+   var pdvBackSlot=form.Controls.Find("pdvBackSlot",true).FirstOrDefault() as Panel;
    var stockArea=form.Controls.Find("stockNavigation",true).FirstOrDefault() as Panel;
-   if(stockArea!=null){
+   if(pdvBackSlot!=null){
+    // No PDV, o botao Voltar fica antes do campo Codigo/Nome.
+    backBar.Dock=DockStyle.Fill;
+    backBar.Margin=Padding.Empty;
+    backBar.BackColor=Color.FromArgb(248,250,254);
+    back.Left=4;back.Top=5;back.Width=256;back.Height=39;
+    back.Font=new Font("Segoe UI",10,FontStyle.Bold);
+    pdvBackSlot.Controls.Add(backBar);
+   }else if(stockArea!=null){
     backBar.Dock=DockStyle.Fill;
     backBar.Margin=new Padding(0);
     stockArea.Controls.Add(backBar);
