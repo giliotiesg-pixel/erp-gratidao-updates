@@ -1,14 +1,13 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-if exist publish rmdir /s /q publish
-if exist publish-maintenance rmdir /s /q publish-maintenance
-if exist installer\Output rmdir /s /q installer\Output
-dotnet restore AMZG.App\AMZG.App.csproj || exit /b 1
-dotnet restore AMZG.Maintenance\AMZG.Maintenance.csproj || exit /b 1
-dotnet publish AMZG.App\AMZG.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish || exit /b 1
-dotnet publish AMZG.Maintenance\AMZG.Maintenance.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-maintenance || exit /b 1
-copy /y publish-maintenance\AMZG.Maintenance.exe publish\AMZG.Maintenance.exe >nul || exit /b 1
-for /r publish %%F in (*.db *.sqlite *.sqlite3) do exit /b 2
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\AMZG.iss || "C:\Program Files\Inno Setup 6\ISCC.exe" installer\AMZG.iss || exit /b 1
-if not exist installer\Output\AMZG-Setup.exe exit /b 3
+REM Uma unica numeração em novo-win8\VERSAO.txt: 1.1.593, 1.2.594...
+REM O gerador valida versao de PDV, instalador, atualizador, ZIP e manifesto.
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "novo-win8\build-unificado.ps1" -Build 0
+set "RESULT=%ERRORLEVEL%"
+if not "%RESULT%"=="0" (
+  echo ERRO: arquivos com numeracao diferente ou falha ao compilar. Nenhum release deve ser publicado.
+  exit /b %RESULT%
+)
+echo Pacote unificado pronto em dist\. Todos os arquivos usam a versao de VERSAO.txt.
+exit /b 0

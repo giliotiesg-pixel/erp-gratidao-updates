@@ -1,0 +1,51 @@
+name: Disponibilizar teste Windows 8 Build 590
+on:
+  push:
+    branches:
+      - fix/amzg-atualizador-ausente-auto-recuperacao-build590
+    paths:
+      - '.github/workflows/distribuir-teste-win8-590.yml'
+jobs:
+  disponibilizar:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Baixar artefato previamente compilado e testado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          gh run download 42382556523 --repo giliotiesg-pixel/erp-gratidao-updates --name Armazem-Gratidao-Unico-build-590 --dir distribuicao
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel baixar artefato validado.'}
+          $setup='distribuicao/Instalador-Armazem-Gratidao.exe'
+          $updater='distribuicao/AtualizadorGratidao.exe'
+          $zip='distribuicao/Armazem-Gratidao-Atualizacao.zip'
+          if(!(Test-Path $setup) -or !(Test-Path $zip) -or !(Test-Path $updater)){throw 'Pacote incompleto.'}
+          $actualSetup=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $actualZip=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $validation=(Get-Content 'distribuicao/VALIDACAO-SHA256.txt' -Raw)
+          if($validation -notmatch [regex]::Escape($actualSetup)){throw 'SHA256 do instalador diverge do registro validado!'}
+          if($validation -notmatch [regex]::Escape($actualZip)){throw 'SHA256 do patch diverge do registro validado!'}
+          Write-Host 'Integridade confirmada.'
+      - name: Criar release de TESTE sem alterar atualizador oficial
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='amzg-teste-windows8-590'
+          $notes='VERSAO DE TESTE Windows 8 x64 e .NET 4.5. Se aparecer O ATUALIZADOR VISUAL NAO ESTA INSTALADO, baixe somente AtualizadorGratidao.exe e copie na pasta do programa, normalmente C:\\ERP-Gratidao, sem reinstalar nem mexer nos dados. O ZIP passa a incluir o atualizador automaticamente. Instalador-Armazem-Gratidao.exe com icone de caixa e seta. Depois de instalar, atalho Armazem Gratidao com carrinho azul/vermelho abre somente o PDV. Arquivos e icones diferentes. Backup obrigatorio antes do reparo. Mantem backup obrigatorio e progresso visivel. Testado apenas no Windows moderno com dados descartaveis. NAO DESINSTALE a versao atual. Este prerelease nao altera o manifesto oficial de atualizacoes.'
+          $params=@('release','create',$tag,
+            'distribuicao/Instalador-Armazem-Gratidao.exe',
+            'distribuicao/AtualizadorGratidao.exe',
+            'distribuicao/Armazem-Gratidao-Atualizacao.zip',
+            'distribuicao/VALIDACAO-SHA256.txt',
+            '--repo','giliotiesg-pixel/erp-gratidao-updates',
+            '--target','fix/amzg-atualizador-ausente-auto-recuperacao-build590',
+            '--title','Armazem Gratidao Windows 8 - Teste Build 590',
+            '--notes',$notes,'--prerelease')
+          gh @params
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel publicar release de teste.'}
+          gh release view $tag --repo giliotiesg-pixel/erp-gratidao-updates --json url,name,assets,isPrerelease
+          if($LASTEXITCODE -ne 0){throw 'Release de teste indisponivel.'}

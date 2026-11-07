@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -25,16 +26,29 @@ namespace ArmazemGratidaoAtualizador {
   readonly Button close=new Button{Text="Fechar",Dock=DockStyle.Bottom,Height=40,Visible=false};
   public AtualizadorWindow(string[] arguments){
    args=arguments;
-   Text="Armazém Gratidão | Atualizador Automático";
+   var version=typeof(AtualizadorWindow).Assembly.GetName().Version;
+   Text="Armazém Gratidão | Atualizador v"+version.Major+"."+version.Minor+
+    " (build "+(version.Revision>0?version.Revision:version.Build)+")";
    Width=630;Height=235;MinimumSize=new Size(530,205);
    StartPosition=FormStartPosition.CenterScreen;BackColor=Color.FromArgb(236,244,254);
    Controls.Add(message);Controls.Add(progress);Controls.Add(close);
    close.Click+=(s,e)=>Close();
   }
+  void WriteLog(string text){
+   try{
+    if(args.Length<4)return;
+    string directory=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[3])),"Arquivos","Logs");
+    Directory.CreateDirectory(directory);
+    string name=Path.Combine(directory,"atualizador-"+DateTime.Now.ToString("yyyyMMdd")+".log");
+    lock(logLock)File.AppendAllText(name,DateTime.Now.ToString("o")+" "+text+Environment.NewLine);
+   }catch(IOException){}catch(UnauthorizedAccessException){}
+  }
+  static readonly object logLock=new object();
   void Report(string text,int percent){
    if(IsDisposed)return;
    if(InvokeRequired){BeginInvoke(new Action<string,int>(Report),text,percent);return;}
    message.Text=text;
+   WriteLog(text);
    progress.Value=Math.Max(0,Math.Min(100,percent));
   }
   protected override async void OnShown(EventArgs e){
@@ -45,6 +59,7 @@ namespace ArmazemGratidaoAtualizador {
     await Task.Delay(700);
     Close();
    }catch(Exception ex){
+    WriteLog("ERRO: "+ex.ToString());
     Report("Não foi possível atualizar. A versão anterior foi preservada ou restaurada.",0);
     MessageBox.Show(this,ex.Message,"Atualização não concluída",MessageBoxButtons.OK,MessageBoxIcon.Error);
     close.Visible=true;
@@ -53,8 +68,30 @@ namespace ArmazemGratidaoAtualizador {
   static bool Allowed(string path){
    return new[]{
     "ArmazemGratidaoNovo.exe","ArmazemGratidaoNovo.exe.config",
-    "QRCoder.dll","System.Data.SQLite.dll","zxing.dll","x64/SQLite.Interop.dll"
+    "QRCoder.dll","System.Data.SQLite.dll","zxing.dll","x64/SQLite.Interop.dll",
+    "AtualizadorGratidao.exe"
    }.Contains(path,StringComparer.OrdinalIgnoreCase);
+  }
+  // Protecao adicional, independente da tela principal: recusa downgrade.
+  // Build historica pode vir no terceiro ou quarto campo da AssemblyVersion.
+  internal static int ReadInstalledBuild(string executable){
+   if(!File.Exists(executable))
+    throw new Exception("Executável não encontrado para comparar versões: "+executable);
+   Version version;
+   try{version=AssemblyName.GetAssemblyName(executable).Version;}
+   catch(Exception ex){throw new Exception("Não foi possível identificar a versão do executável: "+executable,ex);}
+   if(version==null)throw new Exception("Executável sem versão identificável: "+executable);
+   int number=version.Revision>0?version.Revision:version.Build;
+   if(number<1)throw new Exception("Versão inválida. Atualização bloqueada por segurança: "+version);
+   return number;
+  }
+  internal static void AssertUpgrade(int installedBuild,int packageBuild){
+   if(installedBuild<1||packageBuild<1)
+    throw new Exception("Versão inválida. Nenhum arquivo será alterado.");
+   if(packageBuild<=installedBuild)
+    throw new Exception("ATUALIZAÇÃO BLOQUEADA: a build "+packageBuild+
+     " não é mais recente que a versão instalada "+installedBuild+
+     ". O programa e o banco de dados foram preservados.");
   }
   void Apply(){
    if(args.Length!=6||args[0]!="--apply-zip")
@@ -79,7 +116,10 @@ namespace ArmazemGratidaoAtualizador {
     if(!process.WaitForExit(60000))throw new Exception("O Armazém Gratidão continua aberto. Feche todas as janelas e tente novamente.");
    }catch(ArgumentException){} // O processo já foi encerrado.
    string staging=Path.Combine(Path.GetTempPath(),"amzg-stage-"+Guid.NewGuid().ToString("N"));
-   string rollback=Path.Combine(Path.GetDirectoryName(zip),"RollbackArquivos",
+   string rollbackRoot=Path.Combine(dir,"Arquivos","Rollback");
+   if(!Directory.Exists(rollbackRoot))
+    rollbackRoot=Path.Combine(Path.GetDirectoryName(zip),"RollbackArquivos");
+   string rollback=Path.Combine(rollbackRoot,
     DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,5));
    Directory.CreateDirectory(staging);Directory.CreateDirectory(rollback);
    var targets=new List<string>();
@@ -89,6 +129,16 @@ namespace ArmazemGratidaoAtualizador {
     targets.AddRange(ZipCompat.Extract(zip,staging,Allowed));
     if(!targets.Contains("ArmazemGratidaoNovo.exe",StringComparer.OrdinalIgnoreCase))
      throw new Exception("Pacote incompleto: executável não encontrado.");
+    // Mesmo quando uma versão antiga solicita erroneamente a build 582,
+    // o atualizador deve BLOQUEAR antes de qualquer substituição e rollback.
+    int installedBuild=ReadInstalledBuild(app);
+    int candidateBuild=ReadInstalledBuild(Path.Combine(staging,"ArmazemGratidaoNovo.exe"));
+    WriteLog("Comparando versões: instalada="+installedBuild+" pacote="+candidateBuild);
+    AssertUpgrade(installedBuild,candidateBuild);
+    // Novos ZIPs devem recuperar o executavel do atualizador tambem.
+    // A própria aplicacao invoca uma copia no diretorio temporario, de modo
+    // que AtualizadorGratidao.exe na pasta do sistema nao fica bloqueado.
+    // ZIPs legados continuam aceitos pelo atualizador previamente instalado.
     foreach(string name in targets){
      string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
      string previous=Path.Combine(rollback,name.Replace('/',Path.DirectorySeparatorChar));

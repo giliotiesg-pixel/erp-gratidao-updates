@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Diagnostics;
@@ -13,7 +14,23 @@ using System.Windows.Forms;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Idle+=(sender,args)=>{ButtonTextVisibility.CheckOpenForms(); PdvShortcutButtons.CheckOpenForms(); WindowBoundsGuard.CheckOpenForms(); RoundedGridTheme.CheckOpenForms(); ModuleVisualTheme.CheckOpenForms();}; Application.Run(new MainForm()); }
+  static DateTime nextVisualScanUtc=DateTime.MinValue;
+  [STAThread] static void Main() {
+   Application.EnableVisualStyles();
+   Application.SetCompatibleTextRenderingDefault(false);
+   // Nao percorrer todas as janelas a cada mensagem ociosa do Windows: em PCs lentos isso consome CPU.
+   Application.Idle+=(sender,args)=>{
+    var now=DateTime.UtcNow;
+    if(now<nextVisualScanUtc)return;
+    nextVisualScanUtc=now.AddMilliseconds(3500);
+    ButtonTextVisibility.CheckOpenForms();
+    PdvShortcutButtons.CheckOpenForms();
+    WindowBoundsGuard.CheckOpenForms();
+    RoundedGridTheme.CheckOpenForms();
+    ModuleVisualTheme.CheckOpenForms();
+   };
+   Application.Run(new MainForm());
+  }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
  static class WindowBoundsGuard {
@@ -118,14 +135,18 @@ namespace ArmazemGratidao {
    };
    table.Disposed+=(sender,args)=>styled.Remove(table);
   }
-  static void Search(Control parent){
-   if(parent.IsDisposed)return;
+  static readonly System.Collections.Generic.HashSet<Control> watched=
+   new System.Collections.Generic.HashSet<Control>();
+  static void Watch(Control parent){
+   if(parent==null||parent.IsDisposed||!watched.Add(parent))return;
+   parent.Disposed+=(sender,args)=>watched.Remove(parent);
    var grid=parent as DataGridView;
    if(grid!=null){Apply(grid);return;}
-   foreach(Control child in parent.Controls)Search(child);
+   parent.ControlAdded+=(sender,args)=>Watch(args.Control);
+   foreach(Control child in parent.Controls)Watch(child);
   }
   public static void CheckOpenForms(){
-   foreach(Form f in Application.OpenForms)if(!f.IsDisposed)Search(f);
+   foreach(Form form in Application.OpenForms)Watch(form);
   }
  }
  static class RoundedVisuals {
@@ -255,31 +276,51 @@ namespace ArmazemGratidao {
   }
  }
  static class ButtonTextVisibility {
-  static readonly System.Collections.Generic.Dictionary<Button,string> inspected=new System.Collections.Generic.Dictionary<Button,string>();
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms)Check(form);
-  }
-  static void Check(Control parent){
-   foreach(Control child in parent.Controls){
-    var button=child as Button;
-    if(button!=null && !string.IsNullOrWhiteSpace(button.Text)){
-     string signature=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
-     string previous;
-     if(!inspected.TryGetValue(button,out previous) || previous!=signature){
-      var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
-      int desired=size.Width+24;
-      if(button.Image!=null)desired+=button.Image.Width+8;
-      if(button.Width<desired && button.Dock==DockStyle.None && button.Parent is FlowLayoutPanel && !(button.MinimumSize.Width>0 && button.MaximumSize.Width==button.MinimumSize.Width)){
-       button.AutoSize=false;button.Width=desired;
-      }
-      button.AutoEllipsis=true;
-      if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal))button.TextAlign=ContentAlignment.MiddleCenter;
-      button.UseMnemonic=false;
-      inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
-     }
-    }
-    if(child.HasChildren)Check(child);
+  // Aplicar a correção apenas uma vez por controle. Os eventos acompanham
+  // mudanças posteriores: não varrer a árvore de dezenas de janelas no Idle.
+  static readonly System.Collections.Generic.HashSet<Control> watched=
+   new System.Collections.Generic.HashSet<Control>();
+  static readonly System.Collections.Generic.Dictionary<Button,string> inspected=
+   new System.Collections.Generic.Dictionary<Button,string>();
+  static void Inspect(Button button){
+   if(button.IsDisposed)return;
+   string signature=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+   string previous;
+   if(inspected.TryGetValue(button,out previous)&&previous==signature)return;
+   button.AutoEllipsis=true;
+   button.UseMnemonic=false;
+   if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)){
+    var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
+    int desired=size.Width+24;
+    if(button.Image!=null)desired+=button.Image.Width+8;
+    if(button.Width<desired && button.Dock==DockStyle.None &&
+      button.Parent is FlowLayoutPanel &&
+      !(button.MinimumSize.Width>0&&button.MaximumSize.Width==button.MinimumSize.Width))
+     button.Width=desired;
+    button.TextAlign=ContentAlignment.MiddleCenter;
    }
+   inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+  }
+  static void Watch(Control c){
+   if(c==null||c.IsDisposed||!watched.Add(c))return;
+   c.Disposed+=(sender,args)=>{
+    watched.Remove(c);
+    var b=c as Button;
+    if(b!=null)inspected.Remove(b);
+   };
+   var button=c as Button;
+   if(button!=null){
+    button.TextChanged+=(sender,args)=>Inspect(button);
+    button.FontChanged+=(sender,args)=>Inspect(button);
+    button.SizeChanged+=(sender,args)=>Inspect(button);
+    Inspect(button);
+   }
+   if(c is DataGridView)return;
+   c.ControlAdded+=(sender,args)=>Watch(args.Control);
+   foreach(Control child in c.Controls)Watch(child);
+  }
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms)Watch(form);
   }
  }
  public sealed class MainForm : Form {
@@ -289,10 +330,24 @@ namespace ArmazemGratidao {
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
   readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*60*1000};
   bool dailyBackupRunning=false;
+  readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
-  int InstalledBuild { get { return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Build; } }
+  int InstalledBuild {
+   get {
+    // AssemblyVersion 1.0.0.591: 591 e REVISION, nao o campo Build (zero).
+    // Compatibilidade com versões antigas que publicavam 1.0.582.0.
+    var version=typeof(MainForm).Assembly.GetName().Version;
+    return version.Revision>0?version.Revision:version.Build;
+   }
+  }
+  string InstalledVersion {
+   get {
+    var v=typeof(MainForm).Assembly.GetName().Version;
+    return v.Major+"."+v.Minor;
+   }
+  }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
   readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
@@ -300,7 +355,7 @@ namespace ArmazemGratidao {
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
    dbPath=Path.Combine(dataDir,"armazem-gratidao.db");
-   Text="Armazém Gratidão Novo";Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
+   Text="Armazém Gratidão | Versão "+InstalledVersion+" (build "+InstalledBuild+")";Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
    var bar=sideMenu;
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
@@ -310,7 +365,8 @@ namespace ArmazemGratidao {
    menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
-   menuToggle.Click+=(s,e)=>ShowMainMenu();
+   menuToggle.Text="⊞  Iniciar";
+   menuToggle.Click+=(sender,args)=>ToggleStartMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    // Atualização sempre acessível no cabeçalho, independentemente do módulo aberto.
    var updateHeader=new Button{Text="Verificar Atualização",Left=181,Top=13,Width=177,Height=40,
@@ -334,6 +390,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
    AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
+   AddButton(bar,"Central de manutencao", (sender,args)=>OpenProgramFilesFolder());
    AddButton(bar,"Verificar banco",CheckDatabase);
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
@@ -360,8 +417,17 @@ namespace ArmazemGratidao {
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowMainMenu();
-   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{AutoRecoverSales();EnsureDailyBackup();await CheckUpdates(false);}));
-   dailyBackupTimer.Tick+=(s,e)=>EnsureDailyBackup();
+   Shown+=async (sender,args)=>{
+    // Abertura do caixa recebe prioridade. Tarefas automáticas só começam
+    // depois que o menu já estiver desenhado e respondendo ao usuário.
+    await Task.Delay(12000);
+    if(!IsDisposed)await EnsureDailyBackupAsync();
+    // A verificação remota e a procura de vendas antigas são secundárias.
+    await Task.Delay(90000);
+    if(!IsDisposed)await CheckUpdates(false);
+    if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
+   };
+   dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
    dailyBackupTimer.Start();
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
@@ -381,8 +447,12 @@ namespace ArmazemGratidao {
   }
   string UpdateBackupDirectory(){
    string file=Path.Combine(dataDir,"backup-location.txt");
-   string directory=File.Exists(file)?File.ReadAllText(file).Trim():Path.Combine(dataDir,"Backups");
-   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))throw new Exception("A pasta de backup configurada e invalida.");
+   string unified=Path.Combine(Application.StartupPath,"Arquivos","Backups");
+   // NUNCA trocar a pasta que o usuario ja configurou.
+   string directory=File.Exists(file)?File.ReadAllText(file).Trim():
+    (Directory.Exists(unified)?unified:Path.Combine(dataDir,"Backups"));
+   if(string.IsNullOrWhiteSpace(directory)||!Path.IsPathRooted(directory))
+    throw new Exception("A pasta de backup configurada e invalida.");
    Directory.CreateDirectory(directory);
    return directory;
   }
@@ -398,34 +468,42 @@ namespace ArmazemGratidao {
   }
   // Uma copia consistente por dia, ao abrir o sistema e enquanto permanecer aberto.
   // Falhas ficam visiveis; nunca registrar sucesso sem validar a integridade.
-  void EnsureDailyBackup(){
+  async Task EnsureDailyBackupAsync(){
    if(dailyBackupRunning||!File.Exists(dbPath))return;
    dailyBackupRunning=true;
    try{
-    string folder=UpdateBackupDirectory();
-    string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
-    string today=DateTime.Now.ToString("yyyy-MM-dd");
-    if(File.Exists(marker)){
-     string[] lines=File.ReadAllLines(marker);
-     if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return;
-    }
-    string backup=CreateVerifiedPreUpdateBackup();
-    if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
-    string tmp=marker+".tmp";
-    File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
-    if(File.Exists(marker))File.Delete(marker);
-    File.Move(tmp,marker);
-    status.Text="Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+    await backupGate.WaitAsync();
+    try{
+     // Copia e verificacao SQLite feitas fora da thread de interface.
+     string report=await Task.Run(()=>{
+      string folder=UpdateBackupDirectory();
+      string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
+      string today=DateTime.Now.ToString("yyyy-MM-dd");
+      if(File.Exists(marker)){
+       string[] lines=File.ReadAllLines(marker);
+       if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return null;
+      }
+      string backup=CreateVerifiedPreUpdateBackup();
+      if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
+      string tmp=marker+".tmp";
+      File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
+      if(File.Exists(marker))File.Delete(marker);
+      File.Move(tmp,marker);
+      return "Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+     });
+     if(report!=null&&!IsDisposed)status.Text=report;
+    }finally{backupGate.Release();}
    }catch(Exception ex){
-    status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
+    if(!IsDisposed)status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
     // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
    }finally{dailyBackupRunning=false;}
   }
-  string CreateVerifiedPreUpdateBackup(){
+  string CreateVerifiedPreUpdateBackup(string destination=null){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
    Directory.CreateDirectory(dataDir);
-   string backup=Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+   string backup=destination??Path.Combine(UpdateBackupDirectory(),"armazem-gratidao-antes-atualizacao-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
    try{
+    Directory.CreateDirectory(Path.GetDirectoryName(backup));
     using(var source=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString()))
     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
      source.Open();dest.Open();source.BackupDatabase(dest,"main","main",-1,null,0);
@@ -449,18 +527,20 @@ namespace ArmazemGratidao {
   // O banco e copiado pelo SQLite BackupDatabase, nunca pela copia bruta em uso.
   string CreateVerifiedFullUpdateBackup(){
    if(!File.Exists(dbPath))throw new Exception("Banco nao encontrado. Atualizacao bloqueada.");
-   string snapshot=CreateVerifiedPreUpdateBackup();
+   // O backup integral gera apenas UMA copia SQLite verificada, diretamente na pasta final.
    string folder=Path.Combine(UpdateBackupDirectory(),
     "armazem-gratidao-completo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6));
    string dataBackup=Path.Combine(folder,"Dados");
    try{
     Directory.CreateDirectory(dataBackup);
     string dbCopy=Path.Combine(dataBackup,"armazem-gratidao.db");
-    File.Copy(snapshot,dbCopy);
+    CreateVerifiedPreUpdateBackup(dbCopy);
     if(new FileInfo(dbCopy).Length<=0)throw new Exception("Backup do banco ficou vazio.");
     string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string updatesRoot=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string legacyBackupRoot=Path.GetFullPath(Path.Combine(dataDir,"Backups")).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string legacyUpdateRoot=Path.GetFullPath(Path.Combine(dataDir,"Atualizacoes")).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     var pending=new System.Collections.Generic.Stack<string>();
     pending.Push(dataDir);
     while(pending.Count>0){
@@ -468,14 +548,20 @@ namespace ArmazemGratidao {
      foreach(string sub in Directory.GetDirectories(current)){
       string full=Path.GetFullPath(sub).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
       if(full.StartsWith(backupRoot,StringComparison.OrdinalIgnoreCase)||
-         full.StartsWith(updatesRoot,StringComparison.OrdinalIgnoreCase))continue;
+         full.StartsWith(updatesRoot,StringComparison.OrdinalIgnoreCase)||
+         full.StartsWith(legacyBackupRoot,StringComparison.OrdinalIgnoreCase)||
+         full.StartsWith(legacyUpdateRoot,StringComparison.OrdinalIgnoreCase)||
+         (File.GetAttributes(sub)&FileAttributes.ReparsePoint)!=0)continue;
       pending.Push(sub);
      }
      foreach(string file in Directory.GetFiles(current)){
       string full=Path.GetFullPath(file);
+      string name=Path.GetFileName(full);
       if(string.Equals(full,dbPath,StringComparison.OrdinalIgnoreCase)||
          full.EndsWith(".db-wal",StringComparison.OrdinalIgnoreCase)||
-         full.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase))continue;
+         full.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase)||
+         name.StartsWith("armazem-gratidao-completo-",StringComparison.OrdinalIgnoreCase)||
+         name.StartsWith("armazem-gratidao-antes-atualizacao-",StringComparison.OrdinalIgnoreCase))continue;
       string relative=full.Substring(root.Length);
       string target=Path.Combine(dataBackup,relative);
       Directory.CreateDirectory(Path.GetDirectoryName(target));
@@ -492,7 +578,9 @@ namespace ArmazemGratidao {
    }
   }
   string UpdatesDirectory(){
-   string folder=Path.Combine(dataDir,"Atualizacoes");
+   // O instalador unico prepara esta pasta com permissoes de escrita para o usuario.
+   string unified=Path.Combine(Application.StartupPath,"Arquivos","Atualizacoes");
+   string folder=Directory.Exists(unified)?unified:Path.Combine(dataDir,"Atualizacoes");
    Directory.CreateDirectory(folder);
    return folder;
   }
@@ -504,6 +592,17 @@ namespace ArmazemGratidao {
   }
   async Task<string> DownloadVerifiedUpdate(int build,string url,string digest,bool zipPackage){
    string installer=Path.Combine(UpdatesDirectory(),"Armazem-Gratidao-build-"+build+"-Atualizacao"+(zipPackage?".zip":".exe"));
+   // Aproveitar versoes baixadas antes de unificar as pastas, sem redownload.
+   if(!File.Exists(installer)){
+    string legacy=Path.Combine(dataDir,"Atualizacoes",Path.GetFileName(installer));
+    if(!string.Equals(legacy,installer,StringComparison.OrdinalIgnoreCase)&&File.Exists(legacy)){
+     using(var old=File.OpenRead(legacy))using(var sha=SHA256.Create()){
+      string hash=BitConverter.ToString(sha.ComputeHash(old)).Replace("-","").ToLowerInvariant();
+      if(string.Equals(hash,digest.Substring(7),StringComparison.OrdinalIgnoreCase))
+       File.Copy(legacy,installer,false);
+     }
+    }
+   }
    bool valid=false;
    if(File.Exists(installer)){
     using(var stream=File.OpenRead(installer))using(var sha=SHA256.Create())
@@ -528,6 +627,49 @@ namespace ArmazemGratidao {
    }
    return installer;
   }
+  // Atualizador independente: executado de uma copia TEMPORARIA para que
+  // o ZIP possa instalar/reparar AtualizadorGratidao.exe sem arquivo bloqueado.
+  // A origem do EXE e o pacote ja validado por SHA-256 pela aplicacao.
+  string PrepareVerifiedUpdater(string zipPath){
+   string installed=Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe");
+   string staged=Path.Combine(Path.GetTempPath(),
+     "AMZG-Atualizador-"+Guid.NewGuid().ToString("N")+".exe");
+   try{
+    using(var archive=ZipFile.OpenRead(zipPath)){
+     var matches=archive.Entries.Where(e=>string.Equals(e.FullName,
+       "AtualizadorGratidao.exe",StringComparison.OrdinalIgnoreCase)).ToList();
+     if(matches.Count>1)throw new Exception("O pacote contém atualizadores duplicados.");
+     if(matches.Count==1){
+      var entry=matches[0];
+      if(entry.Length<20000||entry.Length>16777216)
+       throw new Exception("O executável do atualizador no ZIP possui tamanho inválido.");
+      using(var input=entry.Open())
+      using(var output=new FileStream(staged,FileMode.CreateNew,FileAccess.Write,FileShare.None)){
+       byte[] buffer=new byte[32768];int n;long count=0;
+       while((n=input.Read(buffer,0,buffer.Length))>0){
+        count+=n;
+        if(count>entry.Length)throw new Exception("Atualizador ZIP com tamanho inconsistente.");
+        output.Write(buffer,0,n);
+       }
+       if(count!=entry.Length)throw new Exception("Atualizador ZIP incompleto.");
+      }
+      return staged;
+     }
+    }
+    // Compatibilidade com ZIP legado (build 582), que nao tinha o atualizador:
+    // usar uma copia temporaria do atualizador ja presente no programa.
+    if(File.Exists(installed)){
+     File.Copy(installed,staged,false);
+     return staged;
+    }
+    throw new Exception("Este pacote antigo nao contém o atualizador e ele está ausente no computador. "+
+      "Baixe somente o arquivo AtualizadorGratidao.exe na página de manutenção do GitHub "+
+      "e copie para C:\\ERP-Gratidao. Não é necessário reinstalar o programa.");
+   }catch{
+    try{if(File.Exists(staged))File.Delete(staged);}catch{}
+    throw;
+   }
+  }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
@@ -541,6 +683,7 @@ namespace ArmazemGratidao {
     const string prefix="amzg-novo-win8-build-";
     System.Collections.Generic.Dictionary<string,object> release=null;
     int remoteBuild=-1;
+    string remoteDisplayVersion="";
     string alternativeError="";
     // Primeiro consultar manifesto estatico (CDN raw). Evita depender da API que pode responder 504.
     try{
@@ -575,6 +718,9 @@ namespace ArmazemGratidao {
      release=new System.Collections.Generic.Dictionary<string,object>();
      release["assets"]=new object[]{manifestAsset};
      remoteBuild=version;
+     remoteDisplayVersion=manifest.ContainsKey("version")?Convert.ToString(manifest["version"]):"1.0";
+     if(!System.Text.RegularExpressions.Regex.IsMatch(remoteDisplayVersion??"", @"^\d{1,2}\.\d{1,2}$"))
+      throw new Exception("Número da versão publicado é inválido.");
     }catch(WebException ex){
      alternativeError=ex.Message;
     }
@@ -609,7 +755,7 @@ namespace ArmazemGratidao {
       string tag=Convert.ToString(candidate["tag_name"]);
       int build;
       if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
-       remoteBuild=build;release=candidate;
+       remoteBuild=build;release=candidate;remoteDisplayVersion="";
       }
      }
     }
@@ -618,12 +764,21 @@ namespace ArmazemGratidao {
      if(manual)MessageBox.Show("Nao existe uma atualizacao Windows8 publicada.","Verificar atualizacao");
      return;
     }
+    string remoteLabel=string.IsNullOrEmpty(remoteDisplayVersion)?"build "+remoteBuild:
+     "versão "+remoteDisplayVersion+" (build "+remoteBuild+")";
     if(remoteBuild<=InstalledBuild){
-     status.Text="Versao atualizada: build "+InstalledBuild+".";
-     if(manual)MessageBox.Show("Versão instalada: "+InstalledBuild+Environment.NewLine+"Última build publicada: "+remoteBuild+Environment.NewLine+Environment.NewLine+"Nenhuma atualização nova foi publicada no GitHub. Alterações em teste não são instaladas automaticamente.","Verificar atualização");
+     status.Text=InstalledBuild>remoteBuild
+      ?"Versão "+InstalledVersion+" instalada; canal oficial na "+remoteLabel+"."
+      :"Versão "+InstalledVersion+" atualizada (build "+InstalledBuild+").";
+     if(manual)MessageBox.Show("Versão instalada: "+InstalledVersion+" (build "+InstalledBuild+")"+Environment.NewLine+
+      "Local executado: "+Application.ExecutablePath+Environment.NewLine+
+      "Última versão publicada no canal oficial: "+remoteLabel+Environment.NewLine+Environment.NewLine+
+      (InstalledBuild>remoteBuild?"Esta é uma versão de teste mais recente que a oficial; não haverá atualização automática para uma versão anterior."
+       :"Não existe atualização oficial mais recente."),
+      "Verificar atualização");
      return;
     }
-    status.Text="Nova versao publicada: build "+remoteBuild+".";
+    status.Text="Nova versão publicada: "+remoteLabel+".";
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Pacote de atualização não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -639,18 +794,24 @@ namespace ArmazemGratidao {
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
     // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
     bool isZip=string.Equals(Convert.ToString(asset["name"]),patchZip,StringComparison.OrdinalIgnoreCase);
-    if(isZip&&!File.Exists(Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe")))
-     throw new Exception("O atualizador visual não está instalado. Utilize uma única vez o instalador completo.");
+    // O ZIP é baixado e validado por SHA-256 antes de conferir o atualizador.
+    // A ausência do auxiliar não deve impedir a recuperação automática.
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
-    status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
+    status.Text="Atualização "+remoteLabel+" salva em Atualizações Salvas.";
     if(!manual&&lastPromptedBuild==remoteBuild)return;
     lastPromptedBuild=remoteBuild;
-    if(MessageBox.Show("Atualização build "+remoteBuild+" já baixada e verificada."+Environment.NewLine+
+    if(MessageBox.Show("Atualização "+remoteLabel+" já baixada e verificada."+Environment.NewLine+
      "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
-     Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
+     Environment.NewLine+"O programa será fechado somente ao iniciar o atualizador.",
      "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
-    string backupPath=isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup();
+    // Aguardar qualquer backup diario e copiar em segundo plano, evitando travar a interface.
+    status.Text="Criando e conferindo o backup antes da atualização...";
+    string backupPath;
+    await backupGate.WaitAsync();
+    try{
+     backupPath=await Task.Run(()=>isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup());
+    }finally{backupGate.Release();}
     status.Text="Backup confirmado: "+backupPath;
     // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
     // de fechamento (por exemplo, uma venda em edição ainda não salva).
@@ -662,7 +823,9 @@ namespace ArmazemGratidao {
      return;
     }
     if(isZip){
-     string updater=Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe");
+     // A copia temporaria nao bloqueia o executavel da pasta de instalacao:
+     // o proprio ZIP pode repor o atualizador que estava faltando.
+     string updater=PrepareVerifiedUpdater(installer);
      Func<string,string> quote=value=>"\""+value.Replace("\"","")+"\"";
      var start=new ProcessStartInfo(updater){
       Arguments="--apply-zip "+quote(installer)+" "+quote(digest.Substring(7))+" "+
@@ -805,7 +968,8 @@ namespace ArmazemGratidao {
   // Pasta persistente de suporte: fora do diretório de instalação e sem copiar dados privados automaticamente.
   void OpenProgramFilesFolder(){
    try{
-    string folder=Path.Combine(dataDir,"Arquivos do Programa");
+    string unified=Path.Combine(Application.StartupPath,"Arquivos");
+    string folder=Directory.Exists(unified)?unified:Path.Combine(dataDir,"Arquivos do Programa");
     Directory.CreateDirectory(folder);
     string instructions=Path.Combine(folder,"LEIA-ME.txt");
     if(!File.Exists(instructions)){
@@ -813,10 +977,13 @@ namespace ArmazemGratidao {
       "ARMAZÉM GRATIDÃO NOVO - ARQUIVOS DO PROGRAMA"+Environment.NewLine+
       "Esta pasta permanece no computador durante as atualizações."+Environment.NewLine+
       "Use-a para guardar documentos de manutenção, instruções e arquivos de suporte."+Environment.NewLine+
-      "Código-fonte e documentação centralizados no GitHub:"+Environment.NewLine+
-      "https://github.com/giliotiesg-pixel/erp-gratidao-updates/tree/main/ARQUIVOS-DO-PROGRAMA"+Environment.NewLine+
-      "NÃO coloque senhas ou backups com dados de clientes em repositórios públicos."+Environment.NewLine+
-      "A pasta de backup do programa é configurada separadamente."+Environment.NewLine,
+      "Atualizacoes: pacotes baixados e verificados SHA-256."+Environment.NewLine+
+      "Backups: copia de seguranca antes de atualizar, exceto quando voce configurou outra pasta."+Environment.NewLine+
+      "Logs: registros de falhas e execucao do atualizador."+Environment.NewLine+
+      "Rollback: arquivos antigos para reparacao em caso de falha."+Environment.NewLine+
+      "Codigo-fonte e compilacao: https://github.com/giliotiesg-pixel/erp-gratidao-updates"+Environment.NewLine+
+      "Dados ativos permanecem na pasta AppData do usuario para preservar o historico."+Environment.NewLine+
+      "NUNCA envie bancos de clientes, fiados ou vendas ao GitHub publico."+Environment.NewLine,
       System.Text.Encoding.UTF8);
     }
     Process.Start("explorer.exe", "\""+folder+"\"");
@@ -1066,76 +1233,181 @@ Panel BuildEmbeddedCalculator(){
    if(new[]{"Relatórios","Consulta de preços","Início / Indicadores","Localizar vendas","Conferir valores","Itens"}.Contains(name))return "CONSULTAS E RELATÓRIOS";
    return "SISTEMA E MANUTENÇÃO";
   }
-  void GroupModuleButtons(FlowLayoutPanel panel){
+  // Menu nativo e compacto: linhas horizontais de largura total, sem colunas fixas.
+  // TODAS as secoes possuem controle Mostrar/Ocultar, sem alterar o clique dos modulos.
+  void GroupModuleButtons(FlowLayoutPanel panel,bool adjustHeight=false){
    var buttons=panel.Controls.OfType<Button>().ToList();
    panel.SuspendLayout();panel.Controls.Clear();
    panel.WrapContents=false;
    panel.FlowDirection=FlowDirection.TopDown;
-   panel.Padding=new Padding(7,5,5,5);
-   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
-   var sections=new System.Collections.Generic.List<Panel>();
+   panel.Padding=new Padding(5,4,5,4);
+   panel.AutoScroll=!adjustHeight;
+   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA",
+    "CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
+   var blocks=new System.Collections.Generic.List<Tuple<Panel,FlowLayoutPanel,Button>>();
+   Action arrange=null;
    foreach(string section in order){
     var matches=buttons.Where(x=>ModuleSection(x.AccessibleDescription)==section).ToList();
     if(matches.Count==0)continue;
-    bool maintenance=section=="SISTEMA E MANUTENÇÃO"||section=="CONSULTAS E RELATÓRIOS";
-    var block=new Panel{Width=606,Height=36+(maintenance?0:((matches.Count+2)/3)*40),
-     Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
-    var heading=new Label{Dock=DockStyle.Top,Height=31,
-     Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
-     Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
-     ForeColor=Color.FromArgb(180,35,50),BackColor=Color.FromArgb(229,237,249)};
-    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,
-     RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
+    var block=new Panel{Width=600,Height=50,Margin=new Padding(0,0,0,4),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<3;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,200));
-    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
-    for(int n=0;n<matches.Count;n++){
-     var button=matches[n];
+    var bar=new Panel{Dock=DockStyle.Top,Height=25,BackColor=Color.FromArgb(226,236,250)};
+    var toggle=new Button{Text="Ocultar ▲",Dock=DockStyle.Right,Width=88,Height=23,
+     Font=new Font("Segoe UI",8,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
+     BackColor=Color.FromArgb(226,236,250),ForeColor=Color.FromArgb(24,75,149),
+     UseMnemonic=false,Cursor=Cursors.Hand};
+    toggle.FlatAppearance.BorderSize=0;
+    var heading=new Label{Dock=DockStyle.Fill,Text=section,TextAlign=ContentAlignment.MiddleLeft,
+     Padding=new Padding(9,0,0,0),Font=new Font("Segoe UI",8.5f,FontStyle.Bold),
+     ForeColor=Color.FromArgb(180,35,50),AutoEllipsis=true};
+    bar.Controls.Add(heading);bar.Controls.Add(toggle);
+    var row=new FlowLayoutPanel{Left=0,Top=25,Width=600,Height=28,AutoScroll=false,
+     FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Margin=new Padding(0),
+     Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(246,249,253)};
+    foreach(var button in matches){
      button.Dock=DockStyle.None;
      button.Anchor=AnchorStyles.None;
-     button.Height=34;
-     button.Width=190;
      button.AutoEllipsis=true;
-     var tip=new ToolTip();tip.SetToolTip(button,button.Text);
+     button.Font=new Font("Segoe UI",7.8f,FontStyle.Bold);
+     button.Width=Math.Max(54,Math.Min(210,TextRenderer.MeasureText(button.Text,button.Font).Width+15));
+     button.Height=20;
      button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
-     button.Margin=new Padding(2,2,2,2);
-     group.Controls.Add(button,n%3,n/3);
+     button.Margin=new Padding(2,1,2,1);
+     button.Padding=new Padding(2,0,2,0);
+     button.TextAlign=ContentAlignment.MiddleCenter;
+     button.FlatAppearance.BorderSize=0;
+     var help=new ToolTip();help.SetToolTip(button,button.Text);
+     row.Controls.Add(button);
     }
-    block.Controls.Add(group);block.Controls.Add(heading);
-    if(maintenance){
-     group.Visible=false;heading.Cursor=Cursors.Hand;
-     heading.BackColor=Color.FromArgb(218,231,250);
-     heading.Click+=(sender,args)=>{
-      bool expanded=!group.Visible;
-      group.Visible=expanded;
-      block.Height=36+(expanded?group.RowCount*40:0);
-      heading.Text=expanded?"▾ "+section+"  (clique para ocultar)":"▸ "+section+"  (clique para abrir)";
-     };
-    }
-    sections.Add(block);panel.Controls.Add(block);
+    block.Controls.Add(row);block.Controls.Add(bar);
+    blocks.Add(Tuple.Create(block,row,toggle));
+    panel.Controls.Add(block);
+    toggle.Click+=(sender,args)=>{
+     row.Visible=!row.Visible;
+     toggle.Text=row.Visible?"Ocultar ▲":"Mostrar ▼";
+     if(arrange!=null)arrange();
+    };
    }
-   Action resize=()=>{
-    int width=606;
-    foreach(Panel block in sections)block.Width=width;
+   bool resizing=false;
+   arrange=()=>{
+    if(resizing||panel.IsDisposed)return;
+    resizing=true;
+    try{
+     int width=Math.Max(230,panel.ClientSize.Width-panel.Padding.Horizontal-
+      (adjustHeight?0:SystemInformation.VerticalScrollBarWidth)-5);
+     int sum=panel.Padding.Vertical;
+     foreach(var item in blocks){
+      var block=item.Item1;
+      if(!block.Visible)continue;
+      var row=item.Item2;
+      block.Width=width;row.Width=width;
+      int usable=Math.Max(80,width-row.Padding.Horizontal-5);
+      int line=0,lines=1;
+      foreach(Button button in row.Controls.OfType<Button>().Where(x=>x.Visible)){
+       int size=button.Width+button.Margin.Horizontal;
+       if(line>0&&line+size>usable){lines++;line=0;}
+       line+=size;
+      }
+      int bodyHeight=row.Visible?lines*22+row.Padding.Vertical+1:0;
+      row.Height=bodyHeight;
+      block.Height=25+bodyHeight;
+      sum+=block.Height+block.Margin.Vertical;
+     }
+     if(adjustHeight&&panel.Height!=sum)panel.Height=sum;
+    }finally{resizing=false;}
    };
-   panel.Resize+=(sender,args)=>resize();
-   resize();
+   panel.SizeChanged+=(sender,args)=>{if(arrange!=null)arrange();};
+   panel.Tag=arrange;
    panel.ResumeLayout(true);
+   arrange();
   }
+  // Abre/recolhe o menu como o botão Iniciar do Windows.
+  // Não cria uma nova janela nem exige navegador/WebView.
+  void ToggleStartMenu(){
+   var page=Controls["homePanel"] as Panel;
+   if(page==null||page.IsDisposed||!page.Visible){
+    ShowMainMenu();
+    return;
+   }
+   var start=page.Controls.Find("amzgStartPanel",true).FirstOrDefault();
+   if(start==null||start.IsDisposed){ShowMainMenu();return;}
+   start.Visible=!start.Visible;
+   status.Text=start.Visible?
+    "Menu Iniciar aberto. Pesquise ou selecione um módulo.":
+    "Menu Iniciar recolhido. Clique em Iniciar para exibir os acessos rápidos.";
+  }
+
+  // Layout nativo tipo Windows Start: barra vertical de atalhos à esquerda,
+  // pesquisa integrada, grupos recolhíveis e botões compactos à direita.
+  // O lado esquerdo pode ser ocultado para devolver toda a largura à área de trabalho.
   void ShowMainMenu(){
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
-   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(246,249,253)};
-   var top=new Panel{Dock=DockStyle.Top,Height=76,BackColor=Color.White};
-   top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=40,
-    Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)});
-   top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
-    Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
-   var tiles=new FlowLayoutPanel{Dock=DockStyle.Left,Width=620,AutoScroll=true,WrapContents=true,
-    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
+   var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
+   var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White};
+   var pageStart=new Button{Name="amzgStartButton",Text="⊞  Iniciar",
+    Left=8,Top=9,Width=112,Height=40,Anchor=AnchorStyles.Left|AnchorStyles.Top,
+    BackColor=Color.FromArgb(25,75,149),ForeColor=Color.White,
+    FlatStyle=FlatStyle.Flat,UseMnemonic=false,
+    Font=new Font("Segoe UI",10,FontStyle.Bold),Cursor=Cursors.Hand};
+   pageStart.FlatAppearance.BorderSize=0;
+   pageStart.Click+=(sender,args)=>ToggleStartMenu();
+   var pageTitle=new Label{Left=133,Top=5,Width=900,Height=27,
+    Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   VERSÃO "+InstalledVersion+" (build "+InstalledBuild+")",
+    Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
+    TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
+   var pageTip=new Label{Left=134,Top=34,Width=870,Height=18,
+    Text="Clique em Iniciar para recolher os atalhos. Os módulos continuam organizados por seção.",
+    Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(90,103,124),AutoEllipsis=true};
+   heading.Controls.Add(pageStart);heading.Controls.Add(pageTitle);heading.Controls.Add(pageTip);
+   heading.Resize+=(sender,args)=>{
+    int available=Math.Max(160,heading.ClientSize.Width-148);
+    pageTitle.Width=available;pageTip.Width=available;
+   };
+   var area=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
+
+   var start=new Panel{Name="amzgStartPanel",Dock=DockStyle.Left,Width=248,
+    BackColor=Color.FromArgb(30,45,71),Padding=new Padding(0)};
+   var startTop=new Panel{Dock=DockStyle.Top,Height=94,BackColor=Color.FromArgb(23,38,64)};
+   var startBrand=new Label{Text="⊞   ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=43,
+    Padding=new Padding(13,10,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
+    ForeColor=Color.White};
+   var quickLabel=new Label{Text="MAIS USADOS  •  ACESSO RÁPIDO",Dock=DockStyle.Bottom,Height=22,
+    Padding=new Padding(12,3,0,0),Font=new Font("Segoe UI",7.8f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(181,198,228)};
+   var search=new TextBox{Name="amzgStartSearch",Dock=DockStyle.Bottom,
+    Font=new Font("Segoe UI",10),BorderStyle=BorderStyle.FixedSingle,
+    ForeColor=Color.FromArgb(25,53,91),Height=25,TabStop=true};
+   var searchHolder=new Panel{Dock=DockStyle.Bottom,Height=32,Padding=new Padding(9,0,9,5),
+    BackColor=Color.FromArgb(23,38,64)};
+   searchHolder.Controls.Add(search);
+   startTop.Controls.Add(quickLabel);startTop.Controls.Add(startBrand);
+   startTop.Controls.Add(searchHolder);
+   var leftFooter=new Panel{Dock=DockStyle.Bottom,Height=48,
+    BackColor=Color.FromArgb(23,38,64),Padding=new Padding(8,7,8,7)};
+   var indicators=new Button{Text="▤  Início / Indicadores",Dock=DockStyle.Fill,
+    BackColor=Color.FromArgb(42,66,103),ForeColor=Color.White,
+    FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),
+    Cursor=Cursors.Hand,TextAlign=ContentAlignment.MiddleLeft};
+   indicators.FlatAppearance.BorderSize=0;
+   indicators.Click+=ShowHome;leftFooter.Controls.Add(indicators);
+   var quick=new FlowLayoutPanel{Name="amzgQuickActions",Dock=DockStyle.Fill,
+    FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
+    Padding=new Padding(6,7,5,6),BackColor=Color.FromArgb(30,45,71)};
+   start.Controls.Add(quick);start.Controls.Add(leftFooter);start.Controls.Add(startTop);
+
+   var content=new FlowLayoutPanel{Name="amzgStartWorkspace",Dock=DockStyle.Fill,
+    AutoScroll=true,WrapContents=false,FlowDirection=FlowDirection.TopDown,
+    Padding=new Padding(12,8,12,8),BackColor=Color.FromArgb(247,249,253)};
+   var sectionTitle=new Label{Width=715,Height=31,Margin=new Padding(0),
+    Text="TODOS OS MÓDULOS     |     Seções com Mostrar / Ocultar",
+    Font=new Font("Segoe UI",10.2f,FontStyle.Bold),ForeColor=Color.FromArgb(185,44,68),
+    TextAlign=ContentAlignment.MiddleLeft};
+   var tiles=new FlowLayoutPanel{Name="amzgStartSections",Width=700,Height=270,
+    WrapContents=false,FlowDirection=FlowDirection.TopDown,Margin=new Padding(0),
+    Padding=new Padding(2),AutoScroll=false,BackColor=Color.FromArgb(247,249,253)};
    var actions=ModuleActions();
-
-
+   // Mantém as funções existentes, sem criar módulos fictícios.
    actions.Insert(2,Tuple.Create("Arquivos do Programa",(EventHandler)((sender,args)=>OpenProgramFilesFolder())));
    actions.Insert(3,Tuple.Create("Atualizações Salvas",(EventHandler)((sender,args)=>OpenSavedUpdates())));
    actions.Add(Tuple.Create("Importar banco",(EventHandler)ImportDatabase));
@@ -1145,40 +1417,99 @@ Panel BuildEmbeddedCalculator(){
    actions.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
    actions.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
    actions.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
-   actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
-   actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}OpenModuleWindow(new StockCountQuickForm(dbPath));})));
-   // Sistema e manutencao ficam na mesma faixa dos demais modulos, recolhidos inicialmente.
+   actions.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>
+    ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
+   actions.Add(Tuple.Create("Conferência rápida de estoque",(EventHandler)((sender,args)=>{
+    if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de conferir estoque.");return;}
+    OpenModuleWindow(new StockCountQuickForm(dbPath));
+   })));
+
+   var favs=new[]{"PDV  •  Nova venda","Vendas","Lançar vendas anotadas",
+    "Produtos","Consulta de preços","Estoque","Clientes","Fiado","Caixa",
+    "Cascos retornáveis","Relatórios","Compras","Backup do banco"};
    foreach(var item in actions){
-    string displayName=System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(item.Item1.ToLower(System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
-    displayName=displayName.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp").Replace("Qr","QR").Replace("Pix","PIX");
-    var tile=new Button{Text=displayName,Tag="home-shortcut",AccessibleDescription=item.Item1,Width=120,Height=38,
-     MinimumSize=new Size(120,38),MaximumSize=new Size(120,38),Margin=new Padding(3),
-     Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
-     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
-     Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
-     AutoEllipsis=true,UseMnemonic=false};
-    tile.FlatAppearance.BorderSize=0;
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
-    tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-     new Rectangle(1,1,tile.ClientSize.Width-3,tile.ClientSize.Height-3),
-     9,Color.FromArgb(92,117,155),1.3f);
-    tile.Click+=item.Item2;
-    tiles.Controls.Add(tile);
+    string label=System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(
+     item.Item1.ToLower(System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
+    label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp")
+     .Replace("Pix","PIX").Replace("Qr","QR");
+    var button=new Button{Text=label,AccessibleDescription=item.Item1,
+     Tag="home-shortcut",Width=105,Height=20,MinimumSize=Size.Empty,
+     MaximumSize=Size.Empty,Margin=new Padding(2,1,2,1),Padding=new Padding(2,0,2,0),
+     Font=new Font("Segoe UI",7.8f,FontStyle.Bold),AutoEllipsis=true,
+     ForeColor=Color.White,BackColor=Color.FromArgb(27,79,151),
+     FlatStyle=FlatStyle.Flat,UseMnemonic=false,Cursor=Cursors.Hand};
+    button.FlatAppearance.BorderSize=0;
+    button.FlatAppearance.MouseOverBackColor=Color.FromArgb(49,108,184);
+    button.Click+=item.Item2;tiles.Controls.Add(button);
+    if(!favs.Contains(item.Item1))continue;
+    var quickButton=new Button{Text="  "+label,AccessibleDescription=item.Item1,
+     Tag="start-quick",Width=228,Height=31,Margin=new Padding(2,1,2,1),
+     Padding=new Padding(6,0,1,0),AutoEllipsis=true,
+     FlatStyle=FlatStyle.Flat,UseMnemonic=false,Cursor=Cursors.Hand,
+     BackColor=item.Item1==favs[0]?Color.FromArgb(35,93,175):Color.FromArgb(30,45,71),
+     ForeColor=Color.White,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),
+     TextAlign=ContentAlignment.MiddleLeft};
+    quickButton.FlatAppearance.BorderSize=0;
+    quickButton.FlatAppearance.MouseOverBackColor=Color.FromArgb(48,95,164);
+    quickButton.Click+=item.Item2;
+    quick.Controls.Add(quickButton);
    }
-   GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.None,Width=390,Height=515,Left=630,Top=85,
-    BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
-   var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
-    Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
-    TextAlign=ContentAlignment.MiddleCenter};
-   var calcBody=BuildEmbeddedCalculator();
-   calculatorSide.Controls.Add(calcBody);
-   calculatorSide.Controls.Add(calcTitle);
-   // A calculadora recebe foco ao abrir o menu e ao voltar a ele.
-   // Não desloca o ponteiro do mouse nem captura teclas em outros módulos.
+   GroupModuleButtons(tiles,true);
+
+   // Pesquisa por nome (sem diferenciar maiúsculas, minúsculas e acentos).
+   // Filtra a lista lateral e os botões das seções, sem tocar no SQLite.
+   Action filter=()=>{
+    string query=NormalizeMenuSearch(search.Text.Trim());
+    foreach(var quickButton in quick.Controls.OfType<Button>()){
+     quickButton.Visible=query.Length==0||
+      NormalizeMenuSearch(quickButton.AccessibleDescription).Contains(query);
+    }
+    foreach(var block in tiles.Controls.OfType<Panel>()){
+     block.Visible=true; // restaurar antes de examinar filhos de grupo oculto
+     var row=block.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
+     if(row==null)continue;
+     bool found=false;
+     foreach(var btn in row.Controls.OfType<Button>()){
+      bool visible=query.Length==0||NormalizeMenuSearch(btn.AccessibleDescription).Contains(query);
+      btn.Visible=visible;
+      found|=visible;
+     }
+     block.Visible=found;
+     if(query.Length>0&&found){
+      row.Visible=true;
+      var bar=block.Controls.OfType<Panel>().FirstOrDefault(p=>p.Dock==DockStyle.Top);
+      if(bar!=null){
+       foreach(var toggle in bar.Controls.OfType<Button>())toggle.Text="Ocultar ▲";
+      }
+     }
+    }
+    var layout=tiles.Tag as Action;
+    if(layout!=null)layout();
+   };
+   search.TextChanged+=(sender,args)=>filter();
+   search.KeyDown+=(sender,args)=>{
+    if(args.KeyCode!=Keys.Enter)return;
+    var selected=quick.Controls.OfType<Button>().FirstOrDefault(x=>x.Visible);
+    if(selected==null){
+     selected=tiles.Controls.OfType<Panel>()
+      .SelectMany(x=>x.Controls.OfType<FlowLayoutPanel>())
+      .SelectMany(x=>x.Controls.OfType<Button>()).FirstOrDefault(x=>x.Visible);
+    }
+    if(selected!=null)selected.PerformClick();
+    args.Handled=true;args.SuppressKeyPress=true;
+   };
+
+   var calculatorSide=new Panel{Width=330,Height=390,
+    BackColor=Color.FromArgb(236,243,252),
+    Padding=new Padding(7),Margin=new Padding(0,7,0,10)};
+   calculatorSide.Controls.Add(BuildEmbeddedCalculator());
+   calculatorSide.Controls.Add(new Label{Dock=DockStyle.Top,Height=30,Text="CALCULADORA",
+    TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(180,35,50),
+    Font=new Font("Segoe UI",10,FontStyle.Bold)});
+   var calcBody=calculatorSide.Controls.OfType<Panel>().FirstOrDefault();
    Action focusCalculator=()=>{
     if(!IsDisposed&&Visible&&Controls["homePanel"]==page&&
-       Form.ActiveForm==this&&calcBody.Visible){
+       Form.ActiveForm==this&&!search.Focused&&calcBody!=null&&calcBody.Visible){
      var visor=calcBody.Controls.Find("embeddedCalculatorDisplay",true).FirstOrDefault();
      if(visor!=null&&visor.CanFocus)visor.Focus();
     }
@@ -1186,22 +1517,39 @@ Panel BuildEmbeddedCalculator(){
    EventHandler onActivated=(sender,args)=>BeginInvoke((Action)(()=>focusCalculator()));
    Activated+=onActivated;
    page.Disposed+=(sender,args)=>Activated-=onActivated;
-   page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
-   page.Controls.Add(tiles);page.Controls.Add(top);page.Controls.Add(calculatorSide);
-   calculatorSide.BringToFront();
-   Action positionCalculator=()=>{
-    calculatorSide.Left=tiles.Right+8;
-    calculatorSide.Top=top.Bottom+8;
-    calculatorSide.Height=Math.Min(515,Math.Max(360,page.ClientSize.Height-calculatorSide.Top-12));
-    calculatorSide.Width=Math.Min(390,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
-    calculatorSide.Visible=page.ClientSize.Width-calculatorSide.Left>=210;
+
+   content.Controls.Add(sectionTitle);content.Controls.Add(tiles);
+   content.Controls.Add(calculatorSide);
+   area.Controls.Add(content);area.Controls.Add(start);
+   page.Controls.Add(area);page.Controls.Add(heading);
+   Action resize=()=>{
+    int width=Math.Max(310,content.ClientSize.Width-content.Padding.Horizontal-19);
+    if(sectionTitle.Width!=width)sectionTitle.Width=width;
+    if(tiles.Width!=width)tiles.Width=width;
+    int calcWidth=Math.Min(330,width);
+    if(calculatorSide.Width!=calcWidth)calculatorSide.Width=calcWidth;
+    calculatorSide.Margin=new Padding(Math.Max(0,width-calcWidth),7,0,10);
+    int quickWidth=Math.Max(120,start.ClientSize.Width-17);
+    foreach(var button in quick.Controls.OfType<Button>())if(button.Width!=quickWidth)button.Width=quickWidth;
+    var layout=tiles.Tag as Action;if(layout!=null)layout();
    };
-   page.Resize+=(sender,args)=>positionCalculator();
-   positionCalculator();
+   content.Resize+=(sender,args)=>resize();
+   start.VisibleChanged+=(sender,args)=>resize();
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
-   sideMenu.Visible=false;EnableWheelScrolling(tiles);
+   sideMenu.Visible=false;
+   resize();
+   EnableWheelScrolling(content);
    BeginInvoke((Action)(()=>focusCalculator()));
-   status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
+   status.Text="Menu Iniciar | Pesquisa, atalhos rápidos e seções recolhíveis. A calculadora permanece disponível.";
+  }
+
+  static string NormalizeMenuSearch(string value){
+   if(string.IsNullOrEmpty(value))return "";
+   var decomposed=value.Normalize(System.Text.NormalizationForm.FormD);
+   var characters=decomposed.Where(ch=>
+    System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch)!=
+    System.Globalization.UnicodeCategory.NonSpacingMark);
+   return new string(characters.ToArray()).ToUpperInvariant();
   }
   // Janela independente de atalhos: os mais usados primeiro.
   // O menu lateral antigo continua acessível como alternativa de navegação.
@@ -1642,6 +1990,17 @@ Panel BuildEmbeddedCalculator(){
     }catch(Exception ex){MessageBox.Show("Recuperação não aplicada: "+ex.Message,"Recuperação bloqueada",MessageBoxButtons.OK,MessageBoxIcon.Error);}
    }
   }
+  void AutoRecoverSalesIfDue(){
+   if(!File.Exists(dbPath))return;
+   // Evita vasculhar vendas antigas e discos inteiros toda vez que o PDV abre.
+   string marker=Path.Combine(dataDir,"ultima-varredura-recuperacao.txt");
+   string today=DateTime.Now.ToString("yyyy-MM-dd");
+   try{
+    if(File.Exists(marker)&&File.ReadAllText(marker).Trim()==today)return;
+   }catch(IOException){}catch(UnauthorizedAccessException){}
+   AutoRecoverSales();
+   try{File.WriteAllText(marker,today);}catch(IOException){}catch(UnauthorizedAccessException){}
+  }
   void AutoRecoverSales(){
    // Nunca altera o banco ativo: somente produz uma copia de teste.
    if(!File.Exists(dbPath))return;
@@ -1723,9 +2082,20 @@ Panel BuildEmbeddedCalculator(){
      }
      using(var q=new SQLiteCommand("PRAGMA integrity_check",dest))if(Convert.ToString(q.ExecuteScalar())!="ok")throw new Exception("Integridade da cópia recuperada inválida.");
     }
-    status.Text="Recuperação automática: "+bestMissing+" vendas ausentes preparadas em cópia de teste.";
-    MessageBox.Show("Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.","Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
-   }catch(Exception ex){status.Text="Recuperação automática não concluída: "+ex.Message;}
+    string report="Recuperação automática: "+bestMissing+" vendas ausentes preparadas em cópia de teste.";
+    string prompt="Foram localizadas "+bestMissing+" vendas ausentes da versão 12.1.6.\n\nUma cópia recuperada foi criada automaticamente em:\n"+destination+"\n\nO banco atual e o estoque NÃO foram alterados. Confira a cópia antes de substituir dados.";
+    if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)(()=>{
+     if(IsDisposed)return;
+     status.Text=report;
+     MessageBox.Show(this,prompt,"Vendas recuperadas para conferência",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }));
+   }catch(Exception ex){
+    string report="Recuperação automática não concluída: "+ex.Message;
+    if(!IsDisposed&&IsHandleCreated){
+     try{BeginInvoke((Action)(()=>{if(!IsDisposed)status.Text=report;}));}
+     catch(InvalidOperationException){} // janela encerrada durante a recuperação
+    }
+   }
   }
   void IntegrateHistoricalSales(object sender,EventArgs e){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco atual.");return;}

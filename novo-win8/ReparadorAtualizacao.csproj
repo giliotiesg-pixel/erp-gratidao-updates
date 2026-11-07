@@ -2,7 +2,7 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 <PropertyGroup>
 <OutputType>WinExe</OutputType>
-<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+<TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
 <RootNamespace>ArmazemGratidaoReparo</RootNamespace>
 <AssemblyName>Reparador-Atualizacao-Armazem-Gratidao</AssemblyName>
 <PlatformTarget>x64</PlatformTarget>
