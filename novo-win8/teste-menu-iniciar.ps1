@@ -6,6 +6,7 @@ $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $exe=[IO.Path]::GetFullPath($Executable)
+$previewAbsolute=[IO.Path]::GetFullPath($PreviewFile)
 if(!(Test-Path -LiteralPath $exe)){throw "PDV nao encontrado: $exe"}
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -56,19 +57,19 @@ try {
  $toggle.Invoke($form,@()) | Out-Null
  [System.Windows.Forms.Application]::DoEvents()
  if(!$start[0].Visible){throw 'Botao Iniciar nao reabriu o painel'}
- $directory=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PreviewFile))
+ $directory=[IO.Path]::GetDirectoryName($previewAbsolute)
  [IO.Directory]::CreateDirectory($directory) | Out-Null
  $picture=[System.Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try {
    $rect=[System.Drawing.Rectangle]::new([System.Drawing.Point]::Empty,$form.ClientSize)
    $form.DrawToBitmap($picture,$rect)
-   $picture.Save($PreviewFile,[System.Drawing.Imaging.ImageFormat]::Png)
+   $picture.Save($previewAbsolute,[System.Drawing.Imaging.ImageFormat]::Png)
  }finally{$picture.Dispose()}
- if((Get-Item -LiteralPath $PreviewFile).Length -lt 5000){
+ if((Get-Item -LiteralPath $previewAbsolute).Length -lt 5000){
    throw 'Previa do menu gerada incompleta'
  }
  Write-Host "TESTE MENU INICIAR OK: $total modulos, $($quick[0].Controls.Count) atalhos, 5 secoes, pesquisa e abrir/recolher"
- Write-Host "PREVIA VISUAL: $PreviewFile"
+ Write-Host "PREVIA VISUAL: $previewAbsolute"
 }finally{
  if($null -ne $form){try{$form.Close()}catch{};$form.Dispose()}
 }
