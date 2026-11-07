@@ -53,6 +53,12 @@ try{
  if($categoryCount -ne 5 -or $moduleCount -lt 30){
   throw "Menu incompleto: $categoryCount categorias, $moduleCount modulos."
  }
+ foreach($button in @($categories[0].Controls)){
+  if($button.Width -lt 260 -or $button.Height -lt 64 -or
+     $null -eq $button.Image -or $button.Image.Width -lt 38){
+   throw 'Botao de categoria pequeno ou sem icone grande.'
+  }
+ }
  $isBranch=[bool]$popup.GetType().GetProperty('IsBranchOpen').GetValue($popup,$null)
  if($isBranch){throw 'Submenu deve estar fechado antes de escolher secao.'}
  $select=$popup.GetType().GetMethod('SelectSection')
@@ -69,8 +75,9 @@ try{
    throw "Falta no submenu de vendas: $required. Encontrados: $($items -join '; ')"
   }
  }
- if(@($modules[0].Controls | Where-Object {$null -eq $_.Image}).Count -gt 0){
-  throw 'Modulo no submenu sem icone.'
+ if(@($modules[0].Controls | Where-Object {$null -eq $_.Image -or
+   $_.Image.Width -lt 38 -or $_.Width -lt 220 -or $_.Height -lt 75}).Count -gt 0){
+  throw 'Modulo sem botao grande ou sem icone 40px.'
  }
  $search[0].Text='produto'
  [System.Windows.Forms.Application]::DoEvents()
