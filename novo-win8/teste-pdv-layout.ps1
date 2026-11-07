@@ -16,7 +16,10 @@ $main=$null;$pdv=$null
 $database=Join-Path $env:RUNNER_TEMP 'pdv-layout-dados-descartaveis.db'
 try{
  $main=[Activator]::CreateInstance($mainType)
- $pdv=[Activator]::CreateInstance($pdvType,@($database,$false))
+ # Usar o construtor publico de um argumento elimina ambiguidades do binder PowerShell 5.1.
+ $ctor=$pdvType.GetConstructor([type[]]@([string]))
+ if($null -eq $ctor){throw 'Construtor publico PdvForm(string) ausente.'}
+ $pdv=$ctor.Invoke([object[]]@($database))
  # Reproduz a mesma injecao de navegacao feita ao abrir PDV via menu Iniciar.
  $flags=[System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
  $backMethod=$mainType.GetMethod('AddBackToMenu',$flags)
