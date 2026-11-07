@@ -1,6 +1,6 @@
 #define MyAppName "Armazem Gratidao Novo"
 #ifndef BuildNumber
-#define BuildNumber "584"
+#define BuildNumber "585"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
