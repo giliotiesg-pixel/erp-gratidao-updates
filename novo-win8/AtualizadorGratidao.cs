@@ -65,7 +65,8 @@ namespace ArmazemGratidaoAtualizador {
   static bool Allowed(string path){
    return new[]{
     "ArmazemGratidaoNovo.exe","ArmazemGratidaoNovo.exe.config",
-    "QRCoder.dll","System.Data.SQLite.dll","zxing.dll","x64/SQLite.Interop.dll"
+    "QRCoder.dll","System.Data.SQLite.dll","zxing.dll","x64/SQLite.Interop.dll",
+    "AtualizadorGratidao.exe"
    }.Contains(path,StringComparer.OrdinalIgnoreCase);
   }
   void Apply(){
@@ -104,6 +105,10 @@ namespace ArmazemGratidaoAtualizador {
     targets.AddRange(ZipCompat.Extract(zip,staging,Allowed));
     if(!targets.Contains("ArmazemGratidaoNovo.exe",StringComparer.OrdinalIgnoreCase))
      throw new Exception("Pacote incompleto: executável não encontrado.");
+    // Novos ZIPs devem recuperar o executavel do atualizador tambem.
+    // A própria aplicacao invoca uma copia no diretorio temporario, de modo
+    // que AtualizadorGratidao.exe na pasta do sistema nao fica bloqueado.
+    // ZIPs legados continuam aceitos pelo atualizador previamente instalado.
     foreach(string name in targets){
      string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
      string previous=Path.Combine(rollback,name.Replace('/',Path.DirectorySeparatorChar));
