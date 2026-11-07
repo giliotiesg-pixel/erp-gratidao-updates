@@ -15,7 +15,12 @@ $allow=[System.Delegate]::CreateDelegate([System.Func[string,bool]],$allowed)
 $root=Join-Path $env:RUNNER_TEMP 'AMZG-Teste-ZIP-Integral'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 try {
- $entries=$method.Invoke($null,@([IO.Path]::GetFullPath($Zip),$root,$allow))
+ # Reflection Invoke precisa receber object[] de CLR, nao a lista com wrappers PSObject do PowerShell.
+ $parameters=New-Object 'object[]' 3
+ $parameters[0]=[string][IO.Path]::GetFullPath($Zip)
+ $parameters[1]=[string][IO.Path]::GetFullPath($root)
+ $parameters[2]=$allow
+ $entries=$method.Invoke($null,[object[]]$parameters)
  $required=@('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe','QRCoder.dll',
    'System.Data.SQLite.dll','zxing.dll','x64/SQLite.Interop.dll')
  foreach($name in $required){
