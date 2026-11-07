@@ -22,7 +22,7 @@ namespace ArmazemGratidao {
   readonly TextBox search;
   readonly Dictionary<string,Button> sectionButtons=new Dictionary<string,Button>();
   const int CompactWidth=296;
-  const int ExpandedWidth=804;
+  const int ExpandedWidth=860;
   string selectedSection=null;
   bool closing=false;
 
@@ -39,8 +39,8 @@ namespace ArmazemGratidao {
    ShowInTaskbar=false;
    StartPosition=FormStartPosition.Manual;
    BackColor=Color.FromArgb(236,241,250);
-   Size=new Size(CompactWidth,550);
-   MinimumSize=new Size(CompactWidth,365);
+   Size=new Size(CompactWidth,566);
+   MinimumSize=new Size(CompactWidth,395);
    KeyPreview=true;
    DoubleBuffered=true;
 
@@ -96,6 +96,11 @@ namespace ArmazemGratidao {
     BorderStyle=BorderStyle.FixedSingle,Font=new Font("Segoe UI",11f),
     AccessibleName="Pesquisar modulo",TabStop=true};
    searchBar.Controls.Add(search);
+   var searchHint=new Label{Text="⌕  Pesquisar:",Dock=DockStyle.Left,
+    Width=119,ForeColor=Color.FromArgb(73,89,112),
+    TextAlign=ContentAlignment.MiddleLeft,
+    Font=new Font("Segoe UI",9.3f,FontStyle.Bold)};
+   searchBar.Controls.Add(searchHint);
 
    Controls.Add(branchPane);
    Controls.Add(navigation);
