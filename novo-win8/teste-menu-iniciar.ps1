@@ -6,88 +6,100 @@ $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $exe=[IO.Path]::GetFullPath($Executable)
-$previewAbsolute=[IO.Path]::GetFullPath($PreviewFile)
+$preview=[IO.Path]::GetFullPath($PreviewFile)
 if(!(Test-Path -LiteralPath $exe)){throw "PDV nao encontrado: $exe"}
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $assembly=[System.Reflection.Assembly]::LoadFrom($exe)
 $type=$assembly.GetType('ArmazemGratidao.MainForm',$true)
 $form=$null
-try {
+try{
  $form=[Activator]::CreateInstance($type)
  $form.StartPosition='Manual'
- $form.Location=[System.Drawing.Point]::new(24,24)
- $form.Size=[System.Drawing.Size]::new(1230,800)
+ $form.Location=[System.Drawing.Point]::new(22,22)
+ $form.Size=[System.Drawing.Size]::new(1180,750)
  $form.Show()
  [System.Windows.Forms.Application]::DoEvents()
- $start=@($form.Controls.Find('amzgStartPanel',$true))
- $quick=@($form.Controls.Find('amzgQuickActions',$true))
- $search=@($form.Controls.Find('amzgStartSearch',$true))
- $sections=@($form.Controls.Find('amzgStartSections',$true))
- $workspace=@($form.Controls.Find('amzgStartWorkspace',$true))
- if($start.Count -ne 1 -or $quick.Count -ne 1 -or $search.Count -ne 1 -or
-    $sections.Count -ne 1 -or $workspace.Count -ne 1){
-    throw 'Menu Iniciar incompleto: painel, pesquisa, atalhos ou secoes ausentes'
+ # Falha antiga: painel Start fixado na lateral.
+ if(@($form.Controls.Find('amzgStartPanel',$true)).Count -gt 0){
+  throw 'Falha: ainda existe barra lateral fixa em vez do menu flutuante.'
  }
- if(!$start[0].Visible){throw 'Menu Iniciar deveria abrir inicialmente'}
- if($quick[0].Controls.Count -lt 8){throw 'Faltam os atalhos mais usados'}
- if($sections[0].Controls.Count -ne 5){throw 'O menu deveria conter cinco secoes ocultaveis'}
- $pageStart=@($form.Controls.Find('amzgStartButton',$true))
- if($pageStart.Count -ne 1){throw 'Botao Iniciar nao esta visivel na barra do menu'}
- Write-Host "Janela WinForms exibiu: $($form.Text)"
+ if(@($form.Controls.Find('amzgHomeCalculator',$true)).Count -ne 1){
+  throw 'Calculadora deixou de aparecer na pagina principal.'
+ }
  if($form.Text -notmatch [regex]::Escape($env:AMZG_VERSION) -or
-    $form.Text -notmatch ('(?i)build\s+'+$env:AMZG_BUILD)){throw 'Barra de titulo nao mostra a build correta'}
- $total=0
- $originalLabels=@{}
- foreach($block in $sections[0].Controls){
-    $row=@($block.Controls | Where-Object {$_ -is [System.Windows.Forms.FlowLayoutPanel]})
-    $bar=@($block.Controls | Where-Object {$_ -is [System.Windows.Forms.Panel]})
-    if($row.Count -ne 1 -or $bar.Count -lt 1){throw 'Secao sem barra ou fileira horizontal'}
-    if(@($bar[0].Controls | Where-Object {$_ -is [System.Windows.Forms.Button]}).Count -lt 1){
-       throw 'Secao sem botao Mostrar / Ocultar'
-    }
-    $total+=$row[0].Controls.Count
-    foreach($button in $row[0].Controls){
-      $originalLabels[$button.AccessibleDescription]=$button.Text
-    }
- }
- if($total -lt 20){throw 'Atalhos de modulos nao foram preservados'}
- $search[0].Text='produto'
- [System.Windows.Forms.Application]::DoEvents()
- $search[0].Text=''
- [System.Windows.Forms.Application]::DoEvents()
- foreach($block in $sections[0].Controls){
-   foreach($row in @($block.Controls | Where-Object {$_ -is [System.Windows.Forms.FlowLayoutPanel]})){
-     foreach($button in $row.Controls){
-       if($button.Text -ne $originalLabels[$button.AccessibleDescription]){
-         throw "Pesquisa alterou texto do modulo $($button.AccessibleDescription): $($button.Text)"
-       }
-     }
-   }
+    $form.Text -notmatch ('(?i)build\s+'+$env:AMZG_BUILD)){
+   throw "Versao incorreta no PDV: $($form.Text)"
  }
  $toggle=$type.GetMethod('ToggleStartMenu',
-   [System.Reflection.BindingFlags]::Instance -bor
-   [System.Reflection.BindingFlags]::NonPublic)
- if($null -eq $toggle){throw 'Botao Iniciar nao tem acao de abrir/recolher'}
+  [System.Reflection.BindingFlags]::Instance -bor
+  [System.Reflection.BindingFlags]::NonPublic)
+ if($null -eq $toggle){throw 'Botao Iniciar nao esta ligado ao menu.'}
  $toggle.Invoke($form,@()) | Out-Null
  [System.Windows.Forms.Application]::DoEvents()
- if($start[0].Visible){throw 'Botao Iniciar nao recolheu o painel'}
- $toggle.Invoke($form,@()) | Out-Null
- [System.Windows.Forms.Application]::DoEvents()
- if(!$start[0].Visible){throw 'Botao Iniciar nao reabriu o painel'}
- $directory=[IO.Path]::GetDirectoryName($previewAbsolute)
- [IO.Directory]::CreateDirectory($directory) | Out-Null
- $picture=[System.Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
- try {
-   $rect=[System.Drawing.Rectangle]::new([System.Drawing.Point]::Empty,$form.ClientSize)
-   $form.DrawToBitmap($picture,$rect)
-   $picture.Save($previewAbsolute,[System.Drawing.Imaging.ImageFormat]::Png)
- }finally{$picture.Dispose()}
- if((Get-Item -LiteralPath $previewAbsolute).Length -lt 5000){
-   throw 'Previa do menu gerada incompleta'
+ $popup=@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgFloatingStartMenu'}) |
+   Select-Object -First 1
+ if($null -eq $popup -or !$popup.Visible){throw 'Botao Iniciar nao abre janela flutuante.'}
+ $categories=@($popup.Controls.Find('amzgStartCategories',$true))
+ $branch=@($popup.Controls.Find('amzgStartFlyout',$true))
+ $modules=@($popup.Controls.Find('amzgStartModules',$true))
+ $search=@($popup.Controls.Find('amzgStartSearch',$true))
+ if($categories.Count -ne 1 -or $branch.Count -ne 1 -or
+    $modules.Count -ne 1 -or $search.Count -ne 1){
+  throw 'Menu flutuante sem categorias, pesquisa ou submenu.'
  }
- Write-Host "TESTE MENU INICIAR OK: $total modulos, $($quick[0].Controls.Count) atalhos, 5 secoes, pesquisa e abrir/recolher"
- Write-Host "PREVIA VISUAL: $previewAbsolute"
+ $categoryCount=[int]$popup.GetType().GetProperty('CategoryCount').GetValue($popup,$null)
+ $moduleCount=[int]$popup.GetType().GetProperty('ModuleCount').GetValue($popup,$null)
+ if($categoryCount -ne 5 -or $moduleCount -lt 30){
+  throw "Menu incompleto: $categoryCount categorias, $moduleCount modulos."
+ }
+ $isBranch=[bool]$popup.GetType().GetProperty('IsBranchOpen').GetValue($popup,$null)
+ if($isBranch){throw 'Submenu deve estar fechado antes de escolher secao.'}
+ $select=$popup.GetType().GetMethod('SelectSection')
+ if($null -eq $select){throw 'Categorias nao podem abrir o submenu.'}
+ $select.Invoke($popup,@('VENDAS E ATENDIMENTO')) | Out-Null
+ [System.Windows.Forms.Application]::DoEvents()
+ if(!$branch[0].Visible){throw 'Clicar em Vendas e Atendimento nao abriu submenu.'}
+ $items=@($modules[0].Controls | ForEach-Object {$_.AccessibleDescription})
+ foreach($required in @('PDV  •  Nova venda','Vendas','Cascos retornáveis',
+   'Fiado','Clientes','Lançar vendas anotadas','WhatsApp')){
+  if($items -notcontains $required){throw "Falta no submenu de vendas: $required"}
+ }
+ if(@($modules[0].Controls | Where-Object {$null -eq $_.Image}).Count -gt 0){
+  throw 'Modulo no submenu sem icone.'
+ }
+ $search[0].Text='produto'
+ [System.Windows.Forms.Application]::DoEvents()
+ $found=@($modules[0].Controls | ForEach-Object {$_.AccessibleDescription})
+ if($found -notcontains 'Produtos'){throw 'Pesquisa nao encontrou Produtos.'}
+ if($found -contains 'Fiado'){throw 'Pesquisa nao filtrou resultados.'}
+ $search[0].Clear()
+ [System.Windows.Forms.Application]::DoEvents()
+ $select.Invoke($popup,@('PRODUTOS E ESTOQUE')) | Out-Null
+ $goods=@($modules[0].Controls | ForEach-Object {$_.AccessibleDescription})
+ if($goods -notcontains 'Produtos' -or $goods -notcontains 'Estoque'){
+  throw 'Submenu Produtos e Estoque incompleto.'
+ }
+ # Capturar a janela real: popup aberto com icones, nao uma imagem inventada.
+ $select.Invoke($popup,@('VENDAS E ATENDIMENTO')) | Out-Null
+ [System.Windows.Forms.Application]::DoEvents()
+ [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($preview)) | Out-Null
+ $bitmap=[System.Drawing.Bitmap]::new($popup.ClientSize.Width,$popup.ClientSize.Height)
+ try{
+  $area=[System.Drawing.Rectangle]::new([System.Drawing.Point]::Empty,$popup.ClientSize)
+  $popup.DrawToBitmap($bitmap,$area)
+  $bitmap.Save($preview,[System.Drawing.Imaging.ImageFormat]::Png)
+ }finally{$bitmap.Dispose()}
+ if((Get-Item -LiteralPath $preview).Length -lt 5000){
+  throw 'Previa do menu flutuante foi gerada incompleta.'
+ }
+ $toggle.Invoke($form,@()) | Out-Null
+ [System.Windows.Forms.Application]::DoEvents()
+ if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgFloatingStartMenu' -and $_.Visible}).Count -gt 0){
+  throw 'Botao Iniciar nao fechou o menu flutuante.'
+ }
+ Write-Host "MENU WINDOWS OK: $categoryCount categorias, $moduleCount modulos com icones, submenu Vendas/Estoque, pesquisa e fechamento."
+ Write-Host "PREVIA VISUAL: $preview"
 }finally{
  if($null -ne $form){try{$form.Close()}catch{};$form.Dispose()}
 }
