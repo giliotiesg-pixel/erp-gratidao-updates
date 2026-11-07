@@ -97,13 +97,13 @@ namespace ArmazemGratidaoAtualizador {
   // Verifica TODOS os arquivos antes da primeira substituicao. O updater
   // legado podia substituir parcialmente as DLLs e depois falhar ao copiar
   // AtualizadorGratidao.exe porque uma janela antiga ainda estava aberta.
-  internal static void EnsureTargetsWritable(string directory,IEnumerable<string> names){
+  internal static void EnsureTargetsWritable(string directory,IEnumerable<string> names,int waitMilliseconds=12000){
    string root=Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
    string running=Path.GetFullPath(Process.GetCurrentProcess().MainModule.FileName);
    string installedUpdater=Path.Combine(root,"AtualizadorGratidao.exe");
    if(string.Equals(running,installedUpdater,StringComparison.OrdinalIgnoreCase))
     throw new IOException("O atualizador instalado esta em execucao. Feche essa janela e inicie a atualizacao pelo programa, nunca pelo executavel isolado.");
-   DateTime deadline=DateTime.UtcNow.AddSeconds(12);
+   DateTime deadline=DateTime.UtcNow.AddMilliseconds(Math.Max(100,waitMilliseconds));
    string unavailable=null;
    do{
     unavailable=null;
