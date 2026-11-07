@@ -38,7 +38,7 @@ try{
  $code=& $find 'amzgPdvCodeInput'
  $list=& $find 'amzgPdvItemBox'
  $actions=& $find 'amzgPdvActions'
- $finish=& $find 'amzgPdvAction'
+ $finish=& $find 'amzgPdvFinish'
  $summary=& $find 'amzgPdvSummary'
  $total=& $find 'amzgPdvTotal'
  $other=& $find 'amzgPdvMoreOptions'
