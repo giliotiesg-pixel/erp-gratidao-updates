@@ -176,37 +176,47 @@ jobs:
       - name: Testar backup automatico antes do instalador
         shell: pwsh
         run: |
-          $dir = Join-Path $env:RUNNER_TEMP "teste-backup-amzg"
+          $ErrorActionPreference='Stop'
+          $dir = Join-Path $env:RUNNER_TEMP 'teste-backup-amzg'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          Copy-Item "novo-win8/bin/x64/Release/System.Data.SQLite.dll" $dir
-          Copy-Item "novo-win8/bin/x64/Release/x64/SQLite.Interop.dll" $dir
-          Copy-Item "novo-win8/backup-antes-instalacao.ps1" $dir
-          $db = Join-Path $dir "armazem-gratidao.db"
-          Add-Type -Path (Join-Path $dir "System.Data.SQLite.dll")
-          $source = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db")
-          try {
+          Copy-Item 'novo-win8/bin/x64/Release/System.Data.SQLite.dll' $dir
+          Copy-Item 'novo-win8/bin/x64/Release/x64/SQLite.Interop.dll' $dir
+          Copy-Item 'novo-win8/backup-antes-instalacao.ps1' $dir
+          $db = Join-Path $dir 'armazem-gratidao.db'
+          Add-Type -Path (Join-Path $dir 'System.Data.SQLite.dll')
+          $source=New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db")
+          try{
             $source.Open()
-            $command = $source.CreateCommand()
-            $command.CommandText = "CREATE TABLE products(id INTEGER PRIMARY KEY,name TEXT); INSERT INTO products(name) VALUES('TESTE PROTECAO');"
+            $command=$source.CreateCommand()
+            $command.CommandText="CREATE TABLE products(id INTEGER PRIMARY KEY,name TEXT); INSERT INTO products(name) VALUES('TESTE PROTECAO');"
             $command.ExecuteNonQuery() | Out-Null
             $command.Dispose()
-          } finally {
-            $source.Dispose()
-          }
-          & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $dir "backup-antes-instalacao.ps1") -Database $db -TargetDirectory $dir
-          if ($LASTEXITCODE -ne 0) { throw "O backup previo da instalacao falhou" }
-          $copies = @(Get-ChildItem -Path $dir -Filter "armazem-gratidao-antes-atualizacao-*.db")
-          if ($copies.Count -ne 1 -or $copies[0].Length -le 0) { throw "Backup nao encontrado ou vazio" }
-          $test = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$($copies[0].FullName);Read Only=True;FailIfMissing=True")
-          try {
+          }finally{$source.Dispose()}
+          $progress=Join-Path $dir 'progresso-backup.txt'
+          & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $dir 'backup-antes-instalacao.ps1') -Database $db -TargetDirectory $dir -ProgressFile $progress
+          if($LASTEXITCODE -ne 0){throw 'Backup automatico falhou'}
+          # O backup atual mantem apenas ZIP validado, nao copia .db solta.
+          $copies=@(Get-ChildItem $dir -Filter 'armazem-gratidao-completo-*.zip')
+          if($copies.Count -ne 1 -or $copies[0].Length -le 0){throw 'ZIP de backup completo ausente ou vazio'}
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive=[System.IO.Compression.ZipFile]::OpenRead($copies[0].FullName)
+          $restored=Join-Path $dir 'validacao-copia-sqlite.db'
+          try{
+            $entry=$archive.GetEntry('Dados/armazem-gratidao.db')
+            if(!$entry -or $entry.Length -le 0){throw 'Banco nao encontrado no backup ZIP'}
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$restored)
+          }finally{$archive.Dispose()}
+          $test=New-Object System.Data.SQLite.SQLiteConnection("Data Source=$restored;Read Only=True;FailIfMissing=True")
+          try{
             $test.Open()
-            $check = $test.CreateCommand()
-            $check.CommandText = "SELECT name FROM products WHERE id=1"
-            if ($check.ExecuteScalar() -ne "TESTE PROTECAO") { throw "O backup nao preservou os dados" }
+            $check=$test.CreateCommand()
+            $check.CommandText='PRAGMA integrity_check'
+            if([string]$check.ExecuteScalar() -ne 'ok'){throw 'Backup SQLite com integridade invalida'}
+            $check.CommandText='SELECT name FROM products WHERE id=1'
+            if([string]$check.ExecuteScalar() -ne 'TESTE PROTECAO'){throw 'Backup nao preservou dados'}
             $check.Dispose()
-          } finally { $test.Dispose() }
-      # ATUALIZACAO CONTINUA: gera ZIP, NUNCA outro instalador.
-      # O instalador completo fica publicado uma unica vez em release legado.
+          }finally{$test.Dispose()}
+      # Testes geram apenas artefatos internos, sem nova instalacao.
       - name: Conferir backup integral
         shell: pwsh
         run: |
