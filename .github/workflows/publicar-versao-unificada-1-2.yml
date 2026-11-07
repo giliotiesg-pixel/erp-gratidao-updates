@@ -1,0 +1,74 @@
+name: Publicar Armazem Gratidao versao unificada 1.2
+on:
+  push:
+    branches:
+      - fix/amzg-atualizacao-rapida-progresso-v1-2
+    paths:
+      - '.github/workflows/publicar-versao-unificada-1-2.yml'
+jobs:
+  publicar:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Exigir teste integral aprovado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $result=(gh run view 42390794168 --repo giliotiesg-pixel/erp-gratidao-updates --json conclusion --jq '.conclusion')
+          if($LASTEXITCODE -ne 0 -or $result.Trim() -ne 'success'){throw "Build e testes nao aprovados: $result"}
+          Write-Host 'CI aprovou instalacao, reparo, backup, ZIP completo e versao unica.'
+      - name: Baixar EXATAMENTE o pacote testado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          gh run download 42390794168 --repo giliotiesg-pixel/erp-gratidao-updates --name Armazem-Gratidao-Unico-build-594 --dir dist
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel baixar os arquivos testados.'}
+          $manifest=Get-Content 'dist/manifesto-proposto.json' -Raw | ConvertFrom-Json
+          if($manifest.version -ne '1.2' -or $manifest.build -ne 594 -or
+             $manifest.full_version -ne '1.2.0.594' -or $manifest.tag -ne 'amzg-novo-win8-build-594'){
+            throw 'Manifesto nao representa versao 1.2 build 594.'
+          }
+          $installer='dist/Instalador-Armazem-Gratidao-v1.2.exe'
+          $zip='dist/Armazem-Gratidao-Atualizacao.zip'
+          if(!(Test-Path $installer) -or !(Test-Path $zip)){throw 'Arquivos essenciais ausentes.'}
+          $zipHash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($zipHash -ne $manifest.sha256){throw 'SHA256 divergente; nada sera publicado.'}
+          $iv=(Get-Item $installer).VersionInfo.FileVersion.Trim()
+          if($iv -ne '1.2.0.594'){throw "Instalador em versao errada: $iv"}
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipStream=[IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
+          try{
+            foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe',
+              'System.Data.SQLite.dll','QRCoder.dll','zxing.dll')){
+              if($null -eq $zipStream.GetEntry($name)){throw "ZIP sem arquivo obrigatorio: $name"}
+            }
+          }finally{$zipStream.Dispose()}
+          Write-Host "Pacote v1.2 (build 594) completo e validado; SHA256=$zipHash"
+      - name: Publicar instalador unico e ZIP para atualizacao automatica
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='amzg-novo-win8-build-594'
+          gh release view $tag --repo giliotiesg-pixel/erp-gratidao-updates --json tagName 2>$null | Out-Null
+          if($LASTEXITCODE -eq 0){throw "Tag $tag ja publicada. Nao sobrescrever."}
+          $notes=@'
+          Armazem Gratidao versao 1.2 - build 594
+          - Programa, instalador e atualizador usam EXATAMENTE a mesma versao.
+          - A atualizacao automatica e um ZIP unico contendo programa, atualizador e DLLs.
+          - Backup completo, validacao de SHA256 e rollback fazem parte da atualizacao.
+          - Corrige arquivos de atualizador em uso: bloqueia a copia ANTES de qualquer alteracao, preserva rollback e indica arquivo ocupado.
+          - Verificacao automatica fica leve: baixa somente apos o usuario autorizar, mostrando porcentagem.
+          - Impede regresso para versoes antigas.
+          - Instalador separado somente para primeira instalacao ou reparo.
+          - Nao desinstale a versao anterior. Preserve o banco e verifique o backup.
+          - Compilado para Windows 8 x64 / .NET Framework 4.5.
+          - Testes Windows automatizados aprovados; hardware Windows 8 fisico ainda nao validado.
+          '@
+          gh release create $tag 'dist/Instalador-Armazem-Gratidao-v1.2.exe' 'dist/Armazem-Gratidao-Atualizacao.zip' 'dist/VALIDACAO-SHA256.txt' --repo giliotiesg-pixel/erp-gratidao-updates --target 0096f899cd0604e1b27233fa32d1c56129fb73a3 --title 'Armazem Gratidao v1.2 (build 594)' --notes $notes
+          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar a versao unificada.'}
+          gh release view $tag --repo giliotiesg-pixel/erp-gratidao-updates --json url,isPrerelease,assets
+          if($LASTEXITCODE -ne 0){throw 'Release ainda nao foi confirmado.'}

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace ArmazemGratidaoAtualizador {
@@ -93,6 +94,51 @@ namespace ArmazemGratidaoAtualizador {
      " não é mais recente que a versão instalada "+installedBuild+
      ". O programa e o banco de dados foram preservados.");
   }
+  // Verifica TODOS os arquivos antes da primeira substituicao. O updater
+  // legado podia substituir parcialmente as DLLs e depois falhar ao copiar
+  // AtualizadorGratidao.exe porque uma janela antiga ainda estava aberta.
+  internal static void EnsureTargetsWritable(string directory,IEnumerable<string> names,int waitMilliseconds=12000){
+   string root=Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+   string running=Path.GetFullPath(Process.GetCurrentProcess().MainModule.FileName);
+   string installedUpdater=Path.Combine(root,"AtualizadorGratidao.exe");
+   if(string.Equals(running,installedUpdater,StringComparison.OrdinalIgnoreCase))
+    throw new IOException("O atualizador instalado esta em execucao. Feche essa janela e inicie a atualizacao pelo programa, nunca pelo executavel isolado.");
+   DateTime deadline=DateTime.UtcNow.AddMilliseconds(Math.Max(100,waitMilliseconds));
+   string unavailable=null;
+   do{
+    unavailable=null;
+    foreach(string name in names){
+     string destination=Path.GetFullPath(Path.Combine(root,name.Replace('/',Path.DirectorySeparatorChar)));
+     if(!destination.StartsWith(root,StringComparison.OrdinalIgnoreCase))
+      throw new IOException("Destino de atualizacao invalido: "+name);
+     if(!File.Exists(destination))continue;
+     try{
+      // Windows nao deixa sobrescrever um executavel que outro processo carregou.
+      // O teste de compartilhamento exclusivo evita uma atualizacao parcial.
+      using(var probe=new FileStream(destination,FileMode.Open,FileAccess.ReadWrite,FileShare.None)){}
+     }catch(IOException){unavailable=destination;break;}
+     catch(UnauthorizedAccessException){unavailable=destination;break;}
+    }
+    if(unavailable==null)return;
+    Thread.Sleep(350);
+   }while(DateTime.UtcNow<deadline);
+   throw new IOException("ATUALIZACAO NAO INICIADA: arquivo em uso: "+unavailable+
+    ". Feche TODAS as janelas antigas do Atualizador Automatico e do Armazem Gratidao; "+
+    "verifique o Gerenciador de Tarefas. Nenhum arquivo do programa foi substituido. "+
+    "O backup existente foi mantido.");
+  }
+  // Retentativas curtas para bloqueios transitorios de antivirus/disco.
+  // Sem eliminar os arquivos originais: o rollback continua possivel.
+  static void CopyFileWithRetry(string source,string destination){
+   Exception last=null;
+   for(int attempt=0;attempt<8;attempt++){
+    try{File.Copy(source,destination,true);return;}
+    catch(IOException ex){last=ex;}
+    catch(UnauthorizedAccessException ex){last=ex;}
+    Thread.Sleep(300*(attempt+1));
+   }
+   throw new IOException("Arquivo nao foi substituido apos tentativas seguras: "+destination,last);
+  }
   void Apply(){
    if(args.Length!=6||args[0]!="--apply-zip")
     throw new Exception("Atualizador não pode ser executado diretamente. Use Verificar Atualização no Armazém Gratidão.");
@@ -139,6 +185,9 @@ namespace ArmazemGratidaoAtualizador {
     // A própria aplicacao invoca uma copia no diretorio temporario, de modo
     // que AtualizadorGratidao.exe na pasta do sistema nao fica bloqueado.
     // ZIPs legados continuam aceitos pelo atualizador previamente instalado.
+    Report("Verificando se todos os arquivos estao livres para atualizar...",48);
+    EnsureTargetsWritable(dir,targets);
+    WriteLog("Preflight concluido: todos os arquivos livres para substituicao");
     foreach(string name in targets){
      string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
      string previous=Path.Combine(rollback,name.Replace('/',Path.DirectorySeparatorChar));
@@ -152,7 +201,7 @@ namespace ArmazemGratidaoAtualizador {
       .Concat(targets.Where(x=>x.Equals("ArmazemGratidaoNovo.exe",StringComparison.OrdinalIgnoreCase)))){
       string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
       Directory.CreateDirectory(Path.GetDirectoryName(dst));
-      File.Copy(Path.Combine(staging,name.Replace('/',Path.DirectorySeparatorChar)),dst,true);
+      CopyFileWithRetry(Path.Combine(staging,name.Replace('/',Path.DirectorySeparatorChar)),dst);
      }
     }catch(Exception failure){
      Report("Revertendo arquivos para a versão anterior...",75);
@@ -160,7 +209,7 @@ namespace ArmazemGratidaoAtualizador {
      foreach(string name in targets){
       string old=Path.Combine(rollback,name.Replace('/',Path.DirectorySeparatorChar));
       string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
-      try{if(File.Exists(old))File.Copy(old,dst,true);}catch(Exception ex){restoreErrors.Add(name+": "+ex.Message);}
+      try{if(File.Exists(old))CopyFileWithRetry(old,dst);}catch(Exception ex){restoreErrors.Add(name+": "+ex.Message);}
      }
      foreach(string added in created)try{if(File.Exists(added))File.Delete(added);}catch{}
      throw new Exception("Falhou a substituição: "+failure.Message+
