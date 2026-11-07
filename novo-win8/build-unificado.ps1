@@ -156,7 +156,7 @@ try {
  $setup=Join-Path $dist "Instalador-Armazem-Gratidao-v$displayVersion.exe"
  if(!(Test-Path $setup)){throw 'Instalador da versao correta nao foi gerado.'}
  $setupVersion=(Get-Item $setup).VersionInfo
- if($setupVersion.FileVersion -ne $version -or $setupVersion.ProductVersion -ne $version){
+ if($setupVersion.FileVersion.Trim() -ne $version -or $setupVersion.ProductVersion.Trim() -ne $version){
   throw "NUMERACAO INCONSISTENTE: Instalador=$($setupVersion.FileVersion), Programa=$version."
  }
  Write-Host "VERSOES IDENTICAS: programa=$actualFile, instalador=$($setupVersion.FileVersion), atualizador=$updaterFileVersion"
