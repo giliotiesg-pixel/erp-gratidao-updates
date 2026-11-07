@@ -285,7 +285,7 @@ namespace ArmazemGratidao {
   }
  }
 
- // Marca d'agua GDI+: sem arquivo externo, nao carrega imagem nem acessa banco.
+ // Painel da tela inicial: marca d'agua pintada no fundo, sem capturar clique.
  internal sealed class BrandedHomePanel : Panel {
   public BrandedHomePanel(){
    DoubleBuffered=true;ResizeRedraw=true;
@@ -297,34 +297,39 @@ namespace ArmazemGratidao {
   }
  }
 
+ // Imagem enviada pelo usuario, incorporada ao EXE como recurso (offline).
+ // Renderizar uma unica imagem com baixa opacidade; nenhuma leitura em disco,
+ // nenhuma consulta de rede e nenhum processamento adicional a cada clique.
  internal static class HomeBrandWatermark {
+  static readonly Image logo=LoadLogo();
+  static Image LoadLogo(){
+   try{
+    var assembly=typeof(HomeBrandWatermark).Assembly;
+    using(var stream=assembly.GetManifestResourceStream("ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(stream==null)return null;
+     using(var bitmap=Image.FromStream(stream))return new Bitmap(bitmap);
+    }
+   }catch{return null;} // A tela inicial funciona mesmo que a imagem falhe.
+  }
   public static void Draw(Graphics graphics,Rectangle bounds){
-   if(bounds.Width<340||bounds.Height<220)return;
+   if(logo==null||bounds.Width<340||bounds.Height<240)return;
+   float size=Math.Min(500f,Math.Min(bounds.Width*0.56f,bounds.Height*0.77f));
+   if(size<150f)return;
+   int side=(int)Math.Round(size);
+   // Centralizar na area livre; manter nome, botoes e indicadores na frente.
+   int left=bounds.Left+(int)((bounds.Width-side)*0.61f);
+   int top=bounds.Top+(int)((bounds.Height-side)*0.51f);
+   var area=new Rectangle(left,top,side,side);
    var state=graphics.Save();
    try{
-    graphics.SmoothingMode=SmoothingMode.AntiAlias;
-    graphics.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAlias;
-    float scale=Math.Min(1.25f,Math.Min((bounds.Width-32f)/610f,(bounds.Height-45f)/365f));
-    float artWidth=600*scale,artHeight=350*scale;
-    float x=bounds.Left+Math.Max(10,(bounds.Width-artWidth)*0.71f);
-    float y=bounds.Top+Math.Max(60,(bounds.Height-artHeight)*0.58f);
-    graphics.TranslateTransform(x,y);
-    graphics.ScaleTransform(scale,scale);
-    using(var cart=new Pen(Color.FromArgb(61,27,82,157),11f))
-    using(var red=new SolidBrush(Color.FromArgb(55,183,38,63)))
-    using(var textBlue=new SolidBrush(Color.FromArgb(49,23,73,153)))
-    using(var titleFont=new Font("Segoe UI",34f,FontStyle.Bold)){
-     cart.StartCap=LineCap.Round;cart.EndCap=LineCap.Round;
-     cart.LineJoin=LineJoin.Round;
-     graphics.DrawLine(cart,48,44,83,44);
-     graphics.DrawLine(cart,83,44,124,210);
-     graphics.DrawLine(cart,124,210,467,210);
-     graphics.DrawLine(cart,105,79,504,79);
-     graphics.DrawLine(cart,504,79,463,184);
-     graphics.DrawLine(cart,463,184,119,184);
-     graphics.FillEllipse(red,145,231,37,37);
-     graphics.FillEllipse(red,403,231,37,37);
-     graphics.DrawString("ARMAZÉM GRATIDÃO",titleFont,textBlue,new PointF(7,295));
+    graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;
+    graphics.PixelOffsetMode=PixelOffsetMode.HighQuality;
+    using(var attributes=new System.Drawing.Imaging.ImageAttributes()){
+     var opacity=new System.Drawing.Imaging.ColorMatrix();
+     opacity.Matrix00=1f;opacity.Matrix11=1f;opacity.Matrix22=1f;
+     opacity.Matrix33=0.095f;opacity.Matrix44=1f;
+     attributes.SetColorMatrix(opacity);
+     graphics.DrawImage(logo,area,0,0,logo.Width,logo.Height,GraphicsUnit.Pixel,attributes);
     }
    }finally{graphics.Restore(state);}
   }
