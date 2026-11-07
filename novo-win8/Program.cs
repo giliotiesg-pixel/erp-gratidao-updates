@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Diagnostics;
@@ -612,6 +613,49 @@ namespace ArmazemGratidao {
    }
    return installer;
   }
+  // Atualizador independente: executado de uma copia TEMPORARIA para que
+  // o ZIP possa instalar/reparar AtualizadorGratidao.exe sem arquivo bloqueado.
+  // A origem do EXE e o pacote ja validado por SHA-256 pela aplicacao.
+  string PrepareVerifiedUpdater(string zipPath){
+   string installed=Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe");
+   string staged=Path.Combine(Path.GetTempPath(),
+     "AMZG-Atualizador-"+Guid.NewGuid().ToString("N")+".exe");
+   try{
+    using(var archive=ZipFile.OpenRead(zipPath)){
+     var matches=archive.Entries.Where(e=>string.Equals(e.FullName,
+       "AtualizadorGratidao.exe",StringComparison.OrdinalIgnoreCase)).ToList();
+     if(matches.Count>1)throw new Exception("O pacote contém atualizadores duplicados.");
+     if(matches.Count==1){
+      var entry=matches[0];
+      if(entry.Length<20000||entry.Length>16777216)
+       throw new Exception("O executável do atualizador no ZIP possui tamanho inválido.");
+      using(var input=entry.Open())
+      using(var output=new FileStream(staged,FileMode.CreateNew,FileAccess.Write,FileShare.None)){
+       byte[] buffer=new byte[32768];int n;long count=0;
+       while((n=input.Read(buffer,0,buffer.Length))>0){
+        count+=n;
+        if(count>entry.Length)throw new Exception("Atualizador ZIP com tamanho inconsistente.");
+        output.Write(buffer,0,n);
+       }
+       if(count!=entry.Length)throw new Exception("Atualizador ZIP incompleto.");
+      }
+      return staged;
+     }
+    }
+    // Compatibilidade com ZIP legado (build 582), que nao tinha o atualizador:
+    // usar uma copia temporaria do atualizador ja presente no programa.
+    if(File.Exists(installed)){
+     File.Copy(installed,staged,false);
+     return staged;
+    }
+    throw new Exception("Este pacote antigo nao contém o atualizador e ele está ausente no computador. "+
+      "Baixe somente o arquivo AtualizadorGratidao.exe na página de manutenção do GitHub "+
+      "e copie para C:\\ERP-Gratidao. Não é necessário reinstalar o programa.");
+   }catch{
+    try{if(File.Exists(staged))File.Delete(staged);}catch{}
+    throw;
+   }
+  }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
@@ -730,8 +774,8 @@ namespace ArmazemGratidao {
     if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
     // A nova versão é salva e validada automaticamente, mesmo sem autorização para instalar.
     bool isZip=string.Equals(Convert.ToString(asset["name"]),patchZip,StringComparison.OrdinalIgnoreCase);
-    if(isZip&&!File.Exists(Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe")))
-     throw new Exception("O atualizador visual não está instalado. Utilize uma única vez o instalador completo.");
+    // O ZIP é baixado e validado por SHA-256 antes de conferir o atualizador.
+    // A ausência do auxiliar não deve impedir a recuperação automática.
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
     status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
     if(!manual&&lastPromptedBuild==remoteBuild)return;
@@ -759,7 +803,9 @@ namespace ArmazemGratidao {
      return;
     }
     if(isZip){
-     string updater=Path.Combine(Application.StartupPath,"AtualizadorGratidao.exe");
+     // A copia temporaria nao bloqueia o executavel da pasta de instalacao:
+     // o proprio ZIP pode repor o atualizador que estava faltando.
+     string updater=PrepareVerifiedUpdater(installer);
      Func<string,string> quote=value=>"\""+value.Replace("\"","")+"\"";
      var start=new ProcessStartInfo(updater){
       Arguments="--apply-zip "+quote(installer)+" "+quote(digest.Substring(7))+" "+

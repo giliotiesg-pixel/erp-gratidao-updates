@@ -1,5 +1,5 @@
 param(
- [ValidateRange(589,65000)][int]$Build=589
+ [ValidateRange(590,65000)][int]$Build=590
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -93,10 +93,13 @@ try {
   if(!(Test-Path $src)){throw "Arquivo compilado ausente: $src"}
  }
  # O pacote incremental contem somente executaveis e DLLs autorizados.
+ # O atualizador e parte obrigatoria de TODO pacote ZIP: nao pode desaparecer.
  foreach($name in $payload){
-  if($name -eq 'AtualizadorGratidao.exe'){continue}
   Copy-Item (Join-Path $bin $name) (Join-Path $stage $name) -Force
  }
+ # Arquivo independente para reparar o atualizador AUSENTE sem reinstalar o PDV.
+ # O usuario copia somente este EXE para a pasta do programa.
+ Copy-Item (Join-Path $bin 'AtualizadorGratidao.exe') (Join-Path $dist 'AtualizadorGratidao.exe') -Force
  $conf=Join-Path $bin 'ArmazemGratidaoNovo.exe.config'
  if(Test-Path $conf){Copy-Item $conf (Join-Path $stage 'ArmazemGratidaoNovo.exe.config') -Force}
  New-Item -ItemType Directory -Path (Join-Path $stage 'x64') -Force|Out-Null
@@ -110,7 +113,20 @@ try {
  try{
   $names=@($archive.Entries | Where-Object {$_.Name} | ForEach-Object {$_.FullName})
   if(-not ($names -contains 'ArmazemGratidaoNovo.exe')){throw 'Executavel principal ausente no ZIP.'}
-  if($names.Count -lt 5){throw 'ZIP de atualizacao incompleto.'}
+  if(-not ($names -contains 'AtualizadorGratidao.exe')){throw 'Atualizador ausente do ZIP. Publicacao bloqueada.'}
+  if($names.Count -lt 6){throw 'ZIP de atualizacao incompleto.'}
+  $entry=$archive.GetEntry('AtualizadorGratidao.exe')
+  $standalone=Join-Path $dist 'AtualizadorGratidao.exe'
+  if($null -eq $entry -or $entry.Length -lt 20000){throw 'Atualizador ZIP invalido.'}
+  $temporary=Join-Path $dist 'amzg-test-updater.bin'
+  try{
+   [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$temporary)
+   if((Get-FileHash $temporary -Algorithm SHA256).Hash -ne
+      (Get-FileHash $standalone -Algorithm SHA256).Hash){
+    throw 'Atualizador no ZIP diverge do executavel independente.'
+   }
+  }finally{if(Test-Path $temporary){Remove-Item $temporary -Force}}
+
  }finally{$archive.Dispose()}
  $inno=@('C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
          'C:\Program Files\Inno Setup 6\ISCC.exe') |
@@ -133,7 +149,7 @@ try {
  @("Build: $Build","Instalador: $setup","Instalador SHA-256: $setupHash",
   "Atualizacao ZIP SHA-256: $hash","Manifesto: manifesto-proposto.json") |
   Set-Content (Join-Path $dist 'VALIDACAO-SHA256.txt') -Encoding UTF8
- Write-Host "Pacote unico e ZIP de atualizacao gerados em $dist"
+ Write-Host "Instalador, atualizador independente e ZIP reparador gerados em $dist"
 }finally{
  Pop-Location
 }
