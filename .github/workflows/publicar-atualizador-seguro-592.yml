@@ -18,7 +18,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $out=gh run view 42385081847 --repo giliotiesg-pixel/erp-gratidao-updates --json conclusion,status --jq '.conclusion'
+          $out=gh run view 42385349373 --repo giliotiesg-pixel/erp-gratidao-updates --json conclusion,status --jq '.conclusion'
           if($LASTEXITCODE -ne 0 -or $out.Trim() -ne 'success'){
             throw "Build 592 nao validada. CI: $out"
           }
@@ -27,7 +27,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          gh run download 42385081847 --repo giliotiesg-pixel/erp-gratidao-updates --name Armazem-Gratidao-Unico-build-592 --dir pacote
+          gh run download 42385349373 --repo giliotiesg-pixel/erp-gratidao-updates --name Armazem-Gratidao-Unico-build-592 --dir pacote
           if($LASTEXITCODE -ne 0){throw 'Artefato nao disponivel.'}
           $updater='pacote/AtualizadorGratidao.exe'
           if(!(Test-Path $updater)){throw 'Executavel independente ausente.'}
