@@ -33,9 +33,34 @@ try{
   throw 'Botao especial Calculadora ausente no cabecalho.'
  }
  $homePanel=@($form.Controls.Find('homePanel',$true)) | Select-Object -First 1
- if($null -eq $homePanel -or @($homePanel.Controls | Where-Object {
-    $_.GetType().Name -eq 'BrandedHomePanel'
-   }).Count -ne 1){throw 'Marca d agua com carrinho ausente no fundo do Inicio.'}
+ if($null -eq $homePanel -or
+   @($homePanel.Controls | Where-Object {$_.Name -eq 'amzgDashboardCanvas'}).Count -ne 1){
+  throw 'Dashboard sem a nova tela inicial.'
+ }
+ if(@($form.Controls.Find('amzgHomeCalculator',$true)).Count -gt 0){
+  throw 'Calculadora fixa encontrada na tela inicial.'
+ }
+ if(@($homePanel.Controls | Where-Object {$_.GetType().Name -eq 'BrandedHomePanel'}).Count -gt 0){
+  throw 'Nao removeram a marca dagua do fundo.'
+ }
+ $rankingLeft=@($form.Controls.Find('amzgRankingLeft',$true))
+ $rankingRight=@($form.Controls.Find('amzgRankingRight',$true))
+ if($rankingLeft.Count -ne 1 -or $rankingRight.Count -ne 1){
+  throw 'Ranking com duas listas de 10 produtos nao encontrado.'
+ }
+ if($rankingLeft[0].Columns.Count -ne 3 -or $rankingRight[0].Columns.Count -ne 3 -or
+   $rankingLeft[0].Columns[2].HeaderText -ne 'Qtd. total' -or
+   $rankingRight[0].Columns[2].HeaderText -ne 'Qtd. total'){
+  throw 'Ranking nao possui coluna de quantidade total.'
+ }
+ $rankPanel=@($form.Controls.Find('amzgDashboardRankingPanel',$true))
+ if($rankPanel.Count -ne 1 -or $rankPanel[0].Height -gt 330){
+  throw 'Ranking nao ficou compacto.'
+ }
+ $windowTitle=@($form.Controls.Find('amzgHomeTitle',$true))
+ if($windowTitle.Count -ne 1 -or $windowTitle[0].Text -ne 'Armazém Gratidão'){
+  throw 'Titulo Armazem Gratidao desapareceu ou foi cortado.'
+ }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
  if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
   throw 'A calculadora apareceu automaticamente, contrariando o modo oculto.'
@@ -61,7 +86,7 @@ try{
   $homeBitmap.Save($homePreview,[System.Drawing.Imaging.ImageFormat]::Png)
  }finally{$homeBitmap.Dispose()}
  if((Get-Item -LiteralPath $homePreview).Length -lt 5000){
-  throw 'Previa da marca d agua incompleta.'
+  throw 'Previa do Inicio incompleta.'
  }
  $calcButton[0].PerformClick()
  [System.Windows.Forms.Application]::DoEvents()
@@ -85,7 +110,7 @@ try{
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
   Select-Object -First 1
  if($null -eq $frame -or !$frame.Visible -or $frame.Height -lt 60 -or
-    $calcDisplay.GetType().Name -ne 'Label'){
+    -not ($calcDisplay -is [System.Windows.Forms.Label])){
   throw 'Visor da calculadora continua cortado ou sem quadro proprio.'
  }
  & $press 'C'
@@ -93,6 +118,29 @@ try{
  if($calcDisplay.Text -ne '1'){throw "Primeiro numero invisivel: $($calcDisplay.Text)"}
  & $press '2'
  if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
+ # O numero deve estar pintado no visor, nao somente guardado em memoria.
+ $render=[Drawing.Bitmap]::new($calcDisplay.ClientSize.Width,$calcDisplay.ClientSize.Height)
+ try{
+  $calcDisplay.DrawToBitmap($render,[Drawing.Rectangle]::new(
+   [Drawing.Point]::Empty,$calcDisplay.ClientSize))
+  $pixels=0
+  for($py=12;$py -lt ($render.Height-12);$py+=2){
+   for($px=12;$px -lt ($render.Width-12);$px+=2){
+    $p=$render.GetPixel($px,$py)
+    if($p.R -lt 160 -and $p.G -lt 170 -and $p.B -lt 210){$pixels++}
+   }
+  }
+  if($pixels -lt 8){throw "Digitos nao foram pintados no visor ($pixels pixels)."}
+ }finally{$render.Dispose()}
+ & $press 'C'
+ foreach($key in @('9','÷','2','=')){& $press $key}
+ if($calcDisplay.Text -ne '4,5'){throw "Erro em 9/2: $($calcDisplay.Text)"}
+ & $press 'C'
+ foreach($key in @('6','×','7','=')){& $press $key}
+ if($calcDisplay.Text -ne '42'){throw "Erro em 6x7: $($calcDisplay.Text)"}
+ & $press 'C'
+ foreach($key in @('1','0','−','3','=')){& $press $key}
+ if($calcDisplay.Text -ne '7'){throw "Erro em 10-3: $($calcDisplay.Text)"}
  & $press 'C'
  foreach($key in @('1','0','0','+','1','0','%','=')){& $press $key}
  if($calcDisplay.Text -ne '110'){throw "Erro em 100 + 10%: $($calcDisplay.Text)"}
@@ -166,6 +214,10 @@ try{
    $_.Image.Width -lt 38 -or $_.Width -lt 220 -or $_.Height -lt 75}).Count -gt 0){
   throw 'Modulo sem botao grande ou sem icone 40px.'
  }
+ if(@($modules[0].Controls | Where-Object {
+  $_.BackColor.B -lt 120 -or $_.ForeColor -ne [Drawing.Color]::White -or $null -eq $_.Region
+ }).Count -gt 0){throw 'Submenu nao usa botoes azuis arredondados com icones brancos.'}
+
  $search[0].Text='produto'
  [System.Windows.Forms.Application]::DoEvents()
  $found=@($modules[0].Controls | ForEach-Object {$_.AccessibleDescription})
