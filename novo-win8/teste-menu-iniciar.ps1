@@ -36,7 +36,7 @@ try {
  if($pageStart.Count -ne 1){throw 'Botao Iniciar nao esta visivel na barra do menu'}
  Write-Host "Janela WinForms exibiu: $($form.Text)"
  if($form.Text -notmatch [regex]::Escape($env:AMZG_VERSION) -or
-    $form.Text -notmatch ('(?i)build\\s+'+$env:AMZG_BUILD)){throw 'Barra de titulo nao mostra a build correta'}
+    $form.Text -notmatch ('(?i)build\s+'+$env:AMZG_BUILD)){throw 'Barra de titulo nao mostra a build correta'}
  $total=0
  $originalLabels=@{}
  foreach($block in $sections[0].Controls){
