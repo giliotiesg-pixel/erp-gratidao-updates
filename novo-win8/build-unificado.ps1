@@ -1,5 +1,5 @@
 param(
- [ValidateRange(591,65000)][int]$Build=591
+ [ValidateRange(592,65000)][int]$Build=592
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
