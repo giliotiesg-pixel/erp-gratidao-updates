@@ -24,9 +24,69 @@ try{
  if(@($form.Controls.Find('amzgStartPanel',$true)).Count -gt 0){
   throw 'Falha: ainda existe barra lateral fixa em vez do menu flutuante.'
  }
- if(@($form.Controls.Find('amzgHomeCalculator',$true)).Count -ne 1){
-  throw 'Calculadora deixou de aparecer na pagina principal.'
+ # Regressao v1.4 build 597: a calculadora nao pode ocupar a pagina inicial.
+ if(@($form.Controls.Find('amzgHomeCalculator',$true)).Count -ne 0){
+  throw 'Calculadora antiga continua fixa na pagina principal.'
  }
+ $calcButton=@($form.Controls.Find('amzgOpenCalculator',$true))
+ if($calcButton.Count -ne 1 -or !$calcButton[0].Visible){
+  throw 'Botao especial Calculadora ausente no cabecalho.'
+ }
+ $homePanel=@($form.Controls.Find('homePanel',$true)) | Select-Object -First 1
+ if($null -eq $homePanel -or @($homePanel.Controls | Where-Object {
+    $_.GetType().Name -eq 'BrandedHomePanel'
+   }).Count -ne 1){throw 'Marca d agua com carrinho ausente no fundo do Inicio.'}
+ $folder=[IO.Path]::GetDirectoryName($preview)
+ [IO.Directory]::CreateDirectory($folder) | Out-Null
+ $homePreview=Join-Path $folder 'Previa-Inicio-Marca-Dagua.png'
+ $homeBitmap=[System.Drawing.Bitmap]::new($homePanel.ClientSize.Width,$homePanel.ClientSize.Height)
+ try{
+  $homePanel.DrawToBitmap($homeBitmap,[System.Drawing.Rectangle]::new(
+    [System.Drawing.Point]::Empty,$homePanel.ClientSize))
+  $homeBitmap.Save($homePreview,[System.Drawing.Imaging.ImageFormat]::Png)
+ }finally{$homeBitmap.Dispose()}
+ if((Get-Item -LiteralPath $homePreview).Length -lt 5000){
+  throw 'Previa da marca d agua incompleta.'
+ }
+ $calcButton[0].PerformClick()
+ [System.Windows.Forms.Application]::DoEvents()
+ $calculator=@($form.OwnedForms | Where-Object {
+   $_.Name -eq 'amzgModernCalculator'
+ }) | Select-Object -First 1
+ if($null -eq $calculator -or !$calculator.Visible){
+  throw 'Botao calculadora nao abriu a janela independente.'
+ }
+ $keypad=@($calculator.Controls.Find('amzgCalcKeys',$true)) | Select-Object -First 1
+ $calcDisplay=@($calculator.Controls.Find('amzgCalcDisplay',$true)) | Select-Object -First 1
+ if($null -eq $keypad -or $null -eq $calcDisplay -or $keypad.Controls.Count -ne 24){
+  throw 'Calculadora moderna sem teclas ou visor.'
+ }
+ $press={param([string]$Key)
+  $target=@($keypad.Controls | Where-Object {$_.Tag -eq $Key}) |
+   Select-Object -First 1
+  if($null -eq $target){throw "Tecla ausente na calculadora: $Key"}
+  $target.PerformClick()
+ }
+ foreach($key in @('1','0','0','+','1','0','%','=')){& $press $key}
+ if($calcDisplay.Text -ne '110'){throw "Erro em 100 + 10%: $($calcDisplay.Text)"}
+ $calcPreview=Join-Path $folder 'Previa-Calculadora.png'
+ $calcBitmap=[System.Drawing.Bitmap]::new($calculator.ClientSize.Width,$calculator.ClientSize.Height)
+ try{
+  $calculator.DrawToBitmap($calcBitmap,[System.Drawing.Rectangle]::new(
+   [System.Drawing.Point]::Empty,$calculator.ClientSize))
+  $calcBitmap.Save($calcPreview,[System.Drawing.Imaging.ImageFormat]::Png)
+ }finally{$calcBitmap.Dispose()}
+ if((Get-Item -LiteralPath $calcPreview).Length -lt 5000){
+  throw 'Previa da calculadora incompleta.'
+ }
+ $calcButton[0].PerformClick()
+ [System.Windows.Forms.Application]::DoEvents()
+ if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator' -and
+   $_.Visible}).Count -ne 1){throw 'Segundo clique abriu calculadora duplicada.'}
+ $calculator.Close()
+ Write-Host 'CALCULADORA OK: janela unica, 24 teclas e porcentagem comercial 100+10%=110.'
+ Write-Host "PREVIA VISUAL CALCULADORA: $calcPreview"
+ Write-Host "PREVIA VISUAL MARCA DAGUA: $homePreview"
  if($form.Text -notmatch [regex]::Escape($env:AMZG_VERSION) -or
     $form.Text -notmatch ('(?i)build\s+'+$env:AMZG_BUILD)){
    throw "Versao incorreta no PDV: $($form.Text)"

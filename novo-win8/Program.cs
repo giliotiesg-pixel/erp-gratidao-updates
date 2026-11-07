@@ -188,6 +188,8 @@ namespace ArmazemGratidao {
    }
   }
   static void Apply(Control control){
+   // A calculadora possui tema proprio: preservar as cores e dimensoes das teclas.
+   if(control is ModernCalculatorForm || control.FindForm() is ModernCalculatorForm)return;
    if(control.IsDisposed||!decorated.Add(control))return;
    control.Disposed+=(sender,args)=>decorated.Remove(control);
    var button=control as Button;
@@ -383,7 +385,18 @@ namespace ArmazemGratidao {
    inicioHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    inicioHeader.Click+=ShowHome;
    RoundHomeControl(inicioHeader,9);header.Controls.Add(inicioHeader);
-   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(180,35,50),Font=new Font("Segoe UI",16,FontStyle.Bold),AutoSize=true,Left=475,Top=17};header.Controls.Add(brand);
+   // Calculadora em janela propria; nao ocupa mais a tela de Inicio.
+   var calculatorHeader=new Button{Text="▦  Calculadora",Name="amzgOpenCalculator",
+    Left=467,Top=13,Width=158,Height=40,Tag="home-shortcut",
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(174,41,66),ForeColor=Color.White,
+    Font=new Font("Segoe UI",10f,FontStyle.Bold),Cursor=Cursors.Hand};
+   calculatorHeader.FlatAppearance.BorderSize=0;
+   calculatorHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(200,52,79);
+   calculatorHeader.Click+=(sender,args)=>{CloseStartMenu();ShowCalculator();};
+   RoundHomeControl(calculatorHeader,11);header.Controls.Add(calculatorHeader);
+   var brand=new Label {Text="ARMAZÉM GRATIDÃO",ForeColor=Color.FromArgb(180,35,50),
+    Font=new Font("Segoe UI",15,FontStyle.Bold),AutoSize=true,Left=642,Top=17};
+   header.Controls.Add(brand);
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -893,6 +906,7 @@ namespace ArmazemGratidao {
    grid.Visible=false;
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var home=new FlowLayoutPanel {Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,10,12,10),BackColor=Color.FromArgb(246,249,253)};
+   home.Paint+=(paintSender,paintArgs)=>HomeBrandWatermark.Draw(paintArgs.Graphics,home.ClientRectangle);
    var title=new Label {Text="INÍCIO  •  ARMAZÉM GRATIDÃO",Width=920,Height=36,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)};
    home.Controls.Add(title);
    var date=new Label {Text=DateTime.Now.ToString("dddd, dd/MM/yyyy  HH:mm"),Width=920,Height=25,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(160,20,40)};
@@ -1040,239 +1054,20 @@ namespace ArmazemGratidao {
      "Arquivos do Programa",MessageBoxButtons.OK,MessageBoxIcon.Warning);
    }
   }
-  // Calculadora nativa, independente do PDV e sem acesso ao banco.
-  Form calculatorWindow;
+  // Instancia unica: ao clicar novamente, traz a janela movel para frente.
+  ModernCalculatorForm calculatorWindow;
   void ShowCalculator(){
    if(calculatorWindow!=null&&!calculatorWindow.IsDisposed){
-    if(calculatorWindow.WindowState==FormWindowState.Minimized)calculatorWindow.WindowState=FormWindowState.Normal;
+    if(calculatorWindow.WindowState==FormWindowState.Minimized)
+     calculatorWindow.WindowState=FormWindowState.Normal;
     calculatorWindow.BringToFront();calculatorWindow.Activate();return;
    }
-   var calc=new Form{Text="Calculadora • Armazém Gratidão",Width=320,Height=420,
-    MinimumSize=new Size(290,385),StartPosition=FormStartPosition.CenterScreen,
-    BackColor=Color.FromArgb(242,247,255),FormBorderStyle=FormBorderStyle.FixedSingle,
-    MaximizeBox=false,ShowInTaskbar=true,Opacity=0.97};
+   var calc=new ModernCalculatorForm();
    calculatorWindow=calc;
-   calc.FormClosed+=(sender,args)=>{if(calculatorWindow==calc)calculatorWindow=null;};
-   var display=new TextBox{Name="embeddedCalculatorDisplay",Dock=DockStyle.Top,Height=55,ReadOnly=true,
-    Text="0",TextAlign=HorizontalAlignment.Right,
-    Font=new Font("Segoe UI",24,FontStyle.Bold),BackColor=Color.White,
-    ForeColor=Color.FromArgb(20,69,147)};
-   calc.Controls.Add(display);
-   var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
-    Padding=new Padding(10),BackColor=Color.FromArgb(242,247,255)};
-   for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
-   for(int i=0;i<5;i++)keys.RowStyles.Add(new RowStyle(SizeType.Percent,20));
-   decimal stored=0m;
-   string operation=null;
-   bool newNumber=true;
-   string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
-   for(int i=0;i<labels.Length;i++){
-    string key=labels[i];
-    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3),
-     Font=new Font("Segoe UI",15,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
-     BackColor=(key=="=")?Color.FromArgb(20,69,147):Color.White,
-     ForeColor=(key=="=")?Color.White:Color.FromArgb(20,69,147)};
-    b.FlatAppearance.BorderSize=0;
-    b.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),9,
-     Color.FromArgb(181,201,228),1.2f);
-    b.Click+=(sender,args)=>{
-     try{
-      decimal current;
-      if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
-        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
-      if(key.Length==1&&char.IsDigit(key[0])){
-       display.Text=newNumber?key:(display.Text=="0"?key:display.Text+key);
-       newNumber=false;
-      }else if(key==","){
-       if(newNumber){display.Text="0,";newNumber=false;}
-       else if(!display.Text.Contains(","))display.Text+=",";
-      }else if(key=="C"){stored=0m;operation=null;newNumber=true;display.Text="0";}
-      else if(key=="⌫"){display.Text=display.Text.Length<=1?"0":display.Text.Substring(0,display.Text.Length-1);newNumber=false;}
-      else if(key=="±"){display.Text=(-current).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));}
-      else if(key=="%"){display.Text=(current/100m).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));newNumber=true;}
-      else if(key=="="){
-       if(operation!=null){
-        decimal answer=current;
-        if(operation=="+")answer=stored+current;
-        else if(operation=="−")answer=stored-current;
-        else if(operation=="×")answer=stored*current;
-        else if(operation=="÷"){if(current==0m){MessageBox.Show(calc,"Não é possível dividir por zero.","Calculadora");return;}answer=stored/current;}
-        display.Text=answer.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-        operation=null;newNumber=true;
-       }
-      }else{stored=current;operation=key;newNumber=true;}
-     }catch(OverflowException){MessageBox.Show(calc,"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
-    };
-    keys.Controls.Add(b,i%4,i/4);
-   }
-   calc.Controls.Add(keys);keys.BringToFront();
-   calc.Show();
+   calc.FormClosed+=(sender,args)=>{if(ReferenceEquals(calculatorWindow,calc))calculatorWindow=null;};
+   calc.Show(this);calc.Activate();
   }
-Panel BuildEmbeddedCalculator(){
-   var panel=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(234,242,253),Padding=new Padding(9)};
-   var display=new TextBox{Name="embeddedCalculatorDisplay",Dock=DockStyle.Top,Height=60,ReadOnly=true,BorderStyle=BorderStyle.None,
-    Text="0",TextAlign=HorizontalAlignment.Right,
-    Font=new Font("Segoe UI",23,FontStyle.Bold),BackColor=Color.White,
-    ForeColor=Color.FromArgb(20,69,147)};
-   var liveResult=new Label{Dock=DockStyle.Top,Height=43,TextAlign=ContentAlignment.MiddleRight,
-    Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
-    BackColor=Color.FromArgb(234,242,253),Text="Resultado: 0"};
-
-   display.TabStop=true;
-   display.Cursor=Cursors.IBeam;
-   display.ShortcutsEnabled=false;
-   var keys=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=5,
-    Padding=new Padding(3,12,3,4),BackColor=Color.FromArgb(234,242,253)};
-   for(int i=0;i<4;i++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
-   for(int i=0;i<5;i++)keys.RowStyles.Add(new RowStyle(SizeType.Percent,20));
-   decimal stored=0m;
-   string operation=null;
-   bool newNumber=true;
-   Action updatePreview=()=>{
-    decimal current;
-    if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
-       System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
-    if(operation!=null&&newNumber){liveResult.Text="Digite o próximo número";return;}
-    if(operation==null){liveResult.Text="Resultado: "+current.ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));return;}
-    if(operation=="÷"&&current==0m){liveResult.Text="Aguardando divisor";return;}
-    try{
-     decimal result=operation=="+"?checked(stored+current):
-       operation=="−"?checked(stored-current):
-       operation=="×"?checked(stored*current):
-       operation=="÷"?stored/current:current;
-     liveResult.Text="Resultado: "+result.ToString("N2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-    }catch(OverflowException){liveResult.Text="Valor muito grande";}
-   };
-   string[] labels={"C","⌫","%","÷","7","8","9","×","4","5","6","−","1","2","3","+","±","0",",","="};
-   var calculatorButtons=new System.Collections.Generic.Dictionary<string,Button>();
-   for(int i=0;i<labels.Length;i++){
-    string key=labels[i];
-    var b=new Button{Text=key,Dock=DockStyle.Fill,Margin=new Padding(3,4,3,4),
-     Font=new Font("Segoe UI",12,FontStyle.Bold),FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,
-     BackColor=(key=="=")?Color.FromArgb(22,75,160):(key=="C"?Color.FromArgb(184,55,69):((key=="+"||key=="−"||key=="×"||key=="÷")?Color.FromArgb(207,226,251):Color.White)),
-     ForeColor=(key=="="||key=="C")?Color.White:Color.FromArgb(20,69,147)};
-    b.FlatAppearance.BorderSize=0;
-    b.FlatAppearance.MouseOverBackColor=Color.FromArgb(174,209,250);
-    RoundHomeControl(b,12);
-    b.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-     new Rectangle(1,1,b.ClientSize.Width-3,b.ClientSize.Height-3),12,
-     Color.FromArgb(181,201,228),1.2f);
-    b.Click+=(sender,args)=>{
-     try{
-      decimal current;
-      if(!decimal.TryParse(display.Text,System.Globalization.NumberStyles.Number,
-        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"),out current))current=0m;
-      if(key.Length==1&&char.IsDigit(key[0])){
-       display.Text=newNumber?key:(display.Text=="0"?key:display.Text+key);
-       newNumber=false;
-      }else if(key==","){
-       if(newNumber){display.Text="0,";newNumber=false;}
-       else if(!display.Text.Contains(","))display.Text+=",";
-      }else if(key=="C"){stored=0m;operation=null;newNumber=true;display.Text="0";}
-      else if(key=="⌫"){display.Text=display.Text.Length<=1?"0":display.Text.Substring(0,display.Text.Length-1);newNumber=false;}
-      else if(key=="±"){display.Text=(-current).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));}
-      else if(key=="%"){display.Text=(current/100m).ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));newNumber=true;}
-      else if(key=="="){
-       if(operation!=null&&!newNumber){
-        decimal answer=current;
-        if(operation=="+")answer=stored+current;
-        else if(operation=="−")answer=stored-current;
-        else if(operation=="×")answer=stored*current;
-        else if(operation=="÷"){if(current==0m){MessageBox.Show(panel.FindForm(),"Não é possível dividir por zero.","Calculadora");return;}answer=stored/current;}
-        display.Text=answer.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-        operation=null;newNumber=true;
-       }
-      }else{
-       if(operation!=null&&!newNumber){
-        if(operation=="+")stored=checked(stored+current);
-        else if(operation=="−")stored=checked(stored-current);
-        else if(operation=="×")stored=checked(stored*current);
-        else if(operation=="÷"){
-         if(current==0m){MessageBox.Show(panel.FindForm(),"Não é possível dividir por zero.","Calculadora");return;}
-         stored=stored/current;
-        }
-        display.Text=stored.ToString(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-       }else if(operation==null)stored=current;
-       operation=key;newNumber=true;
-      }
-     }catch(OverflowException){MessageBox.Show(panel.FindForm(),"Número muito grande.","Calculadora");display.Text="0";stored=0m;operation=null;newNumber=true;}
-     updatePreview();
-    };
-    calculatorButtons[key]=b;
-    b.Click+=(sender,args)=>display.Focus();
-    keys.Controls.Add(b,i%4,i/4);
-   }
-
-   // Teclas do teclado numérico e comandos especiais são tratados por KeyDown.
-   // Sinais do teclado alfanumérico usam KeyPress: respeita ABNT2 e outros layouts.
-   Action<string> pressCalculatorKey=key=>{
-    Button button;
-    if(calculatorButtons.TryGetValue(key,out button))button.PerformClick();
-   };
-   KeyEventHandler calculatorKeyDown=(sender,args)=>{
-    string key=null;
-    if(args.KeyCode>=Keys.NumPad0&&args.KeyCode<=Keys.NumPad9)
-     key=((int)(args.KeyCode-Keys.NumPad0)).ToString();
-    else if(args.KeyCode==Keys.Add)key="+";
-    else if(args.KeyCode==Keys.Subtract)key="−";
-    else if(args.KeyCode==Keys.Multiply)key="×";
-    else if(args.KeyCode==Keys.Divide)key="÷";
-    else if(args.KeyCode==Keys.Decimal)key=",";
-    else if(args.KeyCode==Keys.Enter||args.KeyCode==Keys.Return)key="=";
-    else if(args.KeyCode==Keys.Back)key="⌫";
-    else if(args.KeyCode==Keys.Escape||args.KeyCode==Keys.Delete)key="C";
-    if(key!=null){
-     args.Handled=true;args.SuppressKeyPress=true;
-     pressCalculatorKey(key);
-    }
-   };
-   KeyPressEventHandler calculatorKeyPress=(sender,args)=>{
-    string key=null;
-    char ch=args.KeyChar;
-    if(ch>='0'&&ch<='9')key=ch.ToString();
-    else if(ch=='+')key="+";
-    else if(ch=='-')key="−";
-    else if(ch=='*'||ch=='x'||ch=='X'||ch=='×')key="×";
-    else if(ch=='/'||ch=='÷')key="÷";
-    else if(ch==','||ch=='.')key=",";
-    else if(ch=='='||ch=='\r')key="=";
-    else if(ch=='%')key="%";
-    if(key!=null){
-     args.Handled=true;
-     pressCalculatorKey(key);
-    }
-   };
-   // Captura na janela principal mesmo se o foco estiver em outro botão do menu.
-   // Só atua enquanto o menu principal e a calculadora estiverem visíveis.
-   var mainForm=this;
-   mainForm.KeyPreview=true;
-   KeyEventHandler guardedKeyDown=(sender,args)=>{
-    var home=mainForm.Controls["homePanel"];
-    if(home==null||!home.Visible||!panel.Visible||!mainForm.ContainsFocus)return;
-    calculatorKeyDown(sender,args);
-   };
-   KeyPressEventHandler guardedKeyPress=(sender,args)=>{
-    var home=mainForm.Controls["homePanel"];
-    if(home==null||!home.Visible||!panel.Visible||!mainForm.ContainsFocus)return;
-    calculatorKeyPress(sender,args);
-   };
-   mainForm.KeyDown+=guardedKeyDown;
-   mainForm.KeyPress+=guardedKeyPress;
-   panel.Disposed+=(sender,args)=>{mainForm.KeyDown-=guardedKeyDown;mainForm.KeyPress-=guardedKeyPress;};
-   // Grade explicita impede que visor, resultado e teclas se sobreponham.
-   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty,Padding=Padding.Empty};
-   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,60));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
-   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-   display.Dock=DockStyle.Fill;liveResult.Dock=DockStyle.Fill;
-   layout.Controls.Add(display,0,0);layout.Controls.Add(liveResult,0,1);layout.Controls.Add(keys,0,2);
-   panel.Controls.Add(layout);
-   updatePreview();
-   return panel;
-  }
-  // Tela inicial única de navegação; preserva os handlers originais dos módulos.
+    // Tela inicial única de navegação; preserva os handlers originais dos módulos.
   // Seções visuais do menu; não altera a ação associada a cada botão.
   string ModuleSection(string name){
    if(new[]{"PDV  •  Nova venda","Vendas","Lançar vendas anotadas","Cascos retornáveis","Fiado","Clientes","WhatsApp"}.Contains(name))return "VENDAS E ATENDIMENTO";
@@ -1434,8 +1229,8 @@ Panel BuildEmbeddedCalculator(){
    return list;
   }
 
-  // A area principal fica livre de menus fixos: o popup fica por cima, como
-  // no Windows, e a calculadora continua acessivel na propria pagina.
+  // Area principal livre: menu Iniciar e calculadora sao janelas independentes.
+  // Marca d'agua vetorial no fundo, sem criar imagens ou ler banco de dados.
   void ShowMainMenu(){
    CloseStartMenu();
    grid.Visible=false;
@@ -1443,16 +1238,7 @@ Panel BuildEmbeddedCalculator(){
    if(old!=null){Controls.Remove(old);old.Dispose();}
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,
     BackColor=Color.FromArgb(246,249,253)};
-   var calculatorPanel=new Panel{Name="amzgHomeCalculator",
-    Dock=DockStyle.Right,Width=356,Padding=new Padding(10,12,14,18),
-    BackColor=Color.FromArgb(232,240,252)};
-   calculatorPanel.Controls.Add(BuildEmbeddedCalculator());
-   calculatorPanel.Controls.Add(new Label{
-    Dock=DockStyle.Top,Height=39,
-    Text="CALCULADORA",TextAlign=ContentAlignment.MiddleCenter,
-    ForeColor=Color.FromArgb(184,37,62),
-    Font=new Font("Segoe UI",11,FontStyle.Bold)});
-   var welcome=new Panel{Dock=DockStyle.Fill,
+   var welcome=new BrandedHomePanel{Dock=DockStyle.Fill,
     BackColor=Color.FromArgb(246,249,253),Padding=new Padding(23,23,18,18)};
    var title=new Label{Dock=DockStyle.Top,Height=59,
     Text="ARMAZÉM GRATIDÃO",
@@ -1460,9 +1246,9 @@ Panel BuildEmbeddedCalculator(){
     Font=new Font("Segoe UI",18,FontStyle.Bold),
     TextAlign=ContentAlignment.MiddleLeft};
    var tip=new Label{Dock=DockStyle.Top,Height=112,
-    Text="Acesse o botão  ⊞  INICIAR  no alto da tela.\n"+
-         "Escolha uma seção, depois o módulo desejado.\n"+
-         "O menu abre sobre a tela e fecha quando você seleciona ou clica fora.",
+    Text="Use  ⊞  INICIAR  para abrir os módulos do programa.\n"+
+         "Clique em  ▦  CALCULADORA  no topo para abrir a janela móvel.\n"+
+         "O menu se fecha ao selecionar um módulo ou clicar fora.",
     Font=new Font("Segoe UI",11,FontStyle.Regular),
     ForeColor=Color.FromArgb(65,78,99),
     Padding=new Padding(3,14,6,0),
@@ -1477,7 +1263,7 @@ Panel BuildEmbeddedCalculator(){
    welcome.Controls.Add(title);
    welcome.Controls.Add(version);
    page.Controls.Add(welcome);
-   page.Controls.Add(calculatorPanel);
+   // Sem calculadora fixa: toda a area central e utilizada pelo inicio.
    Controls.Add(page);
    page.BringToFront();header.BringToFront();status.BringToFront();
    sideMenu.Visible=false;
