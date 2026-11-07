@@ -50,9 +50,9 @@ Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{tmp}"; Flags: dontc
 [InstallDelete]
 ; Remove APENAS atalhos com o nome antigo gerados pelo proprio instalador.
 ; O novo atalho unico se chama "Armazém Gratidão" e abre o EXE do PDV.
-Type: files; Name: "{group}\\Armazem Gratidao Novo.lnk"
-Type: files; Name: "{commondesktop}\\Armazem Gratidao Novo.lnk"
-Type: files; Name: "{userdesktop}\\Armazem Gratidao Novo.lnk"
+Type: files; Name: "{group}\Armazem Gratidao Novo.lnk"
+Type: files; Name: "{commondesktop}\Armazem Gratidao Novo.lnk"
+Type: files; Name: "{userdesktop}\Armazem Gratidao Novo.lnk"
 [Icons]
 Name: "{group}\{#MyShortcutName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"; IconFilename: "{app}\ArmazemGratidaoNovo.exe"
 Name: "{autodesktop}\{#MyShortcutName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"; IconFilename: "{app}\ArmazemGratidaoNovo.exe"
