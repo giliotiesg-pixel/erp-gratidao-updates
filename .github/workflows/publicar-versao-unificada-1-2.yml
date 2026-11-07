@@ -4,7 +4,7 @@ on:
     branches:
       - fix/amzg-atualizacao-rapida-progresso-v1-2
     paths:
-      - '.github/workflows/publicar-versao-unificada-1-1.yml'
+      - '.github/workflows/publicar-versao-unificada-1-2.yml'
 jobs:
   publicar:
     runs-on: windows-latest
