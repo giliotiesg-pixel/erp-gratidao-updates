@@ -57,6 +57,13 @@ try{
  if($rankPanel.Count -ne 1 -or $rankPanel[0].Height -gt 330){
   throw 'Ranking nao ficou compacto.'
  }
+ $rankHeader=@($form.Controls.Find('amzgDashboardRankingHeader',$true))
+ $rankTables=@($form.Controls.Find('amzgRankingTables',$true))
+ if($rankHeader.Count -ne 1 -or $rankTables.Count -ne 1 -or
+    $rankHeader[0].Height -lt 35 -or
+    $rankHeader[0].Bottom -gt $rankTables[0].Top){
+  throw 'Cabecalho azul do ranking esta oculto pelas tabelas.'
+ }
  $windowTitle=@($form.Controls.Find('amzgHomeTitle',$true))
  if($windowTitle.Count -ne 1 -or ($windowTitle[0].Text -notmatch 'Armaz' -or $windowTitle[0].Text -notmatch 'Gratid')){
   throw 'Titulo Armazem Gratidao desapareceu ou foi cortado.'
@@ -119,10 +126,10 @@ try{
  & $press '2'
  if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
  # O numero deve estar pintado no visor, nao somente guardado em memoria.
- $render=[Drawing.Bitmap]::new($calcDisplay.ClientSize.Width,$calcDisplay.ClientSize.Height)
+ $render=[Drawing.Bitmap]::new($frame.ClientSize.Width,$frame.ClientSize.Height)
  try{
-  $calcDisplay.DrawToBitmap($render,[Drawing.Rectangle]::new(
-   [Drawing.Point]::Empty,$calcDisplay.ClientSize))
+  $frame.DrawToBitmap($render,[Drawing.Rectangle]::new(
+   [Drawing.Point]::Empty,$frame.ClientSize))
   $pixels=0
   for($py=12;$py -lt ($render.Height-12);$py+=2){
    for($px=12;$px -lt ($render.Width-12);$px+=2){
