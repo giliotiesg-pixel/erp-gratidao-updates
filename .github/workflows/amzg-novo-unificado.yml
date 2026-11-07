@@ -72,7 +72,7 @@ jobs:
           $setups=@(Get-ChildItem dist -File -Filter 'Instalador-Armazem-Gratidao-v*.exe')
           if($setups.Count -ne 1){throw 'Deve existir somente um instalador.'}
           $setup=$setups[0].FullName
-          $setVersion=(Get-Item $setup).VersionInfo.FileVersion
+          $setVersion=(Get-Item $setup).VersionInfo.FileVersion.Trim()
           $pdvVersion=(Get-Item 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe').VersionInfo.FileVersion
           $updVersion=(Get-Item 'dist/AtualizadorGratidao.exe').VersionInfo.FileVersion
           if($setVersion -ne $env:AMZG_FILEVERSION -or $pdvVersion -ne $env:AMZG_FILEVERSION -or $updVersion -ne $env:AMZG_FILEVERSION){
