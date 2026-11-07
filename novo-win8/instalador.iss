@@ -1,6 +1,6 @@
 #define MyAppName "Armazem Gratidao Novo"
 #ifndef BuildNumber
-#define BuildNumber "587"
+#define BuildNumber "588"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
@@ -8,6 +8,8 @@ AppId={{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName=C:\ERP-Gratidao
+UsePreviousAppDir=no
+DisableDirPage=yes
 DefaultGroupName={#MyAppName}
 OutputDir=..\dist
 OutputBaseFilename=Armazem-Gratidao-Novo-Setup
@@ -45,8 +47,8 @@ Source: "backup-antes-instalacao.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "bin\x64\Release\System.Data.SQLite.dll"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{tmp}"; Flags: dontcopy
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"
 Name: "{group}\Reparar Armazem Gratidao"; Filename: "{app}\Reparar-Armazem-Gratidao.exe"; Comment: "Repara os arquivos do programa, com backup e sem apagar os dados"
 Name: "{group}\Arquivos e manutencao"; Filename: "{app}\Arquivos"
 [Run]
@@ -312,18 +314,65 @@ end;
 
 // O instalador completo fica guardado uma vez e oferece reparacao local,
 // sem nova descarga, sem desinstalacao e sem mexer nos dados do usuario.
+// Verifica o EXE real no destino; nunca concluir uma instalação que deixou
+// a versão anterior. Corrige somente atalhos com o mesmo nome do aplicativo.
+procedure AMZGUpdateShortcutIfExists(const LinkPath, Executable, AppDir: String);
+begin
+  if FileExists(LinkPath) then
+  begin
+    try
+      CreateShellLink(LinkPath, 'Armazem Gratidao - Abrir programa instalado',
+        Executable, '', AppDir, Executable, 0, SW_SHOWNORMAL);
+      Log('Atalho atualizado: ' + LinkPath + ' => ' + Executable);
+    except
+      Log('Atalho nao atualizado: ' + LinkPath + ' - ' + GetExceptionMessage);
+    end;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  SourceSetup, RepairSetup: string;
+  SourceSetup, RepairSetup, Executable, ActualVersion, ExpectedVersion: string;
+  AppDir, LogDir, ResultLog: string;
 begin
   if CurStep = ssPostInstall then
   begin
+    AppDir := ExpandConstant('{app}');
+    Executable := AppDir + '\ArmazemGratidaoNovo.exe';
+    ExpectedVersion := '{#MyAppVersion}';
+    if not FileExists(Executable) then
+      RaiseException('Instalacao incompleta: programa nao encontrado em ' + Executable);
+    if not GetVersionNumbersString(Executable, ActualVersion) then
+      RaiseException('Instalacao incompleta: nao foi possivel conferir a versao do EXE: ' + Executable);
+    if CompareText(ActualVersion, ExpectedVersion) <> 0 then
+      RaiseException('Instalacao INCOMPLETA: esperado ' + ExpectedVersion +
+        ', mas encontrado ' + ActualVersion + ' em ' + Executable +
+        '. O instalador nao vai informar sucesso incorretamente.');
+
+    // Atalho do Menu Iniciar e do desktop padrao ja sao atualizados por [Icons].
+    // Aqui corrigimos eventual atalho HOMONIMO no desktop do usuario atual,
+    // que pode coexistir com o atalho comum e continuar abrindo o EXE antigo.
+    AMZGUpdateShortcutIfExists(ExpandConstant('{userdesktop}\{#MyAppName}.lnk'),
+      Executable, AppDir);
+    AMZGUpdateShortcutIfExists(ExpandConstant('{commondesktop}\{#MyAppName}.lnk'),
+      Executable, AppDir);
+
+    LogDir := AppDir + '\Arquivos\Logs';
+    ForceDirectories(LogDir);
+    ResultLog := 'Versao instalada: ' + ActualVersion + #13#10 +
+      'Executavel conferido: ' + Executable + #13#10 +
+      'Pasta unica: ' + AppDir + #13#10 +
+      'Atalhos conferidos: ' + ExpandConstant('{userdesktop}') + #13#10;
+    SaveStringToFile(LogDir + '\instalacao-verificada.txt', ResultLog, False);
+    Log('AMZG instalacao VERIFICADA: ' + ResultLog);
+
+    // O instalador permanece como reparador independente, sem perder o banco.
     SourceSetup := ExpandConstant('{srcexe}');
-    RepairSetup := ExpandConstant('{app}\Reparar-Armazem-Gratidao.exe');
+    RepairSetup := AppDir + '\Reparar-Armazem-Gratidao.exe';
     if CompareText(SourceSetup, RepairSetup) <> 0 then
     begin
       if not FileCopy(SourceSetup, RepairSetup, False) then
-        MsgBox('O programa foi instalado, mas nao foi possivel guardar o reparador. Guarde uma copia deste instalador para reparar os arquivos futuramente.',
+        MsgBox('O programa foi instalado, mas nao foi possivel guardar o reparador. Guarde uma copia do instalador para reparar futuramente.',
           mbError, MB_OK);
     end;
   end;
