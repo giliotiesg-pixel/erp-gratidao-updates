@@ -1,7 +1,7 @@
 #define MyAppName "Armazem Gratidao Novo"
 #define MyShortcutName "Armazém Gratidão"
 #ifndef BuildNumber
-#define BuildNumber "591"
+#define BuildNumber "592"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]

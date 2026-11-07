@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -69,6 +70,27 @@ namespace ArmazemGratidaoAtualizador {
     "AtualizadorGratidao.exe"
    }.Contains(path,StringComparer.OrdinalIgnoreCase);
   }
+  // Protecao adicional, independente da tela principal: recusa downgrade.
+  // Build historica pode vir no terceiro ou quarto campo da AssemblyVersion.
+  internal static int ReadInstalledBuild(string executable){
+   if(!File.Exists(executable))
+    throw new Exception("Executável não encontrado para comparar versões: "+executable);
+   Version version;
+   try{version=AssemblyName.GetAssemblyName(executable).Version;}
+   catch(Exception ex){throw new Exception("Não foi possível identificar a versão do executável: "+executable,ex);}
+   if(version==null)throw new Exception("Executável sem versão identificável: "+executable);
+   int number=version.Revision>0?version.Revision:version.Build;
+   if(number<1)throw new Exception("Versão inválida. Atualização bloqueada por segurança: "+version);
+   return number;
+  }
+  internal static void AssertUpgrade(int installedBuild,int packageBuild){
+   if(installedBuild<1||packageBuild<1)
+    throw new Exception("Versão inválida. Nenhum arquivo será alterado.");
+   if(packageBuild<=installedBuild)
+    throw new Exception("ATUALIZAÇÃO BLOQUEADA: a build "+packageBuild+
+     " não é mais recente que a versão instalada "+installedBuild+
+     ". O programa e o banco de dados foram preservados.");
+  }
   void Apply(){
    if(args.Length!=6||args[0]!="--apply-zip")
     throw new Exception("Atualizador não pode ser executado diretamente. Use Verificar Atualização no Armazém Gratidão.");
@@ -105,6 +127,12 @@ namespace ArmazemGratidaoAtualizador {
     targets.AddRange(ZipCompat.Extract(zip,staging,Allowed));
     if(!targets.Contains("ArmazemGratidaoNovo.exe",StringComparer.OrdinalIgnoreCase))
      throw new Exception("Pacote incompleto: executável não encontrado.");
+    // Mesmo quando uma versão antiga solicita erroneamente a build 582,
+    // o atualizador deve BLOQUEAR antes de qualquer substituição e rollback.
+    int installedBuild=ReadInstalledBuild(app);
+    int candidateBuild=ReadInstalledBuild(Path.Combine(staging,"ArmazemGratidaoNovo.exe"));
+    WriteLog("Comparando versões: instalada="+installedBuild+" pacote="+candidateBuild);
+    AssertUpgrade(installedBuild,candidateBuild);
     // Novos ZIPs devem recuperar o executavel do atualizador tambem.
     // A própria aplicacao invoca uma copia no diretorio temporario, de modo
     // que AtualizadorGratidao.exe na pasta do sistema nao fica bloqueado.

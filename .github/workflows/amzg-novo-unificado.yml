@@ -10,7 +10,7 @@ on:
       build:
         description: 'Numero da build a compilar'
         required: true
-        default: '591'
+        default: '592'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AMZG_BUILD: ${{ inputs.build || '591' }}
+      AMZG_BUILD: ${{ inputs.build || '592' }}
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
@@ -199,6 +199,11 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Banco mudou ao repor apenas o atualizador'}
           Write-Host 'Teste OK: atualizador ausente recuperado com unico EXE; SQLite intacto.'
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
+      - name: Testar bloqueio de versao antiga no atualizador
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-bloqueio-downgrade.ps1 -Updater 'novo-win8/bin/x64/Release/AtualizadorGratidao.exe' -ProgramExe 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe'
       - name: Testar menu estilo Iniciar com atalhos e pesquisa
         shell: powershell
         run: |
