@@ -15,8 +15,8 @@ $form=$null
 try {
  $form=[Activator]::CreateInstance($type)
  $form.StartPosition='Manual'
- $form.Location=New-Object System.Drawing.Point(24,24)
- $form.Size=New-Object System.Drawing.Size(1230,800)
+ $form.Location=[System.Drawing.Point]::new(24,24)
+ $form.Size=[System.Drawing.Size]::new(1230,800)
  $form.Show()
  [System.Windows.Forms.Application]::DoEvents()
  $start=@($form.Controls.Find('amzgStartPanel',$true))
@@ -58,10 +58,9 @@ try {
  if(!$start[0].Visible){throw 'Botao Iniciar nao reabriu o painel'}
  $directory=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PreviewFile))
  [IO.Directory]::CreateDirectory($directory) | Out-Null
- $picture=New-Object System.Drawing.Bitmap($form.ClientSize.Width,$form.ClientSize.Height)
+ $picture=[System.Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try {
-   $rect=New-Object System.Drawing.Rectangle(
-     [System.Drawing.Point]::Empty,$form.ClientSize)
+   $rect=[System.Drawing.Rectangle]::new([System.Drawing.Point]::Empty,$form.ClientSize)
    $form.DrawToBitmap($picture,$rect)
    $picture.Save($PreviewFile,[System.Drawing.Imaging.ImageFormat]::Png)
  }finally{$picture.Dispose()}
