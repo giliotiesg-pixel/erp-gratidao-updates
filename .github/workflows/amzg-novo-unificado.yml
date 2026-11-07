@@ -10,7 +10,7 @@ on:
       build:
         description: 'Numero da build a compilar'
         required: true
-        default: '590'
+        default: '591'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AMZG_BUILD: ${{ inputs.build || '590' }}
+      AMZG_BUILD: ${{ inputs.build || '591' }}
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
@@ -199,6 +199,11 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Banco mudou ao repor apenas o atualizador'}
           Write-Host 'Teste OK: atualizador ausente recuperado com unico EXE; SQLite intacto.'
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
+      - name: Testar menu estilo Iniciar com atalhos e pesquisa
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-menu-iniciar.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Menu-Iniciar.png'
       - uses: actions/upload-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
@@ -206,6 +211,7 @@ jobs:
             dist/Instalador-Armazem-Gratidao.exe
             dist/AtualizadorGratidao.exe
             dist/Armazem-Gratidao-Atualizacao.zip
+            dist/Previa-Menu-Iniciar.png
             dist/manifesto-proposto.json
             dist/VALIDACAO-SHA256.txt
           retention-days: 30
