@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
@@ -38,7 +39,7 @@ namespace ArmazemGratidao {
    FormBorderStyle=FormBorderStyle.None;
    ShowInTaskbar=false;
    StartPosition=FormStartPosition.Manual;
-   BackColor=Color.FromArgb(236,241,250);
+   BackColor=Color.FromArgb(241,246,253);
    Size=new Size(CompactWidth,566);
    MinimumSize=new Size(CompactWidth,395);
    KeyPreview=true;
@@ -46,14 +47,14 @@ namespace ArmazemGratidao {
 
    // Area de ramificacoes so aparece quando a categoria for escolhida.
    branchPane=new Panel{Name="amzgStartFlyout",Dock=DockStyle.Fill,
-    Visible=false,BackColor=Color.FromArgb(249,251,255),
+    Visible=false,BackColor=Color.FromArgb(246,249,254),
     Padding=new Padding(10,9,9,7)};
    branchTitle=new Label{Name="amzgBranchTitle",Dock=DockStyle.Top,Height=48,
     Font=new Font("Segoe UI",12f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(184,38,62),TextAlign=ContentAlignment.MiddleLeft};
+    ForeColor=Color.FromArgb(25,68,139),TextAlign=ContentAlignment.MiddleLeft};
    modules=new FlowLayoutPanel{Name="amzgStartModules",Dock=DockStyle.Fill,
     AutoScroll=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,
-    BackColor=Color.FromArgb(249,251,255),Padding=new Padding(4,5,3,9)};
+    BackColor=Color.FromArgb(246,249,254),Padding=new Padding(4,5,3,9)};
    var branchFooter=new Label{Dock=DockStyle.Bottom,Height=25,
     ForeColor=Color.FromArgb(108,117,135),Font=new Font("Segoe UI",8f),
     Text="Clique no modulo para abrir. Esc fecha o menu."};
@@ -62,12 +63,12 @@ namespace ArmazemGratidao {
    branchPane.Controls.Add(branchFooter);
 
    var navigation=new Panel{Name="amzgStartCategoriesPanel",Dock=DockStyle.Left,
-    Width=CompactWidth,BackColor=Color.FromArgb(29,47,79)};
+    Width=CompactWidth,BackColor=Color.FromArgb(18,52,107)};
    var branding=new Label{Dock=DockStyle.Top,Height=62,
-    Text="  ⊞  ARMAZÉM GRATIDÃO\n        INICIAR",
+    Text="  ⊞  INICIAR\n       Armazém Gratidão",
     Font=new Font("Segoe UI",11.6f,FontStyle.Bold),
     ForeColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,
-    BackColor=Color.FromArgb(20,37,67)};
+    BackColor=Color.FromArgb(12,39,90)};
    var instructions=new Label{Dock=DockStyle.Top,Height=31,
     Text="  SEÇÕES DO PROGRAMA",
     Font=new Font("Segoe UI",9f,FontStyle.Bold),
@@ -119,13 +120,14 @@ namespace ArmazemGratidao {
      Size=new Size(272,66),MinimumSize=new Size(272,66),
      MaximumSize=new Size(272,66),Margin=new Padding(0,2,0,3),
      Font=new Font("Segoe UI",10f,FontStyle.Bold),
-     BackColor=Color.FromArgb(29,47,79),ForeColor=Color.White,
+     BackColor=Color.FromArgb(23,81,169),ForeColor=Color.White,
      FlatStyle=FlatStyle.Flat,TextAlign=ContentAlignment.MiddleLeft,
      Image=ManagedIcon(categoryIcon,40),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      AutoEllipsis=true,Cursor=Cursors.Hand,UseMnemonic=false};
     btn.FlatAppearance.BorderSize=0;
-    btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(52,83,131);
+    btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(43,111,207);
+    RoundedBlue(btn,12);
     btn.Click+=(sender,args)=>SelectSection(section);
     categories.Controls.Add(btn);sectionButtons.Add(section,btn);
    }
@@ -155,6 +157,26 @@ namespace ArmazemGratidao {
    };
   }
 
+  // Botao arredondado no mesmo estilo dos acessos rapidos da pagina inicial.
+  static void RoundedBlue(Button b,int radius){
+   Action apply=()=>{
+    if(b.IsDisposed||b.Width<radius*2+4||b.Height<radius*2+4)return;
+    using(var regionPath=new GraphicsPath()){
+     int w=b.Width-1,h=b.Height-1,d=radius*2;
+     regionPath.AddArc(0,0,d,d,180,90);
+     regionPath.AddArc(w-d,0,d,d,270,90);
+     regionPath.AddArc(w-d,h-d,d,d,0,90);
+     regionPath.AddArc(0,h-d,d,d,90,90);
+     regionPath.CloseFigure();
+     var previous=b.Region;
+     b.Region=new Region(regionPath);
+     if(previous!=null)previous.Dispose();
+    }
+   };
+   b.Resize+=(sender,args)=>apply();
+   apply();
+  }
+
   Image ManagedIcon(string name,int size){
    string key=name+"/"+size;
    Image cached;
@@ -165,6 +187,11 @@ namespace ArmazemGratidao {
      graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
      graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
      graphics.DrawImage(original,new Rectangle(0,0,size,size));
+    }
+    // A imagem e pintada de branco, preservando a transparencia original.
+    for(int y=0;y<icon.Height;y++)for(int x=0;x<icon.Width;x++){
+     Color pixel=icon.GetPixel(x,y);
+     if(pixel.A>0)icon.SetPixel(x,y,Color.FromArgb(pixel.A,255,255,255));
     }
     allocatedIcons.Add(icon);
     iconsByName[key]=icon;
@@ -185,7 +212,7 @@ namespace ArmazemGratidao {
    branchPane.Visible=true;
    ResizeExpanded();
    foreach(var entry in sectionButtons)
-    entry.Value.BackColor=entry.Key==section?Color.FromArgb(52,89,151):Color.FromArgb(29,47,79);
+    entry.Value.BackColor=entry.Key==section?Color.FromArgb(30,117,218):Color.FromArgb(23,81,169);
    branchPane.BringToFront();
    modules.PerformLayout();
   }
@@ -210,7 +237,7 @@ namespace ArmazemGratidao {
    branchTitle.Text="RESULTADOS DA PESQUISA";
    PopulateModules(result);
    branchPane.Visible=true;ResizeExpanded();
-   foreach(var button in sectionButtons.Values)button.BackColor=Color.FromArgb(29,47,79);
+   foreach(var button in sectionButtons.Values)button.BackColor=Color.FromArgb(23,81,169);
   }
 
   void SelectSectionContents(string section){
@@ -239,14 +266,15 @@ namespace ArmazemGratidao {
      Text=label,Size=new Size(228,79),
      MinimumSize=new Size(228,79),MaximumSize=new Size(228,79),
      Margin=new Padding(5,5,5,5),Padding=new Padding(6,0,6,0),
-     BackColor=Color.White,ForeColor=Color.FromArgb(25,61,116),
+     BackColor=Color.FromArgb(20,78,166),ForeColor=Color.White,
      FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,AutoEllipsis=true,
      UseMnemonic=false,Font=new Font("Segoe UI",10f,FontStyle.Bold),
      Image=ManagedIcon(item.Item1,40),ImageAlign=ContentAlignment.MiddleLeft,
      TextAlign=ContentAlignment.MiddleCenter,
      TextImageRelation=TextImageRelation.ImageBeforeText};
-    tile.FlatAppearance.BorderColor=Color.FromArgb(218,227,241);
-    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(229,239,255);
+    tile.FlatAppearance.BorderSize=0;
+    RoundedBlue(tile,12);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(38,112,211);
     tile.Click+=(sender,args)=>{
      if(closing)return;
      closing=true;
