@@ -156,10 +156,17 @@ jobs:
           @'
           param([string]$File)
           $assembly=[System.Reflection.Assembly]::ReflectionOnlyLoadFrom($File)
-          if($assembly.GetReferencedAssemblies() | Where-Object { $_.Name -eq 'System.IO.Compression' }){
-            Write-Error "Dependencia System.IO.Compression presente no $File"
-            exit 12
+          # System.IO.Compression faz parte do .NET Framework 4.5.
+          # Validar a versao alvo real do EXE, sem bloquear biblioteca suportada.
+          $attr=$assembly.GetCustomAttributesData() |
+            Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.Versioning.TargetFrameworkAttribute' } |
+            Select-Object -First 1
+          if($null -eq $attr){throw "TargetFrameworkAttribute ausente no $File"}
+          $target=$attr.ConstructorArguments[0].Value.ToString()
+          if($target -ne '.NETFramework,Version=v4.5'){
+            throw "Framework nao suportado no $File : $target"
           }
+          Write-Host "Alvo do executavel confirmado: $target"
           '@ | Set-Content -Path $verify -Encoding UTF8
           foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe')){
             $file=(Resolve-Path "novo-win8/bin/x64/Release/$name").Path
