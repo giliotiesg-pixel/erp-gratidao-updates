@@ -1,6 +1,7 @@
 #define MyAppName "Armazem Gratidao Novo"
+#define MyShortcutName "Armazém Gratidão"
 #ifndef BuildNumber
-#define BuildNumber "588"
+#define BuildNumber "589"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
@@ -12,13 +13,13 @@ UsePreviousAppDir=no
 DisableDirPage=yes
 DefaultGroupName={#MyAppName}
 OutputDir=..\dist
-OutputBaseFilename=Armazem-Gratidao-Novo-Setup
+OutputBaseFilename=Instalador-Armazem-Gratidao
 AppPublisher=Armazem Gratidao
 AppPublisherURL=https://github.com/giliotiesg-pixel/erp-gratidao-updates
 VersionInfoCompany=Armazem Gratidao
-VersionInfoDescription=Instalador oficial do Armazem Gratidao Novo
-VersionInfoProductName=Armazem Gratidao Novo
-SetupIconFile=Armazem-Gratidao.ico
+VersionInfoDescription=Instalador do Armazem Gratidao - Nao e o programa de caixa
+VersionInfoProductName=Instalador - Armazem Gratidao
+SetupIconFile=Instalador-Armazem-Gratidao.ico
 UninstallDisplayIcon={app}\ArmazemGratidaoNovo.exe
 CloseApplications=yes
 RestartApplications=no
@@ -46,9 +47,15 @@ Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{app}\x64"; Flags: i
 Source: "backup-antes-instalacao.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "bin\x64\Release\System.Data.SQLite.dll"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "bin\x64\Release\x64\SQLite.Interop.dll"; DestDir: "{tmp}"; Flags: dontcopy
+[InstallDelete]
+; Remove APENAS atalhos com o nome antigo gerados pelo proprio instalador.
+; O novo atalho unico se chama "Armazém Gratidão" e abre o EXE do PDV.
+Type: files; Name: "{group}\\Armazem Gratidao Novo.lnk"
+Type: files; Name: "{commondesktop}\\Armazem Gratidao Novo.lnk"
+Type: files; Name: "{userdesktop}\\Armazem Gratidao Novo.lnk"
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"
+Name: "{group}\{#MyShortcutName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"; IconFilename: "{app}\ArmazemGratidaoNovo.exe"
+Name: "{autodesktop}\{#MyShortcutName}"; Filename: "{app}\ArmazemGratidaoNovo.exe"; WorkingDir: "{app}"; IconFilename: "{app}\ArmazemGratidaoNovo.exe"
 Name: "{group}\Reparar Armazem Gratidao"; Filename: "{app}\Reparar-Armazem-Gratidao.exe"; Comment: "Repara os arquivos do programa, com backup e sem apagar os dados"
 Name: "{group}\Arquivos e manutencao"; Filename: "{app}\Arquivos"
 [Run]
@@ -352,9 +359,9 @@ begin
     // Atalho do Menu Iniciar e do desktop padrao ja sao atualizados por [Icons].
     // Aqui corrigimos eventual atalho HOMONIMO no desktop do usuario atual,
     // que pode coexistir com o atalho comum e continuar abrindo o EXE antigo.
-    AMZGUpdateShortcutIfExists(ExpandConstant('{userdesktop}\{#MyAppName}.lnk'),
+    AMZGUpdateShortcutIfExists(ExpandConstant('{userdesktop}\{#MyShortcutName}.lnk'),
       Executable, AppDir);
-    AMZGUpdateShortcutIfExists(ExpandConstant('{commondesktop}\{#MyAppName}.lnk'),
+    AMZGUpdateShortcutIfExists(ExpandConstant('{commondesktop}\{#MyShortcutName}.lnk'),
       Executable, AppDir);
 
     LogDir := AppDir + '\Arquivos\Logs';
