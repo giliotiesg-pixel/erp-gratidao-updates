@@ -36,6 +36,21 @@ try{
  if($null -eq $homePanel -or @($homePanel.Controls | Where-Object {
     $_.GetType().Name -eq 'BrandedHomePanel'
    }).Count -ne 1){throw 'Marca d agua com carrinho ausente no fundo do Inicio.'}
+ # Novo painel inicial: calculadora somente quando acionada no cabecalho.
+ if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
+  throw 'A calculadora apareceu automaticamente, contrariando o modo oculto.'
+ }
+ $stats=@($form.Controls.Find('amzgDashboardMetrics',$true))
+ if($stats.Count -ne 1 -or @($stats[0].Controls | Where-Object {
+    $_.Name -like 'amzgDashboardMetric*'
+   }).Count -ne 4){throw 'Painel novo nao tem os quatro indicadores.'}
+ $quick=@($form.Controls.Find('amzgDashboardTiles',$true))
+ if($quick.Count -ne 1 -or @($quick[0].Controls | Where-Object {
+    $_.Name -like 'amzgDashboardTile*'
+   }).Count -ne 10){throw 'Faltam atalhos compactos do novo painel.'}
+ if(@($form.Controls.Find('amzgDashboardStart',$true)).Count -ne 1){
+  throw 'Botao Iniciar do painel nao encontrado.'
+ }
  $folder=[IO.Path]::GetDirectoryName($preview)
  [IO.Directory]::CreateDirectory($folder) | Out-Null
  $homePreview=Join-Path $folder 'Previa-Inicio-Marca-Dagua.png'
