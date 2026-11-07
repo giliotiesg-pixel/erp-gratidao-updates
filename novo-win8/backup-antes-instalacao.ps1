@@ -57,7 +57,10 @@ public static class BackupNativeDll {
   Set-BackupStatus 65 'Compactando dados e configurações'
   Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $archivePath=Join-Path $TargetDirectory ("armazem-gratidao-completo-"+(Get-Date -Format "yyyyMMdd-HHmmssfff")+"-"+[guid]::NewGuid().ToString("N").Substring(0,6)+".zip")
+  $archiveFinal=Join-Path $TargetDirectory ("armazem-gratidao-completo-"+(Get-Date -Format "yyyyMMdd-HHmmssfff")+"-"+[guid]::NewGuid().ToString("N").Substring(0,6)+".zip")
+  # Arquivo só ganha a extensão .zip após passar nas verificações.
+  # Cancelamentos/travamentos nunca deixam um backup incompleto como válido.
+  $archivePath=$archiveFinal+".partial"
   $archive=$null
   try {
     $archive=[System.IO.Compression.ZipFile]::Open($archivePath,[System.IO.Compression.ZipArchiveMode]::Create)
@@ -115,11 +118,12 @@ public static class BackupNativeDll {
     if(!$entry -or $entry.Length -le 0){ throw "Backup completo nao contem banco de dados." }
   } finally { $verify.Dispose() }
   if((Get-Item -LiteralPath $archivePath).Length -le 0){throw "Backup completo vazio."}
+  [System.IO.File]::Move($archivePath,$archiveFinal)
   # O ZIP verificado já guarda a cópia SQLite consistente. Não manter uma
   # duplicata solta em disco a cada reparo; somente limpar após validar o ZIP.
   try { Remove-Item -LiteralPath $out -Force -ErrorAction Stop } catch { }
   Set-BackupStatus 100 'Backup completo validado'
-  Write-Output "Backup completo validado: $archivePath"
+  Write-Output "Backup completo validado: $archiveFinal"
   exit 0
  } finally {
   if($test){$test.Dispose()}
