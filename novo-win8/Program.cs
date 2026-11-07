@@ -680,6 +680,27 @@ namespace ArmazemGratidao {
     throw;
    }
   }
+  // Detectar o problema ANTES de baixar MBs ou gerar um backup demorado.
+  // O atualizador nao pode substituir seu EXE se outra janela antiga o usa.
+  internal static void EnsureInstalledUpdaterFree(string appDirectory){
+   string updater=Path.Combine(appDirectory,"AtualizadorGratidao.exe");
+   if(!File.Exists(updater))return; // ZIP novo recupera o auxiliar ausente.
+   Exception locked=null;
+   for(int attempt=0;attempt<5;attempt++){
+    try{
+     using(var handle=new FileStream(updater,FileMode.Open,FileAccess.ReadWrite,FileShare.None)){}
+     return;
+    }catch(IOException ex){locked=ex;}
+    catch(UnauthorizedAccessException ex){locked=ex;}
+    System.Threading.Thread.Sleep(250);
+   }
+   throw new IOException(
+    "O Atualizador Gratidao antigo ainda esta aberto ou bloqueado. "+
+    "Feche todas as janelas do Atualizador Automatico antes de continuar. "+
+    "Se nao houver janela, finalize somente o processo AtualizadorGratidao.exe "+
+    "no Gerenciador de Tarefas. A instalacao nao foi iniciada e nenhum "+
+    "arquivo foi substituido.",locked);
+  }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
@@ -818,6 +839,10 @@ namespace ArmazemGratidao {
        "Atualização completa do Armazém Gratidão",
        MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     bool isZip=string.Equals(Convert.ToString(asset["name"]),patchZip,StringComparison.OrdinalIgnoreCase);
+    if(isZip){
+     status.Text="Conferindo se o atualizador antigo esta fechado...";
+     await Task.Run(()=>EnsureInstalledUpdaterFree(Application.StartupPath));
+    }
     // O download só começa após consentimento; o SHA-256 é verificado.
     status.Text="Preparando download da "+remoteLabel+"...";
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
@@ -831,6 +856,9 @@ namespace ArmazemGratidao {
      backupPath=await Task.Run(()=>isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup());
     }finally{backupGate.Release();}
     status.Text="Backup confirmado: "+backupPath;
+    // O usuario pode ter reaberto uma janela antiga durante o backup.
+    // Verificar NOVAMENTE antes de encerrar qualquer janela do PDV.
+    if(isZip)await Task.Run(()=>EnsureInstalledUpdaterFree(Application.StartupPath));
     // Encerrar janelas secundárias automaticamente, respeitando eventuais cancelamentos
     // de fechamento (por exemplo, uma venda em edição ainda não salva).
     foreach(Form window in Application.OpenForms.Cast<Form>().Where(x=>x!=this&&!x.IsDisposed).ToArray()){
