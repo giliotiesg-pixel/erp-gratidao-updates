@@ -73,8 +73,8 @@ try{
  if($quick.Count -ne 1 -or @($quick[0].Controls | Where-Object {
     $_.Name -like 'amzgDashboardTile*'
    }).Count -ne 10){throw 'Faltam atalhos compactos do novo painel.'}
- if(@($form.Controls.Find('amzgDashboardStart',$true)).Count -ne 1){
-  throw 'Botao Iniciar do painel nao encontrado.'
+ if(@($form.Controls.Find('amzgStartHeader',$true)).Count -ne 1){
+  throw 'Botao Iniciar do cabecalho nao encontrado.'
  }
  $folder=[IO.Path]::GetDirectoryName($preview)
  [IO.Directory]::CreateDirectory($folder) | Out-Null
