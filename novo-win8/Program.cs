@@ -334,7 +334,14 @@ namespace ArmazemGratidao {
   bool checkingUpdates=false;
   Form modulesWindow;
   int lastPromptedBuild=-1;
-  int InstalledBuild { get { return typeof(MainForm).Assembly.GetName().Version.Build; } }
+  int InstalledBuild {
+   get {
+    // AssemblyVersion 1.0.0.591: 591 e REVISION, nao o campo Build (zero).
+    // Compatibilidade com versões antigas que publicavam 1.0.582.0.
+    var version=typeof(MainForm).Assembly.GetName().Version;
+    return version.Revision>0?version.Revision:version.Build;
+   }
+  }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
   readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
