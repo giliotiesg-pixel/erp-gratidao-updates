@@ -67,6 +67,18 @@ try{
   if($null -eq $target){throw "Tecla ausente na calculadora: $Key"}
   $target.PerformClick()
  }
+ $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
+  Select-Object -First 1
+ if($null -eq $frame -or !$frame.Visible -or $frame.Height -lt 60 -or
+    $calcDisplay.GetType().Name -ne 'Label'){
+  throw 'Visor da calculadora continua cortado ou sem quadro proprio.'
+ }
+ & $press 'C'
+ & $press '1'
+ if($calcDisplay.Text -ne '1'){throw "Primeiro numero invisivel: $($calcDisplay.Text)"}
+ & $press '2'
+ if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
+ & $press 'C'
  foreach($key in @('1','0','0','+','1','0','%','=')){& $press $key}
  if($calcDisplay.Text -ne '110'){throw "Erro em 100 + 10%: $($calcDisplay.Text)"}
  $calcPreview=Join-Path $folder 'Previa-Calculadora.png'
