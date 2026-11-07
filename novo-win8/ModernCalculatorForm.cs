@@ -9,7 +9,7 @@ namespace ArmazemGratidao {
  // Nao acessa SQLite, nao cria temporizadores e nao exige bibliotecas externas.
  internal sealed class ModernCalculatorForm : Form {
   readonly CultureInfo locale=CultureInfo.GetCultureInfo("pt-BR");
-  readonly TextBox display;
+  readonly Label display;
   readonly Label expression;
   readonly Label preview;
   decimal stored=0m;
@@ -19,9 +19,9 @@ namespace ArmazemGratidao {
   public ModernCalculatorForm(){
    Name="amzgModernCalculator";
    Text="Calculadora | Armazém Gratidão";
-   Size=new Size(370,548);
-   MinimumSize=new Size(370,548);
-   MaximumSize=new Size(370,548);
+   // Dimensoes reais para o visor nao ficar cortado em Windows 8 / DPI maior.
+   ClientSize=new Size(386,552);
+   MinimumSize=Size;MaximumSize=Size;
    FormBorderStyle=FormBorderStyle.FixedSingle;
    MaximizeBox=false;
    MinimizeBox=true;
@@ -43,22 +43,59 @@ namespace ArmazemGratidao {
    copy.Click+=(s,e)=>CopyResult();
    top.Controls.Add(name);top.Controls.Add(copy);
 
-   var screen=new Panel{Dock=DockStyle.Top,Height=137,
+   var screen=new Panel{Dock=DockStyle.Top,Height=164,
     BackColor=Color.FromArgb(24,49,89)};
    expression=new Label{Name="amzgCalcExpression",Text="PRONTO PARA CALCULAR",
-    Left=16,Top=4,Width=322,Height=30,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,
+    Left=18,Top=5,Width=350,Height=27,
+    Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,
     TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(184,205,236),
-    Font=new Font("Segoe UI",9,FontStyle.Bold)};
-   display=new TextBox{Name="amzgCalcDisplay",Text="0",ReadOnly=true,TabStop=false,
-    BorderStyle=BorderStyle.None,Left=13,Top=40,Width=325,Height=52,
+    Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   // Quadro branco independente do teclado. Label no lugar de TextBox evita
+   // caracteres iniciais invisiveis e corte vertical do texto no Windows 8.
+   var displayFrame=new Panel{Name="amzgCalcDisplayFrame",Left=13,Top=37,
+    Width=360,Height=76,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,
+    Padding=new Padding(9,2,9,2),BackColor=Color.White};
+   display=new Label{Name="amzgCalcDisplay",Dock=DockStyle.Fill,Text="0",
+    TabStop=false,AutoEllipsis=false,
+    Font=new Font("Segoe UI",30,FontStyle.Bold),
+    TextAlign=ContentAlignment.MiddleRight,BackColor=Color.White,
+    ForeColor=Color.FromArgb(20,61,122)};
+   displayFrame.Controls.Add(display);
+   Action roundDisplay=()=>{
+    if(displayFrame.Width<24||displayFrame.Height<24)return;
+    using(var outline=new GraphicsPath()){
+     int d=19,w=displayFrame.Width-1,h=displayFrame.Height-1;
+     outline.AddArc(0,0,d,d,180,90);
+     outline.AddArc(w-d,0,d,d,270,90);
+     outline.AddArc(w-d,h-d,d,d,0,90);
+     outline.AddArc(0,h-d,d,d,90,90);
+     outline.CloseFigure();
+     var previous=displayFrame.Region;
+     displayFrame.Region=new Region(outline);
+     if(previous!=null)previous.Dispose();
+    }
+   };
+   displayFrame.Resize+=(s,e)=>roundDisplay();
+   roundDisplay();
+   Action fitDigits=()=>{
+    if(display.IsDisposed||display.ClientSize.Width<50)return;
+    float size=30;
+    using(var measured=new Font("Segoe UI",size,FontStyle.Bold)){
+     var width=TextRenderer.MeasureText(display.Text,measured).Width;
+     if(width>display.ClientSize.Width-12)
+      size=Math.Max(15f,size*(display.ClientSize.Width-12f)/width);
+    }
+    if(Math.Abs(display.Font.SizeInPoints-size)>0.5f)
+     display.Font=new Font("Segoe UI",size,FontStyle.Bold);
+   };
+   display.TextChanged+=(s,e)=>fitDigits();
+   display.Resize+=(s,e)=>fitDigits();
+   preview=new Label{Name="amzgCalcPreview",Text="Digite os números ou use o teclado",
+    Left=16,Top=122,Width=351,Height=32,
     Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top,
-    Font=new Font("Segoe UI",29,FontStyle.Bold),TextAlign=HorizontalAlignment.Right,
-    BackColor=Color.FromArgb(24,49,89),ForeColor=Color.White};
-   preview=new Label{Name="amzgCalcPreview",Text="Use os botões ou o teclado",
-    Left=16,Top=99,Width=322,Height=27,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top,
     TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(196,217,243),
     Font=new Font("Segoe UI",10,FontStyle.Regular)};
-   screen.Controls.Add(expression);screen.Controls.Add(display);screen.Controls.Add(preview);
+   screen.Controls.Add(expression);screen.Controls.Add(displayFrame);screen.Controls.Add(preview);
 
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
     ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
