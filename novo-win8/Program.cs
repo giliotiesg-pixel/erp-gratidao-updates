@@ -21,7 +21,7 @@ namespace ArmazemGratidao {
    Application.Idle+=(sender,args)=>{
     var now=DateTime.UtcNow;
     if(now<nextVisualScanUtc)return;
-    nextVisualScanUtc=now.AddMilliseconds(1500);
+    nextVisualScanUtc=now.AddMilliseconds(3500);
     ButtonTextVisibility.CheckOpenForms();
     PdvShortcutButtons.CheckOpenForms();
     WindowBoundsGuard.CheckOpenForms();
@@ -134,14 +134,18 @@ namespace ArmazemGratidao {
    };
    table.Disposed+=(sender,args)=>styled.Remove(table);
   }
-  static void Search(Control parent){
-   if(parent.IsDisposed)return;
+  static readonly System.Collections.Generic.HashSet<Control> watched=
+   new System.Collections.Generic.HashSet<Control>();
+  static void Watch(Control parent){
+   if(parent==null||parent.IsDisposed||!watched.Add(parent))return;
+   parent.Disposed+=(sender,args)=>watched.Remove(parent);
    var grid=parent as DataGridView;
    if(grid!=null){Apply(grid);return;}
-   foreach(Control child in parent.Controls)Search(child);
+   parent.ControlAdded+=(sender,args)=>Watch(args.Control);
+   foreach(Control child in parent.Controls)Watch(child);
   }
   public static void CheckOpenForms(){
-   foreach(Form f in Application.OpenForms)if(!f.IsDisposed)Search(f);
+   foreach(Form form in Application.OpenForms)Watch(form);
   }
  }
  static class RoundedVisuals {
@@ -271,31 +275,51 @@ namespace ArmazemGratidao {
   }
  }
  static class ButtonTextVisibility {
-  static readonly System.Collections.Generic.Dictionary<Button,string> inspected=new System.Collections.Generic.Dictionary<Button,string>();
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms)Check(form);
-  }
-  static void Check(Control parent){
-   foreach(Control child in parent.Controls){
-    var button=child as Button;
-    if(button!=null && !string.IsNullOrWhiteSpace(button.Text)){
-     string signature=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
-     string previous;
-     if(!inspected.TryGetValue(button,out previous) || previous!=signature){
-      var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
-      int desired=size.Width+24;
-      if(button.Image!=null)desired+=button.Image.Width+8;
-      if(button.Width<desired && button.Dock==DockStyle.None && button.Parent is FlowLayoutPanel && !(button.MinimumSize.Width>0 && button.MaximumSize.Width==button.MinimumSize.Width)){
-       button.AutoSize=false;button.Width=desired;
-      }
-      button.AutoEllipsis=true;
-      if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal))button.TextAlign=ContentAlignment.MiddleCenter;
-      button.UseMnemonic=false;
-      inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
-     }
-    }
-    if(child.HasChildren)Check(child);
+  // Aplicar a correção apenas uma vez por controle. Os eventos acompanham
+  // mudanças posteriores: não varrer a árvore de dezenas de janelas no Idle.
+  static readonly System.Collections.Generic.HashSet<Control> watched=
+   new System.Collections.Generic.HashSet<Control>();
+  static readonly System.Collections.Generic.Dictionary<Button,string> inspected=
+   new System.Collections.Generic.Dictionary<Button,string>();
+  static void Inspect(Button button){
+   if(button.IsDisposed)return;
+   string signature=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+   string previous;
+   if(inspected.TryGetValue(button,out previous)&&previous==signature)return;
+   button.AutoEllipsis=true;
+   button.UseMnemonic=false;
+   if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)){
+    var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
+    int desired=size.Width+24;
+    if(button.Image!=null)desired+=button.Image.Width+8;
+    if(button.Width<desired && button.Dock==DockStyle.None &&
+      button.Parent is FlowLayoutPanel &&
+      !(button.MinimumSize.Width>0&&button.MaximumSize.Width==button.MinimumSize.Width))
+     button.Width=desired;
+    button.TextAlign=ContentAlignment.MiddleCenter;
    }
+   inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
+  }
+  static void Watch(Control c){
+   if(c==null||c.IsDisposed||!watched.Add(c))return;
+   c.Disposed+=(sender,args)=>{
+    watched.Remove(c);
+    var b=c as Button;
+    if(b!=null)inspected.Remove(b);
+   };
+   var button=c as Button;
+   if(button!=null){
+    button.TextChanged+=(sender,args)=>Inspect(button);
+    button.FontChanged+=(sender,args)=>Inspect(button);
+    button.SizeChanged+=(sender,args)=>Inspect(button);
+    Inspect(button);
+   }
+   if(c is DataGridView)return;
+   c.ControlAdded+=(sender,args)=>Watch(args.Control);
+   foreach(Control child in c.Controls)Watch(child);
+  }
+  public static void CheckOpenForms(){
+   foreach(Form form in Application.OpenForms)Watch(form);
   }
  }
  public sealed class MainForm : Form {
@@ -378,12 +402,16 @@ namespace ArmazemGratidao {
    bar.Visible=false;Directory.CreateDirectory(dataDir);
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowMainMenu();
-   Shown+=(s,e)=>BeginInvoke((Action)(async ()=>{
-    // Manter a janela responsiva durante o backup e a procura de vendas antigas.
-    await EnsureDailyBackupAsync();
-    if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
+   Shown+=async (sender,args)=>{
+    // Abertura do caixa recebe prioridade. Tarefas automáticas só começam
+    // depois que o menu já estiver desenhado e respondendo ao usuário.
+    await Task.Delay(12000);
+    if(!IsDisposed)await EnsureDailyBackupAsync();
+    // A verificação remota e a procura de vendas antigas são secundárias.
+    await Task.Delay(90000);
     if(!IsDisposed)await CheckUpdates(false);
-   }));
+    if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
+   };
    dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
    dailyBackupTimer.Start();
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
@@ -496,6 +524,8 @@ namespace ArmazemGratidao {
     string root=Path.GetFullPath(dataDir).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string backupRoot=Path.GetFullPath(UpdateBackupDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     string updatesRoot=Path.GetFullPath(UpdatesDirectory()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string legacyBackupRoot=Path.GetFullPath(Path.Combine(dataDir,"Backups")).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+    string legacyUpdateRoot=Path.GetFullPath(Path.Combine(dataDir,"Atualizacoes")).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
     var pending=new System.Collections.Generic.Stack<string>();
     pending.Push(dataDir);
     while(pending.Count>0){
@@ -503,14 +533,20 @@ namespace ArmazemGratidao {
      foreach(string sub in Directory.GetDirectories(current)){
       string full=Path.GetFullPath(sub).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
       if(full.StartsWith(backupRoot,StringComparison.OrdinalIgnoreCase)||
-         full.StartsWith(updatesRoot,StringComparison.OrdinalIgnoreCase))continue;
+         full.StartsWith(updatesRoot,StringComparison.OrdinalIgnoreCase)||
+         full.StartsWith(legacyBackupRoot,StringComparison.OrdinalIgnoreCase)||
+         full.StartsWith(legacyUpdateRoot,StringComparison.OrdinalIgnoreCase)||
+         (File.GetAttributes(sub)&FileAttributes.ReparsePoint)!=0)continue;
       pending.Push(sub);
      }
      foreach(string file in Directory.GetFiles(current)){
       string full=Path.GetFullPath(file);
+      string name=Path.GetFileName(full);
       if(string.Equals(full,dbPath,StringComparison.OrdinalIgnoreCase)||
          full.EndsWith(".db-wal",StringComparison.OrdinalIgnoreCase)||
-         full.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase))continue;
+         full.EndsWith(".db-shm",StringComparison.OrdinalIgnoreCase)||
+         name.StartsWith("armazem-gratidao-completo-",StringComparison.OrdinalIgnoreCase)||
+         name.StartsWith("armazem-gratidao-antes-atualizacao-",StringComparison.OrdinalIgnoreCase))continue;
       string relative=full.Substring(root.Length);
       string target=Path.Combine(dataBackup,relative);
       Directory.CreateDirectory(Path.GetDirectoryName(target));
