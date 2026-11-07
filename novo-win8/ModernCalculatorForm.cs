@@ -44,7 +44,7 @@ namespace ArmazemGratidao {
    copy.Click+=(s,e)=>CopyResult();
    top.Controls.Add(name);top.Controls.Add(copy);
 
-   var screen=new Panel{Dock=DockStyle.Top,Height=200,
+   var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=200,
     BackColor=Color.FromArgb(24,49,89)};
    expression=new Label{Name="amzgCalcExpression",Text="PRONTO PARA CALCULAR",
     Left=19,Top=9,Width=391,Height=29,
@@ -116,11 +116,41 @@ namespace ArmazemGratidao {
      new Rectangle(16,158,screen.Width-30,30),preview.ForeColor,
      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
+    // Os numeros sao pintados no proprio painel principal. Assim, nem
+    // o redimensionamento nem DrawToBitmap ocultam a linha do resultado.
+    Rectangle area=new Rectangle(13,42,screen.Width-26,106);
+    using(var shape=new GraphicsPath()){
+     int d=20,w=area.Width-1,h=area.Height-1,x=area.Left,y=area.Top;
+     shape.AddArc(x,y,d,d,180,90);shape.AddArc(x+w-d,y,d,d,270,90);
+     shape.AddArc(x+w-d,y+h-d,d,d,0,90);shape.AddArc(x,y+h-d,d,d,90,90);
+     shape.CloseFigure();
+     e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
+     using(var white=new SolidBrush(Color.White))e.Graphics.FillPath(white,shape);
+     using(var border=new Pen(Color.FromArgb(184,205,233),1f))
+      e.Graphics.DrawPath(border,shape);
+    }
+    string number=string.IsNullOrWhiteSpace(display.Text)?"0":display.Text;
+    Font fitted=null;
+    try{
+     for(float size=36f;size>=14f;size-=2f){
+      if(fitted!=null)fitted.Dispose();
+      fitted=new Font("Segoe UI",size,FontStyle.Bold);
+      Size measure=TextRenderer.MeasureText(e.Graphics,number,fitted,
+       new Size(100000,area.Height),TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
+      if(measure.Width<area.Width-25&&measure.Height<area.Height-12)break;
+     }
+     TextRenderer.DrawText(e.Graphics,number,fitted,
+      new Rectangle(area.Left+8,area.Top+5,area.Width-20,area.Height-10),
+      Color.FromArgb(20,61,122),
+      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
+      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
+    }finally{if(fitted!=null)fitted.Dispose();}
    };
-   display.TextChanged+=(sender,e)=>displayFrame.Invalidate();
+   display.TextChanged+=(sender,e)=>{displayFrame.Invalidate();screen.Invalidate();};
    expression.TextChanged+=(sender,e)=>screen.Invalidate();
    preview.TextChanged+=(sender,e)=>screen.Invalidate();
    screen.Controls.Add(expression);screen.Controls.Add(displayFrame);screen.Controls.Add(preview);
+   displayFrame.Visible=false; // pintura acima e a unica fonte visual do numero.
 
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
     ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
