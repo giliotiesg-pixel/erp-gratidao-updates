@@ -93,7 +93,172 @@ jobs:
         shell: pwsh
         run: |
           $source=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
-          if($source -notmatch '^([1-9][0-9]?)\\.([0-9]{1,2})\\.([1-9][0-9]{0,4})$'){
+          if($source -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4}){
+            throw "VERSAO.txt invalido: $source"
+          }
+          $version="$($Matches[1]).$($Matches[2]).0.$($Matches[3])"
+          $assembly = "using System.Reflection;`n[assembly: AssemblyVersion(`"$version`")]`n[assembly: AssemblyFileVersion(`"$version`")]`n"
+          Set-Content -Path novo-win8/BuildVersion.cs -Value $assembly -Encoding UTF8
+      - name: Validar rotinas criticas antes da compilacao
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $product = Get-Content 'novo-win8/ProdutosForm.cs' -Raw
+          $pdv = Get-Content 'novo-win8/PdvForm.cs' -Raw
+          $sales = Get-Content 'novo-win8/ConsultaForm.cs' -Raw
+          $required = @(
+            @{ Label = 'Entradas de estoque'; Text = $product; Pattern = 'void AddQuantityForProduct\(' },
+            @{ Label = 'Auditoria de estoque'; Text = $product; Pattern = 'INSERT INTO stock_audit_log' },
+            @{ Label = 'Restauracao da protecao de estoque'; Text = $product; Pattern = 'UPDATE runtime_operation_context SET authorized=@auth,operation=@operation' },
+            @{ Label = 'Preco do carrinho'; Text = $pdv; Pattern = 'void UpdateRegisteredPrice\(' },
+            @{ Label = 'Pagamentos divididos'; Text = $pdv; Pattern = 'SelectSplitPayments\(' },
+            @{ Label = 'Descontos'; Text = $pdv; Pattern = 'void ConfigureDiscount\(' },
+            @{ Label = 'Atualizacao das vendas'; Text = $sales; Pattern = 'RefreshAfterRecordedSale\(' }
+          )
+          foreach ($check in $required) {
+            if ($check.Text -notmatch $check.Pattern) { throw "Rotina critica ausente: $($check.Label)" }
+          }
+          Write-Host 'Rotinas criticas presentes. Compilacao obrigatoria na proxima etapa.'
+      - name: Compilar WinForms .NET Framework 4.8
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/ArmazemGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal /fl "/flp:logfile=novo-win8/build-diagnostics.log;verbosity=normal"
+      - name: Compilar atualizador independente do instalador
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" novo-win8/AtualizadorGratidao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\x64\Release\ /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "Falha na compilacao do atualizador visual" }
+          if (!(Test-Path "novo-win8/bin/x64/Release/AtualizadorGratidao.exe")) { throw "Executavel do atualizador ausente" }
+      - name: Guardar diagnostico de compilacao quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Diagnostico-Compilacao-AMZG
+          path: novo-win8/build-diagnostics.log
+          if-no-files-found: warn
+      - name: Copiar SQLite nativo
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem novo-win8/packages -Recurse -Filter SQLite.Interop.dll | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (!$dll) { throw "SQLite.Interop.dll x64 nao encontrado" }
+          New-Item -ItemType Directory -Force novo-win8/bin/x64/Release/x64 | Out-Null
+          Copy-Item $dll.FullName novo-win8/bin/x64/Release/x64/SQLite.Interop.dll
+      - name: Compilar reparador autonomo sem instalar programa
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $builder="${env:ProgramFiles}\\Microsoft Visual Studio\\2022\\Enterprise\\MSBuild\\Current\\Bin\\MSBuild.exe"
+          & $builder novo-win8/ReparadorAtualizacao.csproj /p:Configuration=Release /p:Platform=x64 /p:OutputPath=bin\\x64\\Release\\ /v:minimal
+          if($LASTEXITCODE -ne 0){throw "Reparador nao compilou"}
+          $path='novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe'
+          if(!(Test-Path $path) -or (Get-Item $path).Length -lt 100000){throw "Reparador incompleto"}
+          $verify=Join-Path $env:RUNNER_TEMP 'validar-referencias-v4.ps1'
+          @'
+          param([string]$File)
+          $assembly=[System.Reflection.Assembly]::ReflectionOnlyLoadFrom($File)
+          if($assembly.GetReferencedAssemblies() | Where-Object { $_.Name -eq 'System.IO.Compression' }){
+            Write-Error "Dependencia System.IO.Compression presente no $File"
+            exit 12
+          }
+          '@ | Set-Content -Path $verify -Encoding UTF8
+          foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe')){
+            $file=(Resolve-Path "novo-win8/bin/x64/Release/$name").Path
+            & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $verify -File $file
+            if($LASTEXITCODE -ne 0){throw "Referencias incompativeis no $name"}
+          }
+      - name: Testar backup automatico antes do instalador
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "teste-backup-amzg"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item "novo-win8/bin/x64/Release/System.Data.SQLite.dll" $dir
+          Copy-Item "novo-win8/bin/x64/Release/x64/SQLite.Interop.dll" $dir
+          Copy-Item "novo-win8/backup-antes-instalacao.ps1" $dir
+          $db = Join-Path $dir "armazem-gratidao.db"
+          Add-Type -Path (Join-Path $dir "System.Data.SQLite.dll")
+          $source = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db")
+          try {
+            $source.Open()
+            $command = $source.CreateCommand()
+            $command.CommandText = "CREATE TABLE products(id INTEGER PRIMARY KEY,name TEXT); INSERT INTO products(name) VALUES('TESTE PROTECAO');"
+            $command.ExecuteNonQuery() | Out-Null
+            $command.Dispose()
+          } finally {
+            $source.Dispose()
+          }
+          & "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $dir "backup-antes-instalacao.ps1") -Database $db -TargetDirectory $dir
+          if ($LASTEXITCODE -ne 0) { throw "O backup previo da instalacao falhou" }
+          $copies = @(Get-ChildItem -Path $dir -Filter "armazem-gratidao-antes-atualizacao-*.db")
+          if ($copies.Count -ne 1 -or $copies[0].Length -le 0) { throw "Backup nao encontrado ou vazio" }
+          $test = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$($copies[0].FullName);Read Only=True;FailIfMissing=True")
+          try {
+            $test.Open()
+            $check = $test.CreateCommand()
+            $check.CommandText = "SELECT name FROM products WHERE id=1"
+            if ($check.ExecuteScalar() -ne "TESTE PROTECAO") { throw "O backup nao preservou os dados" }
+            $check.Dispose()
+          } finally { $test.Dispose() }
+      # ATUALIZACAO CONTINUA: gera ZIP, NUNCA outro instalador.
+      # O instalador completo fica publicado uma unica vez em release legado.
+      - name: Conferir backup integral
+        shell: pwsh
+        run: |
+          $folder=Join-Path $env:RUNNER_TEMP "teste-backup-amzg"
+          $zipFiles=@(Get-ChildItem $folder -Filter 'armazem-gratidao-completo-*.zip')
+          if($zipFiles.Count -ne 1) { throw "Backup completo obrigatorio nao foi gerado" }
+          Add-Type -AssemblyName System.IO.Compression
+          $z=[System.IO.Compression.ZipFile]::OpenRead($zipFiles[0].FullName)
+          try {
+            $found=$z.GetEntry('Dados/armazem-gratidao.db')
+            if(!$found -or $found.Length -lt 100) { throw "Arquivo SQLite ausente do backup completo" }
+          } finally { $z.Dispose() }
+      - name: Criar pacote de atualizacao ZIP (sem instalacao)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='novo-win8/bin/x64/Release'
+          $temp=Join-Path $env:RUNNER_TEMP 'amzg-atualizacao'
+          New-Item -ItemType Directory -Force "$temp/x64" | Out-Null
+          foreach($name in @('ArmazemGratidaoNovo.exe','QRCoder.dll','System.Data.SQLite.dll','zxing.dll')){
+            if(!(Test-Path "$root/$name")) { throw "Componente obrigatorio ausente: $name" }
+            Copy-Item "$root/$name" "$temp/$name"
+          }
+          if(Test-Path "$root/ArmazemGratidaoNovo.exe.config") {
+            Copy-Item "$root/ArmazemGratidaoNovo.exe.config" "$temp/ArmazemGratidaoNovo.exe.config"
+          }
+          Copy-Item "$root/x64/SQLite.Interop.dll" "$temp/x64/SQLite.Interop.dll"
+          $zip='novo-win8/Armazem-Gratidao-Atualizacao.zip'
+          Compress-Archive -Path "$temp/*" -DestinationPath $zip -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression
+          $archive=[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
+          try {
+            $exe=$archive.GetEntry('ArmazemGratidaoNovo.exe')
+            if(!$exe -or $exe.Length -lt 10000) { throw "Executavel nao encontrado ou incompleto no ZIP" }
+            $expected=@('ArmazemGratidaoNovo.exe','ArmazemGratidaoNovo.exe.config','QRCoder.dll','System.Data.SQLite.dll','zxing.dll','x64/SQLite.Interop.dll')
+            foreach($entry in $archive.Entries) {
+              if($entry.Name -and $entry.FullName.Replace('\\','/') -notin $expected) {
+                throw "Arquivo nao autorizado no pacote: $($entry.FullName)"
+              }
+            }
+          } finally { $archive.Dispose() }
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Pacote ZIP pronto: $zip"
+          Write-Host "SHA-256: $hash"
+      - name: Guardar pacote de atualizacao sem instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-Atualizacao-ZIP
+          path: novo-win8/Armazem-Gratidao-Atualizacao.zip
+          if-no-files-found: error
+      - name: Guardar reparador emergencial sem instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armazem-Gratidao-Reparador-Atualizacao
+          path: novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe
+          if-no-files-found: error
+      # Esta CI verifica o ZIP, backup e reparo, mas nao publica versoes.
+      # A publicacao oficial ocorre exclusivamente no fluxo unificado, apos revisao.
+){
             throw "VERSAO.txt invalido: $source"
           }
           $version="$($Matches[1]).$($Matches[2]).0.$($Matches[3])"
