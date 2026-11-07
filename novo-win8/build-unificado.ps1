@@ -1,5 +1,5 @@
 param(
- [ValidateRange(587,65000)][int]$Build=587
+ [ValidateRange(588,65000)][int]$Build=588
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -60,6 +60,15 @@ try {
   msbuild (Join-Path $project $name) /t:Rebuild /m:1 /p:Configuration=Release /p:Platform=x64 /v:minimal
   Assert-Exit "Compilar $name"
  }
+ # Não distribuir pacote se o executável NÃO contiver a versão prometida.
+ # Esse erro passava despercebido nos testes anteriores, que só verificavam existência.
+ $exe=Join-Path $bin 'ArmazemGratidaoNovo.exe'
+ $actualFile=(Get-Item $exe).VersionInfo.FileVersion
+ $actualAssembly=[System.Reflection.AssemblyName]::GetAssemblyName($exe).Version.ToString()
+ if($actualFile -ne $version -or $actualAssembly -ne $version){
+  throw "Build incorreta no EXE. Esperado=$version arquivo=$actualFile assembly=$actualAssembly"
+ }
+ Write-Host "EXE verificado: $exe, FileVersion=$actualFile, AssemblyVersion=$actualAssembly"
  $native=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'SQLite.Interop.dll' |
   Where-Object {$_.FullName -match '[\\/]x64[\\/]'} |
   Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
