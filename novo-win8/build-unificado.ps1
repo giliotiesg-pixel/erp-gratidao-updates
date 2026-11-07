@@ -1,5 +1,5 @@
 param(
- [ValidateRange(583,65000)][int]$Build=583
+ [ValidateRange(584,65000)][int]$Build=584
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -22,11 +22,24 @@ try {
  if(!(Get-Command python -ErrorAction SilentlyContinue)){throw 'Python nao instalado / nao encontrado.'}
  nuget restore (Join-Path $project 'packages.config') -PackagesDirectory $packageDir -NonInteractive
  Assert-Exit 'Restaurar pacotes'
+ # GitHub Windows 2025 nao inclui o SDK legado .NET 4.5.
+ # As referencias oficiais abaixo servem SOMENTE para compilacao; nao sao instaladas no PC do cliente.
+ nuget install Microsoft.NETFramework.ReferenceAssemblies.net45 -Version 1.0.3 -OutputDirectory $packageDir -NonInteractive
+ Assert-Exit 'Baixar assembly de referencia oficial .NET 4.5'
+ $refSource=Join-Path $packageDir 'Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3\build\.NETFramework\v4.5'
+ if(!(Test-Path (Join-Path $refSource 'mscorlib.dll'))){throw "Pacote oficial .NET 4.5 incompleto: $refSource"}
+ $refTarget=Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.5'
+ if(!(Test-Path (Join-Path $refTarget 'mscorlib.dll'))){
+  New-Item -ItemType Directory -Force -Path $refTarget | Out-Null
+  Copy-Item (Join-Path $refSource '*') $refTarget -Recurse -Force
+ }
+ if(!(Test-Path (Join-Path $refTarget 'mscorlib.dll'))){throw 'Assemblies .NET 4.5 nao preparados para MSBuild'}
+ Write-Host 'Compilacao validara APIs antigas de .NET 4.5, sem exigir .NET 4.8 no Windows 8.'
  # O pacote System.Data.SQLite.Core e somente um metapacote.
  # Procurar a DLL real do Stub NetFramework, sem presumir pasta net46 fixa.
  $managed=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'System.Data.SQLite.dll' |
   Where-Object {$_.FullName -match 'Stub.System.Data.SQLite.Core.NetFramework'} |
-  Sort-Object @{Expression={if($_.FullName -match 'net46'){0}elseif($_.FullName -match 'net40'){1}else{2}}} |
+  Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
   Select-Object -First 1
  if($null -eq $managed){
   Get-ChildItem -Path $packageDir -Recurse -File -Filter '*.dll' |
@@ -49,7 +62,7 @@ try {
  }
  $native=Get-ChildItem -Path $packageDir -Recurse -File -Filter 'SQLite.Interop.dll' |
   Where-Object {$_.FullName -match '[\\/]x64[\\/]'} |
-  Sort-Object @{Expression={if($_.FullName -match 'net46'){0}else{1}}} |
+  Sort-Object @{Expression={if($_.FullName -match 'net45[\\/]'){0}elseif($_.FullName -match 'net40[\\/]'){1}else{2}}} |
   Select-Object -First 1
  if($null -eq $native){throw 'DLL SQLite.Interop.dll (x64) nao encontrada nos pacotes NuGet.'}
  $x64=Join-Path $bin 'x64'

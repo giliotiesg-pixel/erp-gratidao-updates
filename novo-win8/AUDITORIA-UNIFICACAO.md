@@ -1,4 +1,4 @@
-# Auditoria estatica e plano de validacao - build 583
+# Auditoria estatica e plano de validacao - build 584
 
 Data: 2026-11-06. Referencia: codigo-fonte `novo-win8/`.
 **Escopo**: revisao estatica das fontes disponiveis, scripts de compilacao e
@@ -60,3 +60,9 @@ arquivos .csproj, instalador Inno e scripts de backup e GitHub.
 - A rotina de envio/recebimento mobile precisa de testes reais em rede local.
 - A auditoria estatica nao prova integridade de todos os casos de negocio;
   qualquer migracao SQLite precisa de testes sobre copia antes de producao.
+
+## Compatibilidade Windows 8 original
+O Windows 8 original vem com .NET Framework 4.5; nao admite .NET Framework 4.8.
+A build 583 gerada para .NET Framework 4.8 causou erro de Metodo nao encontrado: System.Array.Empty() no Windows 8.
+A build 584 passa a mirar .NET Framework 4.5, incluindo atualizador e dependencias SQLite selecionadas para esse runtime.
+Necessario testar no Windows 8 64 bits real (o runner Windows Server nao reproduz a versao antiga do .NET).
