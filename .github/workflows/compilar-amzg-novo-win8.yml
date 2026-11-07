@@ -6,7 +6,7 @@ on:
       - '.github/workflows/compilar-amzg-novo-win8.yml'
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 # Manter somente a compilacao mais recente por ramificacao.
 # Em main, nao cancelar uma publicacao em andamento.
 concurrency:
@@ -19,6 +19,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Instalar NuGet
         uses: NuGet/setup-nuget@v2
+      # Compatibilidade Windows 8: referencias .NET 4.5 apenas no runner de CI.
+      - name: Preparar referencias oficiais .NET Framework 4.5
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          nuget install Microsoft.NETFramework.ReferenceAssemblies.net45 -Version 1.0.3 -OutputDirectory novo-win8/packages -NonInteractive
+          if($LASTEXITCODE -ne 0){throw 'Falha ao instalar referencias .NET 4.5'}
+          $source='novo-win8/packages/Microsoft.NETFramework.ReferenceAssemblies.net45.1.0.3/build/.NETFramework/v4.5'
+          if(!(Test-Path (Join-Path $source 'mscorlib.dll'))){throw 'Referencias oficiais .NET 4.5 incompletas'}
+          $target=Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies/Microsoft/Framework/.NETFramework/v4.5'
+          if(!(Test-Path (Join-Path $target 'mscorlib.dll'))){
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            Copy-Item (Join-Path $source '*') $target -Recurse -Force
+          }
+          if(!(Test-Path (Join-Path $target 'mscorlib.dll'))){throw 'Targeting pack .NET 4.5 indisponivel'}
       - name: Restaurar SQLite
         shell: pwsh
         run: nuget install System.Data.SQLite.Core -Version 1.0.118 -OutputDirectory novo-win8/packages -NonInteractive -DependencyVersion Highest
@@ -74,10 +89,14 @@ jobs:
           & "novo-win8/gerar-icone.ps1"
           if (!(Test-Path "novo-win8/Armazem-Gratidao.ico")) { throw "Icone Windows nao foi gerado" }
           if ((Get-Item "novo-win8/Armazem-Gratidao.ico").Length -lt 1000) { throw "Icone invalido" }
-      - name: Gravar versao real da compilacao no executavel
+      - name: Gravar versao unica da compilacao no executavel
         shell: pwsh
         run: |
-          $version = "1.0.${{ github.run_number }}.0"
+          $source=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($source -notmatch '^([1-9][0-9]?)\\.([0-9]{1,2})\\.([1-9][0-9]{0,4})$'){
+            throw "VERSAO.txt invalido: $source"
+          }
+          $version="$($Matches[1]).$($Matches[2]).0.$($Matches[3])"
           $assembly = "using System.Reflection;`n[assembly: AssemblyVersion(`"$version`")]`n[assembly: AssemblyFileVersion(`"$version`")]`n"
           Set-Content -Path novo-win8/BuildVersion.cs -Value $assembly -Encoding UTF8
       - name: Validar rotinas criticas antes da compilacao
@@ -237,38 +256,5 @@ jobs:
           name: Armazem-Gratidao-Reparador-Atualizacao
           path: novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe
           if-no-files-found: error
-      - name: Publicar ZIP no Releases (sem novo Setup)
-        if: success() && github.ref == 'refs/heads/main'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag="amzg-novo-win8-build-${{ github.run_number }}"
-          gh release create $tag "novo-win8/Armazem-Gratidao-Atualizacao.zip" "novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe" --title "Armazem Gratidao - atualizacao ${{ github.run_number }}" --notes "Pacote automatico ZIP verificado por SHA-256, aplicado pelo AtualizadorGratidao.exe instalado junto do unico instalador completo. Antes de atualizar, o programa verifica o banco e salva backup completo dos dados e configuracoes. Nao exige reinstalar." --target "${{ github.sha }}" --latest
-          if($LASTEXITCODE -ne 0){ throw "Falha ao publicar a atualizacao" }
-      - name: Atualizar somente o manifesto ZIP (preservar instalador legado)
-        if: success() && github.ref == 'refs/heads/main'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $build=[int]'${{ github.run_number }}'
-          $file='novo-win8/Armazem-Gratidao-Atualizacao.zip'
-          $name='Armazem-Gratidao-Atualizacao.zip'
-          $tag="amzg-novo-win8-build-$build"
-          $digest=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
-          $manifest=[ordered]@{
-            build=$build
-            tag=$tag
-            asset=$name
-            url="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/$tag/$name"
-            sha256=$digest
-          } | ConvertTo-Json -Depth 3 -Compress
-          $content=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($manifest))
-          $path='atualizacao-novo-win8-pacote.json'
-          $payload=@{message="atualizacao ${build}: publicar pacote ZIP [skip ci]";branch='main';content=$content}
-          $oldSha=& gh api "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --jq '.sha' 2>$null
-          if($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($oldSha)){$payload.sha=$oldSha.Trim()}
-          $payload | ConvertTo-Json -Compress | gh api --method PUT "repos/giliotiesg-pixel/erp-gratidao-updates/contents/$path" --input -
-          if($LASTEXITCODE -ne 0){throw "Manifesto ZIP nao publicado"}
+      # Esta CI verifica o ZIP, backup e reparo, mas nao publica versoes.
+      # A publicacao oficial ocorre exclusivamente no fluxo unificado, apos revisao.
