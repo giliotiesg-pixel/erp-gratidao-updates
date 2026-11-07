@@ -133,13 +133,13 @@ try{
   if($pixels -lt 8){throw "Digitos nao foram pintados no visor ($pixels pixels)."}
  }finally{$render.Dispose()}
  & $press 'C'
- foreach($key in @('9','÷','2','=')){& $press $key}
+ foreach($key in @('9',([string][char]0x00F7),'2','=')){& $press $key}
  if($calcDisplay.Text -ne '4,5'){throw "Erro em 9/2: $($calcDisplay.Text)"}
  & $press 'C'
- foreach($key in @('6','×','7','=')){& $press $key}
+ foreach($key in @('6',([string][char]0x00D7),'7','=')){& $press $key}
  if($calcDisplay.Text -ne '42'){throw "Erro em 6x7: $($calcDisplay.Text)"}
  & $press 'C'
- foreach($key in @('1','0','−','3','=')){& $press $key}
+ foreach($key in @('1','0',([string][char]0x2212),'3','=')){& $press $key}
  if($calcDisplay.Text -ne '7'){throw "Erro em 10-3: $($calcDisplay.Text)"}
  & $press 'C'
  foreach($key in @('1','0','0','+','1','0','%','=')){& $press $key}
