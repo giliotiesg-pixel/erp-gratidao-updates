@@ -83,6 +83,43 @@ namespace ArmazemGratidao {
     Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top,
     TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(196,217,243),
     Font=new Font("Segoe UI",10,FontStyle.Regular)};
+   // Labels guardam os valores de forma acessivel a testes e teclas.
+   // A pintura direta nos paineis impede que o Windows 8 corte ou esconda
+   // os algarismos (inclusive em captura real com DrawToBitmap).
+   display.Visible=false;expression.Visible=false;preview.Visible=false;
+   displayFrame.Paint+=(sender,e)=>{
+    e.Graphics.Clear(Color.White);
+    if(displayFrame.ClientSize.Width<50||displayFrame.ClientSize.Height<50)return;
+    string digits=string.IsNullOrWhiteSpace(display.Text)?"0":display.Text;
+    Font font=null;
+    try{
+     for(float size=35f;size>=14f;size-=2f){
+      if(font!=null)font.Dispose();
+      font=new Font("Segoe UI",size,FontStyle.Bold);
+      Size measured=TextRenderer.MeasureText(e.Graphics,digits,font,
+       new Size(100000,displayFrame.Height),TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
+      if(measured.Width<displayFrame.Width-26&&measured.Height<displayFrame.Height-14)break;
+     }
+     TextRenderer.DrawText(e.Graphics,digits,font,
+      new Rectangle(10,5,displayFrame.Width-23,displayFrame.Height-10),
+      Color.FromArgb(20,61,122),
+      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
+      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
+    }finally{if(font!=null)font.Dispose();}
+   };
+   screen.Paint+=(sender,e)=>{
+    TextRenderer.DrawText(e.Graphics,expression.Text,expression.Font,
+     new Rectangle(16,7,screen.Width-30,30),expression.ForeColor,
+     TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
+     TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
+    TextRenderer.DrawText(e.Graphics,preview.Text,preview.Font,
+     new Rectangle(16,158,screen.Width-30,30),preview.ForeColor,
+     TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
+     TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
+   };
+   display.TextChanged+=(sender,e)=>displayFrame.Invalidate();
+   expression.TextChanged+=(sender,e)=>screen.Invalidate();
+   preview.TextChanged+=(sender,e)=>screen.Invalidate();
    screen.Controls.Add(expression);screen.Controls.Add(displayFrame);screen.Controls.Add(preview);
 
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
