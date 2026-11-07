@@ -116,9 +116,12 @@ try{
  }
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
   Select-Object -First 1
- if($null -eq $frame -or !$frame.Visible -or $frame.Height -lt 60 -or
+ $calcScreen=@($calculator.Controls.Find('amzgCalcScreen',$true)) |
+  Select-Object -First 1
+ if($null -eq $frame -or $frame.Height -lt 95 -or
+    $null -eq $calcScreen -or !$calcScreen.Visible -or
     -not ($calcDisplay -is [System.Windows.Forms.Label])){
-  throw 'Visor da calculadora continua cortado ou sem quadro proprio.'
+  throw 'Visor grande da calculadora nao foi construido.'
  }
  & $press 'C'
  & $press '1'
@@ -126,13 +129,13 @@ try{
  & $press '2'
  if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
  # O numero deve estar pintado no visor, nao somente guardado em memoria.
- $render=[Drawing.Bitmap]::new($frame.ClientSize.Width,$frame.ClientSize.Height)
+ $render=[Drawing.Bitmap]::new($calcScreen.ClientSize.Width,$calcScreen.ClientSize.Height)
  try{
-  $frame.DrawToBitmap($render,[Drawing.Rectangle]::new(
-   [Drawing.Point]::Empty,$frame.ClientSize))
+  $calcScreen.DrawToBitmap($render,[Drawing.Rectangle]::new(
+   [Drawing.Point]::Empty,$calcScreen.ClientSize))
   $pixels=0
-  for($py=12;$py -lt ($render.Height-12);$py+=2){
-   for($px=12;$px -lt ($render.Width-12);$px+=2){
+  for($py=58;$py -lt 134;$py+=2){
+   for($px=30;$px -lt ($render.Width-30);$px+=2){
     $p=$render.GetPixel($px,$py)
     if($p.R -lt 160 -and $p.G -lt 170 -and $p.B -lt 210){$pixels++}
    }
@@ -156,6 +159,15 @@ try{
  try{
   $calculator.DrawToBitmap($calcBitmap,[System.Drawing.Rectangle]::new(
    [System.Drawing.Point]::Empty,$calculator.ClientSize))
+  # Verifica os digitos NA CAPTURA DA JANELA inteira (nao apenas no controle).
+  $visible=0
+  for($py=113;$py -lt 175;$py+=2){
+   for($px=30;$px -lt ($calcBitmap.Width-30);$px+=2){
+    $p=$calcBitmap.GetPixel($px,$py)
+    if($p.R -lt 160 -and $p.G -lt 170 -and $p.B -lt 210){$visible++}
+   }
+  }
+  if($visible -lt 8){throw 'Visor branco na captura real da calculadora.'}
   $calcBitmap.Save($calcPreview,[System.Drawing.Imaging.ImageFormat]::Png)
  }finally{$calcBitmap.Dispose()}
  if((Get-Item -LiteralPath $calcPreview).Length -lt 5000){
