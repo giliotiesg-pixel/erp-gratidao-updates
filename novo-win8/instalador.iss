@@ -1,7 +1,7 @@
 #define MyAppName "Armazem Gratidao Novo"
 #define MyShortcutName "Armazém Gratidão"
 #ifndef BuildNumber
-#define BuildNumber "589"
+#define BuildNumber "590"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
@@ -346,6 +346,9 @@ begin
   begin
     AppDir := ExpandConstant('{app}');
     Executable := AppDir + '\ArmazemGratidaoNovo.exe';
+    // Nao marcar instalacao como concluida sem o atualizador independente.
+    if not FileExists(AppDir + '\AtualizadorGratidao.exe') then
+      RaiseException('Instalacao incompleta: AtualizadorGratidao.exe nao foi instalado em ' + AppDir);
     ExpectedVersion := '{#MyAppVersion}';
     if not FileExists(Executable) then
       RaiseException('Instalacao incompleta: programa nao encontrado em ' + Executable);
