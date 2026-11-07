@@ -14,9 +14,25 @@ using System.Windows.Forms;
 namespace ArmazemGratidaoAtualizador {
  static class Program {
   [STAThread] static void Main(string[] args) {
-   Application.EnableVisualStyles();
-   Application.SetCompatibleTextRenderingDefault(false);
-   Application.Run(new AtualizadorWindow(args));
+   // Um clique acidental num atalho antigo NAO deve abrir um segundo
+   // processo que bloqueie AtualizadorGratidao.exe indefinidamente.
+   if(args.Length!=6 || !string.Equals(args[0],"--apply-zip",StringComparison.Ordinal)){
+    // Sem argumentos de atualizacao: o auxiliar termina imediatamente.
+    // O ponto de entrada correto e "Verificar Atualizacao" dentro do PDV.
+    return;
+   }
+   // Impedir duas atualizacoes concorrentes no mesmo perfil Windows.
+   bool owns;
+   using(var singleton=new Mutex(true,@"Local\AMZG-Atualizador-Unico",out owns)){
+    if(!owns)return;
+    try{
+     Application.EnableVisualStyles();
+     Application.SetCompatibleTextRenderingDefault(false);
+     Application.Run(new AtualizadorWindow(args));
+    }finally{
+     try{singleton.ReleaseMutex();}catch(ApplicationException){}
+    }
+   }
   }
  }
  sealed class AtualizadorWindow : Form {
