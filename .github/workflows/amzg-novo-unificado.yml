@@ -222,6 +222,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-pacote-unico.ps1 -Updater 'dist/AtualizadorGratidao.exe' -Zip 'dist/Armazem-Gratidao-Atualizacao.zip' -ExpectedVersion $env:AMZG_FILEVERSION
+      - name: Testar erro real de atualizador em uso, sem alterar arquivos
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-atualizador-bloqueado.ps1 -Updater 'dist/AtualizadorGratidao.exe'
       - name: Testar bloqueio de versao antiga no atualizador
         shell: powershell
         run: |
