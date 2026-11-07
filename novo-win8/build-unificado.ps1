@@ -1,5 +1,5 @@
 param(
- [ValidateRange(592,65000)][int]$Build=592
+ [ValidateRange(0,65000)][int]$Build=0
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -8,6 +8,18 @@ function Assert-Exit([string]$Step) {
 }
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project=$PSScriptRoot
+# Unica fonte: VERSAO.txt (1.1.593 agora; 1.2.594 na proxima atualizacao)
+$versionFileSource=Join-Path $project 'VERSAO.txt'
+if(!(Test-Path $versionFileSource)){throw 'VERSAO.txt ausente'}
+$versionSource=(Get-Content -LiteralPath $versionFileSource -Raw).Trim()
+if($versionSource -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){throw "VERSAO.txt invalido: $versionSource"}
+$major=[int]$Matches[1]
+$minor=[int]$Matches[2]
+$singleBuild=[int]$Matches[3]
+if($Build -ne 0 -and $Build -ne $singleBuild){throw "Versoes divergentes: build solicitada=$Build; fonte=$singleBuild"}
+$Build=$singleBuild
+$displayVersion="$major.$minor"
+$fullVersion="$major.$minor.0.$Build"
 $bin=Join-Path $project 'bin\x64\Release'
 $stage=Join-Path $root 'dist\pacote'
 $dist=Join-Path $root 'dist'
@@ -61,7 +73,7 @@ try {
  $setupIconSha=(Get-FileHash $installerIcon -Algorithm SHA256).Hash
  if($appIconSha -eq $setupIconSha){throw 'ERRO: instalador e programa com o mesmo icone.'}
  Write-Host 'Icones separados: carrinho do PDV e caixa do instalador.'
- $version="1.0.0.$Build"
+ $version=$fullVersion
  $versionFile=Join-Path $project 'BuildVersion.cs'
  "[assembly: System.Reflection.AssemblyVersion(`"$version`")]`r`n[assembly: System.Reflection.AssemblyFileVersion(`"$version`")]" |
   Set-Content $versionFile -Encoding ASCII
@@ -139,21 +151,26 @@ try {
          'C:\Program Files\Inno Setup 6\ISCC.exe') |
   Where-Object {Test-Path $_} | Select-Object -First 1
  if(-not $inno){throw 'Inno Setup 6 nao encontrado.'}
- & $inno "/DBuildNumber=$Build" (Join-Path $project 'instalador.iss')
+ & $inno "/DBuildNumber=$Build" "/DVersionMajor=$major" "/DVersionMinor=$minor" (Join-Path $project 'instalador.iss')
  Assert-Exit 'Gerar instalador completo'
- $setup=Join-Path $dist 'Instalador-Armazem-Gratidao.exe'
- if(!(Test-Path $setup)){throw 'Instalador unico nao foi gerado.'}
+ $setup=Join-Path $dist "Instalador-Armazem-Gratidao-v$displayVersion.exe"
+ if(!(Test-Path $setup)){throw 'Instalador da versao correta nao foi gerado.'}
+ $setupVersion=(Get-Item $setup).VersionInfo
+ if($setupVersion.FileVersion -ne $version -or $setupVersion.ProductVersion -ne $version){
+  throw "NUMERACAO INCONSISTENTE: Instalador=$($setupVersion.FileVersion), Programa=$version."
+ }
+ Write-Host "VERSOES IDENTICAS: programa=$actualFile, instalador=$($setupVersion.FileVersion), atualizador=$updaterFileVersion"
  $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
  $repo='https://github.com/giliotiesg-pixel/erp-gratidao-updates'
  $tag="amzg-novo-win8-build-$Build"
  $manifest=[ordered]@{
-  build=$Build; tag=$tag; asset='Armazem-Gratidao-Atualizacao.zip'
+  build=$Build; version=$displayVersion; full_version=$version; tag=$tag; asset='Armazem-Gratidao-Atualizacao.zip'
   url="$repo/releases/download/$tag/Armazem-Gratidao-Atualizacao.zip"
   sha256=$hash
  }
  ($manifest|ConvertTo-Json -Compress) | Set-Content (Join-Path $dist 'manifesto-proposto.json') -Encoding UTF8
  $setupHash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
- @("Build: $Build","Instalador: $setup","Instalador SHA-256: $setupHash",
+ @("Build: $Build","Versao: $displayVersion","Versao do arquivo: $version","Instalador: $setup","Instalador SHA-256: $setupHash",
   "Atualizacao ZIP SHA-256: $hash","Manifesto: manifesto-proposto.json") |
   Set-Content (Join-Path $dist 'VALIDACAO-SHA256.txt') -Encoding UTF8
  Write-Host "Instalador, atualizador independente e ZIP reparador gerados em $dist"
