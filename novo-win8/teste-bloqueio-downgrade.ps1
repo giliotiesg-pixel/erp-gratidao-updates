@@ -14,8 +14,8 @@ if($null -eq $read -or $null -eq $guard){throw 'Funcoes anti-downgrade ausentes 
 $actual=[int]$read.Invoke($null,@($appFull))
 $expected=[int]$env:AMZG_BUILD
 if($actual -ne $expected){throw "Versao lida incorreta: $actual, esperada $expected"}
-$guard.Invoke($null,@([int]591,[int]592)) | Out-Null
-foreach($pair in @(@([int]592,[int]582),@([int]592,[int]592),@([int]0,[int]592))){
+$guard.Invoke($null,@([int]($actual-1),[int]$actual)) | Out-Null
+foreach($pair in @(@([int]$actual,[int]582),@([int]$actual,[int]$actual),@([int]0,[int]$actual))){
  $blocked=$false
  try{$guard.Invoke($null,@($pair[0],$pair[1])) | Out-Null}
  catch {
@@ -28,4 +28,4 @@ foreach($pair in @(@([int]592,[int]582),@([int]592,[int]592),@([int]0,[int]592))
  }
  if(!$blocked){throw "FALHA: Atualizador aceitou instalar a build $($pair[1]) sobre $($pair[0])."}
 }
-Write-Host "TESTE ANTI-DOWNGRADE OK: instalado=$actual; downgrade 592->582 e repeticao 592->592 bloqueados."
+Write-Host "TESTE ANTI-DOWNGRADE OK: instalado=$actual; downgrade $actual->582 e repeticao $actual->$actual bloqueados."

@@ -26,7 +26,9 @@ namespace ArmazemGratidaoAtualizador {
   readonly Button close=new Button{Text="Fechar",Dock=DockStyle.Bottom,Height=40,Visible=false};
   public AtualizadorWindow(string[] arguments){
    args=arguments;
-   Text="Armazém Gratidão | Atualizador Automático";
+   var version=typeof(AtualizadorWindow).Assembly.GetName().Version;
+   Text="Armazém Gratidão | Atualizador v"+version.Major+"."+version.Minor+
+    " (build "+(version.Revision>0?version.Revision:version.Build)+")";
    Width=630;Height=235;MinimumSize=new Size(530,205);
    StartPosition=FormStartPosition.CenterScreen;BackColor=Color.FromArgb(236,244,254);
    Controls.Add(message);Controls.Add(progress);Controls.Add(close);

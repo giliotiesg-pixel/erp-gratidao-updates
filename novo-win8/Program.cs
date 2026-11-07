@@ -342,6 +342,12 @@ namespace ArmazemGratidao {
     return version.Revision>0?version.Revision:version.Build;
    }
   }
+  string InstalledVersion {
+   get {
+    var v=typeof(MainForm).Assembly.GetName().Version;
+    return v.Major+"."+v.Minor;
+   }
+  }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
   readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.White};
   readonly Button menuToggle=new Button {Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
@@ -349,7 +355,7 @@ namespace ArmazemGratidao {
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
    dbPath=Path.Combine(dataDir,"armazem-gratidao.db");
-   Text="Armazém Gratidão Novo | Build "+InstalledBuild;Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
+   Text="Armazém Gratidão | Versão "+InstalledVersion+" (build "+InstalledBuild+")";Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
    var bar=sideMenu;
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
@@ -677,6 +683,7 @@ namespace ArmazemGratidao {
     const string prefix="amzg-novo-win8-build-";
     System.Collections.Generic.Dictionary<string,object> release=null;
     int remoteBuild=-1;
+    string remoteDisplayVersion="";
     string alternativeError="";
     // Primeiro consultar manifesto estatico (CDN raw). Evita depender da API que pode responder 504.
     try{
@@ -711,6 +718,9 @@ namespace ArmazemGratidao {
      release=new System.Collections.Generic.Dictionary<string,object>();
      release["assets"]=new object[]{manifestAsset};
      remoteBuild=version;
+     remoteDisplayVersion=manifest.ContainsKey("version")?Convert.ToString(manifest["version"]):"1.0";
+     if(!System.Text.RegularExpressions.Regex.IsMatch(remoteDisplayVersion??"", @"^\d{1,2}\.\d{1,2}$"))
+      throw new Exception("Número da versão publicado é inválido.");
     }catch(WebException ex){
      alternativeError=ex.Message;
     }
@@ -745,7 +755,7 @@ namespace ArmazemGratidao {
       string tag=Convert.ToString(candidate["tag_name"]);
       int build;
       if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
-       remoteBuild=build;release=candidate;
+       remoteBuild=build;release=candidate;remoteDisplayVersion="";
       }
      }
     }
@@ -754,19 +764,21 @@ namespace ArmazemGratidao {
      if(manual)MessageBox.Show("Nao existe uma atualizacao Windows8 publicada.","Verificar atualizacao");
      return;
     }
+    string remoteLabel=string.IsNullOrEmpty(remoteDisplayVersion)?"build "+remoteBuild:
+     "versão "+remoteDisplayVersion+" (build "+remoteBuild+")";
     if(remoteBuild<=InstalledBuild){
      status.Text=InstalledBuild>remoteBuild
-      ?"Build "+InstalledBuild+" instalada; canal oficial na "+remoteBuild+"."
-      :"Versao atualizada: build "+InstalledBuild+".";
-     if(manual)MessageBox.Show("Versão deste executável: "+InstalledBuild+Environment.NewLine+
+      ?"Versão "+InstalledVersion+" instalada; canal oficial na "+remoteLabel+"."
+      :"Versão "+InstalledVersion+" atualizada (build "+InstalledBuild+").";
+     if(manual)MessageBox.Show("Versão instalada: "+InstalledVersion+" (build "+InstalledBuild+")"+Environment.NewLine+
       "Local executado: "+Application.ExecutablePath+Environment.NewLine+
-      "Última build publicada no canal oficial: "+remoteBuild+Environment.NewLine+Environment.NewLine+
+      "Última versão publicada no canal oficial: "+remoteLabel+Environment.NewLine+Environment.NewLine+
       (InstalledBuild>remoteBuild?"Esta é uma versão de teste mais recente que a oficial; não haverá atualização automática para uma versão anterior."
        :"Não existe atualização oficial mais recente."),
       "Verificar atualização");
      return;
     }
-    status.Text="Nova versao publicada: build "+remoteBuild+".";
+    status.Text="Nova versão publicada: "+remoteLabel+".";
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Pacote de atualização não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -785,12 +797,12 @@ namespace ArmazemGratidao {
     // O ZIP é baixado e validado por SHA-256 antes de conferir o atualizador.
     // A ausência do auxiliar não deve impedir a recuperação automática.
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
-    status.Text="Atualização build "+remoteBuild+" salva em Atualizações Salvas.";
+    status.Text="Atualização "+remoteLabel+" salva em Atualizações Salvas.";
     if(!manual&&lastPromptedBuild==remoteBuild)return;
     lastPromptedBuild=remoteBuild;
-    if(MessageBox.Show("Atualização build "+remoteBuild+" já baixada e verificada."+Environment.NewLine+
+    if(MessageBox.Show("Atualização "+remoteLabel+" já baixada e verificada."+Environment.NewLine+
      "Instalar agora? Você também pode instalar depois pelo botão Atualizações Salvas."+
-     Environment.NewLine+"O programa será fechado somente ao iniciar o instalador.",
+     Environment.NewLine+"O programa será fechado somente ao iniciar o atualizador.",
      "Atualização do Armazém Gratidão",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
     // Aguardar qualquer backup diario e copiar em segundo plano, evitando travar a interface.
@@ -1341,7 +1353,7 @@ Panel BuildEmbeddedCalculator(){
    pageStart.FlatAppearance.BorderSize=0;
    pageStart.Click+=(sender,args)=>ToggleStartMenu();
    var pageTitle=new Label{Left=133,Top=5,Width=900,Height=27,
-    Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   BUILD "+InstalledBuild,
+    Text="ARMAZÉM GRATIDÃO   •   MENU INICIAR   •   VERSÃO "+InstalledVersion+" (build "+InstalledBuild+")",
     Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(27,76,148),
     TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
    var pageTip=new Label{Left=134,Top=34,Width=870,Height=18,

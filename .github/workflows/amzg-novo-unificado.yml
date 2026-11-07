@@ -7,10 +7,6 @@ on:
       - '.github/workflows/amzg-novo-unificado.yml'
   workflow_dispatch:
     inputs:
-      build:
-        description: 'Numero da build a compilar'
-        required: true
-        default: '592'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -21,10 +17,19 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
-    env:
-      AMZG_BUILD: ${{ inputs.build || '592' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Ler versao unica do projeto
+        shell: pwsh
+        run: |
+          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){
+            throw "VERSAO.txt invalido: $v"
+          }
+          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
+          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
+          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
+          Write-Host "Uma versao para todos os arquivos: $v"
       - uses: microsoft/setup-msbuild@v2
       - uses: NuGet/setup-nuget@v2
       - uses: actions/setup-python@v5
@@ -41,10 +46,14 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $manifest=Get-Content dist/manifesto-proposto.json -Raw | ConvertFrom-Json
-          if($manifest.build -ne [int]$env:AMZG_BUILD){throw 'Build do manifesto divergente.'}
+          if($manifest.build -ne [int]$env:AMZG_BUILD -or
+             $manifest.version -ne $env:AMZG_VERSION -or
+             $manifest.full_version -ne $env:AMZG_FILEVERSION){
+            throw 'Versao divergente entre VERSAO.txt e manifesto. Publicacao bloqueada.'
+          }
           $actual=(Get-FileHash dist/Armazem-Gratidao-Atualizacao.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if($actual -ne $manifest.sha256){throw 'SHA-256 divergente. Publicacao proibida.'}
-          if(!(Test-Path dist/Instalador-Armazem-Gratidao.exe)){throw 'Setup unico ausente.'}
+          if(!(Test-Path dist/Instalador-Armazem-Gratidao-v*.exe)){throw 'Setup unico ausente.'}
           if(!(Test-Path dist/AtualizadorGratidao.exe)){throw 'Atualizador independente ausente.'}
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $ar=[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'dist/Armazem-Gratidao-Atualizacao.zip').Path)
@@ -53,14 +62,23 @@ jobs:
             if($null -eq $entry){throw 'ZIP nao recupera AtualizadorGratidao.exe'}
             if($entry.Length -lt 20000){throw 'Atualizador no ZIP incompleto'}
           }finally{$ar.Dispose()}
-          if((Get-Item dist/Instalador-Armazem-Gratidao.exe).Length -lt 100000){throw 'Setup suspeitamente pequeno.'}
+          if((Get-Item dist/Instalador-Armazem-Gratidao-v*.exe).Length -lt 100000){throw 'Setup suspeitamente pequeno.'}
           Write-Host "Pacote compilado e manifesto verificados. Validacao funcional em Windows ainda necessaria."
       - name: Teste automatico de instalacao, reparo e backup SQLite descartavel
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
           $testDir=Join-Path $env:RUNNER_TEMP 'AMZG-Instalacao-Temp'
-          $setup=(Resolve-Path 'dist/Instalador-Armazem-Gratidao.exe').Path
+          $setups=@(Get-ChildItem dist -File -Filter 'Instalador-Armazem-Gratidao-v*.exe')
+          if($setups.Count -ne 1){throw 'Deve existir somente um instalador.'}
+          $setup=$setups[0].FullName
+          $setVersion=(Get-Item $setup).VersionInfo.FileVersion.Trim()
+          $pdvVersion=(Get-Item 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe').VersionInfo.FileVersion
+          $updVersion=(Get-Item 'dist/AtualizadorGratidao.exe').VersionInfo.FileVersion
+          if($setVersion -ne $env:AMZG_FILEVERSION -or $pdvVersion -ne $env:AMZG_FILEVERSION -or $updVersion -ne $env:AMZG_FILEVERSION){
+            throw "Versoes divergentes: setup=$setVersion, programa=$pdvVersion, atualizador=$updVersion, esperado=$env:AMZG_FILEVERSION"
+          }
+          Write-Host "VERSOES ALINHADAS: $env:AMZG_VERSION build $env:AMZG_BUILD"
           # Verificar visivelmente os icones EMBUTIDOS dos dois EXEs, nao apenas nomes.
           Add-Type -AssemblyName System.Drawing
           $exeSource=(Resolve-Path 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe').Path
@@ -90,7 +108,7 @@ jobs:
             if(!(Test-Path (Join-Path $testDir $name))){throw "Arquivo instalado ausente: $name"}
           }
           $exe=Join-Path $testDir 'ArmazemGratidaoNovo.exe'
-          $expected="1.0.0.$env:AMZG_BUILD"
+          $expected=$env:AMZG_FILEVERSION
           $fv=(Get-Item $exe).VersionInfo.FileVersion
           $av=[System.Reflection.AssemblyName]::GetAssemblyName($exe).Version.ToString()
           if($fv -ne $expected -or $av -ne $expected){throw "Instalacao exibiria build antiga: $fv/$av (esperada $expected)"}
@@ -199,6 +217,11 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Banco mudou ao repor apenas o atualizador'}
           Write-Host 'Teste OK: atualizador ausente recuperado com unico EXE; SQLite intacto.'
           Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
+      - name: Testar ZIP de atualizacao completa com o extrator real do PDV
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-pacote-unico.ps1 -Updater 'dist/AtualizadorGratidao.exe' -Zip 'dist/Armazem-Gratidao-Atualizacao.zip' -ExpectedVersion $env:AMZG_FILEVERSION
       - name: Testar bloqueio de versao antiga no atualizador
         shell: powershell
         run: |
@@ -213,7 +236,7 @@ jobs:
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
           path: |
-            dist/Instalador-Armazem-Gratidao.exe
+            dist/Instalador-Armazem-Gratidao-v*.exe
             dist/AtualizadorGratidao.exe
             dist/Armazem-Gratidao-Atualizacao.zip
             dist/Previa-Menu-Iniciar.png
@@ -229,9 +252,19 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      AMZG_BUILD: ${{ inputs.build }}
     steps:
       - uses: actions/checkout@v4
+      - name: Ler versao unica do projeto
+        shell: pwsh
+        run: |
+          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){
+            throw "VERSAO.txt invalido: $v"
+          }
+          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
+          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
+          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
+          Write-Host "Uma versao para todos os arquivos: $v"
       - uses: actions/download-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
@@ -241,7 +274,9 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
-          gh release create $tag "dist/Instalador-Armazem-Gratidao.exe" "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao Build $env:AMZG_BUILD" --notes "Instalador unico com reparo local, atualizador visual e backup obrigatorio."
+          $setup=Join-Path 'dist' ("Instalador-Armazem-Gratidao-v"+$env:AMZG_VERSION+".exe")
+          if(!(Test-Path $setup)){throw 'Instalador numerado indisponivel.'}
+          gh release create $tag $setup "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Versao unica do programa, instalador e atualizador. Atualizacao incremental com backup e rollback."
           if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           gh release view $tag --json assets | Out-Null
           if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}

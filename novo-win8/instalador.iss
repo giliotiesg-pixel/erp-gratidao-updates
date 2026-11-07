@@ -1,23 +1,33 @@
 #define MyAppName "Armazem Gratidao Novo"
 #define MyShortcutName "Armazém Gratidão"
 #ifndef BuildNumber
-#define BuildNumber "592"
+#define BuildNumber "593"
 #endif
-#define MyAppVersion "1.0.0." + BuildNumber
+#ifndef VersionMajor
+#define VersionMajor "1"
+#endif
+#ifndef VersionMinor
+#define VersionMinor "1"
+#endif
+#define MyDisplayVersion VersionMajor + "." + VersionMinor
+#define MyAppVersion MyDisplayVersion + ".0." + BuildNumber
 [Setup]
 AppId={{8B8E23C2-9EB0-4E9C-9B7A-65B9A1E3AB70}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName=Armazem Gratidao v{#MyDisplayVersion} (build {#BuildNumber})
+VersionInfoVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyAppVersion}
 DefaultDirName=C:\ERP-Gratidao
 UsePreviousAppDir=no
 DisableDirPage=yes
 DefaultGroupName={#MyAppName}
 OutputDir=..\dist
-OutputBaseFilename=Instalador-Armazem-Gratidao
+OutputBaseFilename=Instalador-Armazem-Gratidao-v{#MyDisplayVersion}
 AppPublisher=Armazem Gratidao
 AppPublisherURL=https://github.com/giliotiesg-pixel/erp-gratidao-updates
 VersionInfoCompany=Armazem Gratidao
-VersionInfoDescription=Instalador do Armazem Gratidao - Nao e o programa de caixa
+VersionInfoDescription=Instalador do Armazem Gratidao v{#MyDisplayVersion} - Build {#BuildNumber}
 VersionInfoProductName=Instalador - Armazem Gratidao
 SetupIconFile=Instalador-Armazem-Gratidao.ico
 UninstallDisplayIcon={app}\ArmazemGratidaoNovo.exe

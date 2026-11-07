@@ -1,15 +1,13 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-REM Compilacao UNICA do Armazem Gratidao Novo, atualizador e reparo.
-REM O fluxo antigo apontava para AMZG.App/AMZG.App.csproj (inexistente).
-set "BUILD=592"
-if not "%~1"=="" set "BUILD=%~1"
-powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "novo-win8\build-unificado.ps1" -Build %BUILD%
+REM Uma unica numeração em novo-win8\VERSAO.txt: 1.1.593, 1.2.594...
+REM O gerador valida versao de PDV, instalador, atualizador, ZIP e manifesto.
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "novo-win8\build-unificado.ps1" -Build 0
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (
-  echo Falha na compilacao da build %BUILD%. Nenhum release sera publicado.
+  echo ERRO: arquivos com numeracao diferente ou falha ao compilar. Nenhum release deve ser publicado.
   exit /b %RESULT%
 )
-echo Instalador unico e atualizacao validados em dist\
+echo Pacote unificado pronto em dist\. Todos os arquivos usam a versao de VERSAO.txt.
 exit /b 0
