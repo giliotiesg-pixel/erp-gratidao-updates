@@ -18,9 +18,13 @@ $guard.Invoke($null,@([int]591,[int]592)) | Out-Null
 foreach($pair in @(@([int]592,[int]582),@([int]592,[int]592),@([int]0,[int]592))){
  $blocked=$false
  try{$guard.Invoke($null,@($pair[0],$pair[1])) | Out-Null}
- catch [System.Reflection.TargetInvocationException] {
+ catch {
+  # Invoke() e encapsulado em MethodInvocationException no PowerShell 5.1.
   $blocked=$true
-  if([string]::IsNullOrWhiteSpace($_.Exception.InnerException.Message)){throw 'Bloqueio sem motivo claro.'}
+  $message=$_.Exception.ToString()
+  if($message -notmatch 'BLOQUEADA|inválida|inv.lida'){
+    throw "Rejeição inesperada: $message"
+  }
  }
  if(!$blocked){throw "FALHA: Atualizador aceitou instalar a build $($pair[1]) sobre $($pair[0])."}
 }
