@@ -32,7 +32,11 @@ try {
  if(!$start[0].Visible){throw 'Menu Iniciar deveria abrir inicialmente'}
  if($quick[0].Controls.Count -lt 8){throw 'Faltam os atalhos mais usados'}
  if($sections[0].Controls.Count -ne 5){throw 'O menu deveria conter cinco secoes ocultaveis'}
+ $pageStart=@($form.Controls.Find('amzgStartButton',$true))
+ if($pageStart.Count -ne 1){throw 'Botao Iniciar nao esta visivel na barra do menu'}
+ if($form.Text -notmatch 'Build 591'){throw 'Barra de titulo nao mostra a build correta'}
  $total=0
+ $originalLabels=@{}
  foreach($block in $sections[0].Controls){
     $row=@($block.Controls | Where-Object {$_ -is [System.Windows.Forms.FlowLayoutPanel]})
     $bar=@($block.Controls | Where-Object {$_ -is [System.Windows.Forms.Panel]})
@@ -41,12 +45,24 @@ try {
        throw 'Secao sem botao Mostrar / Ocultar'
     }
     $total+=$row[0].Controls.Count
+    foreach($button in $row[0].Controls){
+      $originalLabels[$button.AccessibleDescription]=$button.Text
+    }
  }
  if($total -lt 20){throw 'Atalhos de modulos nao foram preservados'}
  $search[0].Text='produto'
  [System.Windows.Forms.Application]::DoEvents()
  $search[0].Text=''
  [System.Windows.Forms.Application]::DoEvents()
+ foreach($block in $sections[0].Controls){
+   foreach($row in @($block.Controls | Where-Object {$_ -is [System.Windows.Forms.FlowLayoutPanel]})){
+     foreach($button in $row.Controls){
+       if($button.Text -ne $originalLabels[$button.AccessibleDescription]){
+         throw "Pesquisa alterou texto do modulo $($button.AccessibleDescription): $($button.Text)"
+       }
+     }
+   }
+ }
  $toggle=$type.GetMethod('ToggleStartMenu',
    [System.Reflection.BindingFlags]::Instance -bor
    [System.Reflection.BindingFlags]::NonPublic)
