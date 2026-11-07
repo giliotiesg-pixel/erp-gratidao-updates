@@ -32,6 +32,9 @@ VersionInfoProductName=Instalador - Armazem Gratidao
 SetupIconFile=Instalador-Armazem-Gratidao.ico
 UninstallDisplayIcon={app}\ArmazemGratidaoNovo.exe
 CloseApplications=yes
+; O Windows Restart Manager deve identificar o EXE antigo do atualizador
+; em execucao antes que o instalador substitua QUALQUER arquivo.
+CloseApplicationsFilter=*.exe,*.dll
 RestartApplications=no
 Compression=zip/5
 SolidCompression=no
@@ -349,7 +352,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  SourceSetup, RepairSetup, Executable, ActualVersion, ExpectedVersion: string;
+  SourceSetup, RepairSetup, Executable, ActualVersion, ExpectedVersion, UpdaterVersion: string;
   AppDir, LogDir, ResultLog: string;
 begin
   if CurStep = ssPostInstall then
@@ -368,6 +371,12 @@ begin
       RaiseException('Instalacao INCOMPLETA: esperado ' + ExpectedVersion +
         ', mas encontrado ' + ActualVersion + ' em ' + Executable +
         '. O instalador nao vai informar sucesso incorretamente.');
+    // Concluir so quando o atualizador TAMBEM estiver na mesma versao do PDV.
+    if not GetVersionNumbersString(AppDir + '\AtualizadorGratidao.exe', UpdaterVersion) then
+      RaiseException('Instalacao incompleta: atualizador sem versao verificavel.');
+    if CompareText(UpdaterVersion, ExpectedVersion) <> 0 then
+      RaiseException('Instalacao incompleta: PDV ' + ActualVersion +
+        ', atualizador ' + UpdaterVersion + '; versao esperada ' + ExpectedVersion);
 
     // Atalho do Menu Iniciar e do desktop padrao ja sao atualizados por [Icons].
     // Aqui corrigimos eventual atalho HOMONIMO no desktop do usuario atual,
@@ -380,6 +389,7 @@ begin
     LogDir := AppDir + '\Arquivos\Logs';
     ForceDirectories(LogDir);
     ResultLog := 'Versao instalada: ' + ActualVersion + #13#10 +
+      'Atualizador verificado: ' + UpdaterVersion + #13#10 +
       'Executavel conferido: ' + Executable + #13#10 +
       'Pasta unica: ' + AppDir + #13#10 +
       'Atalhos conferidos: ' + ExpandConstant('{userdesktop}') + #13#10;
