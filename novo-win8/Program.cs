@@ -1124,61 +1124,91 @@ Panel BuildEmbeddedCalculator(){
    if(new[]{"Relatórios","Consulta de preços","Início / Indicadores","Localizar vendas","Conferir valores","Itens"}.Contains(name))return "CONSULTAS E RELATÓRIOS";
    return "SISTEMA E MANUTENÇÃO";
   }
-  void GroupModuleButtons(FlowLayoutPanel panel){
+  // Menu nativo e compacto: linhas horizontais de largura total, sem colunas fixas.
+  // TODAS as secoes possuem controle Mostrar/Ocultar, sem alterar o clique dos modulos.
+  void GroupModuleButtons(FlowLayoutPanel panel,bool adjustHeight=false){
    var buttons=panel.Controls.OfType<Button>().ToList();
    panel.SuspendLayout();panel.Controls.Clear();
    panel.WrapContents=false;
    panel.FlowDirection=FlowDirection.TopDown;
-   panel.Padding=new Padding(7,5,5,5);
-   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
-   var sections=new System.Collections.Generic.List<Panel>();
+   panel.Padding=new Padding(5,4,5,4);
+   panel.AutoScroll=!adjustHeight;
+   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE","FINANCEIRO E CAIXA",
+    "CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
+   var blocks=new System.Collections.Generic.List<Tuple<Panel,FlowLayoutPanel,Button>>();
+   Action arrange=null;
    foreach(string section in order){
     var matches=buttons.Where(x=>ModuleSection(x.AccessibleDescription)==section).ToList();
     if(matches.Count==0)continue;
-    bool maintenance=section=="SISTEMA E MANUTENÇÃO"||section=="CONSULTAS E RELATÓRIOS";
-    var block=new Panel{Width=606,Height=36+(maintenance?0:((matches.Count+2)/3)*40),
-     Margin=new Padding(0,0,0,5),BackColor=Color.FromArgb(246,249,253)};
-    var heading=new Label{Dock=DockStyle.Top,Height=31,
-     Text=maintenance?"▸ "+section+"  (clique para abrir)":section,
-     Padding=new Padding(8,6,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold),
-     ForeColor=Color.FromArgb(180,35,50),BackColor=Color.FromArgb(229,237,249)};
-    var group=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,
-     RowCount=(matches.Count+1)/2,Margin=new Padding(0),Padding=new Padding(0,3,0,0),
+    var block=new Panel{Width=600,Height=50,Margin=new Padding(0,0,0,4),
      BackColor=Color.FromArgb(246,249,253)};
-    for(int col=0;col<3;col++)group.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,200));
-    for(int row=0;row<group.RowCount;row++)group.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
-    for(int n=0;n<matches.Count;n++){
-     var button=matches[n];
+    var bar=new Panel{Dock=DockStyle.Top,Height=25,BackColor=Color.FromArgb(226,236,250)};
+    var toggle=new Button{Text="Ocultar ▲",Dock=DockStyle.Right,Width=88,Height=23,
+     Font=new Font("Segoe UI",8,FontStyle.Bold),FlatStyle=FlatStyle.Flat,
+     BackColor=Color.FromArgb(226,236,250),ForeColor=Color.FromArgb(24,75,149),
+     UseMnemonic=false,Cursor=Cursors.Hand};
+    toggle.FlatAppearance.BorderSize=0;
+    var heading=new Label{Dock=DockStyle.Fill,Text=section,TextAlign=ContentAlignment.MiddleLeft,
+     Padding=new Padding(9,0,0,0),Font=new Font("Segoe UI",8.5f,FontStyle.Bold),
+     ForeColor=Color.FromArgb(180,35,50),AutoEllipsis=true};
+    bar.Controls.Add(heading);bar.Controls.Add(toggle);
+    var row=new FlowLayoutPanel{Left=0,Top=25,Width=600,Height=28,AutoScroll=false,
+     FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Margin=new Padding(0),
+     Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(246,249,253)};
+    foreach(var button in matches){
      button.Dock=DockStyle.None;
      button.Anchor=AnchorStyles.None;
-     button.Height=34;
-     button.Width=190;
      button.AutoEllipsis=true;
-     var tip=new ToolTip();tip.SetToolTip(button,button.Text);
+     button.Font=new Font("Segoe UI",7.8f,FontStyle.Bold);
+     button.Width=Math.Max(54,Math.Min(210,TextRenderer.MeasureText(button.Text,button.Font).Width+15));
+     button.Height=20;
      button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty;
-     button.Margin=new Padding(2,2,2,2);
-     group.Controls.Add(button,n%3,n/3);
+     button.Margin=new Padding(2,1,2,1);
+     button.Padding=new Padding(2,0,2,0);
+     button.TextAlign=ContentAlignment.MiddleCenter;
+     button.FlatAppearance.BorderSize=0;
+     var help=new ToolTip();help.SetToolTip(button,button.Text);
+     row.Controls.Add(button);
     }
-    block.Controls.Add(group);block.Controls.Add(heading);
-    if(maintenance){
-     group.Visible=false;heading.Cursor=Cursors.Hand;
-     heading.BackColor=Color.FromArgb(218,231,250);
-     heading.Click+=(sender,args)=>{
-      bool expanded=!group.Visible;
-      group.Visible=expanded;
-      block.Height=36+(expanded?group.RowCount*40:0);
-      heading.Text=expanded?"▾ "+section+"  (clique para ocultar)":"▸ "+section+"  (clique para abrir)";
-     };
-    }
-    sections.Add(block);panel.Controls.Add(block);
+    block.Controls.Add(row);block.Controls.Add(bar);
+    blocks.Add(Tuple.Create(block,row,toggle));
+    panel.Controls.Add(block);
+    toggle.Click+=(sender,args)=>{
+     row.Visible=!row.Visible;
+     toggle.Text=row.Visible?"Ocultar ▲":"Mostrar ▼";
+     if(arrange!=null)arrange();
+    };
    }
-   Action resize=()=>{
-    int width=606;
-    foreach(Panel block in sections)block.Width=width;
+   bool resizing=false;
+   arrange=()=>{
+    if(resizing||panel.IsDisposed)return;
+    resizing=true;
+    try{
+     int width=Math.Max(230,panel.ClientSize.Width-panel.Padding.Horizontal-
+      (adjustHeight?0:SystemInformation.VerticalScrollBarWidth)-5);
+     int sum=panel.Padding.Vertical;
+     foreach(var item in blocks){
+      var block=item.Item1;
+      var row=item.Item2;
+      block.Width=width;row.Width=width;
+      int usable=Math.Max(80,width-row.Padding.Horizontal-5);
+      int line=0,lines=1;
+      foreach(Button button in row.Controls.OfType<Button>()){
+       int size=button.Width+button.Margin.Horizontal;
+       if(line>0&&line+size>usable){lines++;line=0;}
+       line+=size;
+      }
+      int bodyHeight=row.Visible?lines*22+row.Padding.Vertical+1:0;
+      row.Height=bodyHeight;
+      block.Height=25+bodyHeight;
+      sum+=block.Height+block.Margin.Vertical;
+     }
+     if(adjustHeight&&panel.Height!=sum)panel.Height=sum;
+    }finally{resizing=false;}
    };
-   panel.Resize+=(sender,args)=>resize();
-   resize();
+   panel.SizeChanged+=(sender,args)=>{if(arrange!=null)arrange();};
    panel.ResumeLayout(true);
+   arrange();
   }
   void ShowMainMenu(){
    grid.Visible=false;
@@ -1189,8 +1219,12 @@ Panel BuildEmbeddedCalculator(){
     Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)});
    top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
     Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});
-   var tiles=new FlowLayoutPanel{Dock=DockStyle.Left,Width=620,AutoScroll=true,WrapContents=true,
-    FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(12,12,8,8)};
+   var content=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=false,
+    FlowDirection=FlowDirection.TopDown,Padding=new Padding(11,7,11,7),
+    BackColor=Color.FromArgb(246,249,253)};
+   var tiles=new FlowLayoutPanel{Width=1060,Height=260,AutoScroll=false,WrapContents=false,
+    FlowDirection=FlowDirection.TopDown,Padding=new Padding(4,3,4,3),Margin=new Padding(0),
+    BackColor=Color.FromArgb(246,249,253)};
    var actions=ModuleActions();
 
 
@@ -1209,12 +1243,12 @@ Panel BuildEmbeddedCalculator(){
    foreach(var item in actions){
     string displayName=System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(item.Item1.ToLower(System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
     displayName=displayName.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp").Replace("Qr","QR").Replace("Pix","PIX");
-    var tile=new Button{Text=displayName,Tag="home-shortcut",AccessibleDescription=item.Item1,Width=120,Height=38,
-     MinimumSize=new Size(120,38),MaximumSize=new Size(120,38),Margin=new Padding(3),
-     Padding=new Padding(5,2,5,2),FlatStyle=FlatStyle.Flat,
+    var tile=new Button{Text=displayName,Tag="home-shortcut",AccessibleDescription=item.Item1,
+     Width=100,Height=20,Margin=new Padding(2,1,2,1),
+     Padding=new Padding(2,0,2,0),FlatStyle=FlatStyle.Flat,
      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
-     Font=new Font("Segoe UI",9.5f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
-     AutoEllipsis=true,UseMnemonic=false};
+     Font=new Font("Segoe UI",7.8f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
+     AutoEllipsis=true,UseMnemonic=false,Cursor=Cursors.Hand};
     tile.FlatAppearance.BorderSize=0;
     tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
     tile.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
@@ -1223,9 +1257,9 @@ Panel BuildEmbeddedCalculator(){
     tile.Click+=item.Item2;
     tiles.Controls.Add(tile);
    }
-   GroupModuleButtons(tiles);
-   var calculatorSide=new Panel{Dock=DockStyle.None,Width=390,Height=515,Left=630,Top=85,
-    BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7)};
+   GroupModuleButtons(tiles,true);
+   var calculatorSide=new Panel{Dock=DockStyle.None,Width=350,Height=410,
+    BackColor=Color.FromArgb(242,247,255),Padding=new Padding(7),Margin=new Padding(0,9,0,10)};
    var calcTitle=new Label{Dock=DockStyle.Top,Height=36,Text="CALCULADORA",
     Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50),
     TextAlign=ContentAlignment.MiddleCenter};
@@ -1245,19 +1279,20 @@ Panel BuildEmbeddedCalculator(){
    Activated+=onActivated;
    page.Disposed+=(sender,args)=>Activated-=onActivated;
    page.VisibleChanged+=(sender,args)=>{if(page.Visible)BeginInvoke((Action)(()=>focusCalculator()));};
-   page.Controls.Add(tiles);page.Controls.Add(top);page.Controls.Add(calculatorSide);
-   calculatorSide.BringToFront();
-   Action positionCalculator=()=>{
-    calculatorSide.Left=tiles.Right+8;
-    calculatorSide.Top=top.Bottom+8;
-    calculatorSide.Height=Math.Min(515,Math.Max(360,page.ClientSize.Height-calculatorSide.Top-12));
-    calculatorSide.Width=Math.Min(390,Math.Max(210,page.ClientSize.Width-calculatorSide.Left-12));
-    calculatorSide.Visible=page.ClientSize.Width-calculatorSide.Left>=210;
+   content.Controls.Add(tiles);
+   content.Controls.Add(calculatorSide);
+   page.Controls.Add(content);page.Controls.Add(top);
+   Action resizeMenu=()=>{
+    int width=Math.Max(350,content.ClientSize.Width-content.Padding.Horizontal-18);
+    if(tiles.Width!=width)tiles.Width=width;
+    int calculatorWidth=Math.Min(350,width);
+    if(calculatorSide.Width!=calculatorWidth)calculatorSide.Width=calculatorWidth;
+    calculatorSide.Margin=new Padding(Math.Max(0,width-calculatorWidth),9,0,10);
    };
-   page.Resize+=(sender,args)=>positionCalculator();
-   positionCalculator();
+   content.Resize+=(sender,args)=>resizeMenu();
+   resizeMenu();
    Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
-   sideMenu.Visible=false;EnableWheelScrolling(tiles);
+   sideMenu.Visible=false;EnableWheelScrolling(content);
    BeginInvoke((Action)(()=>focusCalculator()));
    status.Text="Menu Principal • Selecione um módulo. Início exibe apenas indicadores e ranking.";
   }
