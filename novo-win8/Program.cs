@@ -341,7 +341,7 @@ namespace ArmazemGratidao {
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
    dbPath=Path.Combine(dataDir,"armazem-gratidao.db");
-   Text="Armazém Gratidão Novo";Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
+   Text="Armazém Gratidão Novo | Build "+InstalledBuild;Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
    var bar=sideMenu;
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
@@ -703,8 +703,15 @@ namespace ArmazemGratidao {
      return;
     }
     if(remoteBuild<=InstalledBuild){
-     status.Text="Versao atualizada: build "+InstalledBuild+".";
-     if(manual)MessageBox.Show("Versão instalada: "+InstalledBuild+Environment.NewLine+"Última build publicada: "+remoteBuild+Environment.NewLine+Environment.NewLine+"Nenhuma atualização nova foi publicada no GitHub. Alterações em teste não são instaladas automaticamente.","Verificar atualização");
+     status.Text=InstalledBuild>remoteBuild
+      ?"Build "+InstalledBuild+" instalada; canal oficial na "+remoteBuild+"."
+      :"Versao atualizada: build "+InstalledBuild+".";
+     if(manual)MessageBox.Show("Versão deste executável: "+InstalledBuild+Environment.NewLine+
+      "Local executado: "+Application.ExecutablePath+Environment.NewLine+
+      "Última build publicada no canal oficial: "+remoteBuild+Environment.NewLine+Environment.NewLine+
+      (InstalledBuild>remoteBuild?"Esta é uma versão de teste mais recente que a oficial; não haverá atualização automática para uma versão anterior."
+       :"Não existe atualização oficial mais recente."),
+      "Verificar atualização");
      return;
     }
     status.Text="Nova versao publicada: build "+remoteBuild+".";
@@ -1251,7 +1258,7 @@ Panel BuildEmbeddedCalculator(){
    var old=Controls["homePanel"];if(old!=null){Controls.Remove(old);old.Dispose();}
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(246,249,253)};
    var top=new Panel{Dock=DockStyle.Top,Height=76,BackColor=Color.White};
-   top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO",Dock=DockStyle.Top,Height=40,
+   top.Controls.Add(new Label{Text="MENU PRINCIPAL  •  ARMAZÉM GRATIDÃO  •  BUILD "+InstalledBuild,Dock=DockStyle.Top,Height=40,
     Padding=new Padding(14,8,0,0),Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.FromArgb(180,35,50)});
    top.Controls.Add(new Label{Text="Selecione um módulo. Os mais utilizados aparecem primeiro.",Dock=DockStyle.Bottom,Height=28,
     Padding=new Padding(14,0,0,0),Font=new Font("Segoe UI",9,FontStyle.Regular),ForeColor=Color.FromArgb(75,91,115)});

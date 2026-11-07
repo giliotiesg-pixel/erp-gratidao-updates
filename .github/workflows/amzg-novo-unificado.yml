@@ -10,7 +10,7 @@ on:
       build:
         description: 'Numero da build a compilar'
         required: true
-        default: '587'
+        default: '588'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AMZG_BUILD: ${{ inputs.build || '587' }}
+      AMZG_BUILD: ${{ inputs.build || '588' }}
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
@@ -60,6 +60,24 @@ jobs:
                              'Reparar-Armazem-Gratidao.exe','System.Data.SQLite.dll')){
             if(!(Test-Path (Join-Path $testDir $name))){throw "Arquivo instalado ausente: $name"}
           }
+          $exe=Join-Path $testDir 'ArmazemGratidaoNovo.exe'
+          $expected="1.0.0.$env:AMZG_BUILD"
+          $fv=(Get-Item $exe).VersionInfo.FileVersion
+          $av=[System.Reflection.AssemblyName]::GetAssemblyName($exe).Version.ToString()
+          if($fv -ne $expected -or $av -ne $expected){throw "Instalacao exibiria build antiga: $fv/$av (esperada $expected)"}
+          Write-Host "Instalado corretamente: $exe build $fv"
+          $receipt=Join-Path $testDir 'Arquivos/Logs/instalacao-verificada.txt'
+          if(!(Test-Path $receipt) -or !(Select-String -Path $receipt -Pattern "Versao instalada: $expected" -SimpleMatch)){
+            throw 'Instalador nao confirmou versao EXE no destino'
+          }
+          # Cria um atalho HOMONIMO para um caminho velho; o reparador deve
+          # corrigi-lo para a pasta real sem alterar outros atalhos do usuario.
+          $desktop=[Environment]::GetFolderPath('DesktopDirectory')
+          $oldShortcut=Join-Path $desktop 'Armazem Gratidao Novo.lnk'
+          $shell=New-Object -ComObject WScript.Shell
+          $link=$shell.CreateShortcut($oldShortcut)
+          $link.TargetPath=Join-Path $testDir 'EXECUTAVEL-ANTIGO-582.exe'
+          $link.Save()
           $dataDir=Join-Path $env:LOCALAPPDATA 'ArmazemGratidaoNovo'
           New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
           $db=Join-Path $dataDir 'armazem-gratidao.db'
@@ -94,6 +112,13 @@ jobs:
           $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
           Write-Host ('Tempo de reparo e backup: {0:N2}s' -f ((Get-Date)-$started).TotalSeconds)
           if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
+          $fv=(Get-Item $exe).VersionInfo.FileVersion
+          if($fv -ne $expected){throw "Reparo manteve versao antiga $fv"}
+          $target=$shell.CreateShortcut($oldShortcut).TargetPath
+          if([IO.Path]::GetFullPath($target) -ne [IO.Path]::GetFullPath($exe)){
+            throw "Atalho antigo ainda aponta para $target em vez de $exe"
+          }
+          Write-Host "Reparo verificou versao $fv e corrigiu atalho antigo."
           $backups=Join-Path $testDir 'Arquivos/Backups'
           $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
           if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
