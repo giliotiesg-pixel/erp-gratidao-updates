@@ -155,12 +155,35 @@ jobs:
           [System.IO.File]::WriteAllBytes((Join-Path $legacyBackups 'backup-antigo-grande.zip'),(New-Object byte[] (6MB)))
           [System.IO.File]::WriteAllText((Join-Path $dataDir 'configuracao-teste.txt'),'configuracao-preservada')
           $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
+          # Simular instalacao antiga/mista 1.2 apos falha de atualizacao:
+          # o instalador 1.3 deve recolocar tanto PDV quanto atualizador,
+          # sem apagar/alterar o banco SQLite existente.
+          $stubSource=Join-Path $env:RUNNER_TEMP 'amzg-legacy-stub.cs'
+          $stubExe=Join-Path $env:RUNNER_TEMP 'amzg-legacy-stub.exe'
+          @'
+          using System.Reflection;
+          [assembly: AssemblyVersion("1.2.0.594")]
+          [assembly: AssemblyFileVersion("1.2.0.594")]
+          class Legacy { static void Main(){} }
+          '@ | Set-Content -LiteralPath $stubSource -Encoding ASCII
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          & $csc /nologo /target:exe "/out:$stubExe" $stubSource
+          if($LASTEXITCODE -ne 0 -or !(Test-Path $stubExe)){throw 'Nao compilou stub da versao antiga.'}
+          foreach($programFile in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe')){
+            Copy-Item $stubExe (Join-Path $testDir $programFile) -Force
+            $oldVersion=(Get-Item (Join-Path $testDir $programFile)).VersionInfo.FileVersion
+            if($oldVersion -ne '1.2.0.594'){throw "Falhou simulacao de versao antiga: $oldVersion"}
+          }
+          Write-Host 'Instalacao mista 1.2 simulada, com SQLite real de teste preservado.'
           $started=Get-Date
           $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
           Write-Host ('Tempo de reparo e backup: {0:N2}s' -f ((Get-Date)-$started).TotalSeconds)
           if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
           $fv=(Get-Item $exe).VersionInfo.FileVersion
-          if($fv -ne $expected){throw "Reparo manteve versao antiga $fv"}
+          $updaterFV=(Get-Item (Join-Path $testDir 'AtualizadorGratidao.exe')).VersionInfo.FileVersion
+          if($fv -ne $expected -or $updaterFV -ne $expected){
+            throw "Reparo manteve versoes antigas: PDV=$fv, atualizador=$updaterFV; esperado=$expected"
+          }
           $commonDesktop=[Environment]::GetFolderPath('CommonDesktopDirectory')
           # Windows PowerShell 5.1 pode ler o arquivo temporario sem BOM como ANSI,
           # corrompendo nomes com acentos. Montar o nome pelo codigo Unicode.
@@ -222,6 +245,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-pacote-unico.ps1 -Updater 'dist/AtualizadorGratidao.exe' -Zip 'dist/Armazem-Gratidao-Atualizacao.zip' -ExpectedVersion $env:AMZG_FILEVERSION
+      - name: Testar PDV bloqueando atualizador aberto ANTES do backup
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-app-updater-livre.ps1 -ProgramExe 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -UpdaterExe 'dist/AtualizadorGratidao.exe'
       - name: Testar erro real de atualizador em uso, sem alterar arquivos
         shell: powershell
         run: |
