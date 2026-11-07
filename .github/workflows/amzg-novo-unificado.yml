@@ -10,7 +10,7 @@ on:
       build:
         description: 'Numero da build a compilar'
         required: true
-        default: '591'
+        default: '592'
       publicar_release:
         description: 'Publicar somente depois de testar o pacote em Windows'
         type: boolean
@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AMZG_BUILD: ${{ inputs.build || '591' }}
+      AMZG_BUILD: ${{ inputs.build || '592' }}
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
