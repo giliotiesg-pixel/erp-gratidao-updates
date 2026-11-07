@@ -135,16 +135,31 @@ jobs:
           if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
           $fv=(Get-Item $exe).VersionInfo.FileVersion
           if($fv -ne $expected){throw "Reparo manteve versao antiga $fv"}
-          $programShortcut=Join-Path $desktop 'Armazém Gratidão.lnk'
-          if(!(Test-Path $programShortcut)){throw 'Atalho Armazem Gratidao nao apareceu na area de trabalho.'}
-          $target=$shell.CreateShortcut($programShortcut).TargetPath
-          if([IO.Path]::GetFullPath($target) -ne [IO.Path]::GetFullPath($exe)){
-            throw "Atalho do programa aponta para $target em vez de $exe"
+          $commonDesktop=[Environment]::GetFolderPath('CommonDesktopDirectory')
+          $shortcutCandidates=@(
+            (Join-Path $desktop 'Armazém Gratidão.lnk'),
+            (Join-Path $commonDesktop 'Armazém Gratidão.lnk')
+          )
+          $found=@($shortcutCandidates | Where-Object {Test-Path -LiteralPath $_})
+          if($found.Count -eq 0){
+            Write-Host 'Desktop usuario:'
+            Get-ChildItem $desktop -Filter '*.lnk' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            Write-Host 'Desktop publico:'
+            Get-ChildItem $commonDesktop -Filter '*.lnk' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            throw 'Atalho Armazem Gratidao nao apareceu no desktop do usuario nem no publico.'
           }
-          if(Test-Path $oldShortcut){
-            throw 'Atalho com nome antigo permaneceu no desktop depois do reparo.'
+          foreach($programShortcut in $found){
+            $target=$shell.CreateShortcut($programShortcut).TargetPath
+            if([IO.Path]::GetFullPath($target) -ne [IO.Path]::GetFullPath($exe)){
+              throw "Atalho do programa aponta para $target em vez de $exe"
+            }
+            Write-Host "Atalho do PDV correto: $programShortcut => $target"
           }
-          Write-Host "Reparo com icone do PDV, nome Armazem Gratidao e atalho unico verificados."
+          $legacyShortcuts=@($oldShortcut,(Join-Path $commonDesktop 'Armazem Gratidao Novo.lnk'))
+          if(@($legacyShortcuts | Where-Object {Test-Path -LiteralPath $_}).Count -gt 0){
+            throw 'Atalho legado permaneceu na area de trabalho depois do reparo.'
+          }
+          Write-Host 'Reparo com ícone do PDV, nome Armazém Gratidão e sem atalhos duplicados verificados.'
           $backups=Join-Path $testDir 'Arquivos/Backups'
           $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
           if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
