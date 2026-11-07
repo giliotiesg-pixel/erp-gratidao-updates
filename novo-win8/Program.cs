@@ -1403,7 +1403,7 @@ Panel BuildEmbeddedCalculator(){
    int x=Math.Max(working.Left+4,Math.Min(start.X,working.Right-740));
    int y=Math.Max(working.Top+4,Math.Min(start.Y,working.Bottom-325));
    popup.Location=new Point(x,y);
-   popup.Height=Math.Max(325,Math.Min(478,working.Bottom-y-8));
+   popup.Height=Math.Max(365,Math.Min(566,working.Bottom-y-8));
    popup.Show(this);
    popup.Activate();
    status.Text="Menu Iniciar aberto. Escolha uma secao para ver os modulos com icones.";
