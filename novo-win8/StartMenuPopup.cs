@@ -14,6 +14,7 @@ namespace ArmazemGratidao {
   readonly Func<string,Image> iconFor;
   readonly Action<Tuple<string,EventHandler>> launch;
   readonly List<Image> allocatedIcons=new List<Image>();
+  readonly Dictionary<string,Image> iconsByName=new Dictionary<string,Image>(StringComparer.OrdinalIgnoreCase);
   readonly FlowLayoutPanel categories;
   readonly FlowLayoutPanel modules;
   readonly Panel branchPane;
@@ -150,6 +151,9 @@ namespace ArmazemGratidao {
   }
 
   Image ManagedIcon(string name,int size){
+   string key=name+"/"+size;
+   Image cached;
+   if(iconsByName.TryGetValue(key,out cached))return cached;
    using(var original=iconFor(name)){
     var icon=new Bitmap(size,size);
     using(var graphics=Graphics.FromImage(icon)){
@@ -158,6 +162,7 @@ namespace ArmazemGratidao {
      graphics.DrawImage(original,new Rectangle(0,0,size,size));
     }
     allocatedIcons.Add(icon);
+    iconsByName[key]=icon;
     return icon;
    }
   }
