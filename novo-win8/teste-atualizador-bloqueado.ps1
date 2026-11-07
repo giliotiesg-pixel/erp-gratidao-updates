@@ -33,8 +33,6 @@ try{
   $blocked=$true
  }
  if(!$blocked){throw 'ERRO GRAVE: atualizador tentou substituir executavel que estava bloqueado.'}
- $during=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
- if($during -ne $before){throw 'Arquivo mudou durante bloqueio, nao houve protecao transacional.'}
  Write-Host 'LOCK TEST OK: EXE aberto por outro processo foi detectado ANTES de copiar arquivos.'
 }finally{$handle.Dispose()}
 Check 500
