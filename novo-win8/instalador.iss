@@ -1,6 +1,6 @@
 #define MyAppName "Armazem Gratidao Novo"
 #ifndef BuildNumber
-#define BuildNumber "585"
+#define BuildNumber "586"
 #endif
 #define MyAppVersion "1.0.0." + BuildNumber
 [Setup]
@@ -20,8 +20,8 @@ SetupIconFile=Armazem-Gratidao.ico
 UninstallDisplayIcon={app}\ArmazemGratidaoNovo.exe
 CloseApplications=yes
 RestartApplications=no
-Compression=lzma
-SolidCompression=yes
+Compression=zip/5
+SolidCompression=no
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
