@@ -1327,7 +1327,7 @@ Panel BuildEmbeddedCalculator(){
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,BackColor=Color.FromArgb(247,249,253)};
    var heading=new Panel{Dock=DockStyle.Top,Height=59,BackColor=Color.White,
      Padding=new Padding(14,6,8,4)};
-   var pageStart=new Button{Text="⊞  Iniciar",Dock=DockStyle.Left,Width=112,Height=42,
+   var pageStart=new Button{Name="amzgStartButton",Text="⊞  Iniciar",Dock=DockStyle.Left,Width=112,Height=42,
     Margin=new Padding(0),BackColor=Color.FromArgb(25,75,149),
     ForeColor=Color.White,FlatStyle=FlatStyle.Flat,UseMnemonic=false,
     Font=new Font("Segoe UI",10,FontStyle.Bold),Cursor=Cursors.Hand};
