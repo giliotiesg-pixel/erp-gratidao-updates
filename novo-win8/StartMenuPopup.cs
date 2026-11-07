@@ -1,0 +1,246 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Globalization;
+using System.Linq;
+using System.Windows.Forms;
+
+namespace ArmazemGratidao {
+ // Menu Iniciar REAL: janela flutuante sem bordas, categorias e ramificacoes.
+ // Nao fica ancorado na area de trabalho nem substitui os modulos WinForms.
+ internal sealed class StartMenuPopup : Form {
+  readonly List<Tuple<string,EventHandler>> actions;
+  readonly Func<string,string> categoryOf;
+  readonly Func<string,Image> iconFor;
+  readonly Action<Tuple<string,EventHandler>> launch;
+  readonly List<Image> allocatedIcons=new List<Image>();
+  readonly FlowLayoutPanel categories;
+  readonly FlowLayoutPanel modules;
+  readonly Panel branchPane;
+  readonly Label branchTitle;
+  readonly TextBox search;
+  readonly Dictionary<string,Button> sectionButtons=new Dictionary<string,Button>();
+  const int CompactWidth=263;
+  const int ExpandedWidth=727;
+  string selectedSection=null;
+  bool closing=false;
+
+  public StartMenuPopup(IEnumerable<Tuple<string,EventHandler>> available,
+   Func<string,string> classify,Func<string,Image> drawIcon,
+   Action<Tuple<string,EventHandler>> open) {
+   actions=available.ToList();
+   categoryOf=classify;
+   iconFor=drawIcon;
+   launch=open;
+   Name="amzgFloatingStartMenu";
+   Text="Iniciar - Armazem Gratidao";
+   FormBorderStyle=FormBorderStyle.None;
+   ShowInTaskbar=false;
+   StartPosition=FormStartPosition.Manual;
+   BackColor=Color.FromArgb(236,241,250);
+   Size=new Size(CompactWidth,454);
+   MinimumSize=new Size(CompactWidth,320);
+   KeyPreview=true;
+   DoubleBuffered=true;
+
+   // Area de ramificacoes so aparece quando a categoria for escolhida.
+   branchPane=new Panel{Name="amzgStartFlyout",Dock=DockStyle.Fill,
+    Visible=false,BackColor=Color.FromArgb(249,251,255),
+    Padding=new Padding(10,9,9,7)};
+   branchTitle=new Label{Name="amzgBranchTitle",Dock=DockStyle.Top,Height=48,
+    Font=new Font("Segoe UI",11.3f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(184,38,62),TextAlign=ContentAlignment.MiddleLeft};
+   modules=new FlowLayoutPanel{Name="amzgStartModules",Dock=DockStyle.Fill,
+    AutoScroll=true,WrapContents=true,FlowDirection=FlowDirection.LeftToRight,
+    BackColor=Color.FromArgb(249,251,255),Padding=new Padding(4,5,3,9)};
+   var branchFooter=new Label{Dock=DockStyle.Bottom,Height=25,
+    ForeColor=Color.FromArgb(108,117,135),Font=new Font("Segoe UI",8f),
+    Text="Clique no modulo para abrir. Esc fecha o menu."};
+   branchPane.Controls.Add(modules);
+   branchPane.Controls.Add(branchTitle);
+   branchPane.Controls.Add(branchFooter);
+
+   var navigation=new Panel{Name="amzgStartCategoriesPanel",Dock=DockStyle.Left,
+    Width=CompactWidth,BackColor=Color.FromArgb(29,47,79)};
+   var branding=new Label{Dock=DockStyle.Top,Height=62,
+    Text="  ⊞  ARMAZÉM GRATIDÃO\n        INICIAR",
+    Font=new Font("Segoe UI",11f,FontStyle.Bold),
+    ForeColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,
+    BackColor=Color.FromArgb(20,37,67)};
+   var instructions=new Label{Dock=DockStyle.Top,Height=31,
+    Text="  SEÇÕES DO PROGRAMA",
+    Font=new Font("Segoe UI",8.4f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(193,211,238),
+    TextAlign=ContentAlignment.MiddleLeft};
+   categories=new FlowLayoutPanel{Name="amzgStartCategories",Dock=DockStyle.Fill,
+    AutoScroll=true,FlowDirection=FlowDirection.TopDown,
+    WrapContents=false,Padding=new Padding(7,4,5,5),
+    BackColor=Color.FromArgb(29,47,79)};
+   var footer=new Panel{Dock=DockStyle.Bottom,Height=42,
+    BackColor=Color.FromArgb(20,37,67)};
+   var close=new Button{Name="amzgCloseStart",Text="  ×  Fechar menu",
+    Dock=DockStyle.Fill,FlatStyle=FlatStyle.Flat,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,
+    ForeColor=Color.White,BackColor=Color.FromArgb(20,37,67),Cursor=Cursors.Hand};
+   close.FlatAppearance.BorderSize=0;close.Click+=(sender,args)=>Close();
+   footer.Controls.Add(close);
+   navigation.Controls.Add(categories);
+   navigation.Controls.Add(instructions);
+   navigation.Controls.Add(branding);
+   navigation.Controls.Add(footer);
+
+   var searchBar=new Panel{Dock=DockStyle.Top,Height=52,
+    BackColor=Color.White,Padding=new Padding(11,10,11,9)};
+   search=new TextBox{Name="amzgStartSearch",Dock=DockStyle.Fill,
+    BorderStyle=BorderStyle.FixedSingle,Font=new Font("Segoe UI",11f),
+    AccessibleName="Pesquisar modulo",TabStop=true};
+   searchBar.Controls.Add(search);
+
+   Controls.Add(branchPane);
+   Controls.Add(navigation);
+   Controls.Add(searchBar);
+   var order=new[]{"VENDAS E ATENDIMENTO","PRODUTOS E ESTOQUE",
+     "FINANCEIRO E CAIXA","CONSULTAS E RELATÓRIOS","SISTEMA E MANUTENÇÃO"};
+   foreach(string section in order){
+    int count=actions.Count(a=>categoryOf(a.Item1)==section);
+    if(count==0)continue;
+    string categoryIcon=section.StartsWith("VENDAS")?"PDV":
+     section.StartsWith("PRODUTOS")?"Estoque":
+     section.StartsWith("FINANCEIRO")?"Caixa":
+     section.StartsWith("CONSULTAS")?"Relatórios":"Sistema";
+    var btn=new Button{Name="amzgCategory"+sectionButtons.Count,
+     Tag=section,Text="  "+section+"   ›",
+     Size=new Size(240,57),MinimumSize=new Size(240,57),
+     MaximumSize=new Size(240,57),Margin=new Padding(0,1,0,2),
+     Font=new Font("Segoe UI",8.9f,FontStyle.Bold),
+     BackColor=Color.FromArgb(29,47,79),ForeColor=Color.White,
+     FlatStyle=FlatStyle.Flat,TextAlign=ContentAlignment.MiddleLeft,
+     Image=ManagedIcon(categoryIcon),ImageAlign=ContentAlignment.MiddleLeft,
+     TextImageRelation=TextImageRelation.ImageBeforeText,
+     AutoEllipsis=true,Cursor=Cursors.Hand,UseMnemonic=false};
+    btn.FlatAppearance.BorderSize=0;
+    btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(52,83,131);
+    btn.Click+=(sender,args)=>SelectSection(section);
+    categories.Controls.Add(btn);sectionButtons.Add(section,btn);
+   }
+   search.TextChanged+=(sender,args)=>SearchModules();
+   search.KeyDown+=(sender,args)=>{
+    if(args.KeyCode==Keys.Escape){Close();args.SuppressKeyPress=true;}
+    else if(args.KeyCode==Keys.Enter){
+     var first=modules.Controls.OfType<Button>().FirstOrDefault(b=>b.Visible);
+     if(first!=null)first.PerformClick();
+     args.SuppressKeyPress=true;
+    }
+   };
+   KeyDown+=(sender,args)=>{
+    if(args.KeyCode==Keys.Escape){Close();args.Handled=true;}
+   };
+   Deactivate+=(sender,args)=>{
+    if(closing||IsDisposed)return;
+    // O clique fora fecha o menu sem tocar nas janelas em uso.
+    if(IsHandleCreated)BeginInvoke((Action)(()=>{
+     if(!closing&&!IsDisposed&&!ContainsFocus)Close();
+    }));
+   };
+   FormClosed+=(sender,args)=>{
+    closing=true;
+    foreach(var icon in allocatedIcons)icon.Dispose();
+    allocatedIcons.Clear();
+   };
+  }
+
+  Image ManagedIcon(string name){
+   var image=iconFor(name);
+   allocatedIcons.Add(image);
+   return image;
+  }
+
+  public int CategoryCount {get{return sectionButtons.Count;}}
+  public int ModuleCount {get{return actions.Count;}}
+  public bool IsBranchOpen {get{return branchPane.Visible;}}
+  public string SelectedSection {get{return selectedSection;}}
+  public void SelectSection(string section){
+   if(IsDisposed)return;
+   selectedSection=section;
+   search.TextChanged-=IgnoreSearchChanged; // No-op safe; see SearchModules.
+   search.Clear();
+   PopulateModules(actions.Where(a=>categoryOf(a.Item1)==section));
+   branchTitle.Text=section+"   ›";
+   branchPane.Visible=true;
+   Width=ExpandedWidth;
+   foreach(var entry in sectionButtons)
+    entry.Value.BackColor=entry.Key==section?Color.FromArgb(52,89,151):Color.FromArgb(29,47,79);
+   branchPane.BringToFront();
+   modules.PerformLayout();
+  }
+
+  void IgnoreSearchChanged(object sender,EventArgs args){}
+
+  void SearchModules(){
+   string query=Normalize(search.Text);
+   if(query.Length==0){
+    if(selectedSection!=null)SelectSectionContents(selectedSection);
+    else CollapseBranch();
+    return;
+   }
+   var result=actions.Where(a=>Normalize(a.Item1).Contains(query)).ToList();
+   branchTitle.Text="RESULTADOS DA PESQUISA";
+   PopulateModules(result);
+   branchPane.Visible=true;Width=ExpandedWidth;
+   foreach(var button in sectionButtons.Values)button.BackColor=Color.FromArgb(29,47,79);
+  }
+
+  void SelectSectionContents(string section){
+   PopulateModules(actions.Where(a=>categoryOf(a.Item1)==section));
+   branchTitle.Text=section+"   ›";
+   branchPane.Visible=true;Width=ExpandedWidth;
+  }
+
+  public void CollapseBranch(){
+   selectedSection=null;
+   branchPane.Visible=false;
+   modules.Controls.Clear();
+   Width=CompactWidth;
+   foreach(var btn in sectionButtons.Values)btn.BackColor=Color.FromArgb(29,47,79);
+  }
+
+  void PopulateModules(IEnumerable<Tuple<string,EventHandler>> source){
+   modules.SuspendLayout();
+   modules.Controls.Clear();
+   foreach(var item in source){
+    string label=CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(
+     item.Item1.ToLower(CultureInfo.GetCultureInfo("pt-BR")));
+    label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp");
+    var tile=new Button{Name="amzgStartModule"+modules.Controls.Count,
+     AccessibleDescription=item.Item1,Tag=item.Item1,
+     Text=label,Size=new Size(200,63),
+     MinimumSize=new Size(200,63),MaximumSize=new Size(200,63),
+     Margin=new Padding(4,5,4,4),Padding=new Padding(6,0,6,0),
+     BackColor=Color.White,ForeColor=Color.FromArgb(25,61,116),
+     FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,AutoEllipsis=true,
+     UseMnemonic=false,Font=new Font("Segoe UI",9.3f,FontStyle.Bold),
+     Image=ManagedIcon(item.Item1),ImageAlign=ContentAlignment.MiddleLeft,
+     TextAlign=ContentAlignment.MiddleCenter,
+     TextImageRelation=TextImageRelation.ImageBeforeText};
+    tile.FlatAppearance.BorderColor=Color.FromArgb(218,227,241);
+    tile.FlatAppearance.MouseOverBackColor=Color.FromArgb(229,239,255);
+    tile.Click+=(sender,args)=>{
+     if(closing)return;
+     closing=true;
+     Hide();Close();
+     launch(item);
+    };
+    modules.Controls.Add(tile);
+   }
+   modules.ResumeLayout(true);
+  }
+
+  static string Normalize(string text){
+   if(string.IsNullOrEmpty(text))return "";
+   var form=text.Normalize(System.Text.NormalizationForm.FormD);
+   return new string(form.Where(ch=>
+    CharUnicodeInfo.GetUnicodeCategory(ch)!=UnicodeCategory.NonSpacingMark)
+    .ToArray()).ToUpperInvariant();
+  }
+ }
+}
