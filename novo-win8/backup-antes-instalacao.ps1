@@ -53,9 +53,9 @@ public static class BackupNativeDll {
     $skipDirs=@()
     foreach($folder in @($TargetDirectory,(Join-Path $dataDir 'Backups'),
       (Join-Path $dataDir 'Backup'),(Join-Path $dataDir 'Atualizacoes'))){
-      $full=[System.IO.Path]::GetFullPath($folder).TrimEnd('\\')
+      $full=[System.IO.Path]::GetFullPath($folder).TrimEnd([char]92)
       if(!$full.Equals($dataDir,[System.StringComparison]::OrdinalIgnoreCase)){
-        $skipDirs+=($full+'\\')
+        $skipDirs+=($full+[char]92)
       }
     }
     $stack=New-Object 'System.Collections.Generic.Stack[string]'
@@ -63,7 +63,7 @@ public static class BackupNativeDll {
     while($stack.Count -gt 0){
       $directory=$stack.Pop()
       foreach($sub in [System.IO.Directory]::GetDirectories($directory)){
-        $full=[System.IO.Path]::GetFullPath($sub).TrimEnd('\\')+'\\'
+        $full=[System.IO.Path]::GetFullPath($sub).TrimEnd([char]92)+[char]92
         $skip=$false
         foreach($excluded in $skipDirs){
           if($full.StartsWith($excluded,[System.StringComparison]::OrdinalIgnoreCase)){
@@ -86,7 +86,7 @@ public static class BackupNativeDll {
           $name.StartsWith('armazem-gratidao-antes-atualizacao-',[System.StringComparison]::OrdinalIgnoreCase)){
           continue
         }
-        $rel=$full.Substring($dataDir.Length).TrimStart('\\').Replace('\\','/')
+        $rel=$full.Substring($dataDir.Length).TrimStart([char]92).Replace([char]92,[char]47)
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
           $archive,$full,('Dados/'+$rel),
           [System.IO.Compression.CompressionLevel]::Fastest) | Out-Null
