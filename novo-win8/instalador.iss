@@ -296,7 +296,7 @@ begin
 
   StatusFile := ExpandConstant('{tmp}\amzg-backup-progresso.txt');
   if FileExists(StatusFile) then DeleteFile(StatusFile);
-  PsExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  PsExe := ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe');
   Args := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' +
     AddQuotes(ExpandConstant('{tmp}\backup-antes-instalacao.ps1')) +
     ' -Database ' + AddQuotes(DbFile) +
