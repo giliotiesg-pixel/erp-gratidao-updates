@@ -1186,7 +1186,8 @@ namespace ArmazemGratidao {
    var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=365,
     Width=971,Height=309,BackColor=Color.White};
    RoundHomeControl(ranking,12);
-   var rankHeader=new Panel{Dock=DockStyle.Top,Height=42,
+   var rankHeader=new Panel{Name="amzgDashboardRankingHeader",
+    Left=0,Top=0,Width=971,Height=42,
     BackColor=Color.FromArgb(19,73,157)};
    var rankTitle=new Label{Name="amzgDashboardRankingTitle",Dock=DockStyle.Fill,
     Text="  RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",
@@ -1201,13 +1202,14 @@ namespace ArmazemGratidao {
    refresh.FlatAppearance.MouseOverBackColor=Color.FromArgb(58,130,222);
    rankHeader.Controls.Add(rankTitle);rankHeader.Controls.Add(refresh);
    ranking.Controls.Add(rankHeader);
-   var rankArea=new Panel{Name="amzgRankingTables",Dock=DockStyle.Fill,
+   var rankArea=new Panel{Name="amzgRankingTables",
+    Left=0,Top=42,Width=971,Height=267,
     Padding=new Padding(9,5,9,7),BackColor=Color.White};
    var leftGrid=CreateHomeRankingGrid("amzgRankingLeft");
    var rightGrid=CreateHomeRankingGrid("amzgRankingRight");
    leftGrid.Top=5;rightGrid.Top=5;
    rankArea.Controls.Add(leftGrid);rankArea.Controls.Add(rightGrid);
-   ranking.Controls.Add(rankArea);rankArea.BringToFront();rankHeader.BringToFront();
+   ranking.Controls.Add(rankArea);
    canvas.Controls.Add(ranking);
 
    Action fit=()=>{
@@ -1232,6 +1234,9 @@ namespace ArmazemGratidao {
      buttons[i].Width=buttonWidth;
     }
     ranking.Width=width-44;
+    rankHeader.Width=ranking.ClientSize.Width;
+    rankArea.Width=ranking.ClientSize.Width;
+    rankArea.Height=ranking.ClientSize.Height-42;
     int tableWidth=Math.Max(320,(rankArea.ClientSize.Width-rankArea.Padding.Horizontal-12)/2);
     leftGrid.Left=rankArea.Padding.Left;
     rightGrid.Left=rankArea.Padding.Left+tableWidth+12;
