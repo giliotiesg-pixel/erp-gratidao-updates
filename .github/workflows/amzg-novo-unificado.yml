@@ -23,7 +23,13 @@ jobs:
         shell: pwsh
         run: |
           $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
-          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})
+          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){
+            throw "VERSAO.txt invalido: $v"
+          }
+          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
+          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
+          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
+          Write-Host "Uma versao para todos os arquivos: $v"
       - uses: microsoft/setup-msbuild@v2
       - uses: NuGet/setup-nuget@v2
       - uses: actions/setup-python@v5
@@ -243,6 +249,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - name: Ler versao unica do projeto
+        shell: pwsh
+        run: |
+          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){
+            throw "VERSAO.txt invalido: $v"
+          }
+          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
+          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
+          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
+          Write-Host "Uma versao para todos os arquivos: $v"
       - uses: actions/download-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
@@ -255,276 +272,6 @@ jobs:
           $setup=Join-Path 'dist' ("Instalador-Armazem-Gratidao-v"+$env:AMZG_VERSION+".exe")
           if(!(Test-Path $setup)){throw 'Instalador numerado indisponivel.'}
           gh release create $tag $setup "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Versao unica do programa, instalador e atualizador. Atualizacao incremental com backup e rollback."
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
-          gh release view $tag --json assets | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
-          $manifest=(Get-Content dist/manifesto-proposto.json -Raw)
-          [System.IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifest,(New-Object System.Text.UTF8Encoding($false)))
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add atualizacao-novo-win8-pacote.json
-          git commit -m "Atualizar manifesto oficial para build $env:AMZG_BUILD"
-          if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
-          git push origin HEAD:main
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar manifesto.'}
-){
-            throw "VERSAO.txt invalido: $v"
-          }
-          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
-          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
-          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
-          Write-Host "Uma versao para todos os arquivos: $v"
-      - uses: microsoft/setup-msbuild@v2
-      - uses: NuGet/setup-nuget@v2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Preparar Inno Setup
-        shell: powershell
-        run: choco install innosetup --yes --no-progress
-      - name: Compilar PDV, atualizador, instalador e reparador integrado
-        shell: powershell
-        run: .\novo-win8\build-unificado.ps1 -Build ([int]$env:AMZG_BUILD)
-      - name: Validar integridade do instalador, manifesto e pacote
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          $manifest=Get-Content dist/manifesto-proposto.json -Raw | ConvertFrom-Json
-          if($manifest.build -ne [int]$env:AMZG_BUILD){throw 'Build do manifesto divergente.'}
-          $actual=(Get-FileHash dist/Armazem-Gratidao-Atualizacao.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($actual -ne $manifest.sha256){throw 'SHA-256 divergente. Publicacao proibida.'}
-          if(!(Test-Path dist/Instalador-Armazem-Gratidao-v*.exe)){throw 'Setup unico ausente.'}
-          if(!(Test-Path dist/AtualizadorGratidao.exe)){throw 'Atualizador independente ausente.'}
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $ar=[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'dist/Armazem-Gratidao-Atualizacao.zip').Path)
-          try{
-            $entry=$ar.GetEntry('AtualizadorGratidao.exe')
-            if($null -eq $entry){throw 'ZIP nao recupera AtualizadorGratidao.exe'}
-            if($entry.Length -lt 20000){throw 'Atualizador no ZIP incompleto'}
-          }finally{$ar.Dispose()}
-          if((Get-Item dist/Instalador-Armazem-Gratidao-v*.exe).Length -lt 100000){throw 'Setup suspeitamente pequeno.'}
-          Write-Host "Pacote compilado e manifesto verificados. Validacao funcional em Windows ainda necessaria."
-      - name: Teste automatico de instalacao, reparo e backup SQLite descartavel
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          $testDir=Join-Path $env:RUNNER_TEMP 'AMZG-Instalacao-Temp'
-          $setup=(Resolve-Path 'dist/Instalador-Armazem-Gratidao-v*.exe').Path
-          # Verificar visivelmente os icones EMBUTIDOS dos dois EXEs, nao apenas nomes.
-          Add-Type -AssemblyName System.Drawing
-          $exeSource=(Resolve-Path 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe').Path
-          $installerIcon=[System.Drawing.Icon]::ExtractAssociatedIcon($setup)
-          $appIcon=[System.Drawing.Icon]::ExtractAssociatedIcon($exeSource)
-          if($installerIcon -eq $null -or $appIcon -eq $null){throw 'EXE nao possui icone valido.'}
-          $bitmapA=$installerIcon.ToBitmap();$bitmapB=$appIcon.ToBitmap()
-          try{
-            $equal=$true
-            for($yy=0;$yy -lt [Math]::Min($bitmapA.Height,$bitmapB.Height);$yy++){
-              for($xx=0;$xx -lt [Math]::Min($bitmapA.Width,$bitmapB.Width);$xx++){
-                if($bitmapA.GetPixel($xx,$yy).ToArgb() -ne $bitmapB.GetPixel($xx,$yy).ToArgb()){
-                  $equal=$false;break
-                }
-              }
-              if(!$equal){break}
-            }
-            if($equal){throw 'ERRO: o instalador e o programa ainda usam o mesmo icone.'}
-            Write-Host 'ICONES VALIDOS E DIFERENTES: instalador (caixa/seta) e programa (carrinho).'
-          }finally{$bitmapA.Dispose();$bitmapB.Dispose();$installerIcon.Dispose();$appIcon.Dispose()}
-
-          $args=@('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',("/DIR=`""+$testDir+"`""))
-          $install=Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
-          if($install.ExitCode -ne 0){throw "Instalacao falhou: $($install.ExitCode)"}
-          foreach($name in @('ArmazemGratidaoNovo.exe','AtualizadorGratidao.exe',
-                             'Reparar-Armazem-Gratidao.exe','System.Data.SQLite.dll')){
-            if(!(Test-Path (Join-Path $testDir $name))){throw "Arquivo instalado ausente: $name"}
-          }
-          $exe=Join-Path $testDir 'ArmazemGratidaoNovo.exe'
-          $expected="1.0.0.$env:AMZG_BUILD"
-          $fv=(Get-Item $exe).VersionInfo.FileVersion
-          $av=[System.Reflection.AssemblyName]::GetAssemblyName($exe).Version.ToString()
-          if($fv -ne $expected -or $av -ne $expected){throw "Instalacao exibiria build antiga: $fv/$av (esperada $expected)"}
-          Write-Host "Instalado corretamente: $exe build $fv"
-          $receipt=Join-Path $testDir 'Arquivos/Logs/instalacao-verificada.txt'
-          if(!(Test-Path $receipt) -or !(Select-String -Path $receipt -Pattern "Versao instalada: $expected" -SimpleMatch)){
-            throw 'Instalador nao confirmou versao EXE no destino'
-          }
-          # Cria um atalho HOMONIMO para um caminho velho; o reparador deve
-          # corrigi-lo para a pasta real sem alterar outros atalhos do usuario.
-          $desktop=[Environment]::GetFolderPath('DesktopDirectory')
-          $oldShortcut=Join-Path $desktop 'Armazem Gratidao Novo.lnk'
-          $shell=New-Object -ComObject WScript.Shell
-          $link=$shell.CreateShortcut($oldShortcut)
-          $link.TargetPath=Join-Path $testDir 'EXECUTAVEL-ANTIGO-582.exe'
-          $link.Save()
-          $dataDir=Join-Path $env:LOCALAPPDATA 'ArmazemGratidaoNovo'
-          New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-          $db=Join-Path $dataDir 'armazem-gratidao.db'
-          $pyFile=Join-Path $env:RUNNER_TEMP 'amzg-teste-sqlite.py'
-          $py=@'
-          import sqlite3
-          import sys
-          action, path = sys.argv[1], sys.argv[2]
-          c=sqlite3.connect(path)
-          if action == 'create':
-              c.execute('create table teste_integridade (valor text)')
-              c.execute('insert into teste_integridade values (?)',('preservado',))
-              c.commit()
-          elif action == 'check':
-              assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
-              assert c.execute('select valor from teste_integridade').fetchone()[0]=='preservado'
-          else:
-              raise ValueError('operacao invalida')
-          c.close()
-          '@
-          [System.IO.File]::WriteAllText($pyFile,$py,(New-Object System.Text.UTF8Encoding($false)))
-          python $pyFile create $db
-          if($LASTEXITCODE -ne 0){throw 'Falhou criacao do banco descartavel'}
-          # Regressão: backups antigos grandes no perfil NÃO podem ser colocados
-          # dentro de novos backups (crescimento recursivo que travava PCs lentos).
-          $legacyBackups=Join-Path $dataDir 'Backups'
-          New-Item -ItemType Directory -Path $legacyBackups -Force | Out-Null
-          [System.IO.File]::WriteAllBytes((Join-Path $legacyBackups 'backup-antigo-grande.zip'),(New-Object byte[] (6MB)))
-          [System.IO.File]::WriteAllText((Join-Path $dataDir 'configuracao-teste.txt'),'configuracao-preservada')
-          $repair=Join-Path $testDir 'Reparar-Armazem-Gratidao.exe'
-          $started=Get-Date
-          $repaired=Start-Process -FilePath $repair -ArgumentList $args -Wait -PassThru
-          Write-Host ('Tempo de reparo e backup: {0:N2}s' -f ((Get-Date)-$started).TotalSeconds)
-          if($repaired.ExitCode -ne 0){throw "Reparo bloqueado ou falhou: $($repaired.ExitCode)"}
-          $fv=(Get-Item $exe).VersionInfo.FileVersion
-          if($fv -ne $expected){throw "Reparo manteve versao antiga $fv"}
-          $commonDesktop=[Environment]::GetFolderPath('CommonDesktopDirectory')
-          # Windows PowerShell 5.1 pode ler o arquivo temporario sem BOM como ANSI,
-          # corrompendo nomes com acentos. Montar o nome pelo codigo Unicode.
-          $shortcutName='Armaz'+[char]0x00E9+'m Gratid'+[char]0x00E3+'o.lnk'
-          $shortcutCandidates=@(
-            (Join-Path $desktop $shortcutName),
-            (Join-Path $commonDesktop $shortcutName)
-          )
-          $found=@($shortcutCandidates | Where-Object {Test-Path -LiteralPath $_})
-          if($found.Count -eq 0){
-            Write-Host 'Desktop usuario:'
-            Get-ChildItem $desktop -Filter '*.lnk' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-            Write-Host 'Desktop publico:'
-            Get-ChildItem $commonDesktop -Filter '*.lnk' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-            throw 'Atalho Armazem Gratidao nao apareceu no desktop do usuario nem no publico.'
-          }
-          foreach($programShortcut in $found){
-            $target=$shell.CreateShortcut($programShortcut).TargetPath
-            if([IO.Path]::GetFullPath($target) -ne [IO.Path]::GetFullPath($exe)){
-              throw "Atalho do programa aponta para $target em vez de $exe"
-            }
-            Write-Host "Atalho do PDV correto: $programShortcut => $target"
-          }
-          $legacyShortcuts=@($oldShortcut,(Join-Path $commonDesktop 'Armazem Gratidao Novo.lnk'))
-          if(@($legacyShortcuts | Where-Object {Test-Path -LiteralPath $_}).Count -gt 0){
-            throw 'Atalho legado permaneceu na area de trabalho depois do reparo.'
-          }
-          Write-Host 'Reparo com ícone do PDV, nome Armazém Gratidão e sem atalhos duplicados verificados.'
-          $backups=Join-Path $testDir 'Arquivos/Backups'
-          $archives=@(Get-ChildItem $backups -Filter 'armazem-gratidao-completo-*.zip' -ErrorAction SilentlyContinue)
-          if($archives.Count -eq 0){throw 'Reparo nao criou backup completo'}
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive=[System.IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
-          try{
-            $entryNames=@($archive.Entries | ForEach-Object {$_.FullName})
-            if($entryNames -notcontains 'Dados/armazem-gratidao.db'){throw 'Backup nao incluiu SQLite'}
-            if($entryNames -notcontains 'Dados/configuracao-teste.txt'){throw 'Backup nao incluiu configuracoes'}
-            if(@($entryNames | Where-Object {$_ -match '^Dados/Backups/'}).Count -gt 0){
-              throw 'Backup incorreto: incluiu backups antigos, causando lentidao'
-            }
-          }finally{$archive.Dispose()}
-          python $pyFile check $db
-          if($LASTEXITCODE -ne 0){throw 'Banco alterado ou corrompido apos reparo'}
-          # Reproduzir foto do usuario: excluir somente o ATUALIZADOR no teste,
-          # repor o EXE independente sem rodar instalador e sem tocar no SQLite.
-          $installedUpdater=Join-Path $testDir 'AtualizadorGratidao.exe'
-          Remove-Item -LiteralPath $installedUpdater -Force
-          if(Test-Path $installedUpdater){throw 'Nao conseguiu simular atualizador ausente'}
-          Copy-Item 'dist/AtualizadorGratidao.exe' $installedUpdater -Force
-          $independentHash=(Get-FileHash 'dist/AtualizadorGratidao.exe' -Algorithm SHA256).Hash
-          $restoredHash=(Get-FileHash $installedUpdater -Algorithm SHA256).Hash
-          if($independentHash -ne $restoredHash){throw 'Restauracao standalone incorreta'}
-          python $pyFile check $db
-          if($LASTEXITCODE -ne 0){throw 'Banco mudou ao repor apenas o atualizador'}
-          Write-Host 'Teste OK: atualizador ausente recuperado com unico EXE; SQLite intacto.'
-          Write-Host 'Teste OK: setup, reparo, copia completa e banco preservado.'
-      - name: Testar bloqueio de versao antiga no atualizador
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          .\\novo-win8\\teste-bloqueio-downgrade.ps1 -Updater 'novo-win8/bin/x64/Release/AtualizadorGratidao.exe' -ProgramExe 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe'
-      - name: Testar menu estilo Iniciar com atalhos e pesquisa
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          .\\novo-win8\\teste-menu-iniciar.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Menu-Iniciar.png'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
-          path: |
-            dist/Instalador-Armazem-Gratidao-v*.exe
-            dist/AtualizadorGratidao.exe
-            dist/Armazem-Gratidao-Atualizacao.zip
-            dist/Previa-Menu-Iniciar.png
-            dist/manifesto-proposto.json
-            dist/VALIDACAO-SHA256.txt
-          retention-days: 30
-
-  publicar_release:
-    needs: compilar
-    if: github.event_name == 'workflow_dispatch' && inputs.publicar_release == true && github.ref == 'refs/heads/main'
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      AMZG_BUILD: ${{ inputs.build }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Ler versao unica do projeto
-        shell: pwsh
-        run: |
-          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
-          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})
-      - uses: actions/download-artifact@v4
-        with:
-          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
-          path: dist
-      - name: Publicar somente os arquivos verificados no release
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
-          gh release create $tag "dist/Instalador-Armazem-Gratidao-v*.exe" "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao Build $env:AMZG_BUILD" --notes "Instalador unico com reparo local, atualizador visual e backup obrigatorio."
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
-          gh release view $tag --json assets | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
-          $manifest=(Get-Content dist/manifesto-proposto.json -Raw)
-          [System.IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifest,(New-Object System.Text.UTF8Encoding($false)))
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add atualizacao-novo-win8-pacote.json
-          git commit -m "Atualizar manifesto oficial para build $env:AMZG_BUILD"
-          if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
-          git push origin HEAD:main
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar manifesto.'}
-){
-            throw "VERSAO.txt invalido: $v"
-          }
-          "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
-          "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
-          "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
-          Write-Host "Uma versao para todos os arquivos: $v"
-      - uses: actions/download-artifact@v4
-        with:
-          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
-          path: dist
-      - name: Publicar somente os arquivos verificados no release
-        shell: powershell
-        run: |
-          $ErrorActionPreference='Stop'
-          $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
-          gh release create $tag "dist/Instalador-Armazem-Gratidao-v*.exe" "dist/AtualizadorGratidao.exe" "dist/Armazem-Gratidao-Atualizacao.zip" --title "Armazem Gratidao Build $env:AMZG_BUILD" --notes "Instalador unico com reparo local, atualizador visual e backup obrigatorio."
           if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           gh release view $tag --json assets | Out-Null
           if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
