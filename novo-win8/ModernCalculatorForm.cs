@@ -297,41 +297,58 @@ namespace ArmazemGratidao {
   }
  }
 
- // Imagem enviada pelo usuario, incorporada ao EXE como recurso (offline).
- // Renderizar uma unica imagem com baixa opacidade; nenhuma leitura em disco,
- // nenhuma consulta de rede e nenhum processamento adicional a cada clique.
+ // Marca d'agua vetorial sem fundo quadrado: apenas contornos suaves
+ // da identidade Armazem Gratidao. O logotipo original nao e modificado.
+ // E pintada atras dos controles e nunca interfere em cliques ou leitura.
  internal static class HomeBrandWatermark {
-  static readonly Image logo=LoadLogo();
-  static Image LoadLogo(){
-   try{
-    var assembly=typeof(HomeBrandWatermark).Assembly;
-    using(var stream=assembly.GetManifestResourceStream("ArmazemGratidao.LogotipoMarcaDagua.jpg")){
-     if(stream==null)return null;
-     using(var bitmap=Image.FromStream(stream))return new Bitmap(bitmap);
-    }
-   }catch{return null;} // A tela inicial funciona mesmo que a imagem falhe.
-  }
   public static void Draw(Graphics graphics,Rectangle bounds){
-   if(logo==null||bounds.Width<340||bounds.Height<240)return;
-   float size=Math.Min(500f,Math.Min(bounds.Width*0.56f,bounds.Height*0.77f));
-   if(size<150f)return;
-   int side=(int)Math.Round(size);
-   // Centralizar na area livre; manter nome, botoes e indicadores na frente.
-   int left=bounds.Left+(int)((bounds.Width-side)*0.61f);
-   int top=bounds.Top+(int)((bounds.Height-side)*0.51f);
-   var area=new Rectangle(left,top,side,side);
-   var state=graphics.Save();
+   if(bounds.Width<380||bounds.Height<320)return;
+   float size=Math.Min(430f,Math.Min(bounds.Width*0.55f,bounds.Height*0.72f));
+   if(size<200f)return;
+   float scale=size/400f;
+   var saved=graphics.Save();
    try{
-    graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;
-    graphics.PixelOffsetMode=PixelOffsetMode.HighQuality;
-    using(var attributes=new System.Drawing.Imaging.ImageAttributes()){
-     var opacity=new System.Drawing.Imaging.ColorMatrix();
-     opacity.Matrix00=1f;opacity.Matrix11=1f;opacity.Matrix22=1f;
-     opacity.Matrix33=0.095f;opacity.Matrix44=1f;
-     attributes.SetColorMatrix(opacity);
-     graphics.DrawImage(logo,area,0,0,logo.Width,logo.Height,GraphicsUnit.Pixel,attributes);
+    graphics.SmoothingMode=SmoothingMode.AntiAlias;
+    graphics.InterpolationMode=InterpolationMode.HighQualityBilinear;
+    float left=bounds.Left+Math.Max(0f,(bounds.Width-size)*0.69f);
+    float top=bounds.Top+Math.Max(8f,(bounds.Height-size)*0.30f);
+    graphics.TranslateTransform(left,top);
+    graphics.ScaleTransform(scale,scale);
+    // As cores sao proximas do fundo claro: sem bloco escuro e sem saturacao.
+    using(var pale=new Pen(Color.FromArgb(226,236,249),8f))
+    using(var secondary=new Pen(Color.FromArgb(231,239,250),5f))
+    using(var textBrush=new SolidBrush(Color.FromArgb(228,237,249)))
+    using(var fontMain=new Font("Segoe UI",30f,FontStyle.Bold))
+    using(var fontSmall=new Font("Segoe UI",20f,FontStyle.Bold)){
+     pale.StartCap=pale.EndCap=LineCap.Round;
+     pale.LineJoin=LineJoin.Round;
+     secondary.StartCap=secondary.EndCap=LineCap.Round;
+     graphics.DrawLines(pale,new PointF[]{
+      new PointF(26,126),new PointF(199,25),new PointF(374,126)});
+     graphics.DrawLine(pale,50,128,50,245);
+     graphics.DrawLine(pale,350,128,350,245);
+     graphics.DrawRectangle(secondary,67,192,44,51);
+     graphics.DrawLine(secondary,88,192,88,243);
+     graphics.DrawRectangle(secondary,292,168,47,75);
+     graphics.DrawLine(secondary,314,168,314,243);
+     // Carrinho estilizado, inspirado no simbolo do logotipo original.
+     graphics.DrawLine(pale,118,116,142,116);
+     graphics.DrawLine(pale,142,116,160,218);
+     graphics.DrawLine(pale,160,218,275,218);
+     graphics.DrawLine(pale,148,143,288,143);
+     graphics.DrawLine(pale,288,143,271,201);
+     graphics.DrawLine(pale,271,201,155,201);
+     for(int i=1;i<4;i++)
+      graphics.DrawLine(secondary,150+i*30,146,157+i*25,200);
+     graphics.DrawLine(secondary,151,171,280,171);
+     graphics.FillEllipse(textBrush,171,225,19,19);
+     graphics.FillEllipse(textBrush,246,225,19,19);
+     // Letras sem moldura colorida: marca d'agua quase imperceptivel.
+     graphics.DrawString("ARMAZÉM",fontSmall,textBrush,116,260);
+     graphics.DrawString("GRATIDÃO",fontMain,textBrush,72,291);
+     graphics.DrawString("PDV",fontSmall,textBrush,178,343);
     }
-   }finally{graphics.Restore(state);}
+   }finally{graphics.Restore(saved);}
   }
  }
 }
