@@ -19,12 +19,16 @@ try{
  # Usar o construtor publico de um argumento elimina ambiguidades do binder PowerShell 5.1.
  $ctor=$pdvType.GetConstructor([type[]]@([string]))
  if($null -eq $ctor){throw 'Construtor publico PdvForm(string) ausente.'}
- $pdv=$ctor.Invoke([object[]]@($database))
+ $invokePdv=New-Object 'System.Object[]' 1
+ $invokePdv[0]=[string]$database
+ $pdv=$ctor.Invoke($invokePdv)
  # Reproduz a mesma injecao de navegacao feita ao abrir PDV via menu Iniciar.
  $flags=[System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
  $backMethod=$mainType.GetMethod('AddBackToMenu',$flags)
  if($null -eq $backMethod){throw 'MainForm sem botao Voltar.'}
- $backMethod.Invoke($main,@($pdv)) | Out-Null
+ $invokeBack=New-Object 'System.Object[]' 1
+ $invokeBack[0]=[System.Windows.Forms.Form]$pdv
+ $backMethod.Invoke([object]$main,$invokeBack) | Out-Null
  $pdv.StartPosition='Manual'
  $pdv.Location=[System.Drawing.Point]::new(20,20)
  $pdv.Size=[System.Drawing.Size]::new(1180,740)
