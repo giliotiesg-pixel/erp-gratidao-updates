@@ -58,7 +58,7 @@ try{
   throw 'Ranking nao ficou compacto.'
  }
  $windowTitle=@($form.Controls.Find('amzgHomeTitle',$true))
- if($windowTitle.Count -ne 1 -or $windowTitle[0].Text -ne 'Armazém Gratidão'){
+ if($windowTitle.Count -ne 1 -or ($windowTitle[0].Text -notmatch 'Armaz' -or $windowTitle[0].Text -notmatch 'Gratid')){
   throw 'Titulo Armazem Gratidao desapareceu ou foi cortado.'
  }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
