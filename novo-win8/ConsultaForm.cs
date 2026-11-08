@@ -1181,7 +1181,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     Action filter=()=>{
      string q=NormalizeSaleProductSearch(input.Text);
      var words=q.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
-     var matches=catalog.AsEnumerable().Where(row=>{
+     var matches=catalog.Rows.Cast<DataRow>().Where(row=>{
       string text=NormalizeSaleProductSearch(Convert.ToString(row["name"])+" "+
        Convert.ToString(row["barcode"]));
       return words.All(word=>text.Contains(word));
