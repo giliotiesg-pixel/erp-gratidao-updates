@@ -29,7 +29,47 @@ namespace ArmazemGratidao {
    filter.TextChanged+=(s,e)=>RefreshRows();
    var refresh=new Button {Text="Atualizar",Width=90,Height=32};refresh.Click+=(s,e)=>RefreshRows();bar.Controls.Add(refresh);
    grid.BackgroundColor=Color.White;grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0)customer.Text=Convert.ToString(grid.Rows[e.RowIndex].Cells["Pessoa"].Value);};
-   Controls.Add(grid);Controls.Add(summary);Controls.Add(bar);
+   // Estrutura unica no estilo de Vendas: marca no topo, barra de acoes,
+   // tabela e rodape. A altura da barra nao cobre os totais.
+   var layout=new TableLayoutPanel{Name="amzgCascosLayout",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=4,Padding=new Padding(7),Margin=Padding.Empty,
+    BackColor=Color.FromArgb(245,249,254)};
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,109));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,53));
+   var head=new Panel{Name="amzgCascosHeader",Dock=DockStyle.Fill,
+    BackColor=Color.FromArgb(14,56,128),Margin=Padding.Empty};
+   var emblem=new PictureBox{Name="amzgCascosLogo",Left=8,Top=4,
+    Width=44,Height=44,SizeMode=PictureBoxSizeMode.Zoom,
+    BackColor=Color.Transparent};
+   try{
+    using(var resource=typeof(CascosForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(resource!=null)using(var image=Image.FromStream(resource))
+      emblem.Image=new Bitmap(image);
+    }
+   }catch(Exception){}
+   emblem.Disposed+=(sender,args)=>{if(emblem.Image!=null)emblem.Image.Dispose();};
+   var brand=new Label{Name="amzgCascosTitle",
+    Text="ARMAZÉM GRATIDÃO   •   CASCOS RETORNÁVEIS",
+    Left=63,Top=7,Width=880,Height=41,
+    Font=new Font("Segoe UI",15f,FontStyle.Bold),
+    ForeColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
+   head.Resize+=(sender,args)=>brand.Width=Math.Max(80,head.ClientSize.Width-74);
+   head.Controls.Add(emblem);head.Controls.Add(brand);
+   bar.Dock=DockStyle.Fill;bar.Margin=new Padding(0,5,0,4);
+   bar.AutoScroll=true;bar.WrapContents=true;bar.BackColor=Color.FromArgb(231,240,252);
+   grid.Dock=DockStyle.Fill;grid.Margin=Padding.Empty;
+   summary.Dock=DockStyle.Fill;summary.Margin=new Padding(0,3,0,0);
+   summary.BackColor=Color.FromArgb(223,235,253);
+   summary.ForeColor=Color.FromArgb(17,63,134);
+   layout.Controls.Add(head,0,0);
+   layout.Controls.Add(bar,0,1);
+   layout.Controls.Add(grid,0,2);
+   layout.Controls.Add(summary,0,3);
+   Controls.Add(layout);
    try{EnsureSchema();RefreshRows();}catch(Exception ex){bar.Enabled=false;MessageBox.Show("Controle de cascos indisponível: "+ex.Message,"Cascos",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   // Busca clientes cadastrados sem modificar cadastros, fiado ou vendas.
