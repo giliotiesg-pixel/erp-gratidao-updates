@@ -62,7 +62,7 @@ namespace ArmazemGratidao {
     Font=new Font("Segoe UI",18f,FontStyle.Bold),AutoEllipsis=false,
     ForeColor=Color.FromArgb(22,66,130)};
    displayFrame.Controls.Add(display);
-   result=new Label{Name="amzgCalcResult",Text="0",Visible=false,
+   result=new Label{Name="amzgCalcResult",Text="0,00",Visible=false,
     Font=new Font("Segoe UI",43f,FontStyle.Bold),
     ForeColor=Color.FromArgb(10,51,125)};
    preview=new Label{Name="amzgCalcPreview",Visible=false,
@@ -199,6 +199,7 @@ namespace ArmazemGratidao {
   }
 
   string Format(decimal value){return value.ToString("0.############################",locale);}
+  string FormatResult(decimal value){return value.ToString("0.00##########################",locale);}
   decimal Current(){
    decimal value;
    return decimal.TryParse(display.Text,NumberStyles.Number,locale,out value)?value:0m;
@@ -229,20 +230,20 @@ namespace ArmazemGratidao {
   void RefreshPreview(){
    if(operation==null){
     expression.Text=display.Text;
-    result.Text=display.Text;
+    result.Text=FormatResult(Current());
     preview.Text="Resultado";
     return;
    }
    if(entering){
     expression.Text=Format(stored)+" "+operation;
-    result.Text=Format(stored);
+    result.Text=FormatResult(stored);
     preview.Text="Digite o próximo valor";
     return;
    }
    expression.Text=Format(stored)+" "+operation+" "+display.Text;
    decimal answer;
    bool ok=Calculate(stored,Current(),operation,out answer,false);
-   result.Text=ok?Format(answer):"—";
+   result.Text=ok?FormatResult(answer):"—";
    preview.Text=ok?"Resultado parcial":"Verifique a operação";
   }
   void Press(string key){
@@ -260,7 +261,7 @@ namespace ArmazemGratidao {
     }
     if(key=="C"){
      stored=0m;operation=null;entering=true;
-     display.Text="0";result.Text="0";expression.Text="0";
+     display.Text="0";result.Text="0,00";expression.Text="0";
      preview.Text="Use os botões ou o teclado";return;
     }
     if(key=="CE"){
@@ -298,7 +299,7 @@ namespace ArmazemGratidao {
      expression.Text=Format(stored)+" "+operation+" "+Format(right)+" =";
      SetValue(answer);
      operation=null;entering=true;
-     result.Text=Format(answer);
+     result.Text=FormatResult(answer);
      preview.Text="Resultado";return;
     }
     if(key=="+"||key=="−"||key=="×"||key=="÷"){
@@ -310,7 +311,7 @@ namespace ArmazemGratidao {
      }else if(operation==null)stored=current;
      operation=key;entering=true;
      expression.Text=Format(stored)+" "+key;
-     result.Text=Format(stored);
+     result.Text=FormatResult(stored);
      preview.Text="Digite o próximo valor";
     }
    }catch(OverflowException){Error("Número muito grande.");}
