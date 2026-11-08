@@ -28,7 +28,9 @@ conn.execute("INSERT INTO sale_items VALUES (3,1923,?,?,?,?,?)",("78903","Agua d
 conn.commit()
 conn.close()
 '@
-python -c $python $db
+$pythonFile=Join-Path $folder 'preparar-vendas-descartaveis.py'
+[IO.File]::WriteAllText($pythonFile,$python,(New-Object System.Text.UTF8Encoding($false)))
+python $pythonFile $db
 if($LASTEXITCODE -ne 0 -or !(Test-Path $db)){throw 'Banco SQLite descartavel nao criado'}
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 [Windows.Forms.Application]::EnableVisualStyles()
