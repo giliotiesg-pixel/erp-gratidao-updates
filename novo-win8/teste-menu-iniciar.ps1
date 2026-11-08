@@ -118,16 +118,20 @@ try{
   Select-Object -First 1
  $calcScreen=@($calculator.Controls.Find('amzgCalcScreen',$true)) |
   Select-Object -First 1
- if($null -eq $frame -or $frame.Height -lt 95 -or
+ $calcResult=@($calculator.Controls.Find('amzgCalcResult',$true)) |
+  Select-Object -First 1
+ if($null -eq $frame -or $frame.Height -gt 55 -or
+    $null -eq $calcResult -or
     $null -eq $calcScreen -or !$calcScreen.Visible -or
     -not ($calcDisplay -is [System.Windows.Forms.Label])){
-  throw 'Visor grande da calculadora nao foi construido.'
+  throw 'Visores de digitacao compacta e resultado grande nao foram construidos.'
  }
  & $press 'C'
  & $press '1'
  if($calcDisplay.Text -ne '1'){throw "Primeiro numero invisivel: $($calcDisplay.Text)"}
  & $press '2'
  if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
+ if($calcResult.Text -ne '12'){throw "Resultado provisório inicial não aparece: $($calcResult.Text)"}
  # O numero deve estar pintado no visor, nao somente guardado em memoria.
  $render=[Drawing.Bitmap]::new($calcScreen.ClientSize.Width,$calcScreen.ClientSize.Height)
  try{
@@ -152,8 +156,12 @@ try{
  foreach($key in @('1','0',([string][char]0x2212),'3','=')){& $press $key}
  if($calcDisplay.Text -ne '7'){throw "Erro em 10-3: $($calcDisplay.Text)"}
  & $press 'C'
- foreach($key in @('1','0','0','+','1','0','%','=')){& $press $key}
- if($calcDisplay.Text -ne '110'){throw "Erro em 100 + 10%: $($calcDisplay.Text)"}
+ foreach($key in @('1','0','0','+','1','0','%')){& $press $key}
+ if($calcResult.Text -ne '110'){throw "Visor grande nao previu 100+10%: $($calcResult.Text)"}
+ & $press '='
+ if($calcDisplay.Text -ne '110' -or $calcResult.Text -ne '110'){
+  throw "Erro em 100 + 10%: entrada=$($calcDisplay.Text) resultado=$($calcResult.Text)"
+ }
  $calcPreview=Join-Path $folder 'Previa-Calculadora.png'
  $calcBitmap=[System.Drawing.Bitmap]::new($calculator.ClientSize.Width,$calculator.ClientSize.Height)
  try{
@@ -161,7 +169,8 @@ try{
    [System.Drawing.Point]::Empty,$calculator.ClientSize))
   # Verifica os digitos NA CAPTURA DA JANELA inteira (nao apenas no controle).
   $visible=0
-  for($py=113;$py -lt 175;$py+=2){
+  # Verifica a faixa INFERIOR (resultado), nao apenas a digitacao pequena.
+  for($py=137;$py -lt 175;$py+=2){
    for($px=30;$px -lt ($calcBitmap.Width-30);$px+=2){
     $p=$calcBitmap.GetPixel($px,$py)
     if($p.R -lt 160 -and $p.G -lt 170 -and $p.B -lt 210){$visible++}
