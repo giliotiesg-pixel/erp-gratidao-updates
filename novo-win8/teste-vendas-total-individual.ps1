@@ -85,6 +85,11 @@ try{
    try{
     if($script:started.Elapsed.TotalSeconds -gt 18){
      $script:failure="Timeout ao testar janela de alteracao"
+     # Fecha avisos que bloqueiam o metodo modal, de qualquer titulo.
+     $errorPopup=[AMZGWin32]::FindWindow('#32770',$null)
+     if($errorPopup -ne [IntPtr]::Zero){
+      [AMZGWin32]::PostMessage($errorPopup,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+     }
      foreach($win in [Windows.Forms.Application]::OpenForms){
       if($win.Name -eq 'amzgChangeProductDialog'){$win.Close()}
      }
@@ -137,6 +142,10 @@ try{
    }catch{
     $script:failure=$_.Exception.Message
     $script:mode=99
+    $errorPopup=[AMZGWin32]::FindWindow('#32770',$null)
+    if($errorPopup -ne [IntPtr]::Zero){
+     [AMZGWin32]::PostMessage($errorPopup,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+    }
     foreach($win in [Windows.Forms.Application]::OpenForms){
      if($win.Name -eq 'amzgChangeProductDialog'){$win.Close()}
     }
