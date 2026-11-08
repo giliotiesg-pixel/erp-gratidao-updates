@@ -33,17 +33,40 @@ namespace ArmazemGratidao {
    BackColor=Color.FromArgb(238,243,251);
    Font=new Font("Segoe UI",10,FontStyle.Regular);
 
-   var top=new Panel{Dock=DockStyle.Top,Height=51,BackColor=Color.FromArgb(24,49,89)};
-   var name=new Label{Text="  ▦  CALCULADORA",Dock=DockStyle.Left,Width=203,
+   // Identidade no topo conforme modulo Vendas: icone proporcional,
+   // nome inteiro visivel e comando Copiar sem sobreposicao.
+   var top=new Panel{Name="amzgCalcHeader",Dock=DockStyle.Top,Height=66,
+    BackColor=Color.FromArgb(16,59,130)};
+   var logo=new PictureBox{Name="amzgCalcLogo",Left=10,Top=9,
+    Width=47,Height=47,BackColor=Color.Transparent,
+    SizeMode=PictureBoxSizeMode.Zoom};
+   try{
+    using(var embedded=typeof(ModernCalculatorForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(embedded!=null)using(var img=Image.FromStream(embedded))
+      logo.Image=new Bitmap(img);
+    }
+   }catch(Exception){/* Mantem nome sempre visivel sem depender de imagem. */}
+   if(logo.Image==null)logo.Image=CreateFallbackCart();
+   logo.Disposed+=(sender,args)=>{
+    if(logo.Image!=null){logo.Image.Dispose();logo.Image=null;}
+   };
+   var name=new Label{Name="amzgCalcBrand",
+    Text="ARMAZÉM GRATIDÃO\nCALCULADORA",
+    Left=65,Top=10,Width=231,Height=49,AutoEllipsis=false,
     TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.White,
-    Font=new Font("Segoe UI",11,FontStyle.Bold)};
-   var copy=new Button{Text="Copiar",Dock=DockStyle.Right,Width=108,
-    Margin=new Padding(9),FlatStyle=FlatStyle.Flat,
-    BackColor=Color.FromArgb(46,91,164),ForeColor=Color.White,
-    Cursor=Cursors.Hand,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+    BackColor=Color.Transparent,
+    Font=new Font("Segoe UI",11.9f,FontStyle.Bold)};
+   var copy=new Button{Name="amzgCalcCopy",Text="Copiar",
+    Left=310,Top=16,Width=105,Height=35,Margin=new Padding(0),
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(43,103,189),
+    ForeColor=Color.White,Cursor=Cursors.Hand,
+    Font=new Font("Segoe UI",9.2f,FontStyle.Bold)};
    copy.FlatAppearance.BorderSize=0;
-   copy.Click+=(s,e)=>CopyResult();
-   top.Controls.Add(name);top.Controls.Add(copy);
+   copy.FlatAppearance.MouseOverBackColor=Color.FromArgb(55,126,211);
+   copy.Click+=(sender,args)=>CopyResult();
+   copy.Resize+=(sender,args)=>Round(copy);
+   top.Controls.Add(logo);top.Controls.Add(name);top.Controls.Add(copy);
 
    // Dois visores sem historico: o de cima acompanha a operacao inteira,
    // o de baixo exibe com destaque o resultado (inclusive provisório).
@@ -172,6 +195,21 @@ namespace ArmazemGratidao {
     e.SuppressKeyPress=true;e.Handled=true;
    };
    Shown+=(s,e)=>Activate();
+  }
+
+  // Icone sem arquivos externos caso o recurso embutido esteja indisponivel.
+  static Image CreateFallbackCart(){
+   var b=new Bitmap(47,47);
+   using(var g=Graphics.FromImage(b))
+   using(var pen=new Pen(Color.White,3f)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    g.DrawLine(pen,5,11,10,11);g.DrawLine(pen,10,11,16,32);
+    g.DrawLine(pen,16,32,37,32);g.DrawLine(pen,13,17,42,17);
+    g.DrawLine(pen,42,17,37,28);g.DrawLine(pen,37,28,15,28);
+    g.DrawEllipse(pen,17,35,5,5);g.DrawEllipse(pen,30,35,5,5);
+   }
+   return b;
   }
 
   static void AddCalculatorRoundedRect(GraphicsPath path,Rectangle r,int radius){
