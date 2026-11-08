@@ -57,6 +57,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     Margin=new Padding(3,8,3,8),Padding=new Padding(4,1,4,1),
     FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=Color.White,
     Cursor=Cursors.Hand,UseMnemonic=false,AutoEllipsis=true,
+    TextAlign=ContentAlignment.MiddleCenter,
     Font=new Font("Segoe UI",9.1f,FontStyle.Bold)};
    btn.FlatAppearance.BorderSize=0;
    btn.FlatAppearance.MouseOverBackColor=ControlPaint.Light(back,0.17f);
@@ -212,6 +213,39 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     navigation.Controls.Add(btn,navigation.Controls.Count,0);
    FormClosed+=(sender,args)=>{editMenu.Dispose();reportMenu.Dispose();};
    layout.Controls.Add(navigation,0,1);
+   // Em telas estreitas (Windows 8 / 1024 px), duas fileiras evitam
+   // cortar os nomes dos botoes. Em telas largas continua uma fila.
+   bool narrowNav=false;
+   Action fitNavigation=()=>{
+    if(navigation.IsDisposed)return;
+    bool twoRows=layout.ClientSize.Width<1230;
+    if(twoRows==narrowNav&&navigation.Controls.Count==7)return;
+    narrowNav=twoRows;
+    Control[] actions=navigation.Controls.Cast<Control>().ToArray();
+    navigation.SuspendLayout();
+    try{
+     navigation.Controls.Clear();
+     navigation.ColumnStyles.Clear();navigation.RowStyles.Clear();
+     navigation.ColumnCount=twoRows?4:7;navigation.RowCount=twoRows?2:1;
+     if(twoRows){
+      for(int i=0;i<4;i++)navigation.ColumnStyles.Add(
+       new ColumnStyle(SizeType.Percent,25f));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,50f));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,50f));
+     }else{
+      foreach(float weight in new float[]{19f,13f,14f,15f,14f,12f,13f})
+       navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,weight));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+     }
+     for(int i=0;i<actions.Length;i++){
+      int col=twoRows?i%4:i,row=twoRows?i/4:0;
+      navigation.Controls.Add(actions[i],col,row);
+     }
+     layout.RowStyles[1].Height=twoRows?108f:62f;
+    }finally{navigation.ResumeLayout(true);}
+   };
+   layout.SizeChanged+=(sender,args)=>fitNavigation();
+   fitNavigation();
 
    var filters=new TableLayoutPanel{Name="amzgSalesFilters",Dock=DockStyle.Fill,
     ColumnCount=11,RowCount=1,Padding=new Padding(9,6,9,6),
@@ -220,10 +254,12 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    foreach(float w in widths)filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,w));
    filters.Controls.Add(SalesText("Período:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),0,0);
    filters.Controls.Add(SalesText("De:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),1,0);
+   dateFilter.Format=DateTimePickerFormat.Custom;dateFilter.CustomFormat="dd/MM/yyyy";
    dateFilter.Dock=DockStyle.Fill;dateFilter.Margin=new Padding(1,11,2,11);
    dateFilter.Value=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);
    filters.Controls.Add(dateFilter,2,0);
    filters.Controls.Add(SalesText("Até:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),3,0);
+   rangeEnd.Format=DateTimePickerFormat.Custom;rangeEnd.CustomFormat="dd/MM/yyyy";
    rangeEnd.Dock=DockStyle.Fill;rangeEnd.Margin=new Padding(1,11,2,11);
    rangeEnd.Value=DateTime.Today;
    filters.Controls.Add(rangeEnd,4,0);
