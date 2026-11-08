@@ -234,7 +234,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
 
    salesSplit=new SplitContainer{Name="amzgSalesSplit",Dock=DockStyle.Fill,
     Orientation=Orientation.Vertical,Margin=new Padding(0,10,0,4),
-    SplitterWidth=9,Panel1MinSize=320,Panel2MinSize=320,
+    SplitterWidth=9,
     BackColor=Color.FromArgb(236,244,253)};
    // Painel esquerdo: lista das vendas, colunas fixas legiveis.
    var left=new Panel{Name="amzgSalesListPanel",Dock=DockStyle.Fill,
@@ -273,8 +273,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    salesSplit.SizeChanged+=(sender,args)=>{
     if(salesSplit.IsDisposed||salesSplit.Width<710)return;
     int target=(int)(salesSplit.Width*0.51);
-    int min=salesSplit.Panel1MinSize;
-    int max=salesSplit.Width-salesSplit.SplitterWidth-salesSplit.Panel2MinSize;
+    int min=300;
+    int max=salesSplit.Width-salesSplit.SplitterWidth-300;
     if(max>=min){
      int clamped=Math.Max(min,Math.Min(max,target));
      if(salesSplit.SplitterDistance!=clamped)salesSplit.SplitterDistance=clamped;
@@ -454,6 +454,29 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     item[display]="Venda nº "+sequenceNumber+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
    }
   }
+  void ConfigureSalesColumns(){
+   if(credit||master.Columns.Count==0)return;
+   master.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+   // A numeracao exibida e a ordem cronologica; a chave ID continua intacta.
+   foreach(DataGridViewColumn col in master.Columns)col.Visible=
+    col.Name=="Ordem cronológica"||col.Name=="cliente"||
+    col.Name=="data"||col.Name=="itens"||col.Name=="total";
+   var number=master.Columns["Ordem cronológica"];
+   number.HeaderText="Nº Venda";number.DisplayIndex=0;number.FillWeight=74;number.MinimumWidth=73;
+   var client=master.Columns["cliente"];
+   client.HeaderText="Cliente";client.DisplayIndex=1;client.FillWeight=183;client.MinimumWidth=130;
+   var date=master.Columns["data"];
+   date.HeaderText="Data / Hora";date.DisplayIndex=2;date.FillWeight=160;date.MinimumWidth=122;
+   var items=master.Columns["itens"];
+   items.HeaderText="Itens";items.DisplayIndex=3;items.FillWeight=52;items.MinimumWidth=51;
+   var total=master.Columns["total"];
+   total.HeaderText="Total (R$)";total.DisplayIndex=4;total.FillWeight=100;total.MinimumWidth=90;
+   total.DefaultCellStyle.Format="N2";
+   total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+   number.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+   items.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+  }
+
   void LoadMaster(){
    if(loadingMaster||IsDisposed||Disposing)return;
    loadingMaster=true;
@@ -466,25 +489,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
-     master.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
-     // A numeracao exibida e a ordem cronologica; a chave ID continua intacta.
-     foreach(DataGridViewColumn col in master.Columns)col.Visible=
-      col.Name=="Ordem cronológica"||col.Name=="cliente"||
-      col.Name=="data"||col.Name=="itens"||col.Name=="total";
-     var number=master.Columns["Ordem cronológica"];
-     number.HeaderText="Nº Venda";number.DisplayIndex=0;number.FillWeight=74;number.MinimumWidth=73;
-     var client=master.Columns["cliente"];
-     client.HeaderText="Cliente";client.DisplayIndex=1;client.FillWeight=183;client.MinimumWidth=130;
-     var date=master.Columns["data"];
-     date.HeaderText="Data / Hora";date.DisplayIndex=2;date.FillWeight=160;date.MinimumWidth=122;
-     var items=master.Columns["itens"];
-     items.HeaderText="Itens";items.DisplayIndex=3;items.FillWeight=52;items.MinimumWidth=51;
-     var total=master.Columns["total"];
-     total.HeaderText="Total (R$)";total.DisplayIndex=4;total.FillWeight=100;total.MinimumWidth=90;
-     total.DefaultCellStyle.Format="N2";
-     total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
-     number.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
-     items.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+     ConfigureSalesColumns();
      var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
      if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
       (rows.Rows.Count>=3000?" (primeiras 3.000)":"");
@@ -688,15 +693,37 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração de produto");}
   }
   void SearchSale(){
-   long id;
-   if(!long.TryParse(saleSearch.Text.Trim(),out id)||id<=0){MessageBox.Show("Informe o numero da venda.");return;}
+   long input;
+   if(!long.TryParse(saleSearch.Text.Trim(),out input)||input<=0){
+    MessageBox.Show("Informe um número de venda válido.","Vendas");return;
+   }
    try{
+    // O número exibido na lista é a ordem cronológica, não o ID interno.
+    long found=0,order=0;
+    var positions=Query("SELECT id FROM sales ORDER BY datetime(created_at),id");
+    foreach(DataRow row in positions.Rows){
+     order++;
+     if(order==input){found=Convert.ToInt64(row["id"]);break;}
+    }
+    // Compatibilidade com buscas antigas feitas diretamente pelo ID.
+    if(found==0)found=input;
     loadingMaster=true;
-    try{var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);PrepareSalesList(rows);master.DataSource=rows;foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";}finally{loadingMaster=false;}
+    try{
+     var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",found);
+     PrepareSalesList(rows);
+     master.DataSource=rows;
+     ConfigureSalesColumns();
+    }finally{loadingMaster=false;}
     LoadDetails();
-    heading.Text=((DataTable)master.DataSource).Rows.Count==0?"Venda nao encontrada.":"VENDA #"+id+" | Resultado da busca";
-    if(((DataTable)master.DataSource).Rows.Count==0)details.DataSource=null;
-    else summary.Text="  Consulta individual: venda #"+id+" | R$ "+Convert.ToDecimal(((DataTable)master.DataSource).Rows[0]["total"]).ToString("N2");
+    if(((DataTable)master.DataSource).Rows.Count==0){
+     var label=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(label!=null)label.Text="  Venda não encontrada";
+     details.DataSource=null;
+    }else{
+     var label=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(label!=null)label.Text="  Resultado da busca • venda nº "+input;
+     summary.Text="Consulta individual: venda nº "+input;
+    }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na busca");}
   }
   static string Csv(object value){
