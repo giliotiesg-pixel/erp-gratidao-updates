@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Web.Script.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
@@ -164,6 +165,32 @@ namespace ArmazemGratidao {
    }
   }
  }
+ // Identidade grafica oficial nas barras de titulo de todas as janelas,
+ // inclusive dialogs e formularios abertos posteriormente.
+ // Nao adiciona painel sobre botao nem tira area de trabalho do modulo.
+ static class ModuleWindowBranding {
+  [DllImport("user32.dll")]static extern bool DestroyIcon(IntPtr handle);
+  static readonly Icon icon=CreateIcon();
+  static Icon CreateIcon(){
+   try{
+    using(var source=typeof(MainForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(source==null)return null;
+     using(var original=Image.FromStream(source))
+     using(var bitmap=new Bitmap(original,new Size(32,32))){
+      IntPtr handle=bitmap.GetHicon();
+      try{using(var temporary=Icon.FromHandle(handle))
+       return (Icon)temporary.Clone();
+      }finally{DestroyIcon(handle);}
+     }
+    }
+   }catch(Exception){return null;}
+  }
+  public static void Apply(Form form){
+   if(form==null||form.IsDisposed)return;
+   if(icon!=null){form.ShowIcon=true;form.Icon=icon;}
+  }
+ }
  // Tema visual nativo para cada módulo e para diálogos criados depois.
  // Só altera acabamento de controles; nunca tamanho, posição, edição,
  // DataSource, navegacao, eventos ou conteúdo de dados do cliente.
@@ -188,79 +215,102 @@ namespace ArmazemGratidao {
    }
   }
   static void Apply(Control control){
-   // A calculadora possui tema proprio: preservar as cores e dimensoes das teclas.
-   if(control is ModernCalculatorForm || control.FindForm() is ModernCalculatorForm ||
-      control is PdvForm || control.FindForm() is PdvForm)return;
-   if(control.IsDisposed||!decorated.Add(control))return;
+   if(control==null||control.IsDisposed||!decorated.Add(control))return;
    control.Disposed+=(sender,args)=>decorated.Remove(control);
-   var button=control as Button;
-   if(button!=null){
-    // Atalhos de Inicio e menu ja possuem moldura propria.
-    bool ownFrame=string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)
-       ||(button.Parent is FlowLayoutPanel && button.FindForm() is MainForm);
-    // Todos os botoes recebem regiao arredondada, inclusive atalhos e menu lateral.
-    // Os que ja possuem desenho proprio mantem sua moldura e seus eventos.
-    Action roundButton=()=>Round(button,9);
-    button.Resize+=(sender,args)=>roundButton();
-    roundButton();
-    if(!ownFrame){
-     button.FlatStyle=FlatStyle.Flat;
-     button.FlatAppearance.BorderSize=0;
-     // Padrao visual unico: azul vivo, letras brancas, negrito e cantos arredondados.
-     // Preserva cores de alerta/exclusao e dimensoes dos formularios para nao cortar textos.
-     bool danger=button.Text!=null && (button.Text.IndexOf("Excluir",StringComparison.OrdinalIgnoreCase)>=0
-       ||button.Text.IndexOf("Apagar",StringComparison.OrdinalIgnoreCase)>=0
-       ||button.Text.IndexOf("Remover",StringComparison.OrdinalIgnoreCase)>=0);
-     if(!danger){
+   var form=control as Form;
+   if(form!=null){
+    ModuleWindowBranding.Apply(form);
+    // Os modulos ja modernizados usam seu proprio layout; nao impor outra
+    // barra, outros tamanhos ou cores por cima do trabalho aprovado.
+    bool customized=form is MainForm||form is ModernCalculatorForm||
+     form is PdvForm||form is ConsultaForm||form is StartMenuPopup;
+    if(!customized){
+     form.BackColor=Color.FromArgb(245,249,254);
+     form.ForeColor=Color.FromArgb(29,55,101);
+    }
+   }
+   bool special=control.FindForm() is MainForm ||
+    control.FindForm() is PdvForm ||
+    control.FindForm() is ModernCalculatorForm ||
+    control.FindForm() is ConsultaForm ||
+    control.FindForm() is StartMenuPopup;
+   if(!special){
+    var button=control as Button;
+    if(button!=null){
+     // Apenas aparencia: nao altera clique, validacao, largura nem altura.
+     bool danger=button.Text!=null&&(
+      button.Text.IndexOf("Excluir",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Apagar",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Remover",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Retirar",StringComparison.OrdinalIgnoreCase)>=0);
+     bool goBack=button.Text!=null&&(
+      button.Text.IndexOf("Voltar",StringComparison.OrdinalIgnoreCase)>=0);
+     bool cancel=button.Text!=null&&(
+      button.Text.IndexOf("Cancelar",StringComparison.OrdinalIgnoreCase)>=0);
+     Color oldBackground=button.BackColor;
+     bool defaultBackground=oldBackground.IsSystemColor||
+      oldBackground.ToArgb()==SystemColors.Control.ToArgb();
+     if(danger||goBack){
+      button.BackColor=Color.FromArgb(190,40,57);
+      button.ForeColor=Color.White;
+     }else if(cancel){
+      button.BackColor=Color.FromArgb(232,240,250);
+      button.ForeColor=Color.FromArgb(24,67,140);
+     }else if(defaultBackground){
       button.BackColor=Color.FromArgb(22,75,160);
       button.ForeColor=Color.White;
      }
+     button.UseVisualStyleBackColor=false;
+     button.FlatStyle=FlatStyle.Flat;
+     button.FlatAppearance.BorderSize=0;
      if(button.Font!=null && !button.Font.Bold)
       button.Font=new Font(button.Font,FontStyle.Bold);
-     button.FlatAppearance.MouseOverBackColor=danger?Color.FromArgb(180,53,65):Color.FromArgb(36,96,185);
-     button.FlatAppearance.MouseDownBackColor=danger?Color.FromArgb(150,39,52):Color.FromArgb(13,53,128);
-     button.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-      new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
-      9,danger?Color.FromArgb(175,60,75):Color.FromArgb(72,119,194),1.25f);
-    }
-   }else if(control is TextBox){
-    var input=(TextBox)control;
-    if(!input.Multiline&&input.BorderStyle!=BorderStyle.None){
-     input.BorderStyle=BorderStyle.FixedSingle;
-     Action round=()=>Round(input,6);
-     input.Resize+=(sender,args)=>round();
-     round();
-    }
-   }else if(control is ComboBox){
-    var select=(ComboBox)control;
-    select.FlatStyle=FlatStyle.Flat;
-    Action round=()=>Round(select,6);
-    select.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is NumericUpDown){
-    var number=(NumericUpDown)control;
-    number.BorderStyle=BorderStyle.FixedSingle;
-    Action round=()=>Round(number,6);
-    number.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is DateTimePicker){
-    var date=(DateTimePicker)control;
-    Action round=()=>Round(date,6);
-    date.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is GroupBox){
-    var group=(GroupBox)control;
-    group.ForeColor=blue;
-   }else if(control is Panel && !(control is FlowLayoutPanel) && !(control is TableLayoutPanel)){
-    var panel=(Panel)control;
-    if(panel.BorderStyle==BorderStyle.FixedSingle){
-     panel.BorderStyle=BorderStyle.None;
-     panel.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-      new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3),
-      10,outline,1.35f);
+     Action roundButton=()=>Round(button,button.Height<=34?7:10);
+     button.Resize+=(sender,args)=>roundButton();
+     roundButton();
+     button.FlatAppearance.MouseOverBackColor=danger||goBack?
+      Color.FromArgb(217,54,75):Color.FromArgb(37,105,195);
+     button.FlatAppearance.MouseDownBackColor=danger||goBack?
+      Color.FromArgb(152,34,48):Color.FromArgb(12,54,124);
+    }else if(control is TextBox){
+     var input=(TextBox)control;
+     if(!input.Multiline&&input.BorderStyle!=BorderStyle.None)
+      input.BorderStyle=BorderStyle.FixedSingle;
+     input.BackColor=Color.White;
+    }else if(control is ComboBox){
+     var combo=(ComboBox)control;
+     combo.FlatStyle=FlatStyle.Flat;
+     combo.BackColor=Color.White;
+     // Preservar a seta nativa; recorte arredondado cortaria o seletor.
+    }else if(control is NumericUpDown){
+     var number=(NumericUpDown)control;
+     number.BackColor=Color.White;
+     number.BorderStyle=BorderStyle.FixedSingle;
+     // Nao arredondar o campo: preserva as duas setas de quantidade.
+    }else if(control is DateTimePicker){
+     // Preservar a seta do calendario e o seletor do Windows 8.
+    }else if(control is GroupBox){
+     var group=(GroupBox)control;group.ForeColor=blue;
+    }else if(control is FlowLayoutPanel){
+     var flow=(FlowLayoutPanel)control;
+     // Faixas de filtros e botoes seguem o fundo claro de Vendas e PDV.
+     // Evitar trocar cor de barra escura que possui labels brancas.
+     bool whiteTitle=flow.Controls.OfType<Label>().Any(x=>x.ForeColor==Color.White);
+     if(!whiteTitle && (flow.Dock==DockStyle.Top||flow.Dock==DockStyle.Bottom)
+         && flow.BackColor!=Color.Transparent)
+      flow.BackColor=Color.FromArgb(231,240,252);
+    }else if(control is Panel && !(control is TableLayoutPanel)){
+     var panel=(Panel)control;
+     if(panel.BorderStyle==BorderStyle.FixedSingle){
+      panel.BorderStyle=BorderStyle.None;
+      panel.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+       new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3),
+       11,outline,1.3f);
+     }
     }
    }
-   // Mudanças de campos dentro de uma janela também ganham o acabamento.
+   // Novos controles (inclusive dialogos tardios) recebem o mesmo tema.
+   // Nada e acrescentado aos handlers, DataSource ou controles de vendas.
    control.ControlAdded+=(sender,args)=>DecorateTree(args.Control);
   }
   static void DecorateTree(Control root){
@@ -292,16 +342,25 @@ namespace ArmazemGratidao {
    if(inspected.TryGetValue(button,out previous)&&previous==signature)return;
    button.AutoEllipsis=true;
    button.UseMnemonic=false;
-   if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)){
-    var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
-    int desired=size.Width+24;
-    if(button.Image!=null)desired+=button.Image.Width+8;
-    if(button.Width<desired && button.Dock==DockStyle.None &&
-      button.Parent is FlowLayoutPanel &&
-      !(button.MinimumSize.Width>0&&button.MaximumSize.Width==button.MinimumSize.Width))
-     button.Width=desired;
-    button.TextAlign=ContentAlignment.MiddleCenter;
+   // Não expandir botões além das faixas do layout: evita desalinhar o
+   // menu e esconder botões vizinhos em computadores com tela pequena.
+   if(button.Font!=null&&button.Text!=null&&button.Text.Length>4){
+    float points=button.Font.SizeInPoints;
+    float best=points;
+    var available=Math.Max(30,button.Width-button.Padding.Horizontal-15-
+     (button.Image==null?0:button.Image.Width+8));
+    while(best>8.2f){
+     using(var font=new Font(button.Font.FontFamily,best,button.Font.Style)){
+      var measured=TextRenderer.MeasureText(button.Text,font,new Size(2000,140),
+       TextFormatFlags.SingleLine|TextFormatFlags.NoPadding);
+      if(measured.Width<=available)break;
+     }
+     best-=0.5f;
+    }
+    if(best<points-0.3f)
+     button.Font=new Font(button.Font.FontFamily,Math.Max(8.2f,best),button.Font.Style);
    }
+   button.TextAlign=ContentAlignment.MiddleCenter;
    inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
   }
   static void Watch(Control c){
