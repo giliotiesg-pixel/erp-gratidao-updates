@@ -98,6 +98,17 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    BackColor=Color.FromArgb(246,249,253);
    StyleSalesGrid(master);
    StyleSalesGrid(details);
+   details.CellFormatting+=(sender,args)=>{
+    if(args.RowIndex<0||args.ColumnIndex<0||args.Value==null)return;
+    var column=details.Columns[args.ColumnIndex];
+    if(column.Name!="quantidade")return;
+    decimal quantity;
+    if(decimal.TryParse(Convert.ToString(args.Value),out quantity)){
+     args.Value=quantity==decimal.Truncate(quantity)?
+      quantity.ToString("N0"):quantity.ToString("N3");
+     args.FormattingApplied=true;
+    }
+   };
    var layout=new TableLayoutPanel{Name="amzgSalesLayout",Dock=DockStyle.Fill,
     ColumnCount=1,RowCount=5,Padding=new Padding(9,0,9,9),Margin=Padding.Empty};
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
@@ -250,7 +261,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var filters=new TableLayoutPanel{Name="amzgSalesFilters",Dock=DockStyle.Fill,
     ColumnCount=11,RowCount=1,Padding=new Padding(9,6,9,6),
     Margin=new Padding(1,0,1,4),BackColor=Color.FromArgb(233,241,252)};
-   float[] widths={7f,3f,10f,4f,10f,7f,18f,11f,9f,11f,10f};
+   float[] widths={6f,4f,12f,4f,12f,6f,13f,10f,8f,12f,13f};
    foreach(float w in widths)filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,w));
    filters.Controls.Add(SalesText("Período:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),0,0);
    filters.Controls.Add(SalesText("De:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),1,0);
