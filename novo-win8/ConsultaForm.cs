@@ -52,8 +52,66 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    };
    control.Resize+=(sender,args)=>apply();apply();
   }
+  // Icones desenhados com GDI+: funcionam no Windows 8 sem fontes especiais.
+  static Image SalesActionIcon(string key,int size=26){
+   var image=new Bitmap(size,size);
+   using(var g=Graphics.FromImage(image)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    g.ScaleTransform(size/28f,size/28f);
+    using(var p=new Pen(Color.White,2.5f))
+    using(var f=new SolidBrush(Color.White)){
+     p.StartCap=p.EndCap=System.Drawing.Drawing2D.LineCap.Round;
+     string k=key.ToLowerInvariant();
+     if(k.Contains("new")||k.Contains("nova")){
+      g.DrawEllipse(p,4,4,20,20);g.DrawLine(p,14,9,14,19);g.DrawLine(p,9,14,19,14);
+     }else if(k.Contains("today")||k.Contains("previous")){
+      g.DrawRectangle(p,5,7,18,16);
+      g.DrawLine(p,5,12,23,12);g.DrawLine(p,10,4,10,9);g.DrawLine(p,18,4,18,9);
+      if(k.Contains("previous")){g.DrawArc(p,10,13,9,8,30,260);}
+     }else if(k.Contains("edit")){
+      g.DrawLine(p,7,20,18,9);g.DrawLine(p,11,23,22,12);
+      g.DrawLine(p,19,7,24,12);g.DrawLine(p,5,24,11,23);
+     }else if(k.Contains("delete")){
+      g.DrawRectangle(p,9,9,11,15);g.DrawLine(p,6,7,22,7);
+      g.DrawLine(p,11,4,17,4);g.DrawLine(p,13,13,13,21);g.DrawLine(p,16,13,16,21);
+     }else if(k.Contains("report")||k.Contains("daily")){
+      g.DrawLine(p,4,24,24,24);g.FillRectangle(f,6,14,4,10);
+      g.FillRectangle(f,12,9,4,15);g.FillRectangle(f,18,5,4,19);
+     }else if(k.Contains("search")){
+      g.DrawEllipse(p,5,5,14,14);g.DrawLine(p,18,18,25,25);
+     }else{
+      g.DrawArc(p,4,4,20,20,45,275);
+      g.DrawLine(p,19,4,24,10);g.DrawLine(p,24,10,15,11);
+     }
+    }
+   }
+   return image;
+  }
+  static Image SalesCartIcon(){
+   var image=new Bitmap(64,64);
+   using(var g=Graphics.FromImage(image)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    using(var pen=new Pen(Color.White,4f))
+    using(var white=new SolidBrush(Color.White)){
+     pen.StartCap=pen.EndCap=LineCap.Round;
+     pen.LineJoin=LineJoin.Round;
+     g.DrawLine(pen,7,10,16,10);g.DrawLine(pen,16,10,23,43);
+     g.DrawLine(pen,23,43,52,43);
+     g.DrawLine(pen,18,18,57,18);g.DrawLine(pen,57,18,51,35);
+     g.DrawLine(pen,51,35,22,35);g.DrawLine(pen,22,35,18,18);
+     g.FillEllipse(white,25,48,8,8);g.FillEllipse(white,46,48,8,8);
+    }
+   }
+   return image;
+  }
+
   static Button SalesButton(string name,string caption,Color back){
-   var btn=new Button{Name=name,Text=caption,Dock=DockStyle.Fill,
+   string text=caption.Contains("  ")?caption.Substring(caption.IndexOf("  ")+2):caption;
+   var btn=new Button{Name=name,Text=text,Dock=DockStyle.Fill,
+    Image=SalesActionIcon(name),ImageAlign=ContentAlignment.MiddleLeft,
+    TextImageRelation=TextImageRelation.ImageBeforeText,
     Margin=new Padding(3,8,3,8),Padding=new Padding(4,1,4,1),
     FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=Color.White,
     Cursor=Cursors.Hand,UseMnemonic=false,AutoEllipsis=true,
@@ -61,6 +119,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     Font=new Font("Segoe UI",9.1f,FontStyle.Bold)};
    btn.FlatAppearance.BorderSize=0;
    btn.FlatAppearance.MouseOverBackColor=ControlPaint.Light(back,0.17f);
+   btn.Disposed+=(sender,args)=>{if(btn.Image!=null){btn.Image.Dispose();btn.Image=null;}};
    SalesRound(btn,10);
    return btn;
   }
@@ -133,7 +192,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var brand=new Label{Name="amzgSalesBrand",Text="ARMAZÉM GRATIDÃO",
     Font=new Font("Segoe UI",17f,FontStyle.Bold),ForeColor=Color.White,
     Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
-   var module=new Label{Name="amzgSalesModuleTitle",Text="▣  MÓDULO VENDAS",
+   var module=new Label{Name="amzgSalesModuleTitle",Text="MÓDULO VENDAS",
     Font=new Font("Segoe UI",21f,FontStyle.Bold),ForeColor=Color.White,
     Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
    var bannerTotals=new TableLayoutPanel{Name="amzgSalesBannerTotals",
@@ -173,7 +232,18 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    branding.Resize+=(sender,args)=>{brand.Width=Math.Max(100,branding.Width-94);};
    branding.Controls.Add(emblem);branding.Controls.Add(brand);
    bannerColumns.Controls.Add(branding,0,0);
-   bannerColumns.Controls.Add(module,1,0);
+   var moduleArea=new Panel{Name="amzgSalesModuleHeader",Dock=DockStyle.Fill,
+    BackColor=Color.Transparent};
+   var moduleCart=new PictureBox{Name="amzgSalesCartIcon",
+    Image=SalesCartIcon(),SizeMode=PictureBoxSizeMode.Zoom,
+    Left=5,Top=25,Width=55,Height=57,BackColor=Color.Transparent};
+   moduleCart.Disposed+=(sender,args)=>{if(moduleCart.Image!=null)moduleCart.Image.Dispose();};
+   module.Dock=DockStyle.None;module.Left=65;module.Top=20;
+   module.Height=66;module.TextAlign=ContentAlignment.MiddleLeft;
+   module.Font=new Font("Segoe UI",18f,FontStyle.Bold);
+   moduleArea.Resize+=(sender,args)=>{module.Width=Math.Max(140,moduleArea.Width-70);};
+   moduleArea.Controls.Add(moduleCart);moduleArea.Controls.Add(module);
+   bannerColumns.Controls.Add(moduleArea,1,0);
    bannerColumns.Controls.Add(bannerTotals,2,0);
    banner.Controls.Add(bannerColumns);
    layout.Controls.Add(banner,0,0);
