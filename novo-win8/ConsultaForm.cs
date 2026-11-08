@@ -850,7 +850,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      soldGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,246,253);
      soldGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(37,106,195);
      soldGrid.DefaultCellStyle.SelectionForeColor=Color.White;
+     // Gerar as colunas antes de acessar por nome, mesmo com a janela ainda oculta.
+     soldGrid.BindingContext=new BindingContext();
      soldGrid.DataSource=saleItems;
+     if(!soldGrid.Columns.Contains("codigo")||!soldGrid.Columns.Contains("produto"))
+      throw new Exception("As colunas dos produtos vendidos nao foram criadas.");
      foreach(DataGridViewColumn column in soldGrid.Columns)
       column.Visible=column.Name=="codigo"||column.Name=="produto"||
        column.Name=="quantidade"||column.Name=="preco"||column.Name=="valor";
@@ -1151,7 +1155,10 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     list.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(18,70,153);
     list.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
     list.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.3f,FontStyle.Bold);
+    list.BindingContext=new BindingContext();
     list.DataSource=catalog;
+    if(!list.Columns.Contains("name"))
+     throw new Exception("A lista de produtos substitutos nao foi criada.");
     list.Columns["id"].Visible=false;
     list.Columns["cost"].Visible=false;
     list.Columns["barcode"].HeaderText="Código";
