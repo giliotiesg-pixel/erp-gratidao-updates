@@ -248,7 +248,7 @@ namespace ArmazemGratidao {
      bool cancel=button.Text!=null&&(
       button.Text.IndexOf("Cancelar",StringComparison.OrdinalIgnoreCase)>=0);
      Color oldBackground=button.BackColor;
-     bool defaultBackground=oldBackground.IsSystemColor||
+     bool defaultBackground=oldBackground.IsEmpty||oldBackground.IsSystemColor||
       oldBackground.ToArgb()==SystemColors.Control.ToArgb();
      if(danger||goBack){
       button.BackColor=Color.FromArgb(190,40,57);
