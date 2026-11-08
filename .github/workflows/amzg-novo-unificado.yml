@@ -276,6 +276,7 @@ jobs:
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-vendas-layout.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Modulo-Vendas.png'
       - name: Testar alteracao de produto e total individual de cada venda
+        timeout-minutes: 2
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
