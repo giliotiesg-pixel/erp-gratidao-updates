@@ -2,6 +2,8 @@ using System;
 using System.Data;
 using System.Data.SQLite;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Linq;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
@@ -18,76 +20,492 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   readonly DataGridView details=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   bool loadingMaster=false;
   readonly Label heading=new Label {Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",13,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft};
-  public ConsultaForm(string path,bool fiado) {
-   db=path;credit=fiado;Text=fiado?"Fiado - Clientes e Vendas":"Vendas - Itens por Venda";Width=1360;Height=850;MinimumSize=new Size(1050,680);BackColor=Color.FromArgb(229,242,255);
-   foreach(var table in new[]{master,details}){table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;}
-   var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
-   var split=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=465};
-   split.Panel1.Controls.Add(master);split.Panel2.Controls.Add(details);Controls.Add(split);Controls.Add(heading);
-   if(!fiado)split.Panel2Collapsed=true;
-   if(!fiado){
-    var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=108,Padding=new Padding(5),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(190,225,250)};
-    var today=new Button {Text="Vendas do dia",Width=150,Height=33};today.Click+=(s,e)=>{previous=false;selectedDate=false;selectedMonth=false;LoadMaster();};
-    var older=new Button {Text="Vendas anteriores",Width=170,Height=33};older.Click+=(s,e)=>{previous=true;selectedDate=false;selectedMonth=false;LoadMaster();};
-    var refresh=new Button {Text="Atualizar",Width=110,Height=33};refresh.Click+=(s,e)=>LoadMaster();
-    bar.Controls.Add(today);bar.Controls.Add(older);bar.Controls.Add(refresh);
-    bar.Controls.Add(new Label{Text="Mês / Ano:",AutoSize=true,Padding=new Padding(5,8,0,0)});
-    bar.Controls.Add(monthFilter);
-    var showMonth=new Button{Text="Ver mês",Width=95,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
-    showMonth.Click+=(s,e)=>{selectedMonth=true;selectedDate=false;LoadMaster();};
-    bar.Controls.Add(showMonth);
-    var priorMonth=new Button{Text="◀ Mês anterior",Width=130,Height=33};
-    priorMonth.Click+=(s,e)=>{monthFilter.Value=monthFilter.Value.AddMonths(-1);selectedMonth=true;selectedDate=false;LoadMaster();};
-    bar.Controls.Add(priorMonth);
-    var followingMonth=new Button{Text="Próximo mês ▶",Width=130,Height=33};
-    followingMonth.Click+=(s,e)=>{monthFilter.Value=monthFilter.Value.AddMonths(1);selectedMonth=true;selectedDate=false;LoadMaster();};
-    bar.Controls.Add(followingMonth);
-    bar.Controls.Add(new Label {Text="Data:",AutoSize=true,Padding=new Padding(5,8,0,0)});bar.Controls.Add(dateFilter);
-    var filter=new Button {Text="Ver data",Width=85,Height=33};filter.Click+=(s,e)=>{selectedDate=true;selectedMonth=false;LoadMaster();};bar.Controls.Add(filter);
-    var editDate=new Button {Text="Atualizar data / hora",Width=175,Height=33};editDate.Click+=(s,e)=>EditSaleDate();bar.Controls.Add(editDate);
-    var showEdit=new Button {Text="Editar itens",Width=105,Height=33};showEdit.Click+=(s,e)=>{split.Panel2Collapsed=!split.Panel2Collapsed;showEdit.Text=split.Panel2Collapsed?"Editar itens":"Ocultar edição";};bar.Controls.Add(showEdit);
-    var changeProduct=new Button {Text="Alterar produto",Width=125,Height=33};changeProduct.Click+=(s,e)=>{split.Panel2Collapsed=false;showEdit.Text="Ocultar edição";ChangeProduct();};bar.Controls.Add(changeProduct);
-    var remove=new Button {Text="Excluir venda",Width=115,Height=33};remove.Click+=(s,e)=>DeleteSale();bar.Controls.Add(remove);
-    bar.Controls.Add(new Label {Text="Numero da venda:",ForeColor=Color.White,AutoSize=true,Padding=new Padding(5,8,0,0)});
-    bar.Controls.Add(saleSearch);
-    var find=new Button {Text="Buscar venda",Width=120,Height=33};find.Click+=(s,e)=>SearchSale();bar.Controls.Add(find);
-    var export=new Button {Text="Exportar itens CSV",Width=145,Height=33};export.Click+=(s,e)=>ExportSale();bar.Controls.Add(export);
-    var daily=new Button {Text="Totais por dia",Width=145,Height=33};daily.Click+=(s,e)=>ShowDailyTotals();bar.Controls.Add(daily);
-    Controls.Add(bar);
+  // Componentes do painel de vendas. O modulo Fiado mantem seu layout anterior.
+  readonly DateTimePicker rangeEnd=new DateTimePicker{Format=DateTimePickerFormat.Short,Width=120};
+  readonly ComboBox customerFilter=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,
+   Font=new Font("Segoe UI",9f),Width=170};
+  readonly Label saleInfo=new Label{Dock=DockStyle.Fill,AutoEllipsis=true,
+   ForeColor=Color.FromArgb(27,55,102),Font=new Font("Segoe UI",10f,FontStyle.Bold)};
+  readonly Label saleTotal=new Label{Dock=DockStyle.Right,Width=186,
+   Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.FromArgb(182,29,49),
+   TextAlign=ContentAlignment.MiddleCenter};
+  readonly Label footerCount=new Label(),footerToday=new Label(),footerMonth=new Label();
+  readonly Label headerToday=new Label(),headerMonth=new Label();
+  bool selectedRange=false;bool customerOptionsLoading=false;
+  string chosenCustomer="";
+  readonly Color salesBlue=Color.FromArgb(18,70,153);
+  readonly Color salesLight=Color.FromArgb(242,247,253);
+  SplitContainer salesSplit;
+
+  // Estilo nativo, leve e compacto: preserva as funcoes dos controles.
+  static void SalesRound(Control control,int radius){
+   Action apply=()=>{
+    if(control.IsDisposed||control.Width<radius*2+4||control.Height<radius*2+4)return;
+    using(var shape=new GraphicsPath()){
+     int w=control.Width-1,h=control.Height-1,d=radius*2;
+     shape.AddArc(0,0,d,d,180,90);shape.AddArc(w-d,0,d,d,270,90);
+     shape.AddArc(w-d,h-d,d,d,0,90);shape.AddArc(0,h-d,d,d,90,90);
+     shape.CloseFigure();
+     Region former=control.Region;control.Region=new Region(shape);
+     if(former!=null)former.Dispose();
+    }
+   };
+   control.Resize+=(sender,args)=>apply();apply();
+  }
+  // Icones desenhados com GDI+: funcionam no Windows 8 sem fontes especiais.
+  static Image SalesActionIcon(string key,int size=26){
+   var image=new Bitmap(size,size);
+   using(var g=Graphics.FromImage(image)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    g.ScaleTransform(size/28f,size/28f);
+    using(var p=new Pen(Color.White,2.5f))
+    using(var f=new SolidBrush(Color.White)){
+     p.StartCap=p.EndCap=System.Drawing.Drawing2D.LineCap.Round;
+     string k=key.ToLowerInvariant();
+     if(k.Contains("new")||k.Contains("nova")){
+      g.DrawEllipse(p,4,4,20,20);g.DrawLine(p,14,9,14,19);g.DrawLine(p,9,14,19,14);
+     }else if(k.Contains("today")||k.Contains("previous")){
+      g.DrawRectangle(p,5,7,18,16);
+      g.DrawLine(p,5,12,23,12);g.DrawLine(p,10,4,10,9);g.DrawLine(p,18,4,18,9);
+      if(k.Contains("previous")){g.DrawArc(p,10,13,9,8,30,260);}
+     }else if(k.Contains("edit")){
+      g.DrawLine(p,7,20,18,9);g.DrawLine(p,11,23,22,12);
+      g.DrawLine(p,19,7,24,12);g.DrawLine(p,5,24,11,23);
+     }else if(k.Contains("delete")){
+      g.DrawRectangle(p,9,9,11,15);g.DrawLine(p,6,7,22,7);
+      g.DrawLine(p,11,4,17,4);g.DrawLine(p,13,13,13,21);g.DrawLine(p,16,13,16,21);
+     }else if(k.Contains("report")||k.Contains("daily")){
+      g.DrawLine(p,4,24,24,24);g.FillRectangle(f,6,14,4,10);
+      g.FillRectangle(f,12,9,4,15);g.FillRectangle(f,18,5,4,19);
+     }else if(k.Contains("search")){
+      g.DrawEllipse(p,5,5,14,14);g.DrawLine(p,18,18,25,25);
+     }else{
+      g.DrawArc(p,4,4,20,20,45,275);
+      g.DrawLine(p,19,4,24,10);g.DrawLine(p,24,10,15,11);
+     }
+    }
    }
-   heading.Text=fiado?"FIADO | Selecione um cliente":"VENDAS | Selecione uma venda para visualizar todos os itens";
-   if(!fiado)Controls.Add(summary);
-   // Altura fixa: não alterar largura/altura das linhas dentro de DataBindingComplete.
-   // Evita exceções de DataGridViewBand durante vinculação e troca de seleção.
-   foreach(var table in new[]{master,details}){
-    table.Font=new Font("Segoe UI",10,FontStyle.Regular);
-    table.BackgroundColor=Color.White;
-    table.BorderStyle=BorderStyle.None;
-    table.RowHeadersVisible=false;
-    table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
-    table.MultiSelect=false;
-    table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
-    table.RowTemplate.Height=38;
-    table.AllowUserToResizeRows=false;
-    table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-    table.ColumnHeadersHeight=46;
-    table.ColumnHeadersVisible=true;
-    table.EnableHeadersVisualStyles=false;
-    table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
-    table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
-    table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
-    table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(40,100,170);
-    table.DefaultCellStyle.SelectionForeColor=Color.White;
-    table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
-    table.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   return image;
+  }
+  static Image SalesCartIcon(){
+   var image=new Bitmap(64,64);
+   using(var g=Graphics.FromImage(image)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    using(var pen=new Pen(Color.White,4f))
+    using(var white=new SolidBrush(Color.White)){
+     pen.StartCap=pen.EndCap=LineCap.Round;
+     pen.LineJoin=LineJoin.Round;
+     g.DrawLine(pen,7,10,16,10);g.DrawLine(pen,16,10,23,43);
+     g.DrawLine(pen,23,43,52,43);
+     g.DrawLine(pen,18,18,57,18);g.DrawLine(pen,57,18,51,35);
+     g.DrawLine(pen,51,35,22,35);g.DrawLine(pen,22,35,18,18);
+     g.FillEllipse(white,25,48,8,8);g.FillEllipse(white,46,48,8,8);
+    }
    }
-   master.SelectionChanged+=(s,e)=>{if(!loadingMaster)LoadDetails();};
-   master.CellClick+=(s,e)=>{if(e.RowIndex>=0&&!loadingMaster){LoadDetails();if(!credit)ShowSaleItems();}};
-   dateFilter.ValueChanged+=(s,e)=>{if(!credit){selectedDate=true;selectedMonth=false;LoadMaster();}};
-   // Ao voltar à janela, conferir vendas registradas por PDV, lançamentos anotados ou outra janela.
+   return image;
+  }
+
+  static Button SalesButton(string name,string caption,Color back){
+   string text=caption.Contains("  ")?caption.Substring(caption.IndexOf("  ")+2):caption;
+   var btn=new Button{Name=name,Text=text,Dock=DockStyle.Fill,
+    Image=SalesActionIcon(name),ImageAlign=ContentAlignment.MiddleLeft,
+    TextImageRelation=TextImageRelation.ImageBeforeText,
+    Margin=new Padding(3,8,3,8),Padding=new Padding(4,1,4,1),
+    FlatStyle=FlatStyle.Flat,BackColor=back,ForeColor=Color.White,
+    Cursor=Cursors.Hand,UseMnemonic=false,AutoEllipsis=true,
+    TextAlign=ContentAlignment.MiddleCenter,
+    Font=new Font("Segoe UI",9.1f,FontStyle.Bold)};
+   btn.FlatAppearance.BorderSize=0;
+   btn.FlatAppearance.MouseOverBackColor=ControlPaint.Light(back,0.17f);
+   btn.Disposed+=(sender,args)=>{if(btn.Image!=null){btn.Image.Dispose();btn.Image=null;}};
+   SalesRound(btn,10);
+   return btn;
+  }
+  static Label SalesText(string title,Font font,Color color){
+   return new Label{Text=title,Font=font,ForeColor=color,
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
+  }
+  void StyleSalesGrid(DataGridView table){
+   table.Font=new Font("Segoe UI",9.2f,FontStyle.Regular);
+   table.BackgroundColor=Color.White;
+   table.BorderStyle=BorderStyle.None;
+   table.RowHeadersVisible=false;
+   table.ReadOnly=true;
+   table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
+   table.MultiSelect=false;
+   table.ScrollBars=ScrollBars.Both;
+   table.AllowUserToResizeRows=false;
+   table.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
+   table.RowTemplate.Height=33;
+   table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+   table.ColumnHeadersHeight=38;
+   table.ColumnHeadersVisible=true;
+   table.EnableHeadersVisualStyles=false;
+   table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(17,71,153);
+   table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.5f,FontStyle.Bold);
+   table.DefaultCellStyle.ForeColor=Color.FromArgb(31,53,90);
+   table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(48,117,209);
+   table.DefaultCellStyle.SelectionForeColor=Color.White;
+   table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,246,252);
+   table.CellBorderStyle=DataGridViewCellBorderStyle.SingleHorizontal;
+   table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+  }
+  void BuildSalesPage(){
+   BackColor=Color.FromArgb(246,249,253);
+   StyleSalesGrid(master);
+   StyleSalesGrid(details);
+   details.CellFormatting+=(sender,args)=>{
+    if(args.RowIndex<0||args.ColumnIndex<0||args.Value==null)return;
+    var column=details.Columns[args.ColumnIndex];
+    if(column.Name!="quantidade")return;
+    decimal quantity;
+    if(decimal.TryParse(Convert.ToString(args.Value),out quantity)){
+     args.Value=quantity==decimal.Truncate(quantity)?
+      quantity.ToString("N0"):quantity.ToString("N3");
+     args.FormattingApplied=true;
+    }
+   };
+   var layout=new TableLayoutPanel{Name="amzgSalesLayout",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=5,Padding=new Padding(9,0,9,9),Margin=Padding.Empty};
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,110f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,62f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,72f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,76f));
+
+   var banner=new Panel{Name="amzgSalesBanner",Dock=DockStyle.Fill,Margin=Padding.Empty,
+    BackColor=Color.FromArgb(11,47,107)};
+   banner.Paint+=(sender,args)=>{
+    using(var gradient=new LinearGradientBrush(banner.ClientRectangle,
+     Color.FromArgb(11,44,104),Color.FromArgb(17,76,161),0f))
+     args.Graphics.FillRectangle(gradient,banner.ClientRectangle);
+   };
+   var bannerColumns=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,
+    Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.Transparent};
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,29));
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,37));
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34));
+   var brand=new Label{Name="amzgSalesBrand",Text="ARMAZÉM GRATIDÃO",
+    Font=new Font("Segoe UI",17f,FontStyle.Bold),ForeColor=Color.White,
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
+   var module=new Label{Name="amzgSalesModuleTitle",Text="MÓDULO VENDAS",
+    Font=new Font("Segoe UI",21f,FontStyle.Bold),ForeColor=Color.White,
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
+   var bannerTotals=new TableLayoutPanel{Name="amzgSalesBannerTotals",
+    Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,
+    Margin=new Padding(5,20,5,20),BackColor=Color.FromArgb(25,73,140)};
+   bannerTotals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   bannerTotals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,40));
+   bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,60));
+   bannerTotals.Controls.Add(SalesText("Total do Dia",new Font("Segoe UI",9,FontStyle.Bold),Color.White),0,0);
+   bannerTotals.Controls.Add(SalesText("Total do Mês",new Font("Segoe UI",9,FontStyle.Bold),Color.White),1,0);
+   foreach(var lbl in new[]{headerToday,headerMonth}){
+    lbl.Dock=DockStyle.Fill;lbl.Text="R$ 0,00";
+    lbl.Font=new Font("Segoe UI",15.5f,FontStyle.Bold);
+    lbl.ForeColor=Color.FromArgb(255,226,84);
+    lbl.TextAlign=ContentAlignment.MiddleCenter;
+   }
+   bannerTotals.Controls.Add(headerToday,0,1);
+   bannerTotals.Controls.Add(headerMonth,1,1);
+   SalesRound(bannerTotals,12);
+   // Logotipo oficial incorporado no executavel; somente no cabecalho,
+   // nunca como marca d'agua sobre os dados.
+   var branding=new Panel{Dock=DockStyle.Fill,BackColor=Color.Transparent};
+   var emblem=new PictureBox{Left=9,Top=15,Width=76,Height=78,
+    SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
+   try{
+    using(var file=typeof(ConsultaForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(file!=null)using(var original=Image.FromStream(file))
+      emblem.Image=new Bitmap(original);
+    }
+   }catch{ /* A marca escrita continua se a imagem falhar. */ }
+   emblem.Disposed+=(sender,args)=>{if(emblem.Image!=null)emblem.Image.Dispose();};
+   brand.Dock=DockStyle.None;brand.Left=89;brand.Top=19;brand.Height=69;
+   brand.TextAlign=ContentAlignment.MiddleLeft;
+   brand.Font=new Font("Segoe UI",15f,FontStyle.Bold);
+   branding.Resize+=(sender,args)=>{brand.Width=Math.Max(100,branding.Width-94);};
+   branding.Controls.Add(emblem);branding.Controls.Add(brand);
+   bannerColumns.Controls.Add(branding,0,0);
+   var moduleArea=new Panel{Name="amzgSalesModuleHeader",Dock=DockStyle.Fill,
+    BackColor=Color.Transparent};
+   var moduleCart=new PictureBox{Name="amzgSalesCartIcon",
+    Image=SalesCartIcon(),SizeMode=PictureBoxSizeMode.Zoom,
+    Left=5,Top=25,Width=55,Height=57,BackColor=Color.Transparent};
+   moduleCart.Disposed+=(sender,args)=>{if(moduleCart.Image!=null)moduleCart.Image.Dispose();};
+   module.Dock=DockStyle.None;module.Left=65;module.Top=20;
+   module.Height=66;module.TextAlign=ContentAlignment.MiddleLeft;
+   module.Font=new Font("Segoe UI",18f,FontStyle.Bold);
+   moduleArea.Resize+=(sender,args)=>{module.Width=Math.Max(140,moduleArea.Width-70);};
+   moduleArea.Controls.Add(moduleCart);moduleArea.Controls.Add(module);
+   bannerColumns.Controls.Add(moduleArea,1,0);
+   bannerColumns.Controls.Add(bannerTotals,2,0);
+   banner.Controls.Add(bannerColumns);
+   layout.Controls.Add(banner,0,0);
+
+   var navigation=new TableLayoutPanel{Name="amzgSalesNavigation",
+    Dock=DockStyle.Fill,ColumnCount=7,RowCount=1,
+    Margin=Padding.Empty,Padding=Padding.Empty};
+   foreach(float width in new float[]{19f,13f,14f,15f,14f,12f,13f})
+    navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
+   var backSlot=new Panel{Name="amzgSalesBackSlot",Dock=DockStyle.Fill,
+    Margin=new Padding(3,8,3,8)};
+   navigation.Controls.Add(backSlot,0,0);
+   var newSale=SalesButton("amzgSalesNewSale","⊕  Nova Venda",salesBlue);
+   newSale.Click+=(sender,args)=>{
+    var main=Application.OpenForms.OfType<MainForm>().FirstOrDefault();
+    if(main!=null)main.OpenPdvFromModule();
+    else MessageBox.Show("Abra o PDV pelo menu principal.","Vendas");
+   };
+   var today=SalesButton("amzgSalesToday","▣  Vendas do Dia",salesBlue);
+   today.Click+=(sender,args)=>{previous=false;selectedDate=false;selectedMonth=false;selectedRange=false;LoadMaster();};
+   var older=SalesButton("amzgSalesPrevious","▣  Vendas Anteriores",salesBlue);
+   older.Click+=(sender,args)=>{previous=true;selectedDate=false;selectedMonth=false;selectedRange=false;LoadMaster();};
+   var edit=SalesButton("amzgSalesEdit","✎  Editar Venda",salesBlue);
+   var editMenu=new ContextMenuStrip();
+   editMenu.Items.Add("Editar produto, quantidade e preço",null,(sender,args)=>ChangeProduct());
+   editMenu.Items.Add("Atualizar data / hora",null,(sender,args)=>EditSaleDate());
+   editMenu.Items.Add("Visualizar itens em janela",null,(sender,args)=>ShowSaleItems());
+   editMenu.Items.Add("Exportar itens CSV",null,(sender,args)=>ExportSale());
+   edit.Click+=(sender,args)=>editMenu.Show(edit,new Point(0,edit.Height));
+   var remove=SalesButton("amzgSalesDelete","▤  Excluir Venda",salesBlue);
+   remove.Click+=(sender,args)=>DeleteSale();
+   var reports=SalesButton("amzgSalesReports","▥  Totais / Relatórios",salesBlue);
+   var reportMenu=new ContextMenuStrip();
+   reportMenu.Items.Add("Totais por dia",null,(sender,args)=>ShowDailyTotals());
+   reportMenu.Items.Add("Exportar itens da venda CSV",null,(sender,args)=>ExportSale());
+   reportMenu.Items.Add("Ver apenas a data inicial",null,(sender,args)=>{
+    selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;LoadMaster();});
+   reportMenu.Items.Add("Ver mês selecionado",null,(sender,args)=>{
+    selectedMonth=true;selectedDate=false;selectedRange=false;previous=false;LoadMaster();});
+   reportMenu.Items.Add("Mês anterior",null,(sender,args)=>{
+    monthFilter.Value=monthFilter.Value.AddMonths(-1);
+    selectedMonth=true;selectedDate=false;selectedRange=false;previous=false;LoadMaster();});
+   reportMenu.Items.Add("Próximo mês",null,(sender,args)=>{
+    monthFilter.Value=monthFilter.Value.AddMonths(1);
+    selectedMonth=true;selectedDate=false;selectedRange=false;previous=false;LoadMaster();});
+   reports.Click+=(sender,args)=>reportMenu.Show(reports,new Point(0,reports.Height));
+   foreach(var btn in new[]{newSale,today,older,edit,remove,reports})
+    navigation.Controls.Add(btn,navigation.Controls.Count,0);
+   FormClosed+=(sender,args)=>{editMenu.Dispose();reportMenu.Dispose();};
+   layout.Controls.Add(navigation,0,1);
+   // Em telas estreitas (Windows 8 / 1024 px), duas fileiras evitam
+   // cortar os nomes dos botoes. Em telas largas continua uma fila.
+   bool narrowNav=false;
+   Action fitNavigation=()=>{
+    if(navigation.IsDisposed)return;
+    bool twoRows=layout.ClientSize.Width<1230;
+    if(twoRows==narrowNav&&navigation.Controls.Count==7)return;
+    narrowNav=twoRows;
+    Control[] actions=navigation.Controls.Cast<Control>().ToArray();
+    navigation.SuspendLayout();
+    try{
+     navigation.Controls.Clear();
+     navigation.ColumnStyles.Clear();navigation.RowStyles.Clear();
+     navigation.ColumnCount=twoRows?4:7;navigation.RowCount=twoRows?2:1;
+     if(twoRows){
+      for(int i=0;i<4;i++)navigation.ColumnStyles.Add(
+       new ColumnStyle(SizeType.Percent,25f));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,50f));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,50f));
+     }else{
+      foreach(float weight in new float[]{19f,13f,14f,15f,14f,12f,13f})
+       navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,weight));
+      navigation.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+     }
+     for(int i=0;i<actions.Length;i++){
+      int col=twoRows?i%4:i,row=twoRows?i/4:0;
+      navigation.Controls.Add(actions[i],col,row);
+     }
+     layout.RowStyles[1].Height=twoRows?108f:62f;
+    }finally{navigation.ResumeLayout(true);}
+   };
+   layout.SizeChanged+=(sender,args)=>fitNavigation();
+   fitNavigation();
+
+   var filters=new TableLayoutPanel{Name="amzgSalesFilters",Dock=DockStyle.Fill,
+    ColumnCount=11,RowCount=1,Padding=new Padding(9,6,9,6),
+    Margin=new Padding(1,0,1,4),BackColor=Color.FromArgb(233,241,252)};
+   float[] widths={6f,4f,12f,4f,12f,6f,13f,10f,8f,12f,13f};
+   foreach(float w in widths)filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,w));
+   filters.Controls.Add(SalesText("Período:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),0,0);
+   filters.Controls.Add(SalesText("De:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),1,0);
+   dateFilter.Format=DateTimePickerFormat.Custom;dateFilter.CustomFormat="dd/MM/yyyy";
+   dateFilter.Dock=DockStyle.Fill;dateFilter.Margin=new Padding(1,11,2,11);
+   dateFilter.Value=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);
+   filters.Controls.Add(dateFilter,2,0);
+   filters.Controls.Add(SalesText("Até:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),3,0);
+   rangeEnd.Format=DateTimePickerFormat.Custom;rangeEnd.CustomFormat="dd/MM/yyyy";
+   rangeEnd.Dock=DockStyle.Fill;rangeEnd.Margin=new Padding(1,11,2,11);
+   rangeEnd.Value=DateTime.Today;
+   filters.Controls.Add(rangeEnd,4,0);
+   filters.Controls.Add(SalesText("Cliente:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),5,0);
+   customerFilter.Dock=DockStyle.Fill;customerFilter.Margin=new Padding(1,11,2,11);
+   filters.Controls.Add(customerFilter,6,0);
+   filters.Controls.Add(SalesText("Nº da Venda:",new Font("Segoe UI",8.6f,FontStyle.Bold),Color.FromArgb(25,52,92)),7,0);
+   saleSearch.Dock=DockStyle.Fill;saleSearch.Margin=new Padding(1,12,2,12);
+   filters.Controls.Add(saleSearch,8,0);
+   var search=SalesButton("amzgSalesSearch","⌕  Pesquisar",salesBlue);
+   var update=SalesButton("amzgSalesUpdate","↻  Atualizar",Color.FromArgb(56,110,188));
+   search.Margin=new Padding(2,8,2,8);
+   update.Margin=new Padding(2,8,2,8);
+   search.Click+=(sender,args)=>{
+    if(saleSearch.Text.Trim().Length>0)SearchSale();
+    else if(dateFilter.Value.Date>rangeEnd.Value.Date)
+     MessageBox.Show("A data inicial não pode ser posterior à data final.","Vendas");
+    else {selectedRange=true;selectedMonth=false;selectedDate=false;previous=false;LoadMaster();}
+   };
+   update.Click+=(sender,args)=>{if(saleSearch.Text.Trim().Length>0)SearchSale();else LoadMaster();};
+   saleSearch.KeyDown+=(sender,args)=>{if(args.KeyCode==Keys.Enter){search.PerformClick();args.SuppressKeyPress=true;}};
+   customerFilter.SelectedIndexChanged+=(sender,args)=>{
+    if(customerOptionsLoading)return;
+    chosenCustomer=customerFilter.SelectedIndex<=0?"":Convert.ToString(customerFilter.SelectedItem);
+    LoadMaster();
+   };
+   filters.Controls.Add(search,9,0);filters.Controls.Add(update,10,0);
+   SalesRound(filters,12);
+   layout.Controls.Add(filters,0,2);
+
+   salesSplit=new SplitContainer{Name="amzgSalesSplit",Dock=DockStyle.Fill,
+    Orientation=Orientation.Vertical,Margin=new Padding(0,10,0,4),
+    SplitterWidth=9,
+    BackColor=Color.FromArgb(236,244,253)};
+   // Painel esquerdo: lista das vendas, colunas fixas legiveis.
+   var left=new Panel{Name="amzgSalesListPanel",Dock=DockStyle.Fill,
+    BackColor=Color.White,Padding=new Padding(2)};
+   var leftHeader=new Label{Name="amzgSalesListTitle",Dock=DockStyle.Top,Height=40,
+    BackColor=salesBlue,ForeColor=Color.White,
+    Font=new Font("Segoe UI",11f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,
+    Text="  Vendas do Dia"};
+   left.Controls.Add(master);left.Controls.Add(leftHeader);
+   salesSplit.Panel1.Controls.Add(left);
+   // Painel direito: dados e itens da venda selecionada, sem popup obrigatorio.
+   var right=new Panel{Name="amzgSalesDetailPanel",Dock=DockStyle.Fill,
+    BackColor=Color.White,Padding=new Padding(2)};
+   heading.Name="amzgSalesDetailTitle";
+   heading.Height=40;heading.BackColor=salesBlue;heading.ForeColor=Color.White;
+   heading.Font=new Font("Segoe UI",11f,FontStyle.Bold);
+   heading.Padding=new Padding(12,0,0,0);heading.Text="DETALHES DA VENDA";
+   var saleHeader=new Panel{Name="amzgSalesDetailSummary",Dock=DockStyle.Top,Height=102,
+    BackColor=Color.FromArgb(234,241,251)};
+   var infoCaption=new Label{Dock=DockStyle.Left,Width=145,Text="  Cliente:\n  Data / Hora:\n  Forma(s) Pgto:",
+    Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(22,58,121),Padding=new Padding(5,5,0,0)};
+   var valuePanel=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,5,0,0)};
+   saleInfo.Name="amzgSalesInfoValue";
+   saleInfo.Text="Selecione uma venda\n\n";
+   valuePanel.Controls.Add(saleInfo);
+   var totalPanel=new Panel{Dock=DockStyle.Right,Width=195,
+    BackColor=Color.FromArgb(244,246,251)};
+   totalPanel.Controls.Add(new Label{Dock=DockStyle.Top,Height=27,
+    Text="Total da Venda",Font=new Font("Segoe UI",10f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(22,58,121),TextAlign=ContentAlignment.MiddleCenter});
+   saleTotal.Text="R$ 0,00";totalPanel.Controls.Add(saleTotal);
+   var smallInfo=new Font("Segoe UI",9f,FontStyle.Bold);
+   var largeInfo=saleInfo.Font;
+   bool compactInfo=false;
+   right.SizeChanged+=(sender,args)=>{
+    bool compact=right.ClientSize.Width<610;
+    if(compact!=compactInfo){
+     compactInfo=compact;
+     infoCaption.Width=compact?108:145;
+     totalPanel.Width=compact?154:195;
+     saleInfo.Font=compact?smallInfo:largeInfo;
+    }
+   };
+   FormClosed+=(sender,args)=>smallInfo.Dispose();
+   saleHeader.Controls.Add(valuePanel);saleHeader.Controls.Add(infoCaption);saleHeader.Controls.Add(totalPanel);
+   right.Controls.Add(details);right.Controls.Add(saleHeader);right.Controls.Add(heading);
+   salesSplit.Panel2.Controls.Add(right);
+   layout.Controls.Add(salesSplit,0,3);
+   salesSplit.SizeChanged+=(sender,args)=>{
+    if(salesSplit.IsDisposed||salesSplit.Width<710)return;
+    int target=(int)(salesSplit.Width*0.51);
+    int min=300;
+    int max=salesSplit.Width-salesSplit.SplitterWidth-300;
+    if(max>=min){
+     int clamped=Math.Max(min,Math.Min(max,target));
+     if(salesSplit.SplitterDistance!=clamped)salesSplit.SplitterDistance=clamped;
+    }
+   };
+   var bottom=new TableLayoutPanel{Name="amzgSalesTotalsBar",Dock=DockStyle.Fill,
+    ColumnCount=4,RowCount=1,Margin=new Padding(0,5,0,0),
+    Padding=new Padding(10,6,10,6),BackColor=Color.FromArgb(13,61,138)};
+   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));
+   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26));
+   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,28));
+   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,22));
+   foreach(var label in new[]{footerCount,footerToday,footerMonth}){
+    label.Dock=DockStyle.Fill;label.TextAlign=ContentAlignment.MiddleCenter;
+    label.ForeColor=Color.White;label.Font=new Font("Segoe UI",10.5f,FontStyle.Bold);
+    label.AutoEllipsis=true;
+   }
+   bottom.Controls.Add(footerCount,0,0);
+   bottom.Controls.Add(footerToday,1,0);
+   bottom.Controls.Add(footerMonth,2,0);
+   var daily=SalesButton("amzgSalesDailyTotals","▥  Consultar Totais por Dia",Color.FromArgb(24,94,181));
+   daily.Margin=new Padding(4,7,4,7);
+   daily.Click+=(sender,args)=>ShowDailyTotals();
+   bottom.Controls.Add(daily,3,0);
+   SalesRound(bottom,12);layout.Controls.Add(bottom,0,4);
+   Controls.Add(layout);
+   LoadCustomerOptions();
+  }
+
+  void LoadCustomerOptions(){
+   if(credit)return;
+   customerOptionsLoading=true;
+   try{
+    customerFilter.Items.Clear();
+    customerFilter.Items.Add("Todos os Clientes");
+    var customers=Query("SELECT DISTINCT TRIM(customer_name) AS nome FROM sales "+
+     "WHERE TRIM(COALESCE(customer_name,''))<>'' ORDER BY nome COLLATE NOCASE LIMIT 2000");
+    foreach(DataRow row in customers.Rows){
+     var name=Convert.ToString(row["nome"]);
+     if(!string.IsNullOrWhiteSpace(name))customerFilter.Items.Add(name);
+    }
+    customerFilter.SelectedIndex=0;
+   }catch(Exception){customerFilter.Items.Clear();customerFilter.Items.Add("Todos os Clientes");customerFilter.SelectedIndex=0;}
+   finally{customerOptionsLoading=false;}
+  }
+
+  public ConsultaForm(string path,bool fiado){
+   db=path;credit=fiado;
+   Text=fiado?"Fiado - Clientes e Vendas":"Vendas - Itens por Venda";
+   Width=1360;Height=850;MinimumSize=new Size(1020,660);
+   Font=new Font("Segoe UI",9.5f);
+   BackColor=Color.FromArgb(246,249,253);
+   var working=Screen.FromControl(this).WorkingArea;
+   Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
+   if(fiado){
+    // Nao alterar o modulo Fiado por causa do novo visual de Vendas.
+    var split=new SplitContainer{Dock=DockStyle.Fill,
+     Orientation=Orientation.Horizontal,SplitterDistance=465};
+    split.Panel1.Controls.Add(master);
+    split.Panel2.Controls.Add(details);
+    Controls.Add(split);Controls.Add(heading);
+    heading.Text="FIADO | Selecione um cliente";
+    foreach(var table in new[]{master,details}){
+     table.Font=new Font("Segoe UI",10f);
+     table.BackgroundColor=Color.White;
+     table.RowHeadersVisible=false;
+     table.EnableHeadersVisualStyles=false;
+     table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+     table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+    }
+   }else BuildSalesPage();
+   master.SelectionChanged+=(sender,args)=>{if(!loadingMaster)LoadDetails();};
+   // Clique seleciona e atualiza o painel direito. Duplo clique abre a janela antiga.
+   master.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0&&!loadingMaster&&!credit)ShowSaleItems();};
    Activated+=(sender,args)=>{if(!credit&&!loadingMaster)LoadMaster();};
    LoadMaster();
   }
+
   // Atualiza somente a lista de vendas aberta após uma venda ser gravada.
   public void RefreshAfterRecordedSale(){
    if(IsDisposed||credit)return;
@@ -108,6 +526,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   static string SalesWithDailyTotalsSql(){
    return "SELECT s.id AS venda,s.created_at AS data,s.customer_name AS cliente,"+
     "s.payment_method AS pagamento,s.gross_total AS total,"+
+    "(SELECT COUNT(*) FROM sale_items si WHERE si.sale_id=s.id) AS itens,"+
     "COALESCE(day.total,0) AS 'Total do dia' "+
     "FROM sales s LEFT JOIN (SELECT date(created_at) AS dia,SUM(COALESCE(gross_total,0)) AS total "+
     "FROM sales GROUP BY date(created_at)) day ON day.dia=date(s.created_at)";
@@ -116,10 +535,9 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(credit)return;
    try{
     string condition=SalesFilterSql();
-    var days=Query("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
+    var days=QueryFiltered("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
      "ROUND(SUM(COALESCE(gross_total,0)),2) AS 'Total vendido (R$)' FROM sales WHERE "+condition+
-     " GROUP BY date(created_at) ORDER BY date(created_at) DESC",
-     SalesFilterParameter(),SalesFilterValue());
+     " GROUP BY date(created_at) ORDER BY date(created_at) DESC");
     using(var dialog=new Form{Text="Fechamento de vendas - totais diários",Width=680,Height=520,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      decimal total=0;long count=0;
      foreach(DataRow row in days.Rows){total+=Convert.ToDecimal(row["Total vendido (R$)"]);count+=Convert.ToInt64(row["Vendas"]);}
@@ -134,17 +552,41 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    }catch(Exception ex){MessageBox.Show("Não foi possível calcular os totais diários: "+ex.Message,"Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   string SalesFilterSql(){
-   if(selectedMonth)return "created_at >= @date AND created_at < date(@date,'+1 month')";
-   if(selectedDate)return "created_at >= @date AND created_at < date(@date,'+1 day')";
-   return previous?"created_at < date('now','localtime')":"created_at >= date('now','localtime') AND created_at < date('now','localtime','+1 day')";
+   string condition;
+   if(selectedRange)condition="created_at >= @start AND created_at < date(@end,'+1 day')";
+   else if(selectedMonth)condition="created_at >= @date AND created_at < date(@date,'+1 month')";
+   else if(selectedDate)condition="created_at >= @date AND created_at < date(@date,'+1 day')";
+   else condition=previous?"created_at < date('now','localtime')":
+    "created_at >= date('now','localtime') AND created_at < date('now','localtime','+1 day')";
+   if(!credit&&!string.IsNullOrEmpty(chosenCustomer))
+    condition+=" AND TRIM(COALESCE(customer_name,''))=@customer";
+   return condition;
   }
   string SalesFilterParameter(){return selectedDate||selectedMonth?"@date":null;}
   object SalesFilterValue(){
    if(selectedMonth)return monthFilter.Value.ToString("yyyy-MM-01");
    return selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null;
   }
+  DataTable QueryFiltered(string sql){
+   using(var connection=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+    DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
+    connection.Open();
+    using(var command=new SQLiteCommand(sql,connection)){
+     if(selectedMonth)command.Parameters.AddWithValue("@date",monthFilter.Value.ToString("yyyy-MM-01"));
+     else if(selectedDate)command.Parameters.AddWithValue("@date",dateFilter.Value.ToString("yyyy-MM-dd"));
+     if(selectedRange){
+      command.Parameters.AddWithValue("@start",dateFilter.Value.ToString("yyyy-MM-dd"));
+      command.Parameters.AddWithValue("@end",rangeEnd.Value.ToString("yyyy-MM-dd"));
+     }
+     if(!string.IsNullOrEmpty(chosenCustomer))command.Parameters.AddWithValue("@customer",chosenCustomer);
+     var result=new DataTable();
+     using(var adapter=new SQLiteDataAdapter(command))adapter.Fill(result);
+     return result;
+    }
+   }
+  }
   string SalesFilterTitle(){
-   return selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
+   return selectedRange?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy")+" a "+rangeEnd.Value.ToString("dd/MM/yyyy"):selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
   }
   // A numeracao e cronologica; IDs de vendas nunca mudam (itens, pagamentos e Fiado).
   void PrepareSalesList(DataTable rows){
@@ -165,34 +607,69 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     item[display]="Venda nº "+sequenceNumber+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
    }
   }
-  void LoadMaster() {
+  void ConfigureSalesColumns(){
+   if(credit||master.Columns.Count==0)return;
+   master.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+   // A numeracao exibida e a ordem cronologica; a chave ID continua intacta.
+   foreach(DataGridViewColumn col in master.Columns)col.Visible=
+    col.Name=="Ordem cronológica"||col.Name=="cliente"||
+    col.Name=="data"||col.Name=="itens"||col.Name=="total";
+   var number=master.Columns["Ordem cronológica"];
+   number.HeaderText="Nº Venda";number.DisplayIndex=0;number.FillWeight=74;number.MinimumWidth=73;
+   var client=master.Columns["cliente"];
+   client.HeaderText="Cliente";client.DisplayIndex=1;client.FillWeight=183;client.MinimumWidth=130;
+   var date=master.Columns["data"];
+   date.HeaderText="Data / Hora";date.DisplayIndex=2;date.FillWeight=160;date.MinimumWidth=122;
+   var items=master.Columns["itens"];
+   items.HeaderText="Itens";items.DisplayIndex=3;items.FillWeight=52;items.MinimumWidth=51;
+   var total=master.Columns["total"];
+   total.HeaderText="Total (R$)";total.DisplayIndex=4;total.FillWeight=100;total.MinimumWidth=90;
+   total.DefaultCellStyle.Format="N2";
+   total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+   number.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+   items.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+  }
+
+  void LoadMaster(){
+   if(loadingMaster||IsDisposed||Disposing)return;
    loadingMaster=true;
-   try {
+   try{
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     Query(SalesWithDailyTotalsSql()+" WHERE "+SalesFilterSql().Replace("created_at","s.created_at")+" ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000",SalesFilterParameter(),SalesFilterValue());
+     QueryFiltered(SalesWithDailyTotalsSql()+" WHERE "+
+      SalesFilterSql().Replace("created_at","s.created_at")+
+      " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000");
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
-     foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";
-     master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";
-     master.Columns["Venda para consultar"].DefaultCellStyle.Padding=new Padding(8,4,4,4);
-     if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
-     if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
-     if(master.Columns.Contains("cliente")){master.Columns["cliente"].HeaderText="Cliente";master.Columns["cliente"].FillWeight=230;}
-     if(master.Columns.Contains("pagamento")){master.Columns["pagamento"].HeaderText="Pagamento";master.Columns["pagamento"].FillWeight=134;}
-     if(master.Columns.Contains("total")){master.Columns["total"].HeaderText="Valor (R$)";master.Columns["total"].FillWeight=120;master.Columns["total"].DefaultCellStyle.Format="N2";master.Columns["total"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     if(master.Columns.Contains("Total do dia")){master.Columns["Total do dia"].HeaderText="Total do dia (R$)";master.Columns["Total do dia"].FillWeight=150;master.Columns["Total do dia"].DefaultCellStyle.Format="N2";master.Columns["Total do dia"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     heading.Text=selectedMonth?"VENDAS | "+monthFilter.Value.ToString("MMMM yyyy").ToUpperInvariant():selectedDate?"VENDAS DE "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"VENDAS ANTERIORES | Clique na venda para ver produtos":"VENDAS DO DIA | Clique na venda para ver produtos";
-     var totals=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE "+SalesFilterSql(),SalesFilterParameter(),SalesFilterValue());
-     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE created_at >= @date AND created_at < date(@date,'+1 month')","@date",
-      (selectedMonth?monthFilter.Value:DateTime.Today).ToString("yyyy-MM-01"));
-     summary.Text="  "+SalesFilterTitle()+"  |  Quantidade: "+Convert.ToInt64(totals.Rows[0]["quantidade"])+
-      "  |  TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
-      "  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2")+
-      (rows.Rows.Count>=3000?"  |  Exibindo 3000 vendas; totais calculados sobre todas.":"  |  Consulte Totais por dia");
+     ConfigureSalesColumns();
+     var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
+      (rows.Rows.Count>=3000?" (primeiras 3.000)":"");
+     var totals=QueryFiltered("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE "+SalesFilterSql());
+     var daily=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE created_at >= date('now','localtime') "+
+      "AND created_at < date('now','localtime','+1 day')");
+     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE created_at >= @date AND created_at < date(@date,'+1 month')",
+      "@date",(selectedMonth?monthFilter.Value:DateTime.Today).ToString("yyyy-MM-01"));
+     long selectedCount=Convert.ToInt64(totals.Rows[0]["quantidade"]);
+     long todayCount=Convert.ToInt64(daily.Rows[0]["quantidade"]);
+     decimal todayTotal=Convert.ToDecimal(daily.Rows[0]["total"]);
+     decimal monthlyTotal=Convert.ToDecimal(monthly.Rows[0]["total"]);
+     string dayText="R$ "+todayTotal.ToString("N2");
+     string monthText="R$ "+monthlyTotal.ToString("N2");
+     footerCount.Text="Vendas do Dia: "+todayCount.ToString("N0");
+     footerToday.Text="Total Vendido Hoje: "+dayText;
+     footerMonth.Text="Total do Mês: "+monthText;
+     headerToday.Text=dayText;
+     headerMonth.Text=monthText;
+     summary.Text=SalesFilterTitle()+" | Quantidade: "+selectedCount+
+      " | TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
+      " | TOTAL DO MÊS: "+monthText;
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir módulo");}
    finally{loadingMaster=false;LoadDetails();}
   }
 
@@ -369,15 +846,37 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração de produto");}
   }
   void SearchSale(){
-   long id;
-   if(!long.TryParse(saleSearch.Text.Trim(),out id)||id<=0){MessageBox.Show("Informe o numero da venda.");return;}
+   long input;
+   if(!long.TryParse(saleSearch.Text.Trim(),out input)||input<=0){
+    MessageBox.Show("Informe um número de venda válido.","Vendas");return;
+   }
    try{
+    // O número exibido na lista é a ordem cronológica, não o ID interno.
+    long found=0,order=0;
+    var positions=Query("SELECT id FROM sales ORDER BY datetime(created_at),id");
+    foreach(DataRow row in positions.Rows){
+     order++;
+     if(order==input){found=Convert.ToInt64(row["id"]);break;}
+    }
+    // Compatibilidade com buscas antigas feitas diretamente pelo ID.
+    if(found==0)found=input;
     loadingMaster=true;
-    try{var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",id);PrepareSalesList(rows);master.DataSource=rows;foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";}finally{loadingMaster=false;}
+    try{
+     var rows=Query(SalesWithDailyTotalsSql()+" WHERE s.id=@id","@id",found);
+     PrepareSalesList(rows);
+     master.DataSource=rows;
+     ConfigureSalesColumns();
+    }finally{loadingMaster=false;}
     LoadDetails();
-    heading.Text=((DataTable)master.DataSource).Rows.Count==0?"Venda nao encontrada.":"VENDA #"+id+" | Resultado da busca";
-    if(((DataTable)master.DataSource).Rows.Count==0)details.DataSource=null;
-    else summary.Text="  Consulta individual: venda #"+id+" | R$ "+Convert.ToDecimal(((DataTable)master.DataSource).Rows[0]["total"]).ToString("N2");
+    if(((DataTable)master.DataSource).Rows.Count==0){
+     var label=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(label!=null)label.Text="  Venda não encontrada";
+     details.DataSource=null;
+    }else{
+     var label=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(label!=null)label.Text="  Resultado da busca • venda nº "+input;
+     summary.Text="Consulta individual: venda nº "+input;
+    }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na busca");}
   }
   static string Csv(object value){
@@ -412,6 +911,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     DataRowView view=master.CurrentRow==null?null:master.CurrentRow.DataBoundItem as DataRowView;
     if(view==null||view.Row==null||!view.Row.Table.Columns.Contains(key)){
      details.DataSource=null;
+     if(!credit){saleInfo.Text="Selecione uma venda";saleTotal.Text="R$ 0,00";heading.Text="  DETALHES DA VENDA";}
      return;
     }
     object selected=view.Row[key];
@@ -428,11 +928,45 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      title="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
     }else{
      result=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
-     title="VENDA #"+selected+" | Todos os itens da venda";
+     var info=Query("SELECT customer_name,created_at,payment_method,gross_total FROM sales WHERE id=@id","@id",selected);
+     string ordinal=master.CurrentRow!=null&&master.Columns.Contains("Ordem cronológica")?
+      Convert.ToString(master.CurrentRow.Cells["Ordem cronológica"].Value):Convert.ToString(selected);
+     title="  DETALHES DA VENDA  #"+ordinal;
+     if(info.Rows.Count>0){
+      var sale=info.Rows[0];
+      saleInfo.Text=Convert.ToString(sale["customer_name"])+Environment.NewLine+
+       Convert.ToString(sale["created_at"])+Environment.NewLine+
+       Convert.ToString(sale["payment_method"]);
+      saleTotal.Text="R$ "+Convert.ToDecimal(sale["gross_total"]).ToString("N2");
+     }else{
+      saleInfo.Text="Venda não encontrada";saleTotal.Text="R$ 0,00";
+     }
     }
     if(!IsDisposed&&!details.IsDisposed){
      details.DataSource=result;
      heading.Text=title;
+     if(!credit){
+      foreach(DataGridViewColumn col in details.Columns){
+       col.Visible=col.Name=="produto"||col.Name=="quantidade"||
+        col.Name=="preco"||col.Name=="valor";
+      }
+      details.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+      var product=details.Columns["produto"];
+      product.HeaderText="Produto";product.DisplayIndex=0;
+      product.FillWeight=230;product.MinimumWidth=160;
+      var qty=details.Columns["quantidade"];
+      qty.HeaderText="Qtd.";qty.DisplayIndex=1;qty.FillWeight=55;qty.MinimumWidth=55;
+      qty.DefaultCellStyle.Format="N3";
+      var price=details.Columns["preco"];
+      price.HeaderText="Valor Unit. (R$)";price.DisplayIndex=2;
+      price.FillWeight=98;price.MinimumWidth=85;
+      price.DefaultCellStyle.Format="N2";
+      var total=details.Columns["valor"];
+      total.HeaderText="Total (R$)";total.DisplayIndex=3;
+      total.FillWeight=98;total.MinimumWidth=85;
+      total.DefaultCellStyle.Format="N2";
+      total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+     }
     }
    }catch(Exception ex){
     if(!details.IsDisposed)details.DataSource=null;
