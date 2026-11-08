@@ -280,7 +280,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
-          .\\novo-win8\\teste-vendas-total-individual.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Alterar-Produto-Venda.png'
+          .\\novo-win8\\teste-vendas-ui-csharp.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Alterar-Produto-Venda.png'
       - name: Testar tema visual em todas as janelas e gerar previas reais dos modulos
         timeout-minutes: 3
         shell: powershell
