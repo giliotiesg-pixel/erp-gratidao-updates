@@ -69,23 +69,35 @@ public static class AmzgSalesUiTest {
   var clock=Stopwatch.StartNew();
   var timer=new System.Windows.Forms.Timer();
   timer.Interval=75;
-  bool clicked=false,seen=false,finished=false;
+  bool clicked=false,seen=false,finished=false,invoked=false;
   string error=null;
   try{
    host.StartPosition=FormStartPosition.Manual;
    host.Size=new Size(1100,740);
    host.Location=new Point(35,35);
-   host.Shown+=(sender,args)=>{
-    host.BeginInvoke((Action)(()=>{
-     try{change.Invoke(host,null);}
-     catch(Exception ex){error="Erro ao abrir a edicao: "+ex.ToString();}
-     finally{finished=true;host.Close();}
-    }));
-   };
    timer.Tick+=(sender,args)=>{
     try{
+     // Aguardar a tabela terminar de carregar antes de abrir a edicao.
+     // BeginInvoke no Shown era cedo demais e nenhuma venda estava selecionada.
+     if(!invoked && clock.ElapsedMilliseconds>350){
+      Control[] panels=host.Controls.Find("amzgSalesListPanel",true);
+      if(panels.Length==1){
+       DataGridView master=null;
+       foreach(Control child in panels[0].Controls)
+        if(child is DataGridView)master=(DataGridView)child;
+       if(master!=null && master.Rows.Count>0){
+        master.CurrentCell=master.Rows[0].Cells["cliente"];
+        invoked=true;
+        host.BeginInvoke((Action)(()=>{
+         try{change.Invoke(host,null);}
+         catch(Exception ex){error="Erro ao abrir a edicao: "+ex.ToString();}
+         finally{finished=true;host.Close();}
+        }));
+       }
+      }
+     }
      if(clock.Elapsed.TotalSeconds>22){
-      error="Tempo limite de 22s no modal. Encontrado="+seen+" clicado="+clicked;
+      error="Tempo limite de 22s no modal. invocado="+invoked+" aberto="+seen+" clicado="+clicked;
       IntPtr msg=FindWindow("#32770",null);
       if(msg!=IntPtr.Zero)PostMessage(msg,0x0010,IntPtr.Zero,IntPtr.Zero);
       foreach(Form open in Application.OpenForms.Cast<Form>().ToArray())
@@ -142,7 +154,7 @@ public static class AmzgSalesUiTest {
    Application.Run(host);
    if(error!=null)throw new Exception(error);
    if(!finished||!seen||!clicked)
-    throw new Exception("Fluxo nao completado: "+finished+"/"+seen+"/"+clicked);
+    throw new Exception("Fluxo nao completado: "+finished+"/"+seen+"/"+clicked+" invocado="+invoked);
   }finally{
    timer.Stop();timer.Dispose();
    if(!host.IsDisposed)host.Dispose();
