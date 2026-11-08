@@ -28,6 +28,7 @@ CREATE TABLE customers(id INTEGER PRIMARY KEY,name TEXT,cpf TEXT,phone TEXT);
 CREATE TABLE purchases(id INTEGER PRIMARY KEY);
 CREATE TABLE cash_sessions(id INTEGER PRIMARY KEY,opened_at TEXT,opening_amount REAL,closed_at TEXT,closing_amount REAL,expected_cash REAL,difference REAL,status TEXT);
 CREATE TABLE sale_payments(id INTEGER PRIMARY KEY,sale_id INTEGER,payment_method TEXT,amount REAL,fee_percent REAL,fee_amount REAL,created_at TEXT);
+CREATE TABLE credit_payments(id INTEGER PRIMARY KEY,sale_id INTEGER,amount REAL,payment_method TEXT,paid_at TEXT);
 """)
 p=[
  (1,"78900001","Refrigerante Cola 2L",11.99,6.80),
@@ -53,6 +54,8 @@ conn.executemany("INSERT INTO sale_items VALUES(?,?,?,?,?,?,?,?,?)",[
  (5,102,4,"78900004","Leite integral 1L",3,5.49,3.58,16.47),
 ])
 conn.execute("INSERT INTO customers VALUES(1,'Ana Maria','00000000000','11999999999')")
+conn.execute("INSERT INTO sales VALUES(103,?,?,?,?,?,?,?,?,?,?,?)",(
+ today+" 16:10:00","Jose Alves","FIADO",19.80,19.80,0,0,13.00,6.80,0.68,"FIADO"))
 conn.commit()
 conn.close()
 '@
@@ -75,7 +78,8 @@ $items=@(
  @{Class='ModuloConsultaForm';Name='Caixa';Args=@($database,'Caixa')},
  @{Class='ModuloConsultaForm';Name='Sistema';Args=@($database,'Sistema')},
  @{Class='CascosForm';Name='Cascos-Retornaveis';Args=@($database)},
- @{Class='LucroForm';Name='Lucro';Args=@($database)}
+ @{Class='LucroForm';Name='Lucro';Args=@($database)},
+ @{Class='FiadoClientesForm';Name='Fiado';Args=@($database)}
 )
 function Get-ThemeControls($parent){
  foreach($child in $parent.Controls){
