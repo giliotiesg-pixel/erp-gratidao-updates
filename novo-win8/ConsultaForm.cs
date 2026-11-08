@@ -758,6 +758,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     DataRowView view=master.CurrentRow==null?null:master.CurrentRow.DataBoundItem as DataRowView;
     if(view==null||view.Row==null||!view.Row.Table.Columns.Contains(key)){
      details.DataSource=null;
+     if(!credit){saleInfo.Text="Selecione uma venda";saleTotal.Text="R$ 0,00";heading.Text="  DETALHES DA VENDA";}
      return;
     }
     object selected=view.Row[key];
@@ -774,11 +775,45 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      title="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
     }else{
      result=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
-     title="VENDA #"+selected+" | Todos os itens da venda";
+     var info=Query("SELECT customer_name,created_at,payment_method,gross_total FROM sales WHERE id=@id","@id",selected);
+     string ordinal=master.CurrentRow!=null&&master.Columns.Contains("Ordem cronológica")?
+      Convert.ToString(master.CurrentRow.Cells["Ordem cronológica"].Value):Convert.ToString(selected);
+     title="  DETALHES DA VENDA  #"+ordinal;
+     if(info.Rows.Count>0){
+      var sale=info.Rows[0];
+      saleInfo.Text=Convert.ToString(sale["customer_name"])+Environment.NewLine+
+       Convert.ToString(sale["created_at"])+Environment.NewLine+
+       Convert.ToString(sale["payment_method"]);
+      saleTotal.Text="R$ "+Convert.ToDecimal(sale["gross_total"]).ToString("N2");
+     }else{
+      saleInfo.Text="Venda não encontrada";saleTotal.Text="R$ 0,00";
+     }
     }
     if(!IsDisposed&&!details.IsDisposed){
      details.DataSource=result;
      heading.Text=title;
+     if(!credit){
+      foreach(DataGridViewColumn col in details.Columns){
+       col.Visible=col.Name=="produto"||col.Name=="quantidade"||
+        col.Name=="preco"||col.Name=="valor";
+      }
+      details.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+      var product=details.Columns["produto"];
+      product.HeaderText="Produto";product.DisplayIndex=0;
+      product.FillWeight=230;product.MinimumWidth=160;
+      var qty=details.Columns["quantidade"];
+      qty.HeaderText="Qtd.";qty.DisplayIndex=1;qty.FillWeight=55;qty.MinimumWidth=55;
+      qty.DefaultCellStyle.Format="N3";
+      var price=details.Columns["preco"];
+      price.HeaderText="Valor Unit. (R$)";price.DisplayIndex=2;
+      price.FillWeight=98;price.MinimumWidth=85;
+      price.DefaultCellStyle.Format="N2";
+      var total=details.Columns["valor"];
+      total.HeaderText="Total (R$)";total.DisplayIndex=3;
+      total.FillWeight=98;total.MinimumWidth=85;
+      total.DefaultCellStyle.Format="N2";
+      total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+     }
     }
    }catch(Exception ex){
     if(!details.IsDisposed)details.DataSource=null;
