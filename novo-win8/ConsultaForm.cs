@@ -140,7 +140,25 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    bannerTotals.Controls.Add(headerToday,0,1);
    bannerTotals.Controls.Add(headerMonth,1,1);
    SalesRound(bannerTotals,12);
-   bannerColumns.Controls.Add(brand,0,0);
+   // Logotipo oficial incorporado no executavel; somente no cabecalho,
+   // nunca como marca d'agua sobre os dados.
+   var branding=new Panel{Dock=DockStyle.Fill,BackColor=Color.Transparent};
+   var emblem=new PictureBox{Left=9,Top=15,Width=76,Height=78,
+    SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
+   try{
+    using(var file=typeof(ConsultaForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(file!=null)using(var original=Image.FromStream(file))
+      emblem.Image=new Bitmap(original);
+    }
+   }catch{ /* A marca escrita continua se a imagem falhar. */ }
+   emblem.Disposed+=(sender,args)=>{if(emblem.Image!=null)emblem.Image.Dispose();};
+   brand.Dock=DockStyle.None;brand.Left=89;brand.Top=19;brand.Height=69;
+   brand.TextAlign=ContentAlignment.MiddleLeft;
+   brand.Font=new Font("Segoe UI",15f,FontStyle.Bold);
+   branding.Resize+=(sender,args)=>{brand.Width=Math.Max(100,branding.Width-94);};
+   branding.Controls.Add(emblem);branding.Controls.Add(brand);
+   bannerColumns.Controls.Add(branding,0,0);
    bannerColumns.Controls.Add(module,1,0);
    bannerColumns.Controls.Add(bannerTotals,2,0);
    banner.Controls.Add(bannerColumns);
@@ -177,6 +195,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var reportMenu=new ContextMenuStrip();
    reportMenu.Items.Add("Totais por dia",null,(sender,args)=>ShowDailyTotals());
    reportMenu.Items.Add("Exportar itens da venda CSV",null,(sender,args)=>ExportSale());
+   reportMenu.Items.Add("Ver apenas a data inicial",null,(sender,args)=>{
+    selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;LoadMaster();});
    reportMenu.Items.Add("Ver mês selecionado",null,(sender,args)=>{
     selectedMonth=true;selectedDate=false;selectedRange=false;previous=false;LoadMaster();});
    reportMenu.Items.Add("Mês anterior",null,(sender,args)=>{
