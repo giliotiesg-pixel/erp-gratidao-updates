@@ -77,6 +77,12 @@ $items=@(
  @{Class='CascosForm';Name='Cascos-Retornaveis';Args=@($database)},
  @{Class='LucroForm';Name='Lucro';Args=@($database)}
 )
+function Get-ThemeControls($parent){
+ foreach($child in $parent.Controls){
+  $child
+  Get-ThemeControls $child
+ }
+}
 $success=[Collections.Generic.List[string]]::new()
 foreach($sample in $items){
  $form=$null
@@ -99,7 +105,7 @@ foreach($sample in $items){
   $styleGrid.Invoke($null,@())|Out-Null
   [Windows.Forms.Application]::DoEvents()
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
-  $buttons=@($form.Controls.Find('*',$true)|Where-Object {$_.GetType().Name -eq 'Button'})
+  $buttons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
   $visibleButtons=@($buttons|Where-Object {$_.Visible -and $_.Width -ge 80})
   foreach($button in $visibleButtons){
    if($null -eq $button.Region){
