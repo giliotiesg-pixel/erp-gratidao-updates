@@ -10,6 +10,7 @@ namespace ArmazemGratidao {
  internal sealed class ModernCalculatorForm : Form {
   readonly CultureInfo locale=CultureInfo.GetCultureInfo("pt-BR");
   readonly CalculatorDisplayLabel display;
+  readonly Label result;
   readonly Label expression;
   readonly Label preview;
   decimal stored=0m;
@@ -44,113 +45,97 @@ namespace ArmazemGratidao {
    copy.Click+=(s,e)=>CopyResult();
    top.Controls.Add(name);top.Controls.Add(copy);
 
+   // Dois visores: a digitacao pequena fica acima; o resultado da
+   // operacao tem a area maior e sempre aparece no campo principal.
    var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=200,
     BackColor=Color.FromArgb(24,49,89)};
    expression=new Label{Name="amzgCalcExpression",Text="PRONTO PARA CALCULAR",
-    Left=19,Top=9,Width=391,Height=29,
-    Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,
-    TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(184,205,236),
-    Font=new Font("Segoe UI",10,FontStyle.Bold)};
-   // Quadro branco independente do teclado. Label no lugar de TextBox evita
-   // caracteres iniciais invisiveis e corte vertical do texto no Windows 8.
-   var displayFrame=new Panel{Name="amzgCalcDisplayFrame",Left=13,Top=42,
-    Width=402,Height=106,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right,
-    Padding=new Padding(9,2,9,2),BackColor=Color.White};
-   display=new CalculatorDisplayLabel{Name="amzgCalcDisplay",Dock=DockStyle.Fill,Text="0",
-    TabStop=false,AutoEllipsis=false,
-    Font=new Font("Segoe UI",33,FontStyle.Bold),
-    TextAlign=ContentAlignment.MiddleRight,BackColor=Color.White,
-    ForeColor=Color.FromArgb(20,61,122)};
+    Left=16,Top=5,Width=398,Height=22,
+    Font=new Font("Segoe UI",9,FontStyle.Bold),
+    ForeColor=Color.FromArgb(187,208,236),Visible=false};
+   // Label de entrada mantido como fonte da logica matematica e do teclado.
+   // O desenho do visor nao depende de TextBox nem de fonte especial.
+   var displayFrame=new Panel{Name="amzgCalcDisplayFrame",
+    Left=13,Top=30,Width=402,Height=45,BackColor=Color.White,Visible=false};
+   display=new CalculatorDisplayLabel{Name="amzgCalcDisplay",
+    Dock=DockStyle.Fill,Text="0",Visible=false,
+    Font=new Font("Segoe UI",18f,FontStyle.Bold),AutoEllipsis=false,
+    ForeColor=Color.FromArgb(22,66,130)};
    displayFrame.Controls.Add(display);
-   Action roundDisplay=()=>{
-    if(displayFrame.Width<24||displayFrame.Height<24)return;
-    using(var outline=new GraphicsPath()){
-     int d=19,w=displayFrame.Width-1,h=displayFrame.Height-1;
-     outline.AddArc(0,0,d,d,180,90);
-     outline.AddArc(w-d,0,d,d,270,90);
-     outline.AddArc(w-d,h-d,d,d,0,90);
-     outline.AddArc(0,h-d,d,d,90,90);
-     outline.CloseFigure();
-     var previous=displayFrame.Region;
-     displayFrame.Region=new Region(outline);
-     if(previous!=null)previous.Dispose();
-    }
-   };
-   displayFrame.Resize+=(s,e)=>roundDisplay();
-   roundDisplay();
-   preview=new Label{Name="amzgCalcPreview",Text="Digite os números ou use o teclado",
-    Left=17,Top=158,Width=395,Height=32,
-    Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top,
-    TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(196,217,243),
-    Font=new Font("Segoe UI",10,FontStyle.Regular)};
-   // Labels guardam os valores de forma acessivel a testes e teclas.
-   // A pintura direta nos paineis impede que o Windows 8 corte ou esconda
-   // os algarismos (inclusive em captura real com DrawToBitmap).
-   display.Visible=false;expression.Visible=false;preview.Visible=false;
-   displayFrame.Paint+=(sender,e)=>{
-    e.Graphics.Clear(Color.White);
-    if(displayFrame.ClientSize.Width<50||displayFrame.ClientSize.Height<50)return;
-    string digits=string.IsNullOrWhiteSpace(display.Text)?"0":display.Text;
-    Font font=null;
-    try{
-     for(float size=35f;size>=14f;size-=2f){
-      if(font!=null)font.Dispose();
-      font=new Font("Segoe UI",size,FontStyle.Bold);
-      Size measured=TextRenderer.MeasureText(e.Graphics,digits,font,
-       new Size(100000,displayFrame.Height),TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
-      if(measured.Width<displayFrame.Width-26&&measured.Height<displayFrame.Height-14)break;
-     }
-     TextRenderer.DrawText(e.Graphics,digits,font,
-      new Rectangle(10,5,displayFrame.Width-23,displayFrame.Height-10),
-      Color.FromArgb(20,61,122),
-      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
-      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
-    }finally{if(font!=null)font.Dispose();}
-   };
+   result=new Label{Name="amzgCalcResult",Text="0",Visible=false,
+    Font=new Font("Segoe UI",43f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(10,51,125)};
+   preview=new Label{Name="amzgCalcPreview",Visible=false,
+    Text="Cálculo rápido em reais e centavos",
+    Font=new Font("Segoe UI",9f),ForeColor=Color.White};
+
+   // Pintura unificada para evitar cortes no Windows 8. O resultado
+   // ocupa a maior area, em fonte dinamicamente adaptada ao valor.
    screen.Paint+=(sender,e)=>{
-    TextRenderer.DrawText(e.Graphics,expression.Text,expression.Font,
-     new Rectangle(16,7,screen.Width-30,30),expression.ForeColor,
+    var g=e.Graphics;
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    TextRenderer.DrawText(g,expression.Text,expression.Font,
+     new Rectangle(16,4,screen.Width-32,22),
+     Color.FromArgb(190,212,240),
      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
-    TextRenderer.DrawText(e.Graphics,preview.Text,preview.Font,
-     new Rectangle(16,158,screen.Width-30,30),preview.ForeColor,
-     TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
-     TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
-    // Os numeros sao pintados no proprio painel principal. Assim, nem
-    // o redimensionamento nem DrawToBitmap ocultam a linha do resultado.
-    Rectangle area=new Rectangle(13,42,screen.Width-26,106);
-    using(var shape=new GraphicsPath()){
-     int d=20,w=area.Width-1,h=area.Height-1,x=area.Left,y=area.Top;
-     shape.AddArc(x,y,d,d,180,90);shape.AddArc(x+w-d,y,d,d,270,90);
-     shape.AddArc(x+w-d,y+h-d,d,d,0,90);shape.AddArc(x,y+h-d,d,d,90,90);
-     shape.CloseFigure();
-     e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
-     using(var white=new SolidBrush(Color.White))e.Graphics.FillPath(white,shape);
-     using(var border=new Pen(Color.FromArgb(184,205,233),1f))
-      e.Graphics.DrawPath(border,shape);
+    Rectangle inputArea=new Rectangle(13,29,screen.Width-26,47);
+    Rectangle resultArea=new Rectangle(13,83,screen.Width-26,103);
+    using(var inputShape=new GraphicsPath())
+    using(var outputShape=new GraphicsPath()){
+     AddCalculatorRoundedRect(inputShape,inputArea,10);
+     AddCalculatorRoundedRect(outputShape,resultArea,13);
+     using(var white=new SolidBrush(Color.FromArgb(246,249,254)))
+      g.FillPath(white,inputShape);
+     using(var lightBlue=new SolidBrush(Color.FromArgb(221,236,255)))
+      g.FillPath(lightBlue,outputShape);
+     using(var thin=new Pen(Color.FromArgb(167,197,234),1f))
+      g.DrawPath(thin,inputShape);
+     using(var prominent=new Pen(Color.FromArgb(48,119,217),2f))
+      g.DrawPath(prominent,outputShape);
     }
-    string number=string.IsNullOrWhiteSpace(display.Text)?"0":display.Text;
+    using(var caption=new Font("Segoe UI",9f,FontStyle.Bold))
+    using(var small=new Font("Segoe UI",19f,FontStyle.Bold)){
+     TextRenderer.DrawText(g,"DIGITAÇÃO",caption,
+      new Rectangle(inputArea.Left+11,inputArea.Top+5,96,inputArea.Height-10),
+      Color.FromArgb(66,98,143),
+      TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
+     TextRenderer.DrawText(g,string.IsNullOrEmpty(display.Text)?"0":display.Text,small,
+      new Rectangle(inputArea.Left+107,inputArea.Top+5,inputArea.Width-120,inputArea.Height-10),
+      Color.FromArgb(36,76,132),
+      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
+      TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
+     TextRenderer.DrawText(g,"RESULTADO",caption,
+      new Rectangle(resultArea.Left+13,resultArea.Top+8,130,21),
+      Color.FromArgb(24,84,162),
+      TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
+    }
+    string number=string.IsNullOrEmpty(result.Text)?"0":result.Text;
     Font fitted=null;
     try{
-     for(float size=36f;size>=14f;size-=2f){
+     for(float size=45f;size>=16f;size-=2f){
       if(fitted!=null)fitted.Dispose();
       fitted=new Font("Segoe UI",size,FontStyle.Bold);
-      Size measure=TextRenderer.MeasureText(e.Graphics,number,fitted,
-       new Size(100000,area.Height),TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
-      if(measure.Width<area.Width-25&&measure.Height<area.Height-12)break;
+      var measured=TextRenderer.MeasureText(g,number,fitted,
+       new Size(100000,resultArea.Height),
+       TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
+      if(measured.Width<=resultArea.Width-24&&measured.Height<=69)break;
      }
-     TextRenderer.DrawText(e.Graphics,number,fitted,
-      new Rectangle(area.Left+8,area.Top+5,area.Width-20,area.Height-10),
-      Color.FromArgb(20,61,122),
-      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
-      TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
+     TextRenderer.DrawText(g,number,fitted,
+      new Rectangle(resultArea.Left+10,resultArea.Top+27,
+       resultArea.Width-22,resultArea.Height-31),
+      Color.FromArgb(9,57,135),
+      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
+      TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
     }finally{if(fitted!=null)fitted.Dispose();}
    };
-   display.TextChanged+=(sender,e)=>{displayFrame.Invalidate();screen.Invalidate();};
+   display.TextChanged+=(sender,e)=>screen.Invalidate();
+   result.TextChanged+=(sender,e)=>screen.Invalidate();
    expression.TextChanged+=(sender,e)=>screen.Invalidate();
-   preview.TextChanged+=(sender,e)=>screen.Invalidate();
-   screen.Controls.Add(expression);screen.Controls.Add(displayFrame);screen.Controls.Add(preview);
-   displayFrame.Visible=false; // pintura acima e a unica fonte visual do numero.
+   screen.Controls.Add(displayFrame);
+   screen.Controls.Add(expression);
+   screen.Controls.Add(result);
+   screen.Controls.Add(preview);
 
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
     ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
@@ -187,6 +172,15 @@ namespace ArmazemGratidao {
     e.SuppressKeyPress=true;e.Handled=true;
    };
    Shown+=(s,e)=>Activate();
+  }
+
+  static void AddCalculatorRoundedRect(GraphicsPath path,Rectangle r,int radius){
+   int d=radius*2,w=r.Width-1,h=r.Height-1,x=r.X,y=r.Y;
+   path.AddArc(x,y,d,d,180,90);
+   path.AddArc(x+w-d,y,d,d,270,90);
+   path.AddArc(x+w-d,y+h-d,d,d,0,90);
+   path.AddArc(x,y+h-d,d,d,90,90);
+   path.CloseFigure();
   }
 
   static void Round(Button button){
@@ -231,14 +225,20 @@ namespace ArmazemGratidao {
    }
   }
   void RefreshPreview(){
-   if(operation==null||entering){
-    if(operation==null)preview.Text="Cálculo rápido em reais e centavos";
-    else preview.Text="Digite o próximo valor";
+   if(operation==null){
+    result.Text=display.Text;
+    preview.Text="Resultado";
+    return;
+   }
+   if(entering){
+    result.Text=Format(stored);
+    preview.Text="Digite o próximo valor";
     return;
    }
    decimal answer;
-   preview.Text=Calculate(stored,Current(),operation,out answer,false)?
-    "= "+Format(answer):"";
+   bool ok=Calculate(stored,Current(),operation,out answer,false);
+   result.Text=ok?Format(answer):"—";
+   preview.Text=ok?"Resultado parcial":"Verifique a operação";
   }
   void Press(string key){
    try{
@@ -255,7 +255,7 @@ namespace ArmazemGratidao {
     }
     if(key=="C"){
      stored=0m;operation=null;entering=true;
-     display.Text="0";expression.Text="PRONTO PARA CALCULAR";
+     display.Text="0";result.Text="0";expression.Text="PRONTO PARA CALCULAR";
      preview.Text="Use os botões ou o teclado";return;
     }
     if(key=="CE"){
@@ -293,6 +293,7 @@ namespace ArmazemGratidao {
      expression.Text=Format(stored)+" "+operation+" "+Format(right)+" =";
      SetValue(answer);
      operation=null;entering=true;
+     result.Text=Format(answer);
      preview.Text="Resultado";return;
     }
     if(key=="+"||key=="−"||key=="×"||key=="÷"){
@@ -304,6 +305,7 @@ namespace ArmazemGratidao {
      }else if(operation==null)stored=current;
      operation=key;entering=true;
      expression.Text=Format(stored)+" "+key;
+     result.Text=Format(stored);
      preview.Text="Digite o próximo valor";
     }
    }catch(OverflowException){Error("Número muito grande.");}
@@ -311,7 +313,7 @@ namespace ArmazemGratidao {
   }
   void CopyResult(){
    try{
-    Clipboard.SetText(display.Text);
+    Clipboard.SetText(result.Text);
     preview.Text="Resultado copiado";
    }catch(Exception){
     preview.Text="Não foi possível copiar agora";
