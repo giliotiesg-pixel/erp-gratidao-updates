@@ -783,311 +783,448 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   // Edicao de produto em uma unica venda, mantendo todas as demais linhas.
   // O numero em destaque e EXCLUSIVAMENTE o total dessa venda,
   // incluindo descontos originais; nao exibe somatorio do dia/mes aqui.
+  // Primeiro lista SOMENTE itens da venda selecionada. O catalogo de
+  // produtos abre separadamente, apenas quando clicar Buscar substituto.
   void ChangeProduct(){
    if(credit)return;
    try{
     long sale=SelectedSale();
-    if(details.CurrentRow==null||!details.Columns.Contains("item_id"))
-     throw new Exception("Selecione o item da venda que deseja alterar no painel direito.");
-    long item=Convert.ToInt64(details.CurrentRow.Cells["item_id"].Value);
-    var current=Query("SELECT product_id,name,quantity,unit_price,total FROM sale_items WHERE id=@item","@item",item);
-    var saleRecord=Query("SELECT gross_total,COALESCE(discount_total,0) AS discount_total FROM sales WHERE id=@sale","@sale",sale);
-    var itemsSubtotal=Query("SELECT COALESCE(SUM(total),0) AS subtotal FROM sale_items WHERE sale_id=@sale","@sale",sale);
-    if(current.Rows.Count==0||saleRecord.Rows.Count==0)
-     throw new Exception("Venda ou item não encontrado.");
-    var row=current.Rows[0];
-    long originalProduct=row["product_id"]==DBNull.Value?0:Convert.ToInt64(row["product_id"]);
-    decimal originalQty=Convert.ToDecimal(row["quantity"]);
-    decimal originalUnitPrice=Convert.ToDecimal(row["unit_price"]);
-    decimal oldLineTotal=Convert.ToDecimal(row["total"]);
-    decimal originalSaleTotal=Convert.ToDecimal(saleRecord.Rows[0]["gross_total"]);
-    decimal initialSubtotal=Convert.ToDecimal(itemsSubtotal.Rows[0]["subtotal"]);
-    decimal saleDiscount=Convert.ToDecimal(saleRecord.Rows[0]["discount_total"]);
-    string originalName=Convert.ToString(row["name"]);
-    using(var dialog=new Form{
-     Name="amzgChangeProductDialog",Text="Alterar produto da venda #"+sale,
-     StartPosition=FormStartPosition.CenterParent,
-     Width=890,Height=650,MinimumSize=new Size(705,545),
+    var saleInfo=Query("SELECT gross_total,COALESCE(discount_total,0) AS discount_total "+
+     "FROM sales WHERE id=@id","@id",sale);
+    if(saleInfo.Rows.Count==0)throw new Exception("Venda não encontrada.");
+    decimal discount=Convert.ToDecimal(saleInfo.Rows[0]["discount_total"]);
+    var saleItems=Query("SELECT id AS item_id,product_id,barcode AS codigo,"+
+     "name AS produto,quantity AS quantidade,unit_price AS preco,"+
+     "unit_cost,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",sale);
+    if(saleItems.Rows.Count==0)throw new Exception("Esta venda não possui produtos.");
+    decimal subtotal=0m;
+    foreach(DataRow r in saleItems.Rows)subtotal+=Convert.ToDecimal(r["valor"]);
+    long initiallySelected=0;
+    if(details.CurrentRow!=null&&details.Columns.Contains("item_id"))
+     initiallySelected=Convert.ToInt64(details.CurrentRow.Cells["item_id"].Value);
+
+    using(var dialog=new Form{Name="amzgChangeProductDialog",
+     Text="Alterar produtos da venda #"+sale,StartPosition=FormStartPosition.CenterParent,
+     Width=900,Height=645,MinimumSize=new Size(710,545),
      BackColor=Color.FromArgb(245,249,254),
-     Font=new Font("Segoe UI",9.6f),
-     FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=false
-    }){
+     Font=new Font("Segoe UI",9.4f),FormBorderStyle=FormBorderStyle.Sizable,
+     MaximizeBox=false}){
      var screen=Screen.FromControl(this).WorkingArea;
-     dialog.Size=new Size(Math.Min(dialog.Width,screen.Width-25),
-      Math.Min(dialog.Height,screen.Height-25));
-     var page=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,
-      Padding=new Padding(11),BackColor=Color.FromArgb(245,249,254)};
-     page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-     page.RowStyles.Add(new RowStyle(SizeType.Absolute,67));
-     page.RowStyles.Add(new RowStyle(SizeType.Absolute,49));
-     page.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-     page.RowStyles.Add(new RowStyle(SizeType.Absolute,65));
-     page.RowStyles.Add(new RowStyle(SizeType.Absolute,105));
+     dialog.Size=new Size(Math.Min(dialog.Width,screen.Width-18),
+      Math.Min(dialog.Height,screen.Height-18));
+     var page=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=6,
+      Padding=new Padding(12),Margin=Padding.Empty};
+     page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+     page.RowStyles.Add(new RowStyle(SizeType.Absolute,60f));
+     page.RowStyles.Add(new RowStyle(SizeType.Absolute,39f));
+     page.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+     page.RowStyles.Add(new RowStyle(SizeType.Absolute,53f));
+     page.RowStyles.Add(new RowStyle(SizeType.Absolute,65f));
+     page.RowStyles.Add(new RowStyle(SizeType.Absolute,105f));
+     var heading=new Label{Name="amzgSaleEditTitle",
+      Text="PRODUTOS DA VENDA  #"+sale,
+      Dock=DockStyle.Fill,Font=new Font("Segoe UI",16f,FontStyle.Bold),
+      BackColor=Color.FromArgb(15,61,136),ForeColor=Color.White,
+      TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(13,0,0,0)};
+     page.Controls.Add(heading,0,0);
+     var guide=new Label{Name="amzgSaleEditInstruction",
+      Text="1. Selecione um produto desta venda.  2. Altere quantidade/preço, procure substituto ou retire o item.",
+      Dock=DockStyle.Fill,Font=new Font("Segoe UI",9.3f),
+      ForeColor=Color.FromArgb(41,76,130),
+      TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
+     page.Controls.Add(guide,0,1);
 
-     var title=new Label{Name="amzgSaleEditTitle",
-      Text="ALTERAR PRODUTO DA VENDA  #"+sale,TextAlign=ContentAlignment.MiddleLeft,
-      Dock=DockStyle.Fill,Padding=new Padding(14,0,0,0),
-      Font=new Font("Segoe UI",16f,FontStyle.Bold),
-      BackColor=Color.FromArgb(15,61,136),ForeColor=Color.White};
-     page.Controls.Add(title,0,0);
-     var searchRow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,
-      Margin=new Padding(0,7,0,7)};
-     searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,77));
-     searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,23));
-     var search=new TextBox{Name="amzgSaleEditSearch",Dock=DockStyle.Fill,
-      Margin=new Padding(1,5,8,5),Font=new Font("Segoe UI",11f)};
-     var searchButton=SalesButton("amzgSaleEditFind","Buscar produto",salesBlue);
-     searchButton.Margin=new Padding(0,0,0,0);
-     searchRow.Controls.Add(search,0,0);searchRow.Controls.Add(searchButton,1,0);
-     page.Controls.Add(searchRow,0,1);
-
-     var productList=new DataGridView{Name="amzgSaleEditProducts",
+     var soldGrid=new DataGridView{Name="amzgSaleEditSaleItems",
       Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
-      AllowUserToDeleteRows=false,MultiSelect=false,
+      AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,
       SelectionMode=DataGridViewSelectionMode.FullRowSelect,
-      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
       BackgroundColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
-      RowHeadersVisible=false,ScrollBars=ScrollBars.Both,
-      RowTemplate={Height=31},EnableHeadersVisualStyles=false,
-      ColumnHeadersHeight=38,ColumnHeadersHeightSizeMode=
-       DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-      Margin=new Padding(0,3,0,5)};
-     productList.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(17,71,153);
-     productList.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
-     productList.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10f,FontStyle.Bold);
-     productList.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(237,244,254);
-     productList.DefaultCellStyle.SelectionBackColor=Color.FromArgb(187,218,255);
-     productList.DefaultCellStyle.SelectionForeColor=Color.FromArgb(20,52,105);
-     page.Controls.Add(productList,0,2);
+      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+      ScrollBars=ScrollBars.Both,RowTemplate={Height=32},
+      EnableHeadersVisualStyles=false,ColumnHeadersHeight=38,
+      ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+      Margin=new Padding(0,0,0,5)};
+     soldGrid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(16,69,149);
+     soldGrid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+     soldGrid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.5f,FontStyle.Bold);
+     soldGrid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,246,253);
+     soldGrid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(37,106,195);
+     soldGrid.DefaultCellStyle.SelectionForeColor=Color.White;
+     soldGrid.DataSource=saleItems;
+     foreach(DataGridViewColumn column in soldGrid.Columns)
+      column.Visible=column.Name=="codigo"||column.Name=="produto"||
+       column.Name=="quantidade"||column.Name=="preco"||column.Name=="valor";
+     soldGrid.Columns["codigo"].HeaderText="Código";
+     soldGrid.Columns["codigo"].FillWeight=95;
+     soldGrid.Columns["produto"].HeaderText="Produto vendido";
+     soldGrid.Columns["produto"].FillWeight=265;
+     soldGrid.Columns["quantidade"].HeaderText="Qtd.";
+     soldGrid.Columns["quantidade"].FillWeight=57;
+     soldGrid.Columns["quantidade"].DefaultCellStyle.Format="N3";
+     soldGrid.Columns["preco"].HeaderText="Preço (R$)";
+     soldGrid.Columns["preco"].FillWeight=94;
+     soldGrid.Columns["preco"].DefaultCellStyle.Format="N2";
+     soldGrid.Columns["valor"].HeaderText="Total (R$)";
+     soldGrid.Columns["valor"].FillWeight=94;
+     soldGrid.Columns["valor"].DefaultCellStyle.Format="N2";
+     page.Controls.Add(soldGrid,0,2);
 
-     var fields=new TableLayoutPanel{Name="amzgSaleEditFields",Dock=DockStyle.Fill,
-      ColumnCount=3,RowCount=2,BackColor=Color.FromArgb(232,240,252),
-      Margin=new Padding(0,4,0,0),Padding=new Padding(12,3,12,4)};
-     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
-     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
-     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-     fields.RowStyles.Add(new RowStyle(SizeType.Absolute,23));
-     fields.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+     var tools=new TableLayoutPanel{Name="amzgSaleEditActions",
+      Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Padding=Padding.Empty};
+     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38f));
+     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34f));
+     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,28f));
+     var replace=SalesButton("amzgSaleEditFind","Buscar substituto",salesBlue);
+     var remove=SalesButton("amzgSaleEditRemove","Retirar da venda",
+      Color.FromArgb(185,39,60));
+     var keep=new Label{Text="Sem substituto: altera só Qtd. / Preço",
+      Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.2f),
+      ForeColor=Color.FromArgb(65,86,115),TextAlign=ContentAlignment.MiddleCenter,
+      AutoEllipsis=true};
+     replace.Margin=new Padding(0,5,6,5);
+     remove.Margin=new Padding(0,5,6,5);
+     tools.Controls.Add(replace,0,0);tools.Controls.Add(remove,1,0);
+     tools.Controls.Add(keep,2,0);
+     page.Controls.Add(tools,0,3);
+
+     var fields=new TableLayoutPanel{Name="amzgSaleEditFields",
+      Dock=DockStyle.Fill,ColumnCount=3,RowCount=2,
+      BackColor=Color.FromArgb(231,240,251),
+      Padding=new Padding(10,4,10,4),Margin=Padding.Empty};
+     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,23f));
+     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24f));
+     fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,53f));
+     fields.RowStyles.Add(new RowStyle(SizeType.Absolute,23f));
+     fields.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
      fields.Controls.Add(new Label{Text="Quantidade",Dock=DockStyle.Fill,
       Font=new Font("Segoe UI",9f,FontStyle.Bold)},0,0);
      fields.Controls.Add(new Label{Text="Preço unitário (R$)",Dock=DockStyle.Fill,
       Font=new Font("Segoe UI",9f,FontStyle.Bold)},1,0);
-     fields.Controls.Add(new Label{Text="Produto escolhido",Dock=DockStyle.Fill,
+     fields.Controls.Add(new Label{Text="Produto selecionado / substituto",Dock=DockStyle.Fill,
       Font=new Font("Segoe UI",9f,FontStyle.Bold)},2,0);
-     var quantity=new NumericUpDown{Name="amzgSaleEditQty",Dock=DockStyle.Fill,
-      Margin=new Padding(0,0,18,1),DecimalPlaces=3,Increment=0.001m,
-      Maximum=1000000m,Minimum=0.001m,ThousandsSeparator=true};
-     var price=new NumericUpDown{Name="amzgSaleEditPrice",Dock=DockStyle.Fill,
-      Margin=new Padding(0,0,18,1),DecimalPlaces=2,
-      Maximum=1000000m,Minimum=0,ThousandsSeparator=true};
-     quantity.Value=Math.Min(quantity.Maximum,Math.Max(quantity.Minimum,originalQty));
-     price.Value=Math.Min(price.Maximum,Math.Max(price.Minimum,originalUnitPrice));
-     var selectedProduct=new Label{Name="amzgSaleEditSelected",Dock=DockStyle.Fill,
-      Text=originalName,Font=new Font("Segoe UI",10f,FontStyle.Bold),
-      ForeColor=Color.FromArgb(24,70,145),AutoEllipsis=true};
+     var quantity=new NumericUpDown{Name="amzgSaleEditQty",
+      DecimalPlaces=3,Increment=0.001m,Minimum=0.001m,
+      Maximum=1000000m,ThousandsSeparator=true,Dock=DockStyle.Fill,
+      Margin=new Padding(0,0,15,0)};
+     var price=new NumericUpDown{Name="amzgSaleEditPrice",
+      DecimalPlaces=2,Minimum=0,Maximum=1000000m,
+      ThousandsSeparator=true,Dock=DockStyle.Fill,
+      Margin=new Padding(0,0,15,0)};
+     var choice=new Label{Name="amzgSaleEditSelected",
+      Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+      ForeColor=Color.FromArgb(15,66,143),
+      Font=new Font("Segoe UI",9.6f,FontStyle.Bold),AutoEllipsis=true};
      fields.Controls.Add(quantity,0,1);fields.Controls.Add(price,1,1);
-     fields.Controls.Add(selectedProduct,2,1);
-     page.Controls.Add(fields,0,3);
+     fields.Controls.Add(choice,2,1);
+     page.Controls.Add(fields,0,4);
 
-     var footer=new TableLayoutPanel{Name="amzgSaleEditFooter",Dock=DockStyle.Fill,
-      ColumnCount=3,RowCount=2,Margin=Padding.Empty,
-      Padding=new Padding(5,7,5,5)};
-     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,54));
-     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
-     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26));
-     footer.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
-     footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+     var footer=new TableLayoutPanel{Name="amzgSaleEditFooter",
+      Dock=DockStyle.Fill,ColumnCount=3,RowCount=2,
+      Padding=new Padding(3,4,3,3),Margin=Padding.Empty};
+     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,53f));
+     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20f));
+     footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,27f));
+     footer.RowStyles.Add(new RowStyle(SizeType.Absolute,45f));
+     footer.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
      var totalCaption=new Label{Name="amzgSaleEditTotalCaption",
-      Dock=DockStyle.Fill,Text="TOTAL DESTA VENDA APÓS ALTERAÇÃO",
+      Text="TOTAL DESTA VENDA APÓS ALTERAÇÃO",
+      Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
       Font=new Font("Segoe UI",10f,FontStyle.Bold),
-      ForeColor=Color.FromArgb(16,57,119),
-      TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
-     var totalValue=new Label{Name="amzgSaleEditTotal",Dock=DockStyle.Fill,
+      ForeColor=Color.FromArgb(18,58,118)};
+     var totalValue=new Label{Name="amzgSaleEditTotal",
+      Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,
       Font=new Font("Segoe UI",19f,FontStyle.Bold),
-      ForeColor=Color.FromArgb(193,32,50),
-      TextAlign=ContentAlignment.MiddleRight,AutoEllipsis=true};
-     footer.Controls.Add(totalCaption,0,0);
-     footer.SetColumnSpan(totalCaption,2);
+      ForeColor=Color.FromArgb(194,31,49),AutoEllipsis=true};
+     footer.Controls.Add(totalCaption,0,0);footer.SetColumnSpan(totalCaption,2);
      footer.Controls.Add(totalValue,2,0);
-     var hint=new Label{Name="amzgSaleEditHint",Dock=DockStyle.Fill,
-      Text="Este valor corresponde somente à venda selecionada.",
-      Font=new Font("Segoe UI",8.2f),
-      ForeColor=Color.FromArgb(77,96,124),TextAlign=ContentAlignment.MiddleLeft,
-      AutoEllipsis=true};
-     footer.Controls.Add(hint,0,1);
-     var cancel=new Button{Name="amzgSaleEditCancel",Text="Cancelar",Dock=DockStyle.Fill,
-      Margin=new Padding(2,1,5,1),FlatStyle=FlatStyle.Flat,
-      BackColor=Color.White,ForeColor=Color.FromArgb(20,59,125),
-      Font=new Font("Segoe UI",9.6f,FontStyle.Bold),DialogResult=DialogResult.Cancel};
+     footer.Controls.Add(new Label{Text="Total individual da venda selecionada.",
+      Dock=DockStyle.Fill,ForeColor=Color.FromArgb(77,96,124),
+      Font=new Font("Segoe UI",8.4f),TextAlign=ContentAlignment.MiddleLeft},0,1);
+     var cancel=new Button{Name="amzgSaleEditCancel",Dock=DockStyle.Fill,
+      Text="Cancelar",DialogResult=DialogResult.Cancel,
+      Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
+      FlatStyle=FlatStyle.Flat,BackColor=Color.White,
+      ForeColor=Color.FromArgb(19,64,139),Margin=new Padding(2,1,5,1)};
      var save=SalesButton("amzgSaleEditSave","Salvar alteração",salesBlue);
      save.Margin=new Padding(2,1,0,1);
      footer.Controls.Add(cancel,1,1);footer.Controls.Add(save,2,1);
-     page.Controls.Add(footer,0,4);
-     dialog.Controls.Add(page);
+     page.Controls.Add(footer,0,5);
      dialog.CancelButton=cancel;
+     dialog.Controls.Add(page);
 
-     bool populating=true;
-     DataTable productTable=null;
-     Action calculate=()=>{
-      decimal newLine=decimal.Round(quantity.Value*price.Value,2);
-      decimal projected=decimal.Round(initialSubtotal-oldLineTotal+newLine-saleDiscount,2);
-      totalValue.Text="R$ "+projected.ToString("N2");
+     DataRow selected=null,replacement=null;
+     bool changing=true;
+     Action projected=()=>{
+      if(selected==null){totalValue.Text="R$ "+(subtotal-discount).ToString("N2");return;}
+      decimal previous=Convert.ToDecimal(selected["valor"]);
+      decimal newAmount=decimal.Round(quantity.Value*price.Value,2);
+      totalValue.Text="R$ "+(subtotal-previous+newAmount-discount).ToString("N2");
      };
-     quantity.ValueChanged+=(sender,args)=>calculate();
-     price.ValueChanged+=(sender,args)=>calculate();
-     Action loadProducts=()=>{
-      string term=search.Text.Trim();
-      // Consulta sem LIMIT: ao abrir vazio, TODOS os produtos sao exibidos.
-      // Leitura apenas, nunca movimenta estoque.
-      using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
-       DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
-       conn.Open();
-       using(var cmd=new SQLiteCommand(
-        "SELECT id,barcode,name,price,cost FROM products "+
-        "WHERE (@term='' OR name LIKE @like OR barcode LIKE @like) "+
-        "ORDER BY name COLLATE NOCASE,id",conn)){
-        cmd.Parameters.AddWithValue("@term",term);
-        cmd.Parameters.AddWithValue("@like","%"+term+"%");
-        var dt=new DataTable();
-        using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(dt);
-        productTable=dt;
-        productList.DataSource=productTable;
-       }
-      }
-      if(productList.Columns.Contains("id"))productList.Columns["id"].Visible=false;
-      if(productList.Columns.Contains("cost"))productList.Columns["cost"].Visible=false;
-      if(productList.Columns.Contains("barcode")){
-       productList.Columns["barcode"].HeaderText="Código";
-       productList.Columns["barcode"].FillWeight=87;
-      }
-      if(productList.Columns.Contains("name")){
-       productList.Columns["name"].HeaderText="Produto";
-       productList.Columns["name"].FillWeight=215;
-      }
-      if(productList.Columns.Contains("price")){
-       productList.Columns["price"].HeaderText="Preço (R$)";
-       productList.Columns["price"].FillWeight=85;
-       productList.Columns["price"].DefaultCellStyle.Format="N2";
-      }
-      selectedProduct.Text=productList.Rows.Count.ToString()+" produtos disponíveis";
-      if(productList.Rows.Count>0){
-       productList.ClearSelection();
-       int found=-1;
-       for(int i=0;i<productList.Rows.Count;i++)
-        if(Convert.ToInt64(productList.Rows[i].Cells["id"].Value)==originalProduct){found=i;break;}
-       if(found>=0){
-        productList.Rows[found].Selected=true;
-        productList.CurrentCell=productList.Rows[found].Cells["name"];
-       }else productList.CurrentCell=productList.Rows[0].Cells["name"];
-      }
-     };
-     productList.SelectionChanged+=(sender,args)=>{
-      if(populating||productList.CurrentRow==null)return;
-      var chosen=productList.CurrentRow;
-      if(!productList.Columns.Contains("name")||!productList.Columns.Contains("price"))return;
-      selectedProduct.Text=Convert.ToString(chosen.Cells["name"].Value);
-      decimal catalogPrice=chosen.Cells["price"].Value==DBNull.Value?0:
-       Convert.ToDecimal(chosen.Cells["price"].Value);
-      price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,catalogPrice));
-      calculate();
-     };
-     searchButton.Click+=(sender,args)=>{
-      try{populating=true;loadProducts();}
-      catch(Exception ex){MessageBox.Show("Erro na busca: "+ex.Message,"Vendas");}
-      finally{populating=false;}
-      if(productList.CurrentRow!=null){
-       var chosenRow=productList.CurrentRow;
-       selectedProduct.Text=Convert.ToString(chosenRow.Cells["name"].Value);
-       decimal newCatalogPrice=chosenRow.Cells["price"].Value==DBNull.Value?0:
-        Convert.ToDecimal(chosenRow.Cells["price"].Value);
-       if(Convert.ToInt64(chosenRow.Cells["id"].Value)!=originalProduct)
-        price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,newCatalogPrice));
-       calculate();
-      }
-     };
-     search.KeyDown+=(sender,args)=>{
-      if(args.KeyCode==Keys.Enter){searchButton.PerformClick();args.SuppressKeyPress=true;}
-     };
-     save.Click+=(sender,args)=>{
+     Action loadSelection=()=>{
+      if(soldGrid.CurrentRow==null||soldGrid.CurrentRow.DataBoundItem==null)return;
+      var view=soldGrid.CurrentRow.DataBoundItem as DataRowView;
+      if(view==null)return;
+      selected=view.Row;replacement=null;changing=true;
       try{
-       if(productList.CurrentRow==null)
-        throw new Exception("Selecione um produto na lista.");
-       var chosen=productList.CurrentRow;
-       long product=Convert.ToInt64(chosen.Cells["id"].Value);
-       string name=Convert.ToString(chosen.Cells["name"].Value);
-       string barcode=Convert.ToString(chosen.Cells["barcode"].Value);
-       decimal cost=chosen.Cells["cost"].Value==DBNull.Value?0:
-        Convert.ToDecimal(chosen.Cells["cost"].Value);
-       decimal total=decimal.Round(quantity.Value*price.Value,2);
-       using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
-        DataSource=db,FailIfMissing=true}.ToString())){
-        conn.Open();
-        using(var tx=conn.BeginTransaction()){
-         string before="";
-         using(var cmd=new SQLiteCommand(
-          "SELECT * FROM sale_items WHERE id=@item AND sale_id=@sale",conn,tx)){
-          cmd.Parameters.AddWithValue("@item",item);
-          cmd.Parameters.AddWithValue("@sale",sale);
-          using(var rd=cmd.ExecuteReader()){
-           if(!rd.Read())throw new Exception("Item da venda não encontrado.");
-           for(int i=0;i<rd.FieldCount;i++)
-            before+=rd.GetName(i)+"="+Convert.ToString(rd.GetValue(i))+"; ";
-          }
+       quantity.Value=Math.Max(quantity.Minimum,
+        Math.Min(quantity.Maximum,Convert.ToDecimal(selected["quantidade"])));
+       price.Value=Math.Max(price.Minimum,
+        Math.Min(price.Maximum,Convert.ToDecimal(selected["preco"])));
+       choice.Text=Convert.ToString(selected["produto"]);
+      }finally{changing=false;}
+      projected();
+     };
+     soldGrid.SelectionChanged+=(sender,args)=>{if(!changing)loadSelection();};
+     quantity.ValueChanged+=(sender,args)=>{if(!changing)projected();};
+     price.ValueChanged+=(sender,args)=>{if(!changing)projected();};
+     replace.Click+=(sender,args)=>{
+      if(selected==null){MessageBox.Show("Selecione um item desta venda.","Vendas");return;}
+      var found=PickReplacementProduct(dialog);
+      if(found==null)return;
+      replacement=found;
+      choice.Text="Substituir por: "+Convert.ToString(found["name"]);
+      decimal value=found["price"]==DBNull.Value?0:Convert.ToDecimal(found["price"]);
+      price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,value));
+      projected();
+     };
+     Action<bool> apply=(removeSelected)=>{
+      if(selected==null)throw new Exception("Selecione o produto da venda.");
+      long item=Convert.ToInt64(selected["item_id"]);
+      decimal oldLine=Convert.ToDecimal(selected["valor"]);
+      decimal newTotal=decimal.Round(quantity.Value*price.Value,2);
+      decimal after=subtotal-oldLine+(removeSelected?0m:newTotal)-discount;
+      if(after<0m)throw new Exception(
+       "A alteração deixaria o valor da venda negativo. Confira o desconto.");
+      if(removeSelected&&saleItems.Rows.Count<=1)
+       throw new Exception("Para retirar o último item, use Excluir Venda.");
+      using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+       DataSource=db,FailIfMissing=true}.ToString())){
+       conn.Open();
+       using(var tx=conn.BeginTransaction()){
+        var oldText="";int count=0;
+        using(var cmd=new SQLiteCommand(
+         "SELECT * FROM sale_items WHERE id=@item AND sale_id=@sale",conn,tx)){
+         cmd.Parameters.AddWithValue("@item",item);cmd.Parameters.AddWithValue("@sale",sale);
+         using(var reader=cmd.ExecuteReader()){
+          if(!reader.Read())throw new Exception("Item da venda não encontrado.");
+          for(int i=0;i<reader.FieldCount;i++)
+           oldText+=reader.GetName(i)+"="+Convert.ToString(reader.GetValue(i))+"; ";
          }
+        }
+        if(removeSelected){
+         using(var cmd=new SQLiteCommand(
+          "DELETE FROM sale_items WHERE id=@item AND sale_id=@sale",conn,tx)){
+          cmd.Parameters.AddWithValue("@item",item);cmd.Parameters.AddWithValue("@sale",sale);
+          count=cmd.ExecuteNonQuery();
+         }
+        }else{
+         long productId=replacement!=null?Convert.ToInt64(replacement["id"]):
+          (selected["product_id"]==DBNull.Value?0:Convert.ToInt64(selected["product_id"]));
+         string barcode=replacement!=null?Convert.ToString(replacement["barcode"]):
+          Convert.ToString(selected["codigo"]);
+         string productName=replacement!=null?Convert.ToString(replacement["name"]):
+          Convert.ToString(selected["produto"]);
+         decimal cost=replacement!=null?
+          (replacement["cost"]==DBNull.Value?0m:Convert.ToDecimal(replacement["cost"])):
+          (selected["unit_cost"]==DBNull.Value?0m:Convert.ToDecimal(selected["unit_cost"]));
          using(var cmd=new SQLiteCommand(
           "UPDATE sale_items SET product_id=@product,barcode=@barcode,name=@name,"+
           "quantity=@qty,unit_price=@price,unit_cost=@cost,total=@total "+
           "WHERE id=@item AND sale_id=@sale",conn,tx)){
-          cmd.Parameters.AddWithValue("@product",product);
+          cmd.Parameters.AddWithValue("@product",productId>0?(object)productId:DBNull.Value);
           cmd.Parameters.AddWithValue("@barcode",barcode);
-          cmd.Parameters.AddWithValue("@name",name);
+          cmd.Parameters.AddWithValue("@name",productName);
           cmd.Parameters.AddWithValue("@qty",quantity.Value);
           cmd.Parameters.AddWithValue("@price",price.Value);
           cmd.Parameters.AddWithValue("@cost",cost);
-          cmd.Parameters.AddWithValue("@total",total);
-          cmd.Parameters.AddWithValue("@item",item);
-          cmd.Parameters.AddWithValue("@sale",sale);
-          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Item não atualizado.");
+          cmd.Parameters.AddWithValue("@total",newTotal);
+          cmd.Parameters.AddWithValue("@item",item);cmd.Parameters.AddWithValue("@sale",sale);
+          count=cmd.ExecuteNonQuery();
          }
-         using(var cmd=new SQLiteCommand(@"UPDATE sales SET
-          subtotal=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale),
-          gross_total=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0),
-          total_cost=(SELECT COALESCE(SUM(quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale),
-          net_profit=(SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0),
-          profit_reserve_10=MAX(0,((SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0))*0.1)
-          WHERE id=@sale",conn,tx)){
-          cmd.Parameters.AddWithValue("@sale",sale);cmd.ExecuteNonQuery();
-         }
-         WriteAudit(conn,tx,sale,"ALTERAR_ITEM_"+item,before,
-          "product_id="+product+"; name="+name+"; quantity="+quantity.Value+
-          "; price="+price.Value+"; total="+total+
-          "; novo_total_venda="+totalValue.Text);
-         tx.Commit();
         }
+        if(count!=1)throw new Exception("Não foi possível salvar o item desta venda.");
+        using(var cmd=new SQLiteCommand(@"UPDATE sales SET
+         subtotal=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale),
+         gross_total=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0),
+         total_cost=(SELECT COALESCE(SUM(quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale),
+         net_profit=(SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0),
+         profit_reserve_10=MAX(0,((SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0))*0.1)
+         WHERE id=@sale",conn,tx)){
+         cmd.Parameters.AddWithValue("@sale",sale);
+         if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não encontrada.");
+        }
+        WriteAudit(conn,tx,sale,(removeSelected?"RETIRAR_ITEM_":"ALTERAR_ITEM_")+item,
+         oldText,removeSelected?"Item retirado; total_venda="+after.ToString("N2"):
+         "item_id="+item+"; quantidade="+quantity.Value+"; preco="+price.Value+
+         "; total_item="+newTotal+"; total_venda="+after.ToString("N2"));
+        tx.Commit();
        }
-       dialog.DialogResult=DialogResult.OK;dialog.Close();
-      }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva");}
-     };
-     calculate();
-     try{
-      loadProducts(); // Todos os produtos aparecem automaticamente ao abrir.
-      if(productList.CurrentRow!=null){
-       selectedProduct.Text=Convert.ToString(productList.CurrentRow.Cells["name"].Value);
-       // Se continua o mesmo produto, manter preco original da venda.
-       if(Convert.ToInt64(productList.CurrentRow.Cells["id"].Value)==originalProduct)
-        price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,originalUnitPrice));
       }
-     }catch(Exception ex){MessageBox.Show("Não foi possível listar produtos: "+ex.Message,"Vendas");}
-     finally{populating=false;}
-     calculate();
+      dialog.DialogResult=DialogResult.OK;
+      dialog.Close();
+     };
+     remove.Click+=(sender,args)=>{
+      try{
+       if(selected==null)throw new Exception("Selecione um produto vendido.");
+       var oldLine=Convert.ToDecimal(selected["valor"]);
+       totalValue.Text="R$ "+(subtotal-oldLine-discount).ToString("N2");
+       var confirm=MessageBox.Show(dialog,
+        "Retirar da venda o produto "+Convert.ToString(selected["produto"])+
+        "?\nO valor da venda será recalculado e a exclusão ficará registrada.",
+        "Confirmar retirada",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
+       if(confirm==DialogResult.Yes)apply(true);
+       else projected();
+      }catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Retirar item");projected();}
+     };
+     save.Click+=(sender,args)=>{
+      try{apply(false);}
+      catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Alteração não salva");}
+     };
+     changing=true;
+     if(initiallySelected!=0)
+      foreach(DataGridViewRow r in soldGrid.Rows)
+       if(Convert.ToInt64(r.Cells["item_id"].Value)==initiallySelected){
+        soldGrid.CurrentCell=r.Cells["produto"];break;
+       }
+     changing=false;
+     loadSelection();
+     projected();
      if(dialog.ShowDialog(this)==DialogResult.OK){
-      // Recarrega a venda, o total do dia e o total do mes a partir do SQLite.
       LoadMaster();
-      MessageBox.Show("Venda atualizada e auditada. Total individual, totais do dia e do mês recalculados. "+
-       "Confira os pagamentos se o total mudou; o estoque não foi movimentado.","Vendas");
+      // Selecao da mesma venda apos atualizacao dos totais agregados.
+      foreach(DataGridViewRow row in master.Rows)
+       if(Convert.ToInt64(row.Cells["venda"].Value)==sale){
+        master.CurrentCell=row.Cells["cliente"];break;
+       }
+      LoadDetails();
+      MessageBox.Show("Venda atualizada com auditoria. Totais da venda, dia e mês recalculados. "+
+       "Confira o pagamento caso tenha mudado o valor. O estoque não foi movimentado.",
+       "Vendas");
      }
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração de produto");}
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Alterar produto da venda");}
+  }
+
+  // Pesquisar no catalogo apenas DEPOIS de selecionar um produto vendido.
+  // Busca inteligente: sem diferenca entre maiusculas, acentos ou ordem das
+  // palavras. Nao altera o cadastro, apenas devolve o substituto escolhido.
+  DataRow PickReplacementProduct(Form owner){
+   var catalog=Query("SELECT id,barcode,name,price,cost FROM products "+
+    "ORDER BY name COLLATE NOCASE,id");
+   using(var dialog=new Form{Name="amzgSaleReplacePicker",
+    Text="Buscar produto substituto",StartPosition=FormStartPosition.CenterParent,
+    Width=780,Height=545,MinimumSize=new Size(600,410),
+    BackColor=Color.FromArgb(244,249,254),
+    Font=new Font("Segoe UI",9.3f)}){
+    var screen=Screen.FromControl(owner).WorkingArea;
+    dialog.Size=new Size(Math.Min(dialog.Width,screen.Width-18),
+     Math.Min(dialog.Height,screen.Height-18));
+    var frame=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,
+     RowCount=4,Padding=new Padding(10)};
+    frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+    frame.RowStyles.Add(new RowStyle(SizeType.Absolute,49f));
+    frame.RowStyles.Add(new RowStyle(SizeType.Absolute,52f));
+    frame.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+    frame.RowStyles.Add(new RowStyle(SizeType.Absolute,53f));
+    frame.Controls.Add(new Label{Name="amzgSaleReplaceTitle",
+     Text="BUSCAR PRODUTO PARA SUBSTITUIR",
+     Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+     BackColor=Color.FromArgb(16,66,147),ForeColor=Color.White,
+     Padding=new Padding(14,0,0,0),
+     Font=new Font("Segoe UI",14f,FontStyle.Bold)},0,0);
+    var input=new TextBox{Name="amzgSaleReplaceSearch",Dock=DockStyle.Fill,
+     Font=new Font("Segoe UI",12.3f),
+     Margin=new Padding(4,11,4,7)};
+    frame.Controls.Add(input,0,1);
+    var list=new DataGridView{Name="amzgSaleReplaceResults",
+     Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
+     AllowUserToDeleteRows=false,RowHeadersVisible=false,
+     SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,
+     AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+     BackgroundColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
+     ScrollBars=ScrollBars.Both,ColumnHeadersHeight=36,
+     EnableHeadersVisualStyles=false,RowTemplate={Height=31}};
+    list.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(18,70,153);
+    list.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+    list.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.3f,FontStyle.Bold);
+    list.DataSource=catalog;
+    list.Columns["id"].Visible=false;
+    list.Columns["cost"].Visible=false;
+    list.Columns["barcode"].HeaderText="Código";
+    list.Columns["barcode"].FillWeight=82;
+    list.Columns["name"].HeaderText="Descrição";
+    list.Columns["name"].FillWeight=240;
+    list.Columns["price"].HeaderText="Preço (R$)";
+    list.Columns["price"].FillWeight=88;
+    list.Columns["price"].DefaultCellStyle.Format="N2";
+    frame.Controls.Add(list,0,2);
+    var actions=new TableLayoutPanel{Dock=DockStyle.Fill,
+     ColumnCount=3,RowCount=1};
+    actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55f));
+    actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,19f));
+    actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26f));
+    var resultCount=new Label{Dock=DockStyle.Fill,
+     Text="Digite nome ou código para filtrar.",
+     ForeColor=Color.FromArgb(39,73,125),
+     TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
+    var back=new Button{Text="Voltar",Dock=DockStyle.Fill,
+     DialogResult=DialogResult.Cancel,
+     FlatStyle=FlatStyle.Flat,BackColor=Color.White,
+     ForeColor=Color.FromArgb(24,70,151)};
+    var use=SalesButton("amzgSaleReplaceUse","Usar substituto",salesBlue);
+    use.Margin=new Padding(2,4,0,4);
+    actions.Controls.Add(resultCount,0,0);
+    actions.Controls.Add(back,1,0);actions.Controls.Add(use,2,0);
+    frame.Controls.Add(actions,0,3);
+    dialog.Controls.Add(frame);dialog.CancelButton=back;
+    DataRow chosen=null;
+    Action filter=()=>{
+     string q=NormalizeSaleProductSearch(input.Text);
+     var words=q.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+     var matches=catalog.AsEnumerable().Where(row=>{
+      string text=NormalizeSaleProductSearch(Convert.ToString(row["name"])+" "+
+       Convert.ToString(row["barcode"]));
+      return words.All(word=>text.Contains(word));
+     }).OrderByDescending(row=>NormalizeSaleProductSearch(
+       Convert.ToString(row["name"])).StartsWith(q))
+      .ThenBy(row=>Convert.ToString(row["name"])).Take(500).ToList();
+     var output=catalog.Clone();
+     foreach(var row in matches)output.ImportRow(row);
+     list.DataSource=output;
+     if(list.Columns.Contains("id"))list.Columns["id"].Visible=false;
+     if(list.Columns.Contains("cost"))list.Columns["cost"].Visible=false;
+     resultCount.Text=matches.Count.ToString()+" resultado(s)"+(matches.Count==500?" (primeiros 500)":"");
+    };
+    var timer=new System.Windows.Forms.Timer{Interval=180};
+    timer.Tick+=(sender,args)=>{timer.Stop();filter();};
+    input.TextChanged+=(sender,args)=>{timer.Stop();timer.Start();};
+    Action select=()=>{
+     var view=list.CurrentRow==null?null:list.CurrentRow.DataBoundItem as DataRowView;
+     if(view==null)return;
+     chosen=view.Row;dialog.DialogResult=DialogResult.OK;dialog.Close();
+    };
+    use.Click+=(sender,args)=>select();
+    list.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)select();};
+    dialog.Shown+=(sender,args)=>{input.Focus();};
+    try{
+     filter();
+     dialog.ShowDialog(owner);
+    }finally{timer.Stop();timer.Dispose();}
+    return chosen;
+   }
+  }
+
+  static string NormalizeSaleProductSearch(string value){
+   if(string.IsNullOrEmpty(value))return "";
+   var src=value.Normalize(System.Text.NormalizationForm.FormD).ToLowerInvariant();
+   var output=new System.Text.StringBuilder(src.Length);
+   foreach(char c in src){
+    if(System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)==
+     System.Globalization.UnicodeCategory.NonSpacingMark)continue;
+    if(char.IsLetterOrDigit(c))output.Append(c);
+    else if(output.Length>0&&output[output.Length-1]!=' ')output.Append(' ');
+   }
+   return output.ToString().Trim();
   }
 
   void SearchSale(){
