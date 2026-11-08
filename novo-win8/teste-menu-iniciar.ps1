@@ -78,8 +78,9 @@ try{
  if(@($form.Controls.Find('amzgHomeTitle',$true)).Count -gt 0){
   throw 'Nome duplicado sobre os indicadores da pagina inicial.'
  }
- if($form.Controls.Find('homePanel',$true)[0].Controls[0].Controls |
-    Where-Object {$_.Text -match 'Sistema de Gest|Mercearia|Bebidas|Gelo|PDV
+ if(@($form.Controls.Find('amzgDashboardCanvas',$true)).Count -ne 1){
+  throw 'Painel inicial ausente.'
+ }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
  if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
   throw 'A calculadora apareceu automaticamente, contrariando o modo oculto.'
