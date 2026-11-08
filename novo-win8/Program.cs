@@ -1634,9 +1634,25 @@ namespace ArmazemGratidao {
     backBar.Resize+=(sender,args)=>{back.Left=Math.Max(8,backBar.ClientSize.Width-back.Width-10);};
    }
    backBar.Controls.Add(back);
+   var salesBackSlot=form.Controls.Find("amzgSalesBackSlot",true).FirstOrDefault() as Panel;
    var pdvBackSlot=form.Controls.Find("pdvBackSlot",true).FirstOrDefault() as Panel;
    var stockArea=form.Controls.Find("stockNavigation",true).FirstOrDefault() as Panel;
-   if(pdvBackSlot!=null){
+   if(salesBackSlot!=null){
+    // Vendas: o botao de retorno ocupa a PRIMEIRA posicao da barra superior.
+    backBar.Dock=DockStyle.Fill;
+    backBar.Margin=Padding.Empty;
+    backBar.Padding=Padding.Empty;
+    backBar.BackColor=Color.Transparent;
+    back.Dock=DockStyle.Fill;
+    back.Left=0;back.Top=0;
+    back.Width=salesBackSlot.Width;
+    back.Height=salesBackSlot.Height;
+    back.Text="⌂  Voltar ao Menu Inicial";
+    back.Font=new Font("Segoe UI",9.3f,FontStyle.Bold);
+    back.BackColor=Color.FromArgb(198,30,48);
+    back.FlatAppearance.MouseOverBackColor=Color.FromArgb(225,51,65);
+    salesBackSlot.Controls.Add(backBar);
+   }else if(pdvBackSlot!=null){
     // No PDV, o botao Voltar fica antes do campo Codigo/Nome.
     backBar.Dock=DockStyle.Fill;
     backBar.Margin=Padding.Empty;
