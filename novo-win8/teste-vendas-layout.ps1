@@ -80,6 +80,10 @@ try{
  if($total.Height -lt 85 -or $left.Width -lt 350 -or $right.Width -lt 350){
   throw 'Painel de venda fora do layout de duas colunas.'
  }
+ $info=@($form.Controls.Find('amzgSalesInfoValue',$true))
+ if($info.Count -ne 1 -or $info[0].Width -lt 165){
+  throw 'Cliente, data ou pagamento estao espremidos no painel de detalhes.'
+ }
  $snapshot=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try{
   $form.DrawToBitmap($snapshot,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
