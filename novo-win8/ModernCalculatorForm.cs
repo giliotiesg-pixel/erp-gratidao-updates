@@ -45,11 +45,11 @@ namespace ArmazemGratidao {
    copy.Click+=(s,e)=>CopyResult();
    top.Controls.Add(name);top.Controls.Add(copy);
 
-   // Dois visores: a digitacao pequena fica acima; o resultado da
-   // operacao tem a area maior e sempre aparece no campo principal.
+   // Dois visores sem historico: o de cima acompanha a operacao inteira,
+   // o de baixo exibe com destaque o resultado (inclusive provisório).
    var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=200,
     BackColor=Color.FromArgb(24,49,89)};
-   expression=new Label{Name="amzgCalcExpression",Text="PRONTO PARA CALCULAR",
+   expression=new Label{Name="amzgCalcExpression",Text="0",
     Left=16,Top=5,Width=398,Height=22,
     Font=new Font("Segoe UI",9,FontStyle.Bold),
     ForeColor=Color.FromArgb(187,208,236),Visible=false};
@@ -96,11 +96,11 @@ namespace ArmazemGratidao {
     }
     using(var caption=new Font("Segoe UI",9f,FontStyle.Bold))
     using(var small=new Font("Segoe UI",19f,FontStyle.Bold)){
-     TextRenderer.DrawText(g,"DIGITAÇÃO",caption,
+     TextRenderer.DrawText(g,"CÁLCULO",caption,
       new Rectangle(inputArea.Left+11,inputArea.Top+5,96,inputArea.Height-10),
       Color.FromArgb(66,98,143),
       TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
-     TextRenderer.DrawText(g,string.IsNullOrEmpty(display.Text)?"0":display.Text,small,
+     TextRenderer.DrawText(g,string.IsNullOrEmpty(expression.Text)?"0":expression.Text,small,
       new Rectangle(inputArea.Left+107,inputArea.Top+5,inputArea.Width-120,inputArea.Height-10),
       Color.FromArgb(36,76,132),
       TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
@@ -224,17 +224,22 @@ namespace ArmazemGratidao {
     return false;
    }
   }
+  // O visor superior SEMPRE mostra a conta escrita, e nao apenas o
+  // ultimo numero digitado; o inferior mostra a resposta em tempo real.
   void RefreshPreview(){
    if(operation==null){
+    expression.Text=display.Text;
     result.Text=display.Text;
     preview.Text="Resultado";
     return;
    }
    if(entering){
+    expression.Text=Format(stored)+" "+operation;
     result.Text=Format(stored);
     preview.Text="Digite o próximo valor";
     return;
    }
+   expression.Text=Format(stored)+" "+operation+" "+display.Text;
    decimal answer;
    bool ok=Calculate(stored,Current(),operation,out answer,false);
    result.Text=ok?Format(answer):"—";
@@ -255,7 +260,7 @@ namespace ArmazemGratidao {
     }
     if(key=="C"){
      stored=0m;operation=null;entering=true;
-     display.Text="0";result.Text="0";expression.Text="PRONTO PARA CALCULAR";
+     display.Text="0";result.Text="0";expression.Text="0";
      preview.Text="Use os botões ou o teclado";return;
     }
     if(key=="CE"){
