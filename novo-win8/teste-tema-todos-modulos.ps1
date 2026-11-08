@@ -92,7 +92,11 @@ foreach($sample in $items){
     else{[Type[]]@([string],[string])}
   $ctor=$type.GetConstructor($argTypes)
   if($null -eq $ctor){throw "Construtor indisponivel: $($sample.Class)"}
-  $argsList=[object[]]@($sample.Args)
+  if($sample.Args.Count -eq 1){
+   $argsList=[object[]]@([string]($sample.Args[0]))
+  }else{
+   $argsList=[object[]]@([string]($sample.Args[0]),[string]($sample.Args[1]))
+  }
   $form=$ctor.Invoke($argsList)
   $form.StartPosition='Manual'
   $form.Location=[Drawing.Point]::new(40,40)
