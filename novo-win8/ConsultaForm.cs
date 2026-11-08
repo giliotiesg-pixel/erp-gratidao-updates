@@ -791,7 +791,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      throw new Exception("Selecione o item da venda que deseja alterar no painel direito.");
     long item=Convert.ToInt64(details.CurrentRow.Cells["item_id"].Value);
     var current=Query("SELECT product_id,name,quantity,unit_price,total FROM sale_items WHERE id=@item","@item",item);
-    var saleRecord=Query("SELECT gross_total FROM sales WHERE id=@sale","@sale",sale);
+    var saleRecord=Query("SELECT gross_total,COALESCE(discount_total,0) AS discount_total FROM sales WHERE id=@sale","@sale",sale);
+    var itemsSubtotal=Query("SELECT COALESCE(SUM(total),0) AS subtotal FROM sale_items WHERE sale_id=@sale","@sale",sale);
     if(current.Rows.Count==0||saleRecord.Rows.Count==0)
      throw new Exception("Venda ou item não encontrado.");
     var row=current.Rows[0];
@@ -800,6 +801,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     decimal originalUnitPrice=Convert.ToDecimal(row["unit_price"]);
     decimal oldLineTotal=Convert.ToDecimal(row["total"]);
     decimal originalSaleTotal=Convert.ToDecimal(saleRecord.Rows[0]["gross_total"]);
+    decimal initialSubtotal=Convert.ToDecimal(itemsSubtotal.Rows[0]["subtotal"]);
+    decimal saleDiscount=Convert.ToDecimal(saleRecord.Rows[0]["discount_total"]);
     string originalName=Convert.ToString(row["name"]);
     using(var dialog=new Form{
      Name="amzgChangeProductDialog",Text="Alterar produto da venda #"+sale,
@@ -907,7 +910,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      footer.SetColumnSpan(totalCaption,2);
      footer.Controls.Add(totalValue,2,0);
      var hint=new Label{Name="amzgSaleEditHint",Dock=DockStyle.Fill,
-      Text="Prévia do total da venda selecionada; outros dias e meses só são atualizados ao salvar.",
+      Text="Este valor corresponde somente à venda selecionada.",
       Font=new Font("Segoe UI",8.2f),
       ForeColor=Color.FromArgb(77,96,124),TextAlign=ContentAlignment.MiddleLeft,
       AutoEllipsis=true};
@@ -927,7 +930,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      DataTable productTable=null;
      Action calculate=()=>{
       decimal newLine=decimal.Round(quantity.Value*price.Value,2);
-      decimal projected=decimal.Round(originalSaleTotal-oldLineTotal+newLine,2);
+      decimal projected=decimal.Round(initialSubtotal-oldLineTotal+newLine-saleDiscount,2);
       totalValue.Text="R$ "+projected.ToString("N2");
      };
      quantity.ValueChanged+=(sender,args)=>calculate();
@@ -993,7 +996,12 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       catch(Exception ex){MessageBox.Show("Erro na busca: "+ex.Message,"Vendas");}
       finally{populating=false;}
       if(productList.CurrentRow!=null){
-       selectedProduct.Text=Convert.ToString(productList.CurrentRow.Cells["name"].Value);
+       var chosenRow=productList.CurrentRow;
+       selectedProduct.Text=Convert.ToString(chosenRow.Cells["name"].Value);
+       decimal newCatalogPrice=chosenRow.Cells["price"].Value==DBNull.Value?0:
+        Convert.ToDecimal(chosenRow.Cells["price"].Value);
+       if(Convert.ToInt64(chosenRow.Cells["id"].Value)!=originalProduct)
+        price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,newCatalogPrice));
        calculate();
       }
      };
