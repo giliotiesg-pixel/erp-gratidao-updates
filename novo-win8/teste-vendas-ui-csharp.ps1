@@ -133,7 +133,13 @@ public static class AmzgSalesUiTest {
        }
       }
       quantity.Value=qty;unitPrice.Value=price;
-      if(!total.Text.Contains(expected.ToString("N2",new System.Globalization.CultureInfo("pt-BR"))))
+      string displayed=total.Text.Replace("R$","").Trim();
+      if(displayed.IndexOf(',')>=0)displayed=displayed.Replace(".","").Replace(',','.');
+      decimal actual;
+      if(!decimal.TryParse(displayed,
+        System.Globalization.NumberStyles.Number,
+        System.Globalization.CultureInfo.InvariantCulture,out actual)||
+        Math.Abs(actual-expected)>0.005m)
        throw new Exception("Total individual esperado "+expected+"; exibido "+total.Text);
       clicked=true;
       save.PerformClick();
