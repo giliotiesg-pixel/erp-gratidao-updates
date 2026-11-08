@@ -41,7 +41,9 @@ $main=$null
 $form=$null
 try{
  $main=[Activator]::CreateInstance($mainType)
- $form=[Activator]::CreateInstance($salesType,[object[]]@($db,$false))
+ $constructor=$salesType.GetConstructor([Type[]]@([string],[bool]))
+ if($null -eq $constructor){throw 'ConsultaForm nao possui construtor (string, bool).'}
+ $form=$constructor.Invoke([object[]]@([string]$db,[bool]$false))
  $form.StartPosition='Manual'
  $form.Location=[Drawing.Point]::new(30,30)
  $form.Size=[Drawing.Size]::new(1280,780)
