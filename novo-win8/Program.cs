@@ -366,10 +366,11 @@ namespace ArmazemGratidao {
 
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
    status.BackColor=Color.FromArgb(14,54,116);status.ForeColor=Color.White;status.Padding=new Padding(12,0,0,0);
-   menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
+   menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
    menuToggle.Text="⊞  Iniciar";
+   menuToggle.Name="amzgStartHeader";
    menuToggle.BackColor=Color.FromArgb(200,34,54);
    menuToggle.Click+=(sender,args)=>ToggleStartMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
@@ -396,7 +397,52 @@ namespace ArmazemGratidao {
    calculatorHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(200,52,79);
    calculatorHeader.Click+=(sender,args)=>{CloseStartMenu();ShowCalculator();};
    RoundHomeControl(calculatorHeader,11);header.Controls.Add(calculatorHeader);
-   // Marca exibida no conteudo, nao duplicada sobre a barra de botoes.
+   // Identidade da loja sempre visivel ANTES do botao Iniciar.
+   // Reutiliza o logotipo incorporado: nao ha download nem marca d'agua.
+   var brandPicture=new PictureBox{Name="amzgHeaderLogo",
+    Width=49,Height=49,Left=12,Top=8,
+    SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
+   try{
+    using(var source=typeof(MainForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(source!=null)using(var img=Image.FromStream(source))
+      brandPicture.Image=new Bitmap(img);
+    }
+   }catch(Exception){/* Nome permanece legivel mesmo se a imagem falhar. */}
+   if(brandPicture.Image==null)brandPicture.Image=HomeShortcutImage("PDV");
+   brandPicture.Disposed+=(sender,args)=>{if(brandPicture.Image!=null){
+    brandPicture.Image.Dispose();brandPicture.Image=null;}};
+   var brandCaption=new Label{Name="amzgHeaderBrand",Text="ARMAZÉM\nGRATIDÃO",
+    Font=new Font("Segoe UI",12.2f,FontStyle.Bold),
+    ForeColor=Color.White,BackColor=Color.Transparent,
+    TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=false,
+    Left=69,Top=9,Width=166,Height=49};
+   header.Controls.Add(brandPicture);
+   header.Controls.Add(brandCaption);
+   // Distribuicao horizontal compacta sem sobrepor controles em 950-1280 px.
+   Action alignHeader=()=>{
+    if(header.IsDisposed)return;
+    const int gap=8;
+    int x=brandCaption.Right+14;
+    int usable=header.ClientSize.Width-x-12;
+    int[] baseWidths={108,174,86,145};
+    int total=baseWidths.Sum()+3*gap;
+    float factor=usable>=total?1f:
+     Math.Max(0.78f,(float)(usable-3*gap)/(total-3*gap));
+    Button[] items={menuToggle,updateHeader,inicioHeader,calculatorHeader};
+    for(int i=0;i<items.Length;i++){
+     var btn=items[i];
+     btn.Left=x;btn.Top=13;btn.Height=39;
+     btn.Width=Math.Max(70,(int)(baseWidths[i]*factor));
+     btn.Font=new Font("Segoe UI",factor<0.9f?8.5f:9.3f,FontStyle.Bold);
+     x+=btn.Width+gap;
+    }
+    header.Height=66;
+   };
+   header.Resize+=(sender,args)=>alignHeader();
+   alignHeader();
+   brandCaption.BringToFront();brandPicture.BringToFront();
+
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -1118,19 +1164,11 @@ namespace ArmazemGratidao {
     BackColor=Color.FromArgb(245,249,254)};
    // Painel COMUM sem desenho em segundo plano.
    var canvas=new Panel{Name="amzgDashboardCanvas",Left=0,Top=0,
-    Width=1015,Height=697,BackColor=Color.FromArgb(245,249,254)};
+    Width=1015,Height=622,BackColor=Color.FromArgb(245,249,254)};
    page.Controls.Add(canvas);
-   var title=new Label{Name="amzgHomeTitle",Text="Armazém Gratidão",
-    Left=26,Top=12,Width=530,Height=49,AutoEllipsis=false,
-    Font=new Font("Segoe UI",25f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(26,68,135)};
-   canvas.Controls.Add(title);
-   var subtitle=new Label{Text="Sistema de Gestão  •  Mercearia  •  Bebidas  •  Gelo  •  PDV",
-    Left=29,Top=60,Width=685,Height=29,
-    Font=new Font("Segoe UI",10f),ForeColor=Color.FromArgb(90,104,130)};
-   canvas.Controls.Add(subtitle);
+   // A marca ja esta no cabecalho, sem duplicar nome nem descricao.
    // O botao Iniciar do cabecalho continua sempre presente.
-   var metrics=new Panel{Name="amzgDashboardMetrics",Left=22,Top=108,
+   var metrics=new Panel{Name="amzgDashboardMetrics",Left=22,Top=22,
     Width=971,Height=87,BackColor=Color.Transparent};
    canvas.Controls.Add(metrics);
    string[] labels={"VENDAS DO DIA","TOTAL VENDIDO HOJE",
@@ -1152,8 +1190,8 @@ namespace ArmazemGratidao {
     card.Controls.Add(bar);card.Controls.Add(caption);card.Controls.Add(figure);
     metrics.Controls.Add(card);metricCards[i]=card;values[i]=figure;
    }
-   var tiles=new Panel{Name="amzgDashboardTiles",Left=22,Top=211,
-    Width=971,Height=138,BackColor=Color.Transparent};
+   var tiles=new Panel{Name="amzgDashboardTiles",Left=22,Top=128,
+    Width=971,Height=128,BackColor=Color.Transparent};
    canvas.Controls.Add(tiles);
    var quick=new[]{
     Tuple.Create("PDV","PDV  •  Nova venda"),Tuple.Create("Vendas","Vendas"),
@@ -1174,7 +1212,7 @@ namespace ArmazemGratidao {
      Image=HomeWhiteTileIcon(entry.Item1),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      TextAlign=ContentAlignment.MiddleCenter,Cursor=Cursors.Hand,UseMnemonic=false,
-     AutoEllipsis=true,Padding=new Padding(7,0,4,0),Width=177,Height=61};
+     AutoEllipsis=true,Padding=new Padding(7,0,4,0),Width=177,Height=56};
     btn.FlatAppearance.BorderSize=0;
     btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(35,103,202);
     RoundHomeControl(btn,11);
@@ -1183,7 +1221,7 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(btn);buttons.Add(btn);
    }
    // Ranking em duas tabelas compactas: 1-10 e 11-20.
-   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=365,
+   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=274,
     Width=971,Height=309,BackColor=Color.White};
    RoundHomeControl(ranking,12);
    var rankHeader=new Panel{Name="amzgDashboardRankingHeader",
@@ -1230,7 +1268,7 @@ namespace ArmazemGratidao {
     int buttonWidth=(tiles.Width-4*tGap)/5;
     for(int i=0;i<buttons.Count;i++){
      buttons[i].Left=(i%5)*(buttonWidth+tGap);
-     buttons[i].Top=(i/5)*69;
+     buttons[i].Top=(i/5)*63;
      buttons[i].Width=buttonWidth;
     }
     ranking.Width=width-44;
@@ -1243,7 +1281,7 @@ namespace ArmazemGratidao {
     leftGrid.Width=tableWidth;rightGrid.Width=tableWidth;
     int h=Math.Max(210,rankArea.ClientSize.Height-rankArea.Padding.Vertical);
     leftGrid.Height=h;rightGrid.Height=h;
-    page.AutoScrollMinSize=new Size(width,698);
+    page.AutoScrollMinSize=new Size(width,625);
    };
    page.Resize+=(sender,args)=>fit();
    rankArea.Resize+=(sender,args)=>fit();
