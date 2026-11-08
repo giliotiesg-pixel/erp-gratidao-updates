@@ -280,6 +280,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-vendas-total-individual.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-Alterar-Produto-Venda.png'
+      - name: Testar tema visual em todas as janelas e gerar previas reais dos modulos
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-tema-todos-modulos.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Previas-Modulos'
       - name: Testar visual do PDV exatamente na disposicao aprovada
         shell: powershell
         run: |
@@ -298,6 +303,7 @@ jobs:
             dist/Previa-PDV.png
             dist/Previa-Modulo-Vendas.png
             dist/Previa-Alterar-Produto-Venda.png
+            dist/Previas-Modulos/Previa-Modulo-*.png
             dist/manifesto-proposto.json
             dist/VALIDACAO-SHA256.txt
           retention-days: 30
