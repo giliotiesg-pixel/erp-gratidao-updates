@@ -373,6 +373,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   static string SalesWithDailyTotalsSql(){
    return "SELECT s.id AS venda,s.created_at AS data,s.customer_name AS cliente,"+
     "s.payment_method AS pagamento,s.gross_total AS total,"+
+    "(SELECT COUNT(*) FROM sale_items si WHERE si.sale_id=s.id) AS itens,"+
     "COALESCE(day.total,0) AS 'Total do dia' "+
     "FROM sales s LEFT JOIN (SELECT date(created_at) AS dia,SUM(COALESCE(gross_total,0)) AS total "+
     "FROM sales GROUP BY date(created_at)) day ON day.dia=date(s.created_at)";
@@ -399,17 +400,41 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    }catch(Exception ex){MessageBox.Show("Não foi possível calcular os totais diários: "+ex.Message,"Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   string SalesFilterSql(){
-   if(selectedMonth)return "created_at >= @date AND created_at < date(@date,'+1 month')";
-   if(selectedDate)return "created_at >= @date AND created_at < date(@date,'+1 day')";
-   return previous?"created_at < date('now','localtime')":"created_at >= date('now','localtime') AND created_at < date('now','localtime','+1 day')";
+   string condition;
+   if(selectedRange)condition="created_at >= @start AND created_at < date(@end,'+1 day')";
+   else if(selectedMonth)condition="created_at >= @date AND created_at < date(@date,'+1 month')";
+   else if(selectedDate)condition="created_at >= @date AND created_at < date(@date,'+1 day')";
+   else condition=previous?"created_at < date('now','localtime')":
+    "created_at >= date('now','localtime') AND created_at < date('now','localtime','+1 day')";
+   if(!credit&&!string.IsNullOrEmpty(chosenCustomer))
+    condition+=" AND TRIM(COALESCE(customer_name,''))=@customer";
+   return condition;
   }
   string SalesFilterParameter(){return selectedDate||selectedMonth?"@date":null;}
   object SalesFilterValue(){
    if(selectedMonth)return monthFilter.Value.ToString("yyyy-MM-01");
    return selectedDate?(object)dateFilter.Value.ToString("yyyy-MM-dd"):null;
   }
+  DataTable QueryFiltered(string sql){
+   using(var connection=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+    DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
+    connection.Open();
+    using(var command=new SQLiteCommand(sql,connection)){
+     if(selectedMonth)command.Parameters.AddWithValue("@date",monthFilter.Value.ToString("yyyy-MM-01"));
+     else if(selectedDate)command.Parameters.AddWithValue("@date",dateFilter.Value.ToString("yyyy-MM-dd"));
+     if(selectedRange){
+      command.Parameters.AddWithValue("@start",dateFilter.Value.ToString("yyyy-MM-dd"));
+      command.Parameters.AddWithValue("@end",rangeEnd.Value.ToString("yyyy-MM-dd"));
+     }
+     if(!string.IsNullOrEmpty(chosenCustomer))command.Parameters.AddWithValue("@customer",chosenCustomer);
+     var result=new DataTable();
+     using(var adapter=new SQLiteDataAdapter(command))adapter.Fill(result);
+     return result;
+    }
+   }
+  }
   string SalesFilterTitle(){
-   return selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
+   return selectedRange?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy")+" a "+rangeEnd.Value.ToString("dd/MM/yyyy"):selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
   }
   // A numeracao e cronologica; IDs de vendas nunca mudam (itens, pagamentos e Fiado).
   void PrepareSalesList(DataTable rows){
