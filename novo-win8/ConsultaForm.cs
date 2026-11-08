@@ -327,6 +327,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
     ForeColor=Color.FromArgb(22,58,121),Padding=new Padding(5,5,0,0)};
    var valuePanel=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,5,0,0)};
+   saleInfo.Name="amzgSalesInfoValue";
    saleInfo.Text="Selecione uma venda\n\n";
    valuePanel.Controls.Add(saleInfo);
    var totalPanel=new Panel{Dock=DockStyle.Right,Width=195,
@@ -335,6 +336,19 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     Text="Total da Venda",Font=new Font("Segoe UI",10f,FontStyle.Bold),
     ForeColor=Color.FromArgb(22,58,121),TextAlign=ContentAlignment.MiddleCenter});
    saleTotal.Text="R$ 0,00";totalPanel.Controls.Add(saleTotal);
+   var smallInfo=new Font("Segoe UI",9f,FontStyle.Bold);
+   var largeInfo=saleInfo.Font;
+   bool compactInfo=false;
+   right.SizeChanged+=(sender,args)=>{
+    bool compact=right.ClientSize.Width<610;
+    if(compact!=compactInfo){
+     compactInfo=compact;
+     infoCaption.Width=compact?108:145;
+     totalPanel.Width=compact?154:195;
+     saleInfo.Font=compact?smallInfo:largeInfo;
+    }
+   };
+   FormClosed+=(sender,args)=>smallInfo.Dispose();
    saleHeader.Controls.Add(valuePanel);saleHeader.Controls.Add(infoCaption);saleHeader.Controls.Add(totalPanel);
    right.Controls.Add(details);right.Controls.Add(saleHeader);right.Controls.Add(heading);
    salesSplit.Panel2.Controls.Add(right);
