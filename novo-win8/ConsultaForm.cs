@@ -382,10 +382,9 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(credit)return;
    try{
     string condition=SalesFilterSql();
-    var days=Query("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
+    var days=QueryFiltered("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
      "ROUND(SUM(COALESCE(gross_total,0)),2) AS 'Total vendido (R$)' FROM sales WHERE "+condition+
-     " GROUP BY date(created_at) ORDER BY date(created_at) DESC",
-     SalesFilterParameter(),SalesFilterValue());
+     " GROUP BY date(created_at) ORDER BY date(created_at) DESC");
     using(var dialog=new Form{Text="Fechamento de vendas - totais diários",Width=680,Height=520,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      decimal total=0;long count=0;
      foreach(DataRow row in days.Rows){total+=Convert.ToDecimal(row["Total vendido (R$)"]);count+=Convert.ToInt64(row["Vendas"]);}
@@ -455,34 +454,64 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     item[display]="Venda nº "+sequenceNumber+"  |  "+Convert.ToString(item["cliente"])+"  |  "+Convert.ToString(item["data"])+"  |  R$ "+Convert.ToDecimal(item["total"]).ToString("N2");
    }
   }
-  void LoadMaster() {
+  void LoadMaster(){
+   if(loadingMaster||IsDisposed||Disposing)return;
    loadingMaster=true;
-   try {
+   try{
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     Query(SalesWithDailyTotalsSql()+" WHERE "+SalesFilterSql().Replace("created_at","s.created_at")+" ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000",SalesFilterParameter(),SalesFilterValue());
+     QueryFiltered(SalesWithDailyTotalsSql()+" WHERE "+
+      SalesFilterSql().Replace("created_at","s.created_at")+
+      " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000");
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
-     foreach(DataGridViewColumn column in master.Columns)column.Visible=column.Name=="Venda para consultar";
-     master.Columns["Venda para consultar"].HeaderText="VENDAS POR DATA — clique para ver produtos e quantidades";
-     master.Columns["Venda para consultar"].DefaultCellStyle.Padding=new Padding(8,4,4,4);
-     if(master.Columns.Contains("venda")){master.Columns["venda"].HeaderText="Nº venda";master.Columns["venda"].FillWeight=72;}
-     if(master.Columns.Contains("data")){master.Columns["data"].HeaderText="Data e hora";master.Columns["data"].FillWeight=158;}
-     if(master.Columns.Contains("cliente")){master.Columns["cliente"].HeaderText="Cliente";master.Columns["cliente"].FillWeight=230;}
-     if(master.Columns.Contains("pagamento")){master.Columns["pagamento"].HeaderText="Pagamento";master.Columns["pagamento"].FillWeight=134;}
-     if(master.Columns.Contains("total")){master.Columns["total"].HeaderText="Valor (R$)";master.Columns["total"].FillWeight=120;master.Columns["total"].DefaultCellStyle.Format="N2";master.Columns["total"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     if(master.Columns.Contains("Total do dia")){master.Columns["Total do dia"].HeaderText="Total do dia (R$)";master.Columns["Total do dia"].FillWeight=150;master.Columns["Total do dia"].DefaultCellStyle.Format="N2";master.Columns["Total do dia"].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     heading.Text=selectedMonth?"VENDAS | "+monthFilter.Value.ToString("MMMM yyyy").ToUpperInvariant():selectedDate?"VENDAS DE "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"VENDAS ANTERIORES | Clique na venda para ver produtos":"VENDAS DO DIA | Clique na venda para ver produtos";
-     var totals=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE "+SalesFilterSql(),SalesFilterParameter(),SalesFilterValue());
-     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total FROM sales WHERE created_at >= @date AND created_at < date(@date,'+1 month')","@date",
-      (selectedMonth?monthFilter.Value:DateTime.Today).ToString("yyyy-MM-01"));
-     summary.Text="  "+SalesFilterTitle()+"  |  Quantidade: "+Convert.ToInt64(totals.Rows[0]["quantidade"])+
-      "  |  TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
-      "  |  TOTAL DO MÊS: R$ "+Convert.ToDecimal(monthly.Rows[0]["total"]).ToString("N2")+
-      (rows.Rows.Count>=3000?"  |  Exibindo 3000 vendas; totais calculados sobre todas.":"  |  Consulte Totais por dia");
+     master.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+     // A numeracao exibida e a ordem cronologica; a chave ID continua intacta.
+     foreach(DataGridViewColumn col in master.Columns)col.Visible=
+      col.Name=="Ordem cronológica"||col.Name=="cliente"||
+      col.Name=="data"||col.Name=="itens"||col.Name=="total";
+     var number=master.Columns["Ordem cronológica"];
+     number.HeaderText="Nº Venda";number.DisplayIndex=0;number.FillWeight=74;number.MinimumWidth=73;
+     var client=master.Columns["cliente"];
+     client.HeaderText="Cliente";client.DisplayIndex=1;client.FillWeight=183;client.MinimumWidth=130;
+     var date=master.Columns["data"];
+     date.HeaderText="Data / Hora";date.DisplayIndex=2;date.FillWeight=160;date.MinimumWidth=122;
+     var items=master.Columns["itens"];
+     items.HeaderText="Itens";items.DisplayIndex=3;items.FillWeight=52;items.MinimumWidth=51;
+     var total=master.Columns["total"];
+     total.HeaderText="Total (R$)";total.DisplayIndex=4;total.FillWeight=100;total.MinimumWidth=90;
+     total.DefaultCellStyle.Format="N2";
+     total.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+     number.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+     items.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+     var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
+     if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
+      (rows.Rows.Count>=3000?" (primeiras 3.000)":"");
+     var totals=QueryFiltered("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE "+SalesFilterSql());
+     var daily=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE created_at >= date('now','localtime') "+
+      "AND created_at < date('now','localtime','+1 day')");
+     var monthly=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
+      "FROM sales WHERE created_at >= @date AND created_at < date(@date,'+1 month')",
+      "@date",(selectedMonth?monthFilter.Value:DateTime.Today).ToString("yyyy-MM-01"));
+     long selectedCount=Convert.ToInt64(totals.Rows[0]["quantidade"]);
+     long todayCount=Convert.ToInt64(daily.Rows[0]["quantidade"]);
+     decimal todayTotal=Convert.ToDecimal(daily.Rows[0]["total"]);
+     decimal monthlyTotal=Convert.ToDecimal(monthly.Rows[0]["total"]);
+     string dayText="R$ "+todayTotal.ToString("N2");
+     string monthText="R$ "+monthlyTotal.ToString("N2");
+     footerCount.Text="Vendas do Dia: "+todayCount.ToString("N0");
+     footerToday.Text="Total Vendido Hoje: "+dayText;
+     footerMonth.Text="Total do Mês: "+monthText;
+     headerToday.Text=dayText;
+     headerMonth.Text=monthText;
+     summary.Text=SalesFilterTitle()+" | Quantidade: "+selectedCount+
+      " | TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
+      " | TOTAL DO MÊS: "+monthText;
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir modulo");}
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir módulo");}
    finally{loadingMaster=false;LoadDetails();}
   }
 
