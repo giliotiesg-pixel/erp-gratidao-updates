@@ -1102,7 +1102,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
        "Vendas");
      }
     }
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Alterar produto da venda");}
+   }catch(Exception ex){
+    if(string.Equals(Environment.GetEnvironmentVariable("CI"),"true",StringComparison.OrdinalIgnoreCase))
+     Console.Error.WriteLine("AMZG_UI_TEST_CHANGE_PRODUCT: "+ex.ToString());
+    MessageBox.Show(ex.Message,"Alterar produto da venda");
+   }
   }
 
   // Pesquisar no catalogo apenas DEPOIS de selecionar um produto vendido.
