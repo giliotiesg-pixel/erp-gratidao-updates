@@ -95,6 +95,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   }
   void BuildSalesPage(){
    BackColor=Color.FromArgb(246,249,253);
+   StyleSalesGrid(master);
+   StyleSalesGrid(details);
    var layout=new TableLayoutPanel{Name="amzgSalesLayout",Dock=DockStyle.Fill,
     ColumnCount=1,RowCount=5,Padding=new Padding(9,0,9,9),Margin=Padding.Empty};
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
