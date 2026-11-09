@@ -1526,7 +1526,7 @@ namespace ArmazemGratidao {
     if(modulesWindow.WindowState==FormWindowState.Minimized)modulesWindow.WindowState=FormWindowState.Normal;
     modulesWindow.BringToFront();modulesWindow.Activate();return;
    }
-   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
+   var dialog=new StyledDialogForm{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
     MinimumSize=new Size(480,340),StartPosition=FormStartPosition.CenterParent,
     BackColor=Color.FromArgb(246,249,253),ShowInTaskbar=true,AutoScroll=false};
    modulesWindow=dialog;
@@ -1680,7 +1680,7 @@ namespace ArmazemGratidao {
     string ip=MobileStockServer.LanAddress();
     if(string.IsNullOrWhiteSpace(ip)){MessageBox.Show("Não foi encontrada uma rede Wi-Fi local. Conecte o computador e o celular à mesma rede.","Estoque pelo celular");return;}
     string address="http://"+ip+":"+MobileStockServer.Port+"/?chave="+mobileStock.Token;
-    using(var dialog=new Form{Text="Estoque pelo celular - QR Code",Width=760,Height=510,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Estoque pelo celular - QR Code",Width=760,Height=510,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
      var title=new Label{Text="Conecte o celular pelo QR Code",Left=20,Top=13,Width=710,Height=42,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,65,141)};
      var instructions=new Label{Text="1. Conecte o celular e o computador à mesma rede Wi-Fi."+Environment.NewLine+
       "2. Abra a câmera do celular e aponte para o QR Code."+Environment.NewLine+
@@ -2288,7 +2288,7 @@ namespace ArmazemGratidao {
    }
   }
  // Interface Windows Forms independente, sem navegador embutido e sem salvar o token no banco.
- public sealed class WhatsAppNormalForm:Form {
+ public sealed class WhatsAppNormalForm:StyledDialogForm {
   readonly TextBox phone=new TextBox{Width=330};
   readonly TextBox message=new TextBox{Multiline=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Text="Olá! Aqui é do Armazém Gratidão."};
   readonly Label info=new Label{Dock=DockStyle.Bottom,Height=62,Text="WhatsApp comum: o envio é confirmado no WhatsApp Web ou aplicativo externo. PDFs precisam ser anexados manualmente.",Padding=new Padding(12)};
@@ -2323,7 +2323,7 @@ namespace ArmazemGratidao {
    catch(Exception ex){MessageBox.Show("Não foi possível abrir o WhatsApp: "+ex.Message);}
   }
  }
- public sealed class StockCountQuickForm:Form {
+ public sealed class StockCountQuickForm:StyledDialogForm {
   readonly string database;
   readonly TextBox code=new TextBox{Width=240,Font=new Font("Segoe UI",15,FontStyle.Bold)};
   readonly TextBox description=new TextBox{Width=450,ReadOnly=true,BackColor=Color.White,Font=new Font("Segoe UI",12)};
