@@ -346,7 +346,7 @@ public static class AMZGMouse {
  }
  if(@($modules[0].Controls | Where-Object {$null -eq $_.Image -or
    $_.Image.Width -lt 20 -or $_.Image.Width -gt 28 -or
-   $_.Width -lt 218 -or $_.Width -gt 240 -or
+   $_.Width -lt 200 -or $_.Width -gt 216 -or
    $_.Height -lt 38 -or $_.Height -gt 48}).Count -gt 0){
   throw 'Modulo fora do padrao compacto ou sem icone.'
  }
@@ -364,7 +364,7 @@ public static class AMZGMouse {
   }
   $lastTop=$tile.Top
  }
- if($popup.Width -gt 530 -or $popup.Height -gt 450){
+ if($popup.Width -gt 500 -or $popup.Height -gt 450){
   throw 'Janela Iniciar ainda usa dimensoes grandes antigas.'
  }
  if(@($modules[0].Controls | Where-Object {

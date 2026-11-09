@@ -1252,7 +1252,7 @@ namespace ArmazemGratidao {
    startMenuPopup=popup;
    Rectangle working=Screen.FromControl(this).WorkingArea;
    Point start=menuToggle.PointToScreen(new Point(0,menuToggle.Height+5));
-   int x=Math.Max(working.Left+4,Math.Min(start.X,working.Right-520));
+   int x=Math.Max(working.Left+4,Math.Min(start.X,working.Right-500));
     int y=Math.Max(working.Top+4,Math.Min(start.Y,working.Bottom-395));
     popup.Location=new Point(x,y);
     popup.Height=Math.Max(355,Math.Min(418,working.Bottom-y-8));

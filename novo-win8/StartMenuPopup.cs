@@ -23,7 +23,7 @@ namespace ArmazemGratidao {
   readonly TextBox search;
   readonly Dictionary<string,Button> sectionButtons=new Dictionary<string,Button>();
   const int CompactWidth=228;
-  const int ExpandedWidth=506;
+  const int ExpandedWidth=486;
   string selectedSection=null;
   bool closing=false;
 
@@ -263,13 +263,13 @@ namespace ArmazemGratidao {
     label=label.Replace("Pdv","PDV").Replace("Whatsapp","WhatsApp");
     var tile=new Button{Name="amzgStartModule"+modules.Controls.Count,
      AccessibleDescription=item.Item1,Tag=item.Item1,
-     Text=label,Size=new Size(232,44),
-     MinimumSize=new Size(232,44),MaximumSize=new Size(232,44),
+     Text=label,Size=new Size(210,44),
+     MinimumSize=new Size(210,44),MaximumSize=new Size(210,44),
      Margin=new Padding(3,2,3,2),Padding=new Padding(5,0,5,0),
      BackColor=Color.FromArgb(20,78,166),ForeColor=Color.White,
      FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,AutoEllipsis=true,
-     UseMnemonic=false,Font=new Font("Segoe UI",9f,FontStyle.Bold),
-     Image=ManagedIcon(item.Item1,24),ImageAlign=ContentAlignment.MiddleLeft,
+     UseMnemonic=false,Font=new Font("Segoe UI",8.7f,FontStyle.Bold),
+     Image=ManagedIcon(item.Item1,22),ImageAlign=ContentAlignment.MiddleLeft,
      TextAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText};
     tile.FlatAppearance.BorderSize=0;
