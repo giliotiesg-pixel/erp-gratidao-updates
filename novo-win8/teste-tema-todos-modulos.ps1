@@ -141,6 +141,10 @@ foreach($sample in $items){
     if($btn.Height -gt 31){
      throw "Botao grande em $($sample.Name): $($btn.Text) $($btn.Height) px"
     }
+    $textWidth=[Windows.Forms.TextRenderer]::MeasureText($btn.Text,$btn.Font).Width+12
+    if($textWidth -le 192 -and $btn.Width -lt ($textWidth-3)){
+     throw "Legenda de botao cortada em $($sample.Name): $($btn.Text), largura $($btn.Width) vs $textWidth"
+    }
    }
    if($toolbar.Dock -eq [Windows.Forms.DockStyle]::Top -and
       $toolbar.Height -gt 49 -and
