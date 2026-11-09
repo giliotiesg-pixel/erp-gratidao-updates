@@ -6,7 +6,7 @@ using System.Globalization;
 using System.Windows.Forms;
 using System.IO;
 namespace ArmazemGratidao {
- public sealed class LucroForm : Form {
+ public sealed class LucroForm : StyledDialogForm {
   readonly string db;
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly Label[] metricValues=new Label[7];
@@ -84,7 +84,7 @@ namespace ArmazemGratidao {
    history.Controls.Add(returnsGrid);history.Controls.Add(historyHeading);history.Controls.Add(historyBar);history.Controls.Add(remainingLabel);
    tabs.TabPages.Add(products);tabs.TabPages.Add(history);Controls.Add(tabs);
    search.TextChanged+=(sender,args)=>LoadData();
-   Shown+=(sender,args)=>LoadData();
+   Load+=(sender,args)=>LoadData();
   }
   SQLiteConnection Open(){var c=new SQLiteConnection("Data Source="+db+";Version=3;");c.Open();return c;}
   static decimal Number(object o){if(o==null||o==DBNull.Value)return 0;return Convert.ToDecimal(o,CultureInfo.InvariantCulture);}
@@ -146,7 +146,7 @@ namespace ArmazemGratidao {
   }
   void AddReturn(){
    // O registro so e confirmado depois da data, do valor e do novo saldo.
-   using(var dialog=new Form{Text="Devolucao pessoal dos 10%",Width=520,Height=350,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=LightBackground}){
+   using(var dialog=new StyledDialogForm{Text="Devolucao pessoal dos 10%",Width=520,Height=350,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=LightBackground}){
     var info=new Label{Left=18,Top=16,Width=460,Height=52,Text="RESERVA DISPONÍVEL DOS 10%: "+Money(available),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=MainBlue};
     var dateLabel=new Label{Text="Data da devolucao:",Left=18,Top=82,Width=215,Height=26};
     var date=new DateTimePicker{Left=18,Top=109,Width=215,Format=DateTimePickerFormat.Short,Value=DateTime.Today,MaxDate=DateTime.Today};

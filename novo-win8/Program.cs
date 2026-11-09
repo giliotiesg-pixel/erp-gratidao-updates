@@ -15,38 +15,49 @@ using System.Runtime.InteropServices;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  static DateTime nextVisualScanUtc=DateTime.MinValue;
   [STAThread] static void Main() {
    Application.EnableVisualStyles();
    Application.SetCompatibleTextRenderingDefault(false);
-   // Nao percorrer todas as janelas a cada mensagem ociosa do Windows: em PCs lentos isso consome CPU.
-   Application.Idle+=(sender,args)=>{
-    var now=DateTime.UtcNow;
-    if(now<nextVisualScanUtc)return;
-    nextVisualScanUtc=now.AddMilliseconds(3500);
-    ButtonTextVisibility.CheckOpenForms();
-    PdvShortcutButtons.CheckOpenForms();
-    WindowBoundsGuard.CheckOpenForms();
-    RoundedGridTheme.CheckOpenForms();
-    ModuleVisualTheme.CheckOpenForms();
-   };
-   Application.Run(new MainForm());
+   // Personalizar ANTES da primeira pintura; eliminar o antigo atraso de 3,5 s
+   // e a varredura permanente que ocupava CPU no Windows 8.
+   using(var main=new MainForm()){
+    VisualStartup.Prepare(main);
+    Application.Run(main);
+   }
+  }
+ }
+ // Padrao global aplicado uma vez por janela, nunca depois de aparecer.
+ static class VisualStartup {
+  static readonly System.Collections.Generic.HashSet<Form> prepared=
+   new System.Collections.Generic.HashSet<Form>();
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||!prepared.Add(form))return;
+   form.FormClosed+=(sender,args)=>prepared.Remove(form);
+   form.SuspendLayout();
+   try{
+    WindowBoundsGuard.Prepare(form);
+    PdvShortcutButtons.Prepare(form);
+    RoundedGridTheme.Prepare(form);
+    ModuleVisualTheme.Prepare(form);
+    ButtonTextVisibility.Prepare(form);
+   }finally{form.ResumeLayout(true);}
+  }
+ }
+ // Modulos e dialogos recebem o tema na primeira Load, antes do Paint.
+ public class StyledDialogForm : Form {
+  protected override void OnLoad(EventArgs e){
+   VisualStartup.Prepare(this);
+   base.OnLoad(e);
   }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
  static class WindowBoundsGuard {
   static readonly System.Collections.Generic.HashSet<Form> initialized=new System.Collections.Generic.HashSet<Form>();
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms.Cast<Form>().ToArray()){
-    if(form==null||form.IsDisposed||form is StartMenuPopup)continue;
-    if(initialized.Add(form)){
-     form.ShowInTaskbar=true;
-     form.Resize+=(sender,args)=>{if(form.WindowState==FormWindowState.Normal)KeepVisible(form);};
-     form.Shown+=(sender,args)=>KeepVisible(form);
-    }
-    if(form.Visible&&form.WindowState==FormWindowState.Normal)KeepVisible(form);
-   }
-   initialized.RemoveWhere(f=>f.IsDisposed);
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||form is StartMenuPopup||!initialized.Add(form))return;
+   form.Disposed+=(sender,args)=>initialized.Remove(form);
+   form.Resize+=(sender,args)=>{if(form.WindowState==FormWindowState.Normal)KeepVisible(form);};
+   form.Shown+=(sender,args)=>KeepVisible(form);
   }
   static void KeepVisible(Form f){
    if(f.IsDisposed||f.WindowState!=FormWindowState.Normal)return;
@@ -64,48 +75,46 @@ namespace ArmazemGratidao {
  // Atalho centralizado: aparece somente nos formulários principais dos módulos.
  // Não modifica diálogos de confirmação nem os dados de uma venda em andamento.
  static class PdvShortcutButtons {
-  static readonly System.Collections.Generic.HashSet<Form> installed=new System.Collections.Generic.HashSet<Form>();
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms){
-    if(form==null || form.IsDisposed || installed.Contains(form))continue;
-    bool module=form is ConsultaForm || form is FiadoClientesForm ||
-     form is ProdutosForm || form is LucroForm || form is ModuloConsultaForm;
-    if(!module)continue;
-    installed.Add(form);
-    var shortcut=new Button {
-     Text="PDV - Nova Venda",Width=180,Height=38,
-     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
-     Font=new Font("Segoe UI",10,FontStyle.Bold),
-     Margin=new Padding(6)
-    };
-    var strip=new FlowLayoutPanel {
-     Dock=DockStyle.Top,Height=48,WrapContents=false,
-     FlowDirection=FlowDirection.RightToLeft,
-     BackColor=Color.FromArgb(229,242,255)
-    };
-    shortcut.Click+=(sender,args)=>{
-     MainForm main=null;
-     foreach(Form open in Application.OpenForms)if(open is MainForm){main=(MainForm)open;break;}
-     if(main!=null)main.OpenPdvFromModule();
-     else MessageBox.Show("A janela principal não está disponível.","PDV");
-    };
-    // No estoque, usar a barra ja reservada no layout. Nao adicionar outro Dock.Top
-    // diretamente no formulario, pois ele escondia o cabecalho e os primeiros produtos.
-    var stockNavigation=form.Controls.Find("amzgBackBar",true).FirstOrDefault() as Panel;
-    if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")&&stockNavigation!=null){
-     shortcut.Width=150;shortcut.Height=27;shortcut.Top=3;
-     shortcut.Anchor=AnchorStyles.Right|AnchorStyles.Top;
-     stockNavigation.Controls.Add(shortcut);
-     Action position=()=>{shortcut.Left=Math.Max(8,stockNavigation.ClientSize.Width-132-shortcut.Width-25);};
-     stockNavigation.Resize+=(sender,args)=>position();
-     position();
-    }else{
-     strip.Controls.Add(shortcut);
-     form.Controls.Add(strip);
-     strip.BringToFront();
-    }
-    form.FormClosed+=(sender,args)=>installed.Remove(form);
+  static readonly System.Collections.Generic.HashSet<Form> installed=
+   new System.Collections.Generic.HashSet<Form>();
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||installed.Contains(form))return;
+   bool module=form is ConsultaForm || form is FiadoClientesForm ||
+    form is ProdutosForm || form is LucroForm || form is ModuloConsultaForm;
+   if(!module)return;
+   installed.Add(form);
+   var shortcut=new Button {
+    Text="PDV - Nova Venda",Width=150,Height=29,
+    BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9,FontStyle.Bold),
+    Margin=new Padding(4,2,4,2)
+   };
+   var strip=new FlowLayoutPanel {
+    Dock=DockStyle.Top,Height=35,WrapContents=false,
+    FlowDirection=FlowDirection.RightToLeft,
+    BackColor=Color.FromArgb(229,242,255)
+   };
+   shortcut.Click+=(sender,args)=>{
+    MainForm main=null;
+    foreach(Form open in Application.OpenForms)if(open is MainForm){main=(MainForm)open;break;}
+    if(main!=null)main.OpenPdvFromModule();
+    else MessageBox.Show("A janela principal não está disponível.","PDV");
+   };
+   var stockNavigation=form.Controls.Find("amzgBackBar",true).FirstOrDefault() as Panel;
+   if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")&&stockNavigation!=null){
+    shortcut.Width=135;shortcut.Height=26;shortcut.Top=3;
+    shortcut.Anchor=AnchorStyles.Right|AnchorStyles.Top;
+    stockNavigation.Controls.Add(shortcut);
+    Action position=()=>{shortcut.Left=Math.Max(8,
+     stockNavigation.ClientSize.Width-132-shortcut.Width-25);};
+    stockNavigation.Resize+=(sender,args)=>position();
+    position();
+   }else{
+    strip.Controls.Add(shortcut);
+    form.Controls.Add(strip);
+    strip.BringToFront();
    }
+   form.FormClosed+=(sender,args)=>installed.Remove(form);
   }
  }
  // Padrão visual global de tabelas: somente apresentação.
@@ -146,9 +155,7 @@ namespace ArmazemGratidao {
    parent.ControlAdded+=(sender,args)=>Watch(args.Control);
    foreach(Control child in parent.Controls)Watch(child);
   }
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms)Watch(form);
-  }
+  public static void Prepare(Form form){Watch(form);}
  }
  static class RoundedVisuals {
   public static void DrawOutline(Graphics graphics,Rectangle area,int radius,Color color,float weight){
@@ -320,12 +327,10 @@ namespace ArmazemGratidao {
    if(root is DataGridView)return;
    foreach(Control child in root.Controls)DecorateTree(child);
   }
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms){
-    if(form==null||form.IsDisposed||!forms.Add(form))continue;
-    DecorateTree(form);
-    form.FormClosed+=(sender,args)=>forms.Remove(form);
-   }
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||!forms.Add(form))return;
+   DecorateTree(form);
+   form.FormClosed+=(sender,args)=>forms.Remove(form);
   }
  }
  static class ButtonTextVisibility {
@@ -381,11 +386,9 @@ namespace ArmazemGratidao {
    c.ControlAdded+=(sender,args)=>Watch(args.Control);
    foreach(Control child in c.Controls)Watch(child);
   }
-  public static void CheckOpenForms(){
-   foreach(Form form in Application.OpenForms)Watch(form);
-  }
+  public static void Prepare(Form form){Watch(form);}
  }
- public sealed class MainForm : Form {
+ public sealed class MainForm : StyledDialogForm {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   MobileStockServer mobileStock;
@@ -1523,7 +1526,7 @@ namespace ArmazemGratidao {
     if(modulesWindow.WindowState==FormWindowState.Minimized)modulesWindow.WindowState=FormWindowState.Normal;
     modulesWindow.BringToFront();modulesWindow.Activate();return;
    }
-   var dialog=new Form{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
+   var dialog=new StyledDialogForm{Text="Armazém Gratidão • Módulos",Width=720,Height=490,
     MinimumSize=new Size(480,340),StartPosition=FormStartPosition.CenterParent,
     BackColor=Color.FromArgb(246,249,253),ShowInTaskbar=true,AutoScroll=false};
    modulesWindow=dialog;
@@ -1677,7 +1680,7 @@ namespace ArmazemGratidao {
     string ip=MobileStockServer.LanAddress();
     if(string.IsNullOrWhiteSpace(ip)){MessageBox.Show("Não foi encontrada uma rede Wi-Fi local. Conecte o computador e o celular à mesma rede.","Estoque pelo celular");return;}
     string address="http://"+ip+":"+MobileStockServer.Port+"/?chave="+mobileStock.Token;
-    using(var dialog=new Form{Text="Estoque pelo celular - QR Code",Width=760,Height=510,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Estoque pelo celular - QR Code",Width=760,Height=510,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
      var title=new Label{Text="Conecte o celular pelo QR Code",Left=20,Top=13,Width=710,Height=42,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=Color.FromArgb(15,65,141)};
      var instructions=new Label{Text="1. Conecte o celular e o computador à mesma rede Wi-Fi."+Environment.NewLine+
       "2. Abra a câmera do celular e aponte para o QR Code."+Environment.NewLine+
@@ -1781,6 +1784,8 @@ namespace ArmazemGratidao {
    form.StartPosition=FormStartPosition.CenterScreen;
    form.ShowInTaskbar=true;
    AddBackToMenu(form);
+   // Uma unica montagem visual, antes de exibir o modulo.
+   VisualStartup.Prepare(form);
    // Janelas independentes: minimizar o programa principal não oculta o módulo.
    form.Show();
   }
@@ -2283,7 +2288,7 @@ namespace ArmazemGratidao {
    }
   }
  // Interface Windows Forms independente, sem navegador embutido e sem salvar o token no banco.
- public sealed class WhatsAppNormalForm:Form {
+ public sealed class WhatsAppNormalForm:StyledDialogForm {
   readonly TextBox phone=new TextBox{Width=330};
   readonly TextBox message=new TextBox{Multiline=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Text="Olá! Aqui é do Armazém Gratidão."};
   readonly Label info=new Label{Dock=DockStyle.Bottom,Height=62,Text="WhatsApp comum: o envio é confirmado no WhatsApp Web ou aplicativo externo. PDFs precisam ser anexados manualmente.",Padding=new Padding(12)};
@@ -2318,7 +2323,7 @@ namespace ArmazemGratidao {
    catch(Exception ex){MessageBox.Show("Não foi possível abrir o WhatsApp: "+ex.Message);}
   }
  }
- public sealed class StockCountQuickForm:Form {
+ public sealed class StockCountQuickForm:StyledDialogForm {
   readonly string database;
   readonly TextBox code=new TextBox{Width=240,Font=new Font("Segoe UI",15,FontStyle.Bold)};
   readonly TextBox description=new TextBox{Width=450,ReadOnly=true,BackColor=Color.White,Font=new Font("Segoe UI",12)};

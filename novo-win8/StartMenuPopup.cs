@@ -9,7 +9,7 @@ using System.Windows.Forms;
 namespace ArmazemGratidao {
  // Menu Iniciar REAL: janela flutuante sem bordas, categorias e ramificacoes.
  // Nao fica ancorado na area de trabalho nem substitui os modulos WinForms.
- internal sealed class StartMenuPopup : Form {
+ internal sealed class StartMenuPopup : StyledDialogForm {
   readonly List<Tuple<string,EventHandler>> actions;
   readonly Func<string,string> categoryOf;
   readonly Func<string,Image> iconFor;

@@ -6,7 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
- public sealed class ModuloConsultaForm:Form {
+ public sealed class ModuloConsultaForm:StyledDialogForm {
   readonly string db;readonly string module;
   readonly TextBox stockSearch=new TextBox {Width=220,Font=new Font("Segoe UI",10)};
   readonly TextBox clientSearch=new TextBox {Width=205,Font=new Font("Segoe UI",10)};
@@ -76,7 +76,7 @@ namespace ArmazemGratidao {
    grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,246,255);
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(207,227,248);grid.DefaultCellStyle.SelectionForeColor=Color.Black;
    grid.DataBindingComplete+=(s,e)=>{foreach(DataGridViewColumn column in grid.Columns){string n=column.Name.ToLowerInvariant();if(n=="name"||n.Contains("descri")||n=="produto"||n=="cliente"){column.MinimumWidth=240;column.FillWeight=230;column.DefaultCellStyle.WrapMode=DataGridViewTriState.True;}}grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;};
-   Shown+=(s,e)=>{var bounds=Screen.FromControl(this).WorkingArea;Width=Math.Min(Width,Math.Max(360,bounds.Width-24));Height=Math.Min(Height,Math.Max(300,bounds.Height-24));};
+   Load+=(s,e)=>{var bounds=Screen.FromControl(this).WorkingArea;Width=Math.Min(Width,Math.Max(360,bounds.Width-24));Height=Math.Min(Height,Math.Max(300,bounds.Height-24));};
    if(module=="Estoque"){
     // Evita sobreposicao de Grid, indicadores, comandos e atalhos quando a janela e reduzida.
     // As barras globais de Menu/PDV devem usar a area dedicada stockNavigation.
@@ -195,7 +195,7 @@ namespace ArmazemGratidao {
       "COALESCE(price,0) AS 'Preço de venda',ROUND(COALESCE(stock,0)*COALESCE(price,0),2) AS 'Valor em venda' "+
       "FROM products WHERE "+ActiveProductsWhere(columns)+" ORDER BY name COLLATE NOCASE,id";
      using(var cmd=new SQLiteCommand(sql,conn))using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(data);
-     using(var form=new Form{Text="Auditoria financeira do estoque - produtos ativos",Width=1100,Height=660,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var form=new StyledDialogForm{Text="Auditoria financeira do estoque - produtos ativos",Width=1100,Height=660,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var summary=new Label{Dock=DockStyle.Top,Height=108,Padding=new Padding(12,8,8,6),ForeColor=Color.FromArgb(19,64,123),Font=new Font("Segoe UI",11,FontStyle.Bold)};
       decimal totalCost=0,totalSale=0;int missing=0,negative=0;decimal quantity=0;
       foreach(DataRow row in data.Rows){
@@ -231,7 +231,7 @@ namespace ArmazemGratidao {
        if(!reader.Read())throw new Exception("Produto não encontrado.");
        string name=Convert.ToString(reader["name"]),bar=Convert.ToString(reader["barcode"]);
        decimal q=Dec(reader["stock"]),cost=Dec(reader["cost"]),price=Dec(reader["price"]);
-       using(var form=new Form{Text="Estoque | Detalhes do produto",Width=630,Height=370,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+       using(var form=new StyledDialogForm{Text="Estoque | Detalhes do produto",Width=630,Height=370,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
         var label=new Label{Dock=DockStyle.Fill,Padding=new Padding(18),ForeColor=Color.FromArgb(20,57,118),
          Font=new Font("Segoe UI",12,FontStyle.Bold),Text="PRODUTO: "+name+
          Environment.NewLine+"Código de barras: "+bar+
@@ -332,7 +332,7 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Estoque");return;}
-   using(var form=new Form {Text="Estoque | Editar e Salvar - Entrada de Produto",Width=670,Height=445,MinimumSize=new Size(610,415),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var form=new StyledDialogForm {Text="Estoque | Editar e Salvar - Entrada de Produto",Width=670,Height=445,MinimumSize=new Size(610,415),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var title=new Label{Left=17,Top=14,Width=610,Height=48,Text="PRODUTO: "+productName,ForeColor=Color.FromArgb(12,59,137),Font=new Font("Segoe UI",12,FontStyle.Bold)};
     var current=new Label{Left=17,Top=63,Width=605,Height=27,Text="Quantidade atual em estoque: "+initialStock.ToString("N3"),Font=new Font("Segoe UI",10,FontStyle.Bold)};
     var date=new DateTimePicker{Left=195,Top=105,Width=205,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy",Value=DateTime.Today};
@@ -409,7 +409,7 @@ namespace ArmazemGratidao {
       if(value==null)throw new Exception("Produto não encontrado.");
       original=Dec(value);
      }
-     using(var form=new Form{Text="Estoque | Editar e salvar",Width=535,Height=295,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+     using(var form=new StyledDialogForm{Text="Estoque | Editar e salvar",Width=535,Height=295,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
       var minimum=new NumericUpDown{Left=190,Top=35,Width=220,DecimalPlaces=3,Minimum=0,Maximum=10000000,Value=Math.Max(0,original)};
       var reason=new TextBox{Left=190,Top=95,Width=280,MaxLength=250};
       var save=new Button{Text="Salvar alterações",Left=190,Top=154,Width=200,Height=39};
@@ -465,7 +465,7 @@ namespace ArmazemGratidao {
        dt.Rows.Add(row);
       }
      }
-     using(var form=new Form {Text="Conferência de baixas de estoque - somente leitura",Width=1180,Height=650,StartPosition=FormStartPosition.CenterParent}){
+     using(var form=new StyledDialogForm {Text="Conferência de baixas de estoque - somente leitura",Width=1180,Height=650,StartPosition=FormStartPosition.CenterParent}){
       var explanation=new Label {Dock=DockStyle.Top,Height=70,Padding=new Padding(12),Text="Lista das últimas 1.000 baixas registradas. Uma baixa marcada VERIFICAR não é prova de perda: pode ser cancelamento, ajuste ou registro antigo. Confira as informações antes de qualquer correção.",ForeColor=Color.FromArgb(20,52,95),Font=new Font("Segoe UI",10,FontStyle.Bold)};
       var view=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White,DataSource=dt};
       form.Controls.Add(view);form.Controls.Add(explanation);form.ShowDialog(this);
@@ -492,7 +492,7 @@ namespace ArmazemGratidao {
        using(var rd=cmd.ExecuteReader())while(rd.Read())all.Rows.Add(Convert.ToString(rd.GetValue(0)),"Edição: "+Convert.ToString(rd.GetValue(1)),Convert.ToString(rd.GetValue(2)),Convert.ToString(rd.GetValue(3)),"—",Convert.ToString(rd.GetValue(4)));
       }
      }
-     using(var form=new Form{Text="Estoque | Histórico auditável do produto #"+id,Width=980,Height=510,StartPosition=FormStartPosition.CenterParent}){
+     using(var form=new StyledDialogForm{Text="Estoque | Histórico auditável do produto #"+id,Width=980,Height=510,StartPosition=FormStartPosition.CenterParent}){
       var history=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,RowHeadersVisible=false,AllowUserToAddRows=false,DataSource=all,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
       form.Controls.Add(history);form.ShowDialog(this);
      }
@@ -595,7 +595,7 @@ namespace ArmazemGratidao {
   }
   void ChooseClient(){
    try{
-    using(var dlg=new Form{Text="Escolher Cliente",Width=750,Height=540,MinimumSize=new Size(550,390),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dlg=new StyledDialogForm{Text="Escolher Cliente",Width=750,Height=540,MinimumSize=new Size(550,390),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var title=new Label{Text="Pesquisar cliente por nome, telefone ou CPF/CNPJ",Dock=DockStyle.Top,Height=39,Padding=new Padding(9,8,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var lookup=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
      var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
@@ -725,7 +725,7 @@ namespace ArmazemGratidao {
     oldDoc=Convert.ToString(grid.CurrentRow.Cells["CPF / CNPJ"].Value);
     object value=grid.CurrentRow.Cells["ID interno"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
    }
-   using(var form=new Form{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var form=new StyledDialogForm{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(18)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var name=new TextBox{Text=oldName,MaxLength=180,Dock=DockStyle.Top};
