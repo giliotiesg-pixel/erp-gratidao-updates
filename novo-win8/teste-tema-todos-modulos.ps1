@@ -110,7 +110,7 @@ foreach($sample in $items){
   # Preparar os controles ANTES de apresentar um unico pixel.
   $style.Invoke($null,[object[]]@($form))|Out-Null
   if($null -eq $form.Icon){throw "Marca ausente ANTES de Show em $($sample.Name)"}
-  $preButtons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button' -and $_.Visible})
+  $preButtons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
   foreach($b in $preButtons){
    if($b.Width -ge 80 -and $null -eq $b.Region){
     throw "Layout aplicado tarde: botao $($b.Text) de $($sample.Name) sem estilo ANTES de Show."
