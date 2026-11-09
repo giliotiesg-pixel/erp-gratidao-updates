@@ -165,9 +165,12 @@ public static class AMZGMouse {
  }
  $zero=@($keypad.Controls | Where-Object {$_.Tag -eq '0'}) |
   Select-Object -First 1
+ $zeroBottom=$calculator.PointToClient($zero.PointToScreen(
+  [System.Drawing.Point]::new([int]($zero.Width/2),$zero.Height)))
  if($null -eq $zero -or !$zero.Visible -or $zero.Height -lt 30 -or
-    $zero.Bottom -gt $keypad.ClientSize.Height){
-  throw 'A ultima fileira do teclado (0) ficou cortada no monitor.'
+    $zero.Bottom -gt $keypad.ClientSize.Height -or
+    $zeroBottom.Y -gt ($calculator.ClientSize.Height-8)){
+  throw "A ultima fileira do teclado ficou cortada: y=$($zeroBottom.Y) janela=$($calculator.ClientSize.Height)"
  }
  & $press 'C'
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
