@@ -7,7 +7,7 @@ using System.Windows.Forms;
 namespace ArmazemGratidao {
  // Janela nativa: uma unica calculadora, sem ocupar espaco na pagina Inicial.
  // Nao acessa SQLite, nao cria temporizadores e nao exige bibliotecas externas.
- internal sealed class ModernCalculatorForm : Form {
+ internal sealed class ModernCalculatorForm : StyledDialogForm {
   readonly CultureInfo locale=CultureInfo.GetCultureInfo("pt-BR");
   readonly CalculatorDisplayLabel display;
   readonly Label result;
