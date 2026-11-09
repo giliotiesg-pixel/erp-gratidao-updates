@@ -6,7 +6,7 @@ using System.IO;
 using System.Windows.Forms;
 
 namespace ArmazemGratidao {
- public sealed class CascosForm : Form {
+ public sealed class CascosForm : StyledDialogForm {
   const decimal Deposit=4m;
   readonly string db;
   readonly DataGridView grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
@@ -76,7 +76,7 @@ namespace ArmazemGratidao {
   // Inclui nomes do controle de cascos para preservar o acesso aos registros antigos.
   void SelectCustomer(){
    try{
-    using(var dialog=new Form{Text="Clientes | Controle de Cascos",Width=750,Height=550,MinimumSize=new Size(540,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Clientes | Controle de Cascos",Width=750,Height=550,MinimumSize=new Size(540,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=38};
      var heading=new Label{Text="Pesquisar cliente cadastrado por nome ou documento:",Dock=DockStyle.Top,Height=36,Padding=new Padding(9,8,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var listing=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
@@ -200,7 +200,7 @@ namespace ArmazemGratidao {
   void ShowReturns(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione uma retirada.");return;}
    long id=Convert.ToInt64(grid.CurrentRow.Cells["ID"].Value);
-   using(var dialog=new Form{Text="Devoluções da retirada #"+id,Width=660,Height=380,StartPosition=FormStartPosition.CenterParent}){
+   using(var dialog=new StyledDialogForm{Text="Devoluções da retirada #"+id,Width=660,Height=380,StartPosition=FormStartPosition.CenterParent}){
     var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
     using(var c=Open())using(var cmd=new SQLiteCommand("SELECT id AS ID,quantity AS Quantidade,amount AS Reembolso,refund_method AS Forma,returned_at AS Data_hora FROM bottle_returns WHERE loan_id=@id ORDER BY id",c)){
      cmd.Parameters.AddWithValue("@id",id);using(var adapter=new SQLiteDataAdapter(cmd)){var data=new DataTable();adapter.Fill(data);list.DataSource=data;}
