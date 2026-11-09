@@ -135,16 +135,20 @@ namespace ArmazemGratidao {
    // Fonte fixa legivel: evitar CreateGraphics/FontChanged dentro de TextChanged,
    // pois essa combinacao pode reentrar no layout enquanto uma tecla e clicada.
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
-    ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
+    ColumnCount=4,RowCount=7,Padding=new Padding(8,10,8,10),
     BackColor=Color.FromArgb(238,243,251)};
    for(int c=0;c<4;c++)keys.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
    // Altura ABSOLUTA dimensionada pelo espaco real do monitor. Com porcentagens,
    // o TableLayoutPanel mantinha alturas minimas e cortava o 0, a virgula e o =.
    for(int r=0;r<6;r++)keys.RowStyles.Add(new RowStyle(SizeType.Absolute,50f));
+   // A 7a linha nao possui botoes: ela absorve o espaco excedente.
+   // Sem este espaco flexivel o WinForms ESTICA a sexta linha, deixando
+   // apenas 0, virgula e = desproporcionalmente grandes.
+   keys.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
    Action fitKeyRows=()=>{
     int available=keys.ClientSize.Height-keys.Padding.Vertical-12;
     int rowHeight=Math.Max(34,Math.Min(52,available/6));
-    foreach(RowStyle row in keys.RowStyles)row.Height=rowHeight;
+    for(int i=0;i<6;i++)keys.RowStyles[i].Height=rowHeight;
    };
    keys.Resize+=(sender,args)=>fitKeyRows();
    string[] labels={"%","CE","C","⌫","1/x","x²","√","÷",
