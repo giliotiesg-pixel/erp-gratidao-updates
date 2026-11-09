@@ -127,6 +127,52 @@ try{
   if($null -eq $target){throw "Tecla ausente na calculadora: $Key"}
   $target.PerformClick()
  }
+ # Nao aceitar somente PerformClick: pressionar a tecla de verdade via mouse.
+ # Detecta botao coberto/fora da tela, como na falha informada pelo usuario.
+ Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AMZGMouse {
+ [DllImport("user32.dll")]
+ public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")]
+ public static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
+}
+'@
+ $calculator.Activate()
+ [System.Windows.Forms.Application]::DoEvents()
+ $physical=@($keypad.Controls | Where-Object {$_.Tag -eq '7'}) |
+  Select-Object -First 1
+ if($null -eq $physical -or !$physical.Visible -or !$physical.Enabled -or
+    $physical.ClientRectangle.Height -lt 30){
+  throw 'A tecla 7 nao esta visivel e clicavel no teclado fisico.'
+ }
+ $center=$physical.PointToScreen([System.Drawing.Point]::new(
+  [int]($physical.Width/2),[int]($physical.Height/2)))
+ [AMZGMouse]::SetCursorPos($center.X,$center.Y) | Out-Null
+ [System.Windows.Forms.Application]::DoEvents()
+ [AMZGMouse]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+ [AMZGMouse]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+ [System.Windows.Forms.Application]::DoEvents()
+ if($calcDisplay.Text -ne '7'){
+  throw "Clique REAL no teclado nao inseriu 7 no visor: $($calcDisplay.Text)"
+ }
+ $formula=@($calculator.Controls.Find('amzgCalcExpression',$true)) |
+  Select-Object -First 1
+ $value=@($calculator.Controls.Find('amzgCalcResult',$true)) |
+  Select-Object -First 1
+ if($null -eq $formula -or $null -eq $value -or
+    !$formula.Visible -or !$value.Visible -or
+    $formula.Text -ne '7' -or $value.Text -ne '7,00'){
+  throw 'Os dois visores visiveis nao receberam o numero digitado.'
+ }
+ $zero=@($keypad.Controls | Where-Object {$_.Tag -eq '0'}) |
+  Select-Object -First 1
+ if($null -eq $zero -or !$zero.Visible -or $zero.Height -lt 30 -or
+    $zero.Bottom -gt $keypad.ClientSize.Height){
+  throw 'A ultima fileira do teclado (0) ficou cortada no monitor.'
+ }
+ & $press 'C'
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
   Select-Object -First 1
  $calcScreen=@($calculator.Controls.Find('amzgCalcScreen',$true)) |
