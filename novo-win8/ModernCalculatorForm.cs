@@ -108,7 +108,7 @@ namespace ArmazemGratidao {
    result=new Label{Name="amzgCalcResult",Text="0,00",
     Left=9,Top=22,Width=386,Height=70,
     AutoEllipsis=true,TextAlign=ContentAlignment.MiddleRight,
-    Font=new Font("Segoe UI",38f,FontStyle.Bold),
+    Font=new Font("Segoe UI",33f,FontStyle.Bold),
     ForeColor=Color.FromArgb(10,57,130),
     BackColor=Color.Transparent};
    resultFrame.Controls.Add(result);
@@ -132,22 +132,8 @@ namespace ArmazemGratidao {
     // O formulario recebe primeiro os eventos com KeyPreview=true.
     // Manter o campo somente-leitura evita resultado desincronizado.
    };
-   result.TextChanged+=(sender,args)=>{
-    using(var g=result.CreateGraphics()){
-     float size=38f;
-     while(size>17f){
-      using(var font=new Font("Segoe UI",size,FontStyle.Bold)){
-       if(TextRenderer.MeasureText(g,result.Text,font,
-        new Size(2000,75),TextFormatFlags.SingleLine|TextFormatFlags.NoPadding)
-        .Width<=result.Width-12)break;
-      }
-      size-=2f;
-     }
-     var oldFont=result.Font;
-     result.Font=new Font("Segoe UI",size,FontStyle.Bold);
-     oldFont.Dispose();
-    }
-   };
+   // Fonte fixa legivel: evitar CreateGraphics/FontChanged dentro de TextChanged,
+   // pois essa combinacao pode reentrar no layout enquanto uma tecla e clicada.
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
     ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
     BackColor=Color.FromArgb(238,243,251)};
