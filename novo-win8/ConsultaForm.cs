@@ -8,7 +8,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
- public sealed class ConsultaForm:Form {
+ public sealed class ConsultaForm:StyledDialogForm {
   readonly string db;readonly bool credit;
   public bool IsCreditWindow {get{return credit;}}
 bool previous=false;bool selectedDate=false;bool selectedMonth=false;
@@ -538,7 +538,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     var days=QueryFiltered("SELECT date(created_at) AS 'Data',COUNT(*) AS 'Vendas',"+
      "ROUND(SUM(COALESCE(gross_total,0)),2) AS 'Total vendido (R$)' FROM sales WHERE "+condition+
      " GROUP BY date(created_at) ORDER BY date(created_at) DESC");
-    using(var dialog=new Form{Text="Fechamento de vendas - totais diários",Width=680,Height=520,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Fechamento de vendas - totais diários",Width=680,Height=520,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      decimal total=0;long count=0;
      foreach(DataRow row in days.Rows){total+=Convert.ToDecimal(row["Total vendido (R$)"]);count+=Convert.ToInt64(row["Vendas"]);}
      var header=new Label{Dock=DockStyle.Top,Height=72,Padding=new Padding(12),Font=new Font("Segoe UI",11,FontStyle.Bold),
@@ -679,7 +679,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     var sale=Query("SELECT created_at,customer_name,gross_total,payment_method FROM sales WHERE id=@id","@id",id);
     if(sale.Rows.Count==0)throw new Exception("Venda não encontrada.");
     var items=Query("SELECT barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',unit_price AS 'Preço (R$)',total AS 'Valor (R$)' FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
-    using(var dialog=new Form{Text="Produtos da venda #"+id,Width=850,Height=560,MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Produtos da venda #"+id,Width=850,Height=560,MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var header=new Label{Dock=DockStyle.Top,Height=92,Padding=new Padding(14,9,8,4),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),BackColor=Color.FromArgb(221,238,255)};
      var row=sale.Rows[0];
      header.Text="VENDA #"+id+"  |  "+Convert.ToString(row["created_at"])+Environment.NewLine+
@@ -713,7 +713,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     if(dt.Rows.Count==0)throw new Exception("Venda não encontrada.");
     string before=Convert.ToString(dt.Rows[0][0]);DateTime original;
     if(!DateTime.TryParse(before,out original))original=DateTime.Now;
-    using(var dialog=new Form{Text="Corrigir data e hora da venda #"+id,Width=440,Height=260,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    using(var dialog=new StyledDialogForm{Text="Corrigir data e hora da venda #"+id,Width=440,Height=260,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
      var dateLabel=new Label{Text="Data da venda",Left=16,Top=15,Width=385,Height=23};
      var datePicker=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy",Value=original,Left=16,Top=42,Width=385};
      var timeLabel=new Label{Text="Horário da venda (horas, minutos e segundos)",Left=16,Top=85,Width=385,Height=23};
@@ -803,7 +803,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     if(details.CurrentRow!=null&&details.Columns.Contains("item_id"))
      initiallySelected=Convert.ToInt64(details.CurrentRow.Cells["item_id"].Value);
 
-    using(var dialog=new Form{Name="amzgChangeProductDialog",
+    using(var dialog=new StyledDialogForm{Name="amzgChangeProductDialog",
      Text="Alterar produtos da venda #"+sale,StartPosition=FormStartPosition.CenterParent,
      Width=900,Height=645,MinimumSize=new Size(710,545),
      BackColor=Color.FromArgb(245,249,254),
@@ -1119,7 +1119,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   DataRow PickReplacementProduct(Form owner){
    var catalog=Query("SELECT id,barcode,name,price,cost FROM products "+
     "ORDER BY name COLLATE NOCASE,id");
-   using(var dialog=new Form{Name="amzgSaleReplacePicker",
+   using(var dialog=new StyledDialogForm{Name="amzgSaleReplacePicker",
     Text="Buscar produto substituto",StartPosition=FormStartPosition.CenterParent,
     Width=780,Height=545,MinimumSize=new Size(600,410),
     BackColor=Color.FromArgb(244,249,254),
