@@ -90,8 +90,7 @@ namespace ArmazemGratidao {
       button.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
      // Nunca transformar um botao em campo minusculo; conservar o texto
      // inteiro quando couber e mostrar Tooltip quando houver truncamento.
-     int natural=TextRenderer.MeasureText(label,button.Font,
-      new Size(3000,100),TextFormatFlags.SingleLine).Width+18;
+     int natural=TextRenderer.MeasureText(label,button.Font).Width+20;
      int desiredWidth=label.Trim().Length<=2?
       Math.Min(46,Math.Max(30,button.Width)):
       Math.Min(192,Math.Max(78,natural));
