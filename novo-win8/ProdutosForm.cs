@@ -166,7 +166,8 @@ namespace ArmazemGratidao {
     Text="Lançamento rápido | Estoque completo - editar produtos";
     listVisible=true;grid.Visible=true;showList.Text="Ocultar lista de produtos";
     productsEmpty.Visible=false;
-    Shown+=(sender,args)=>{LoadProducts();search.Focus();};
+    Load+=(sender,args)=>LoadProducts();
+   Shown+=(sender,args)=>search.Focus();
    }
   }
   bool resizingProductsToolbar=false;
@@ -206,7 +207,7 @@ namespace ArmazemGratidao {
   static void StyleDialog(Form form,TableLayoutPanel panel){
    form.BackColor=Color.FromArgb(229,242,255);form.ForeColor=Color.FromArgb(18,31,50);
    form.Font=new Font("Segoe UI",10,FontStyle.Bold);
-   form.Shown+=(s,e)=>FitDialogToScreen(form);
+   form.Load+=(s,e)=>FitDialogToScreen(form);
    panel.AutoScroll=true;
    panel.BackColor=form.BackColor;
    foreach(Control control in panel.Controls){
@@ -324,7 +325,7 @@ namespace ArmazemGratidao {
      var close=new Button {Text="Fechar",Dock=DockStyle.Bottom,Height=42};
      close.Click+=(s,e)=>form.Close();
      form.Controls.Add(table);form.Controls.Add(header);form.Controls.Add(close);
-     form.Shown+=(s,e)=>FitDialogToScreen(form);
+     form.Load+=(s,e)=>FitDialogToScreen(form);
      form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível consultar o histórico. Nenhum dado foi alterado.\n"+ex.Message,"Histórico de QTD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
