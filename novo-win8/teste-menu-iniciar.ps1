@@ -81,6 +81,28 @@ try{
  if(@($form.Controls.Find('amzgDashboardCanvas',$true)).Count -ne 1){
   throw 'Painel inicial ausente.'
  }
+ # Falha vista na foto: indicador e texto estavam sob o menu superior.
+ $header=@($form.Controls | Where-Object {$_.GetType().Name -eq 'Panel' -and
+  $_.Dock -eq [Windows.Forms.DockStyle]::Top}) | Select-Object -First 1
+ if($null -eq $header){throw 'Cabecalho principal ausente.'}
+ $headBottom=$header.PointToScreen([Drawing.Point]::new(0,$header.Height)).Y
+ $homeTop=$homePanel.PointToScreen([Drawing.Point]::Empty).Y
+ if($homeTop -lt $headBottom){
+  throw "Painel dos indicadores COBERTO pelo menu: $homeTop < $headBottom"
+ }
+ $metric=@($form.Controls.Find('amzgDashboardMetric0',$true))[0]
+ $metricTop=$metric.PointToScreen([Drawing.Point]::Empty).Y
+ if($metricTop -lt $headBottom+2){
+  throw "Indicador ainda fica por baixo do menu: $metricTop < $headBottom"
+ }
+ if($header.Height -gt 55){throw "Menu superior alto demais: $($header.Height)"}
+ foreach($button in @($header.Controls | Where-Object {$_.GetType().Name -eq 'Button'})){
+  if($button.Height -gt 35){throw "Botao superior alto demais: $($button.Text)"}
+ }
+ $tileButtons=@($form.Controls.Find('amzgDashboardTiles',$true))[0].Controls
+ foreach($button in $tileButtons){
+  if($button.Height -gt 44){throw "Atalho inicial nao compactado: $($button.Text)"}
+ }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
  if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
   throw 'A calculadora apareceu automaticamente, contrariando o modo oculto.'

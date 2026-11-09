@@ -126,6 +126,32 @@ foreach($sample in $items){
     throw "Botao sem arredondamento em $($sample.Name): $($button.Text)"
    }
   }
+  # Barras e botoes devem caber em telas pequenas, sem ocupar a
+  # altura da planilha. Testa TODOS os nove modulos do conjunto.
+  $actionBars=@(Get-ThemeControls $form | Where-Object {
+    $_ -is [System.Windows.Forms.FlowLayoutPanel] -and
+    ($_.Dock -eq [Windows.Forms.DockStyle]::Top -or
+     $_.Dock -eq [Windows.Forms.DockStyle]::Bottom) -and
+    @($_.Controls | Where-Object {$_ -is [System.Windows.Forms.Button]}).Count -gt 0
+  })
+  foreach($toolbar in $actionBars){
+   foreach($btn in @($toolbar.Controls | Where-Object {
+    $_ -is [System.Windows.Forms.Button] -and $_.Dock -eq [Windows.Forms.DockStyle]::None
+   })){
+    if($btn.Height -gt 31){
+     throw "Botao grande em $($sample.Name): $($btn.Text) $($btn.Height) px"
+    }
+    $textWidth=[Windows.Forms.TextRenderer]::MeasureText($btn.Text,$btn.Font).Width+12
+    if($textWidth -le 192 -and $btn.Width -lt ($textWidth-3)){
+     throw "Legenda de botao cortada em $($sample.Name): $($btn.Text), largura $($btn.Width) vs $textWidth"
+    }
+   }
+   if($toolbar.Dock -eq [Windows.Forms.DockStyle]::Top -and
+      $toolbar.Height -gt 49 -and
+      $toolbar.Controls.Count -gt 0){
+    throw "Faixa de botoes de $($sample.Name) ocupa espaco excessivo: $($toolbar.Height) px"
+   }
+  }
   $out=Join-Path $directory ('Previa-Modulo-'+$sample.Name+'.png')
   $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
   try{

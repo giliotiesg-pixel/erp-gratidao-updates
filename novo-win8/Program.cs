@@ -40,6 +40,8 @@ namespace ArmazemGratidao {
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
+    // Medir DEPOIS do tema final: negrito altera a largura renderizada.
+    CompactModuleToolbars.Apply(form);
    }finally{form.ResumeLayout(true);}
   }
  }
@@ -48,6 +50,76 @@ namespace ArmazemGratidao {
   protected override void OnLoad(EventArgs e){
    VisualStartup.Prepare(this);
    base.OnLoad(e);
+  }
+ }
+ // Reduz as barras de acoes em TODOS os modulos sem alterar nenhum handler.
+ // Abre espaço para o DataGridView e mantem a pesquisa/acoes acessiveis
+ // pela rolagem horizontal do toolbar no Windows 8.
+ static class CompactModuleToolbars {
+  static readonly System.Collections.Generic.HashSet<Form> done=
+   new System.Collections.Generic.HashSet<Form>();
+  static System.Collections.Generic.IEnumerable<Control> Descendants(Control parent){
+   foreach(Control child in parent.Controls){
+    yield return child;
+    if(child is DataGridView)continue;
+    foreach(Control nested in Descendants(child))yield return nested;
+   }
+  }
+  public static void Apply(Form form){
+   if(form==null||form.IsDisposed||!done.Add(form))return;
+   form.FormClosed+=(sender,args)=>done.Remove(form);
+   if(form is MainForm||form is ModernCalculatorForm||form is StartMenuPopup)return;
+   var toolTip=new ToolTip{AutoPopDelay=7000,InitialDelay=500};
+   form.Disposed+=(sender,args)=>toolTip.Dispose();
+   var flows=Descendants(form).OfType<FlowLayoutPanel>().ToArray();
+   foreach(var flow in flows){
+    if(flow.Dock!=DockStyle.Top && flow.Dock!=DockStyle.Bottom)continue;
+    var buttons=flow.Controls.OfType<Button>().Where(btn=>btn.Dock==DockStyle.None).ToArray();
+    if(buttons.Length==0)continue;
+    bool hasEditor=flow.Controls.Cast<Control>().Any(c=>
+     c is TextBox||c is ComboBox||c is NumericUpDown||
+     c is DateTimePicker||c is DataGridView);
+    foreach(var button in buttons){
+     if(button.IsDisposed)continue;
+     string label=button.Text??"";
+     button.AutoSize=false;
+     button.AutoEllipsis=true;
+     button.UseMnemonic=false;
+     if(button.Height>29)button.Height=29;
+     var oldFont=button.Font;
+     if(oldFont!=null&&oldFont.SizeInPoints>8.5f)
+      button.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
+     // Nunca transformar um botao em campo minusculo; conservar o texto
+     // inteiro quando couber e mostrar Tooltip quando houver truncamento.
+     int natural=TextRenderer.MeasureText(label,button.Font).Width+20;
+     int desiredWidth=label.Trim().Length<=2?
+      Math.Min(46,Math.Max(30,button.Width)):
+      Math.Min(192,Math.Max(78,natural));
+     // Um AutoSize antigo pode ter deixado Width pequeno antes de medirmos.
+     // A largura deve acompanhar o nome, e nao somente encolher: evita
+     // 'Cadastrar...', 'Editar clie...' e 'Importar 1...' no toolbar.
+     if(button.Width!=desiredWidth)button.Width=desiredWidth;
+     button.Margin=new Padding(3,2,3,2);
+     if(label.Length>0)toolTip.SetToolTip(button,label);
+    }
+    if(flow.Dock==DockStyle.Top && flow.Height>49 && !hasEditor){
+     flow.WrapContents=false;
+     flow.AutoScroll=true;
+     flow.Height=39;
+     flow.Padding=new Padding(5,3,5,2);
+    }else if(flow.Dock==DockStyle.Top && flow.Height>49 && hasEditor){
+     // Acesso direto aos filtros: reduzir a faixa mas preservar o campo.
+     flow.AutoScroll=true;
+     flow.WrapContents=false;
+     flow.Height=48;
+     flow.Padding=new Padding(5,3,5,3);
+    }else if(flow.Dock==DockStyle.Bottom && flow.Height>50 && !hasEditor){
+     flow.AutoScroll=true;
+     flow.WrapContents=false;
+     flow.Height=40;
+     flow.Padding=new Padding(5,2,5,2);
+    }
+   }
   }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
@@ -84,13 +156,13 @@ namespace ArmazemGratidao {
    if(!module)return;
    installed.Add(form);
    var shortcut=new Button {
-    Text="PDV - Nova Venda",Width=150,Height=29,
+    Text="PDV - Nova Venda",Width=129,Height=26,
     BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9,FontStyle.Bold),
     Margin=new Padding(4,2,4,2)
    };
    var strip=new FlowLayoutPanel {
-    Dock=DockStyle.Top,Height=35,WrapContents=false,
+    Dock=DockStyle.Top,Height=31,WrapContents=false,
     FlowDirection=FlowDirection.RightToLeft,
     BackColor=Color.FromArgb(229,242,255)
    };
@@ -102,7 +174,7 @@ namespace ArmazemGratidao {
    };
    var stockNavigation=form.Controls.Find("amzgBackBar",true).FirstOrDefault() as Panel;
    if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")&&stockNavigation!=null){
-    shortcut.Width=135;shortcut.Height=26;shortcut.Top=3;
+    shortcut.Width=122;shortcut.Height=24;shortcut.Top=3;
     shortcut.Anchor=AnchorStyles.Right|AnchorStyles.Top;
     stockNavigation.Controls.Add(shortcut);
     Action position=()=>{shortcut.Left=Math.Max(8,
@@ -415,10 +487,10 @@ namespace ArmazemGratidao {
    }
   }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
-  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=66,BackColor=Color.FromArgb(15,61,128)};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(15,61,128)};
   readonly Button menuToggle=new Button {Name="amzgStartHeader",Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
-  readonly Label status=new Label { Dock=DockStyle.Bottom,Height=34,TextAlign=ContentAlignment.MiddleLeft };
+  readonly Label status=new Label { Dock=DockStyle.Bottom,Height=27,TextAlign=ContentAlignment.MiddleLeft };
   public MainForm() {
    dbPath=Path.Combine(dataDir,"armazem-gratidao.db");
    Text="Armazém Gratidão | Versão "+InstalledVersion+" (build "+InstalledBuild+")";Width=1280;Height=800;MinimumSize=new Size(950,600);Font=new Font("Segoe UI",10,FontStyle.Bold);BackColor=Color.FromArgb(246,249,253);
@@ -462,7 +534,7 @@ namespace ArmazemGratidao {
    // Identidade da loja sempre visivel ANTES do botao Iniciar.
    // Reutiliza o logotipo incorporado: nao ha download nem marca d'agua.
    var brandPicture=new PictureBox{Name="amzgHeaderLogo",
-    Width=49,Height=49,Left=12,Top=8,
+    Width=38,Height=38,Left=9,Top=7,
     SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
    try{
     using(var source=typeof(MainForm).Assembly.GetManifestResourceStream(
@@ -475,31 +547,31 @@ namespace ArmazemGratidao {
    brandPicture.Disposed+=(sender,args)=>{if(brandPicture.Image!=null){
     brandPicture.Image.Dispose();brandPicture.Image=null;}};
    var brandCaption=new Label{Name="amzgHeaderBrand",Text="ARMAZÉM\nGRATIDÃO",
-    Font=new Font("Segoe UI",12.2f,FontStyle.Bold),
+    Font=new Font("Segoe UI",10.4f,FontStyle.Bold),
     ForeColor=Color.White,BackColor=Color.Transparent,
     TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=false,
-    Left=69,Top=9,Width=166,Height=49};
+    Left=53,Top=5,Width=136,Height=42};
    header.Controls.Add(brandPicture);
    header.Controls.Add(brandCaption);
-   // Distribuicao horizontal compacta sem sobrepor controles em 950-1280 px.
+   // Cabecalho fino. Nao encostar nos indicadores nem desperdiçar altura.
    Action alignHeader=()=>{
     if(header.IsDisposed)return;
-    const int gap=8;
-    int x=brandCaption.Right+14;
-    int usable=header.ClientSize.Width-x-12;
-    int[] baseWidths={108,174,86,145};
+    const int gap=6;
+    int x=brandCaption.Right+12;
+    int[] baseWidths={88,142,62,119};
     int total=baseWidths.Sum()+3*gap;
-    float factor=usable>=total?1f:
-     Math.Max(0.78f,(float)(usable-3*gap)/(total-3*gap));
+    int available=Math.Max(305,header.ClientSize.Width-x-10);
+    float factor=available>=total?1f:
+     Math.Max(0.73f,(float)(available-3*gap)/(total-3*gap));
     Button[] items={menuToggle,updateHeader,inicioHeader,calculatorHeader};
     for(int i=0;i<items.Length;i++){
      var btn=items[i];
-     btn.Left=x;btn.Top=13;btn.Height=39;
-     btn.Width=Math.Max(70,(int)(baseWidths[i]*factor));
-     btn.Font=new Font("Segoe UI",factor<0.9f?8.5f:9.3f,FontStyle.Bold);
+     btn.Left=x;btn.Top=9;btn.Height=33;
+     btn.Width=Math.Max(52,(int)(baseWidths[i]*factor));
+     btn.Font=new Font("Segoe UI",factor<0.9f?8f:8.5f,FontStyle.Bold);
+     btn.AutoEllipsis=true;
      x+=btn.Width+gap;
     }
-    header.Height=66;
    };
    header.Resize+=(sender,args)=>alignHeader();
    alignHeader();
@@ -1226,12 +1298,12 @@ namespace ArmazemGratidao {
     BackColor=Color.FromArgb(245,249,254)};
    // Painel COMUM sem desenho em segundo plano.
    var canvas=new Panel{Name="amzgDashboardCanvas",Left=0,Top=0,
-    Width=1015,Height=622,BackColor=Color.FromArgb(245,249,254)};
+    Width=1015,Height=565,BackColor=Color.FromArgb(245,249,254)};
    page.Controls.Add(canvas);
    // A marca ja esta no cabecalho, sem duplicar nome nem descricao.
    // O botao Iniciar do cabecalho continua sempre presente.
-   var metrics=new Panel{Name="amzgDashboardMetrics",Left=22,Top=22,
-    Width=971,Height=87,BackColor=Color.Transparent};
+   var metrics=new Panel{Name="amzgDashboardMetrics",Left=18,Top=10,
+    Width=979,Height=75,BackColor=Color.Transparent};
    canvas.Controls.Add(metrics);
    string[] labels={"VENDAS DO DIA","TOTAL VENDIDO HOJE",
     "PRODUTOS CADASTRADOS","TOTAL VENDIDO NO MÊS"};
@@ -1240,20 +1312,20 @@ namespace ArmazemGratidao {
    for(int i=0;i<4;i++){
     Color accent=(i%2==0)?Color.FromArgb(23,93,185):Color.FromArgb(211,37,57);
     var card=new Panel{Name="amzgDashboardMetric"+i,Top=0,Width=230,
-     Height=82,BackColor=Color.White};
+     Height=70,BackColor=Color.White};
     RoundHomeControl(card,12);
     var bar=new Panel{Dock=DockStyle.Left,Width=6,BackColor=accent};
-    var caption=new Label{Text=labels[i],Left=17,Top=9,Width=200,
-     Height=19,Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
+    var caption=new Label{Text=labels[i],Left=13,Top=7,Width=200,
+     Height=17,Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
      ForeColor=Color.FromArgb(155,39,60),AutoEllipsis=true};
-    var figure=new Label{Text="—",Left=17,Top=31,Width=200,Height=43,
-     Font=new Font("Segoe UI",17f,FontStyle.Bold),
+    var figure=new Label{Text="—",Left=13,Top=26,Width=200,Height=38,
+     Font=new Font("Segoe UI",16f,FontStyle.Bold),
      ForeColor=Color.FromArgb(19,55,112),AutoEllipsis=true};
     card.Controls.Add(bar);card.Controls.Add(caption);card.Controls.Add(figure);
     metrics.Controls.Add(card);metricCards[i]=card;values[i]=figure;
    }
-   var tiles=new Panel{Name="amzgDashboardTiles",Left=22,Top=128,
-    Width=971,Height=128,BackColor=Color.Transparent};
+   var tiles=new Panel{Name="amzgDashboardTiles",Left=18,Top=98,
+    Width=979,Height=94,BackColor=Color.Transparent};
    canvas.Controls.Add(tiles);
    var quick=new[]{
     Tuple.Create("PDV","PDV  •  Nova venda"),Tuple.Create("Vendas","Vendas"),
@@ -1270,11 +1342,11 @@ namespace ArmazemGratidao {
     if(action==null)continue;
     var btn=new Button{Name="amzgDashboardTile"+i,Tag=entry.Item2,Text=entry.Item1,
      FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,81,170),
-     ForeColor=Color.White,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),
+     ForeColor=Color.White,Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
      Image=HomeWhiteTileIcon(entry.Item1),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      TextAlign=ContentAlignment.MiddleCenter,Cursor=Cursors.Hand,UseMnemonic=false,
-     AutoEllipsis=true,Padding=new Padding(7,0,4,0),Width=177,Height=56};
+     AutoEllipsis=true,Padding=new Padding(5,0,3,0),Width=177,Height=42};
     btn.FlatAppearance.BorderSize=0;
     btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(35,103,202);
     RoundHomeControl(btn,11);
@@ -1283,11 +1355,11 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(btn);buttons.Add(btn);
    }
    // Ranking em duas tabelas compactas: 1-10 e 11-20.
-   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=274,
-    Width=971,Height=309,BackColor=Color.White};
+   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=18,Top=207,
+    Width=979,Height=320,BackColor=Color.White};
    RoundHomeControl(ranking,12);
    var rankHeader=new Panel{Name="amzgDashboardRankingHeader",
-    Left=0,Top=0,Width=971,Height=42,
+    Left=0,Top=0,Width=979,Height=38,
     BackColor=Color.FromArgb(19,73,157)};
    var rankTitle=new Label{Name="amzgDashboardRankingTitle",Dock=DockStyle.Fill,
     Text="  RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",
@@ -1295,7 +1367,7 @@ namespace ArmazemGratidao {
     Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.White,
     AutoEllipsis=true};
    var refresh=new Button{Name="amzgDashboardRefresh",Dock=DockStyle.Right,
-    Width=200,Text="↻  Atualizar indicadores",FlatStyle=FlatStyle.Flat,
+    Width=153,Text="↻  Atualizar",FlatStyle=FlatStyle.Flat,
     BackColor=Color.FromArgb(40,107,199),ForeColor=Color.White,
     Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
    refresh.FlatAppearance.BorderSize=0;
@@ -1303,7 +1375,7 @@ namespace ArmazemGratidao {
    rankHeader.Controls.Add(rankTitle);rankHeader.Controls.Add(refresh);
    ranking.Controls.Add(rankHeader);
    var rankArea=new Panel{Name="amzgRankingTables",
-    Left=0,Top=42,Width=971,Height=267,
+    Left=0,Top=38,Width=979,Height=282,
     Padding=new Padding(9,5,9,7),BackColor=Color.White};
    var leftGrid=CreateHomeRankingGrid("amzgRankingLeft");
    var rightGrid=CreateHomeRankingGrid("amzgRankingRight");
@@ -1316,39 +1388,52 @@ namespace ArmazemGratidao {
     if(page.IsDisposed||canvas.IsDisposed)return;
     int width=Math.Max(944,page.ClientSize.Width-2);
     canvas.Width=width;
-    metrics.Width=width-44;
+    metrics.Width=width-36;
     const int mGap=11;
     int cardWidth=(metrics.Width-3*mGap)/4;
     for(int i=0;i<4;i++){
      metricCards[i].Left=i*(cardWidth+mGap);
      metricCards[i].Width=cardWidth;
      foreach(Control c in metricCards[i].Controls)
-      if(c is Label)c.Width=cardWidth-26;
+      if(c is Label)c.Width=cardWidth-23;
     }
-    tiles.Width=width-44;
+    tiles.Width=width-36;
     const int tGap=11;
     int buttonWidth=(tiles.Width-4*tGap)/5;
     for(int i=0;i<buttons.Count;i++){
      buttons[i].Left=(i%5)*(buttonWidth+tGap);
-     buttons[i].Top=(i/5)*63;
+     buttons[i].Top=(i/5)*48;
      buttons[i].Width=buttonWidth;
     }
-    ranking.Width=width-44;
+    ranking.Width=width-36;
     rankHeader.Width=ranking.ClientSize.Width;
     rankArea.Width=ranking.ClientSize.Width;
-    rankArea.Height=ranking.ClientSize.Height-42;
+    rankArea.Height=ranking.ClientSize.Height-38;
     int tableWidth=Math.Max(320,(rankArea.ClientSize.Width-rankArea.Padding.Horizontal-12)/2);
     leftGrid.Left=rankArea.Padding.Left;
     rightGrid.Left=rankArea.Padding.Left+tableWidth+12;
     leftGrid.Width=tableWidth;rightGrid.Width=tableWidth;
     int h=Math.Max(210,rankArea.ClientSize.Height-rankArea.Padding.Vertical);
     leftGrid.Height=h;rightGrid.Height=h;
-    page.AutoScrollMinSize=new Size(width,625);
+    page.AutoScrollMinSize=new Size(width,566);
    };
    page.Resize+=(sender,args)=>fit();
    rankArea.Resize+=(sender,args)=>fit();
-   Controls.Add(page);page.BringToFront();header.BringToFront();status.BringToFront();
-   sideMenu.Visible=false;fit();
+   // CORRECAO: Dock.Fill no topo do formulario permitia a barra
+   // cobrir os valores dos indicadores. Reservar uma area propria fixa
+   // ABAIXO do cabecalho, antes de criar qualquer layout de dashboard.
+   page.Dock=DockStyle.None;
+   Action positionPage=()=>{
+    if(page.IsDisposed)return;
+    page.Bounds=new Rectangle(0,header.Height,ClientSize.Width,
+     Math.Max(100,ClientSize.Height-header.Height-status.Height));
+   };
+   EventHandler positionOnResize=(sender,args)=>positionPage();
+   ClientSizeChanged+=positionOnResize;
+   page.Disposed+=(sender,args)=>ClientSizeChanged-=positionOnResize;
+   Controls.Add(page);
+   page.BringToFront();header.BringToFront();status.BringToFront();
+   sideMenu.Visible=false;positionPage();fit();
 
    // Dados verdadeiros, consultados somente para leitura e fora da interface.
    bool loading=false;
@@ -1561,7 +1646,7 @@ namespace ArmazemGratidao {
    var bottom=new Panel{Dock=DockStyle.Bottom,Height=57,BackColor=Color.White};
    var previous=new Button{Text="Mostrar/ocultar menu antigo",Width=218,Height=35,Top=10,Left=17,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
-    Font=new Font("Segoe UI",9,FontStyle.Bold)};
+    Font=new Font("Segoe UI",8.3f,FontStyle.Bold)};
    previous.FlatAppearance.BorderSize=0;RoundHomeControl(previous,9);
    previous.Click+=(sender,args)=>{sideMenu.Visible=!sideMenu.Visible;dialog.Close();};
    var dashboard=new Button{Text="Início / Indicadores",Width=179,Height=35,Top=10,Left=248,
@@ -1712,9 +1797,9 @@ namespace ArmazemGratidao {
   // O fechamento normal da janela preserva validacoes de alteracoes pendentes.
   void AddBackToMenu(Form form){
    if(form==null||form.IsDisposed||form.Controls.Find("amzgBackBar",true).Length>0)return;
-   var backBar=new Panel{Name="amzgBackBar",Dock=DockStyle.Top,Height=37,
+   var backBar=new Panel{Name="amzgBackBar",Dock=DockStyle.Top,Height=33,
     BackColor=Color.FromArgb(238,244,253)};
-   var back=new Button{Text="← Voltar ao Menu Principal",Left=8,Top=3,Width=193,Height=30,
+   var back=new Button{Text="← Voltar ao Menu Principal",Left=7,Top=3,Width=163,Height=26,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9,FontStyle.Bold)};
    back.FlatAppearance.BorderSize=0;
@@ -1727,8 +1812,8 @@ namespace ArmazemGratidao {
     BringToFront();Activate();
    };
    if(form is ModuloConsultaForm&&form.Text.Contains("Estoque")){
-    backBar.Height=32;
-    back.Width=132;back.Height=26;back.Top=3;
+    backBar.Height=30;
+    back.Width=126;back.Height=24;back.Top=3;
     back.Text="← Menu Principal";
     back.Anchor=AnchorStyles.Top|AnchorStyles.Right;
     backBar.Resize+=(sender,args)=>{back.Left=Math.Max(8,backBar.ClientSize.Width-back.Width-10);};
