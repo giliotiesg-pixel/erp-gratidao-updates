@@ -11,7 +11,7 @@ namespace ArmazemGratidao {
   readonly CultureInfo locale=CultureInfo.GetCultureInfo("pt-BR");
   readonly CalculatorDisplayLabel display;
   readonly Label result;
-  readonly Label expression;
+  readonly TextBox expression;
   readonly Label preview;
   decimal stored=0m;
   string operation=null;
@@ -21,7 +21,9 @@ namespace ArmazemGratidao {
    Name="amzgModernCalculator";
    Text="Calculadora | Armazém Gratidão";
    // Dimensoes reais para o visor nao ficar cortado em Windows 8 / DPI maior.
-   ClientSize=new Size(430,618);
+   // Ajustar a altura a tela real: nenhuma fileira do teclado pode ficar fora.
+   int usable=Screen.PrimaryScreen.WorkingArea.Height;
+   ClientSize=new Size(430,Math.Min(640,Math.Max(490,usable-55)));
    AutoScaleMode=AutoScaleMode.None;
    MinimumSize=Size;MaximumSize=Size;
    FormBorderStyle=FormBorderStyle.FixedSingle;
@@ -68,98 +70,84 @@ namespace ArmazemGratidao {
    copy.Resize+=(sender,args)=>Round(copy);
    top.Controls.Add(logo);top.Controls.Add(name);top.Controls.Add(copy);
 
-   // Dois visores sem historico: o de cima acompanha a operacao inteira,
-   // o de baixo exibe com destaque o resultado (inclusive provisório).
-   var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=200,
+   // Dois visores NATIVOS: a conta em cima e o resultado maior embaixo.
+   // Antes os valores eram pintados em um painel e seus labels ficavam
+   // invisiveis. Agora o texto e um controle WinForms realmente visivel.
+   var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=194,
     BackColor=Color.FromArgb(24,49,89)};
-   expression=new Label{Name="amzgCalcExpression",Text="0",
-    Left=16,Top=5,Width=398,Height=22,
-    Font=new Font("Segoe UI",9,FontStyle.Bold),
-    ForeColor=Color.FromArgb(187,208,236),Visible=false};
-   // Label de entrada mantido como fonte da logica matematica e do teclado.
-   // O desenho do visor nao depende de TextBox nem de fonte especial.
+   var calcCaption=new Label{Name="amzgCalcInputCaption",Text="CÁLCULO",
+    Left=17,Top=5,Width=140,Height=22,
+    Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(207,226,250)};
+   var inputFrame=new Panel{Name="amzgCalcInputFrame",
+    Left=13,Top=30,Width=404,Height=48,BackColor=Color.FromArgb(248,251,255),
+    Padding=new Padding(10,6,10,6)};
+   expression=new TextBox{Name="amzgCalcExpression",Text="0",
+    Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,
+    BackColor=Color.FromArgb(248,251,255),
+    ForeColor=Color.FromArgb(29,72,140),
+    Font=new Font("Segoe UI",17f,FontStyle.Bold),
+    TextAlign=HorizontalAlignment.Right,ReadOnly=true,
+    ShortcutsEnabled=true,TabStop=true};
+   inputFrame.Controls.Add(expression);
+   // Campo de trabalho nao visivel, usado para preservar a logica antiga.
+   // As duas telas verdadeiras ficam acima, com Visible=true.
    var displayFrame=new Panel{Name="amzgCalcDisplayFrame",
-    Left=13,Top=30,Width=402,Height=45,BackColor=Color.White,Visible=false};
+    Left=0,Top=0,Width=1,Height=42,Visible=false};
    display=new CalculatorDisplayLabel{Name="amzgCalcDisplay",
-    Dock=DockStyle.Fill,Text="0",Visible=false,
-    Font=new Font("Segoe UI",18f,FontStyle.Bold),AutoEllipsis=false,
-    ForeColor=Color.FromArgb(22,66,130)};
+    Text="0",Visible=false};
    displayFrame.Controls.Add(display);
-   result=new Label{Name="amzgCalcResult",Text="0,00",Visible=false,
-    Font=new Font("Segoe UI",43f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(10,51,125)};
-   preview=new Label{Name="amzgCalcPreview",Visible=false,
-    Text="Cálculo rápido em reais e centavos",
-    Font=new Font("Segoe UI",9f),ForeColor=Color.White};
-
-   // Pintura unificada para evitar cortes no Windows 8. O resultado
-   // ocupa a maior area, em fonte dinamicamente adaptada ao valor.
-   screen.Paint+=(sender,e)=>{
-    var g=e.Graphics;
-    g.SmoothingMode=SmoothingMode.AntiAlias;
-    TextRenderer.DrawText(g,expression.Text,expression.Font,
-     new Rectangle(16,4,screen.Width-32,22),
-     Color.FromArgb(190,212,240),
-     TextFormatFlags.Right|TextFormatFlags.VerticalCenter|
-     TextFormatFlags.NoPadding|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
-    Rectangle inputArea=new Rectangle(13,29,screen.Width-26,47);
-    Rectangle resultArea=new Rectangle(13,83,screen.Width-26,103);
-    using(var inputShape=new GraphicsPath())
-    using(var outputShape=new GraphicsPath()){
-     AddCalculatorRoundedRect(inputShape,inputArea,10);
-     AddCalculatorRoundedRect(outputShape,resultArea,13);
-     using(var white=new SolidBrush(Color.FromArgb(246,249,254)))
-      g.FillPath(white,inputShape);
-     using(var lightBlue=new SolidBrush(Color.FromArgb(221,236,255)))
-      g.FillPath(lightBlue,outputShape);
-     using(var thin=new Pen(Color.FromArgb(167,197,234),1f))
-      g.DrawPath(thin,inputShape);
-     using(var prominent=new Pen(Color.FromArgb(48,119,217),2f))
-      g.DrawPath(prominent,outputShape);
-    }
-    using(var caption=new Font("Segoe UI",9f,FontStyle.Bold))
-    using(var small=new Font("Segoe UI",19f,FontStyle.Bold)){
-     TextRenderer.DrawText(g,"CÁLCULO",caption,
-      new Rectangle(inputArea.Left+11,inputArea.Top+5,96,inputArea.Height-10),
-      Color.FromArgb(66,98,143),
-      TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
-     TextRenderer.DrawText(g,string.IsNullOrEmpty(expression.Text)?"0":expression.Text,small,
-      new Rectangle(inputArea.Left+107,inputArea.Top+5,inputArea.Width-120,inputArea.Height-10),
-      Color.FromArgb(36,76,132),
-      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
-      TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis);
-     TextRenderer.DrawText(g,"RESULTADO",caption,
-      new Rectangle(resultArea.Left+13,resultArea.Top+8,130,21),
-      Color.FromArgb(24,84,162),
-      TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
-    }
-    string number=string.IsNullOrEmpty(result.Text)?"0":result.Text;
-    Font fitted=null;
-    try{
-     for(float size=45f;size>=16f;size-=2f){
-      if(fitted!=null)fitted.Dispose();
-      fitted=new Font("Segoe UI",size,FontStyle.Bold);
-      var measured=TextRenderer.MeasureText(g,number,fitted,
-       new Size(100000,resultArea.Height),
-       TextFormatFlags.NoPadding|TextFormatFlags.SingleLine);
-      if(measured.Width<=resultArea.Width-24&&measured.Height<=69)break;
-     }
-     TextRenderer.DrawText(g,number,fitted,
-      new Rectangle(resultArea.Left+10,resultArea.Top+27,
-       resultArea.Width-22,resultArea.Height-31),
-      Color.FromArgb(9,57,135),
-      TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
-      TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
-    }finally{if(fitted!=null)fitted.Dispose();}
-   };
-   display.TextChanged+=(sender,e)=>screen.Invalidate();
-   result.TextChanged+=(sender,e)=>screen.Invalidate();
-   expression.TextChanged+=(sender,e)=>screen.Invalidate();
+   var resultFrame=new Panel{Name="amzgCalcResultFrame",
+    Left=13,Top=85,Width=404,Height=101,
+    Padding=new Padding(10,7,10,7),
+    BackColor=Color.FromArgb(216,232,255)};
+   var resultCaption=new Label{Name="amzgCalcResultCaption",Text="RESULTADO",
+    Left=13,Top=5,Width=105,Height=18,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(29,83,158)};
+   result=new Label{Name="amzgCalcResult",Text="0,00",
+    Left=9,Top=22,Width=386,Height=70,
+    AutoEllipsis=true,TextAlign=ContentAlignment.MiddleRight,
+    Font=new Font("Segoe UI",38f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(10,57,130),
+    BackColor=Color.Transparent};
+   resultFrame.Controls.Add(result);
+   resultFrame.Controls.Add(resultCaption);
+   // Mantido somente por compatibilidade com outros modulos/testes.
+   preview=new Label{Name="amzgCalcPreview",Visible=false,Text="Resultado"};
    screen.Controls.Add(displayFrame);
-   screen.Controls.Add(expression);
-   screen.Controls.Add(result);
-   screen.Controls.Add(preview);
-
+   screen.Controls.Add(calcCaption);
+   screen.Controls.Add(inputFrame);
+   screen.Controls.Add(resultFrame);
+   Action fitScreens=()=>{
+    int width=Math.Max(260,screen.ClientSize.Width-26);
+    inputFrame.Width=width;
+    resultFrame.Width=width;
+    result.Width=Math.Max(190,resultFrame.ClientSize.Width-18);
+   };
+   screen.Resize+=(sender,args)=>fitScreens();
+   fitScreens();
+   // A janela permanece focada quando o usuario clica em qualquer visor.
+   expression.KeyDown+=(sender,e)=>{
+    // O formulario recebe primeiro os eventos com KeyPreview=true.
+    // Manter o campo somente-leitura evita resultado desincronizado.
+   };
+   result.TextChanged+=(sender,args)=>{
+    using(var g=result.CreateGraphics()){
+     float size=38f;
+     while(size>17f){
+      using(var font=new Font("Segoe UI",size,FontStyle.Bold)){
+       if(TextRenderer.MeasureText(g,result.Text,font,
+        new Size(2000,75),TextFormatFlags.SingleLine|TextFormatFlags.NoPadding)
+        .Width<=result.Width-12)break;
+      }
+      size-=2f;
+     }
+     var oldFont=result.Font;
+     result.Font=new Font("Segoe UI",size,FontStyle.Bold);
+     oldFont.Dispose();
+    }
+   };
    var keys=new TableLayoutPanel{Name="amzgCalcKeys",Dock=DockStyle.Fill,
     ColumnCount=4,RowCount=6,Padding=new Padding(8,10,8,10),
     BackColor=Color.FromArgb(238,243,251)};
@@ -194,7 +182,7 @@ namespace ArmazemGratidao {
     if(key=="Copiar")CopyResult();else Press(key);
     e.SuppressKeyPress=true;e.Handled=true;
    };
-   Shown+=(s,e)=>Activate();
+   Shown+=(s,e)=>{Activate();expression.Focus();};
   }
 
   // Icone sem arquivos externos caso o recurso embutido esteja indisponivel.
