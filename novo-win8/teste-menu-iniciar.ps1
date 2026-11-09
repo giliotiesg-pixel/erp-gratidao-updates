@@ -172,6 +172,9 @@ public static class AMZGMouse {
     $zeroBottom.Y -gt ($calculator.ClientSize.Height-8)){
   throw "A ultima fileira do teclado ficou cortada: y=$($zeroBottom.Y) janela=$($calculator.ClientSize.Height)"
  }
+ if([Math]::Abs($zero.Height-$physical.Height) -gt 3){
+  throw "Ultima linha com altura desigual: tecla 7=$($physical.Height), zero=$($zero.Height)"
+ }
  & $press 'C'
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
   Select-Object -First 1
