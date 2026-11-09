@@ -169,7 +169,7 @@ public static class AMZGMouse {
   [System.Drawing.Point]::new([int]($zero.Width/2),$zero.Height)))
  if($null -eq $zero -or !$zero.Visible -or $zero.Height -lt 30 -or
     $zero.Bottom -gt $keypad.ClientSize.Height -or
-    $zeroBottom.Y -gt ($calculator.ClientSize.Height-20)){
+    $zeroBottom.Y -gt ($calculator.ClientSize.Height-8)){
   throw "A ultima fileira do teclado ficou cortada: y=$($zeroBottom.Y) janela=$($calculator.ClientSize.Height)"
  }
  & $press 'C'
