@@ -84,7 +84,7 @@ namespace ArmazemGratidao {
    history.Controls.Add(returnsGrid);history.Controls.Add(historyHeading);history.Controls.Add(historyBar);history.Controls.Add(remainingLabel);
    tabs.TabPages.Add(products);tabs.TabPages.Add(history);Controls.Add(tabs);
    search.TextChanged+=(sender,args)=>LoadData();
-   Shown+=(sender,args)=>LoadData();
+   Load+=(sender,args)=>LoadData();
   }
   SQLiteConnection Open(){var c=new SQLiteConnection("Data Source="+db+";Version=3;");c.Open();return c;}
   static decimal Number(object o){if(o==null||o==DBNull.Value)return 0;return Convert.ToDecimal(o,CultureInfo.InvariantCulture);}
