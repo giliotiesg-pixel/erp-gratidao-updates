@@ -143,7 +143,7 @@ namespace ArmazemGratidao {
    for(int r=0;r<6;r++)keys.RowStyles.Add(new RowStyle(SizeType.Absolute,50f));
    Action fitKeyRows=()=>{
     int available=keys.ClientSize.Height-keys.Padding.Vertical-12;
-    int rowHeight=Math.Max(34,Math.Min(56,available/6));
+    int rowHeight=Math.Max(34,Math.Min(52,available/6));
     foreach(RowStyle row in keys.RowStyles)row.Height=rowHeight;
    };
    keys.Resize+=(sender,args)=>fitKeyRows();
