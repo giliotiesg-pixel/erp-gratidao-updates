@@ -52,6 +52,14 @@ $ctor=$salesType.GetConstructor([Type[]]@([string],[bool]))
 $method=$salesType.GetMethod('ChangeProduct',
  [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
 if($null -eq $ctor -or $null -eq $method){throw 'Metodo de edicao nao encontrado.'}
+$normalize=$salesType.GetMethod('NormalizeSaleProductSearch',
+ [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static)
+if($null -eq $normalize){throw 'Busca inteligente nao encontrada.'}
+$expected=([string]([char]0x00C1))+'GUA DE 20l'
+$actual=$normalize.Invoke($null,[object[]]@($expected))
+if($actual -ne 'agua de 20l'){throw "Busca nao ignora acentos: $actual"}
+$test2=$normalize.Invoke($null,[object[]]@('CoCA   COLA'))
+if($test2 -ne 'coca cola'){throw "Busca nao ignora maiusculas: $test2"}
 $form=$null
 try{
  $form=$ctor.Invoke([object[]]@([string]$db,[bool]$false))
@@ -77,6 +85,11 @@ try{
    try{
     if($script:started.Elapsed.TotalSeconds -gt 18){
      $script:failure="Timeout ao testar janela de alteracao"
+     # Fecha avisos que bloqueiam o metodo modal, de qualquer titulo.
+     $errorPopup=[AMZGWin32]::FindWindow('#32770',$null)
+     if($errorPopup -ne [IntPtr]::Zero){
+      [AMZGWin32]::PostMessage($errorPopup,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+     }
      foreach($win in [Windows.Forms.Application]::OpenForms){
       if($win.Name -eq 'amzgChangeProductDialog'){$win.Close()}
      }
@@ -86,7 +99,7 @@ try{
       Where-Object {$_.Name -eq 'amzgChangeProductDialog'} | Select-Object -First 1)
      if($modal.Count -eq 0){return}
      $popup=$modal[0]
-     $list=@($popup.Controls.Find('amzgSaleEditProducts',$true))[0]
+     $list=@($popup.Controls.Find('amzgSaleEditSaleItems',$true))[0]
      $total=@($popup.Controls.Find('amzgSaleEditTotal',$true))[0]
      $qty=@($popup.Controls.Find('amzgSaleEditQty',$true))[0]
      $price=@($popup.Controls.Find('amzgSaleEditPrice',$true))[0]
@@ -94,7 +107,14 @@ try{
      if($null -eq $list -or $null -eq $total -or $null -eq $qty -or $null -eq $price -or $null -eq $save){
       throw "Campo da edicao ausente."
      }
-     if($list.Rows.Count -ne 4){throw "Catalogo completo nao abriu: $($list.Rows.Count) itens"}
+     if($list.Rows.Count -ne 2){throw "Lista deve mostrar apenas os 2 produtos desta venda: $($list.Rows.Count)"}
+     if($list.Columns.Contains('name') -or !$list.Columns.Contains('produto')){
+      throw 'Janela principal exibiu cadastro em vez dos itens vendidos.'
+     }
+     if(@($popup.Controls.Find('amzgSaleEditFind',$true)).Count -ne 1 -or
+        @($popup.Controls.Find('amzgSaleEditRemove',$true)).Count -ne 1){
+      throw 'Alterar produto precisa de Busca de substituto e Retirar da venda.'
+     }
      if($popup.Controls.Find('amzgSalesTotalsBar',$true).Count -gt 0){
       throw 'Totais do dia/mes nao devem aparecer na janela de edicao.'
      }
@@ -122,6 +142,10 @@ try{
    }catch{
     $script:failure=$_.Exception.Message
     $script:mode=99
+    $errorPopup=[AMZGWin32]::FindWindow('#32770',$null)
+    if($errorPopup -ne [IntPtr]::Zero){
+     [AMZGWin32]::PostMessage($errorPopup,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+    }
     foreach($win in [Windows.Forms.Application]::OpenForms){
      if($win.Name -eq 'amzgChangeProductDialog'){$win.Close()}
     }

@@ -40,9 +40,9 @@ namespace ArmazemGratidao {
    table.ScrollBars=ScrollBars.Both;
   }
   Control MetricCard(int index,string title){
-   var card=new Panel{Width=235,Height=92,Margin=new Padding(6,5,6,5),BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
-   var caption=new Label{Text=title,Left=12,Top=9,Width=208,Height=24,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(60,80,105)};
-   var value=new Label{Text="R$ 0,00",Left=12,Top=36,Width=210,Height=39,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=index==6?Color.FromArgb(20,115,82):MainBlue};
+   var card=new Panel{Width=214,Height=80,Margin=new Padding(4,4,4,4),BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
+   var caption=new Label{Text=title,Left=11,Top=8,Width=192,Height=23,Font=new Font("Segoe UI",9,FontStyle.Bold),ForeColor=Color.FromArgb(60,80,105)};
+   var value=new Label{Text="R$ 0,00",Left=11,Top=34,Width=192,Height=34,Font=new Font("Segoe UI",15,FontStyle.Bold),ForeColor=index==6?Color.FromArgb(20,115,82):MainBlue};
    metricValues[index]=value;
    card.Controls.Add(caption);card.Controls.Add(value);
    return card;
@@ -60,7 +60,7 @@ namespace ArmazemGratidao {
    refresh.Click+=(sender,args)=>LoadData();bar.Controls.Add(refresh);
    var clear=new Button{Text="Limpar busca",Width=130,Height=36};
    clear.Click+=(sender,args)=>{search.Clear();search.Focus();};bar.Controls.Add(clear);
-   var cards=new FlowLayoutPanel{Dock=DockStyle.Top,Height=228,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=LightBackground};
+   var cards=new FlowLayoutPanel{Dock=DockStyle.Top,Height=190,Padding=new Padding(8),WrapContents=true,AutoScroll=true,BackColor=LightBackground};
    string[] labels={"Total vendido","Custo dos produtos","Taxas","Lucro líquido","Reserva 10% acumulada","Total já devolvido","Reserva 10% disponível"};
    for(int i=0;i<labels.Length;i++)cards.Controls.Add(MetricCard(i,labels[i]));
    var reserveBar=new TableLayoutPanel{Dock=DockStyle.Top,Height=67,ColumnCount=2,RowCount=1,BackColor=Color.White,Padding=new Padding(6)};

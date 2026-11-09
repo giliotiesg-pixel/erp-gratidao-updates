@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Web.Script.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
@@ -164,6 +165,32 @@ namespace ArmazemGratidao {
    }
   }
  }
+ // Identidade grafica oficial nas barras de titulo de todas as janelas,
+ // inclusive dialogs e formularios abertos posteriormente.
+ // Nao adiciona painel sobre botao nem tira area de trabalho do modulo.
+ static class ModuleWindowBranding {
+  [DllImport("user32.dll")]static extern bool DestroyIcon(IntPtr handle);
+  static readonly Icon icon=CreateIcon();
+  static Icon CreateIcon(){
+   try{
+    using(var source=typeof(MainForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(source==null)return null;
+     using(var original=Image.FromStream(source))
+     using(var bitmap=new Bitmap(original,new Size(32,32))){
+      IntPtr handle=bitmap.GetHicon();
+      try{using(var temporary=Icon.FromHandle(handle))
+       return (Icon)temporary.Clone();
+      }finally{DestroyIcon(handle);}
+     }
+    }
+   }catch(Exception){return null;}
+  }
+  public static void Apply(Form form){
+   if(form==null||form.IsDisposed)return;
+   if(icon!=null){form.ShowIcon=true;form.Icon=icon;}
+  }
+ }
  // Tema visual nativo para cada módulo e para diálogos criados depois.
  // Só altera acabamento de controles; nunca tamanho, posição, edição,
  // DataSource, navegacao, eventos ou conteúdo de dados do cliente.
@@ -188,79 +215,102 @@ namespace ArmazemGratidao {
    }
   }
   static void Apply(Control control){
-   // A calculadora possui tema proprio: preservar as cores e dimensoes das teclas.
-   if(control is ModernCalculatorForm || control.FindForm() is ModernCalculatorForm ||
-      control is PdvForm || control.FindForm() is PdvForm)return;
-   if(control.IsDisposed||!decorated.Add(control))return;
+   if(control==null||control.IsDisposed||!decorated.Add(control))return;
    control.Disposed+=(sender,args)=>decorated.Remove(control);
-   var button=control as Button;
-   if(button!=null){
-    // Atalhos de Inicio e menu ja possuem moldura propria.
-    bool ownFrame=string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)
-       ||(button.Parent is FlowLayoutPanel && button.FindForm() is MainForm);
-    // Todos os botoes recebem regiao arredondada, inclusive atalhos e menu lateral.
-    // Os que ja possuem desenho proprio mantem sua moldura e seus eventos.
-    Action roundButton=()=>Round(button,9);
-    button.Resize+=(sender,args)=>roundButton();
-    roundButton();
-    if(!ownFrame){
-     button.FlatStyle=FlatStyle.Flat;
-     button.FlatAppearance.BorderSize=0;
-     // Padrao visual unico: azul vivo, letras brancas, negrito e cantos arredondados.
-     // Preserva cores de alerta/exclusao e dimensoes dos formularios para nao cortar textos.
-     bool danger=button.Text!=null && (button.Text.IndexOf("Excluir",StringComparison.OrdinalIgnoreCase)>=0
-       ||button.Text.IndexOf("Apagar",StringComparison.OrdinalIgnoreCase)>=0
-       ||button.Text.IndexOf("Remover",StringComparison.OrdinalIgnoreCase)>=0);
-     if(!danger){
+   var form=control as Form;
+   if(form!=null){
+    ModuleWindowBranding.Apply(form);
+    // Os modulos ja modernizados usam seu proprio layout; nao impor outra
+    // barra, outros tamanhos ou cores por cima do trabalho aprovado.
+    bool customized=form is MainForm||form is ModernCalculatorForm||
+     form is PdvForm||form is ConsultaForm||form is StartMenuPopup;
+    if(!customized){
+     form.BackColor=Color.FromArgb(245,249,254);
+     form.ForeColor=Color.FromArgb(29,55,101);
+    }
+   }
+   bool special=control.FindForm() is MainForm ||
+    control.FindForm() is PdvForm ||
+    control.FindForm() is ModernCalculatorForm ||
+    control.FindForm() is ConsultaForm ||
+    control.FindForm() is StartMenuPopup;
+   if(!special){
+    var button=control as Button;
+    if(button!=null){
+     // Apenas aparencia: nao altera clique, validacao, largura nem altura.
+     bool danger=button.Text!=null&&(
+      button.Text.IndexOf("Excluir",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Apagar",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Remover",StringComparison.OrdinalIgnoreCase)>=0||
+      button.Text.IndexOf("Retirar",StringComparison.OrdinalIgnoreCase)>=0);
+     bool goBack=button.Text!=null&&(
+      button.Text.IndexOf("Voltar",StringComparison.OrdinalIgnoreCase)>=0);
+     bool cancel=button.Text!=null&&(
+      button.Text.IndexOf("Cancelar",StringComparison.OrdinalIgnoreCase)>=0);
+     Color oldBackground=button.BackColor;
+     bool defaultBackground=oldBackground.IsEmpty||oldBackground.IsSystemColor||
+      oldBackground.ToArgb()==SystemColors.Control.ToArgb();
+     if(danger||goBack){
+      button.BackColor=Color.FromArgb(190,40,57);
+      button.ForeColor=Color.White;
+     }else if(cancel){
+      button.BackColor=Color.FromArgb(232,240,250);
+      button.ForeColor=Color.FromArgb(24,67,140);
+     }else if(defaultBackground){
       button.BackColor=Color.FromArgb(22,75,160);
       button.ForeColor=Color.White;
      }
+     button.UseVisualStyleBackColor=false;
+     button.FlatStyle=FlatStyle.Flat;
+     button.FlatAppearance.BorderSize=0;
      if(button.Font!=null && !button.Font.Bold)
       button.Font=new Font(button.Font,FontStyle.Bold);
-     button.FlatAppearance.MouseOverBackColor=danger?Color.FromArgb(180,53,65):Color.FromArgb(36,96,185);
-     button.FlatAppearance.MouseDownBackColor=danger?Color.FromArgb(150,39,52):Color.FromArgb(13,53,128);
-     button.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-      new Rectangle(1,1,button.ClientSize.Width-3,button.ClientSize.Height-3),
-      9,danger?Color.FromArgb(175,60,75):Color.FromArgb(72,119,194),1.25f);
-    }
-   }else if(control is TextBox){
-    var input=(TextBox)control;
-    if(!input.Multiline&&input.BorderStyle!=BorderStyle.None){
-     input.BorderStyle=BorderStyle.FixedSingle;
-     Action round=()=>Round(input,6);
-     input.Resize+=(sender,args)=>round();
-     round();
-    }
-   }else if(control is ComboBox){
-    var select=(ComboBox)control;
-    select.FlatStyle=FlatStyle.Flat;
-    Action round=()=>Round(select,6);
-    select.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is NumericUpDown){
-    var number=(NumericUpDown)control;
-    number.BorderStyle=BorderStyle.FixedSingle;
-    Action round=()=>Round(number,6);
-    number.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is DateTimePicker){
-    var date=(DateTimePicker)control;
-    Action round=()=>Round(date,6);
-    date.Resize+=(sender,args)=>round();
-    round();
-   }else if(control is GroupBox){
-    var group=(GroupBox)control;
-    group.ForeColor=blue;
-   }else if(control is Panel && !(control is FlowLayoutPanel) && !(control is TableLayoutPanel)){
-    var panel=(Panel)control;
-    if(panel.BorderStyle==BorderStyle.FixedSingle){
-     panel.BorderStyle=BorderStyle.None;
-     panel.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
-      new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3),
-      10,outline,1.35f);
+     Action roundButton=()=>Round(button,button.Height<=34?7:10);
+     button.Resize+=(sender,args)=>roundButton();
+     roundButton();
+     button.FlatAppearance.MouseOverBackColor=danger||goBack?
+      Color.FromArgb(217,54,75):Color.FromArgb(37,105,195);
+     button.FlatAppearance.MouseDownBackColor=danger||goBack?
+      Color.FromArgb(152,34,48):Color.FromArgb(12,54,124);
+    }else if(control is TextBox){
+     var input=(TextBox)control;
+     if(!input.Multiline&&input.BorderStyle!=BorderStyle.None)
+      input.BorderStyle=BorderStyle.FixedSingle;
+     input.BackColor=Color.White;
+    }else if(control is ComboBox){
+     var combo=(ComboBox)control;
+     combo.FlatStyle=FlatStyle.Flat;
+     combo.BackColor=Color.White;
+     // Preservar a seta nativa; recorte arredondado cortaria o seletor.
+    }else if(control is NumericUpDown){
+     var number=(NumericUpDown)control;
+     number.BackColor=Color.White;
+     number.BorderStyle=BorderStyle.FixedSingle;
+     // Nao arredondar o campo: preserva as duas setas de quantidade.
+    }else if(control is DateTimePicker){
+     // Preservar a seta do calendario e o seletor do Windows 8.
+    }else if(control is GroupBox){
+     var group=(GroupBox)control;group.ForeColor=blue;
+    }else if(control is FlowLayoutPanel){
+     var flow=(FlowLayoutPanel)control;
+     // Faixas de filtros e botoes seguem o fundo claro de Vendas e PDV.
+     // Evitar trocar cor de barra escura que possui labels brancas.
+     bool whiteTitle=flow.Controls.OfType<Label>().Any(x=>x.ForeColor==Color.White);
+     if(!whiteTitle && (flow.Dock==DockStyle.Top||flow.Dock==DockStyle.Bottom)
+         && flow.BackColor!=Color.Transparent)
+      flow.BackColor=Color.FromArgb(231,240,252);
+    }else if(control is Panel && !(control is TableLayoutPanel)){
+     var panel=(Panel)control;
+     if(panel.BorderStyle==BorderStyle.FixedSingle){
+      panel.BorderStyle=BorderStyle.None;
+      panel.Paint+=(sender,args)=>RoundedVisuals.DrawOutline(args.Graphics,
+       new Rectangle(1,1,panel.ClientSize.Width-3,panel.ClientSize.Height-3),
+       11,outline,1.3f);
+     }
     }
    }
-   // Mudanças de campos dentro de uma janela também ganham o acabamento.
+   // Novos controles (inclusive dialogos tardios) recebem o mesmo tema.
+   // Nada e acrescentado aos handlers, DataSource ou controles de vendas.
    control.ControlAdded+=(sender,args)=>DecorateTree(args.Control);
   }
   static void DecorateTree(Control root){
@@ -292,16 +342,25 @@ namespace ArmazemGratidao {
    if(inspected.TryGetValue(button,out previous)&&previous==signature)return;
    button.AutoEllipsis=true;
    button.UseMnemonic=false;
-   if(!string.Equals(Convert.ToString(button.Tag),"home-shortcut",StringComparison.Ordinal)){
-    var size=TextRenderer.MeasureText(button.Text,button.Font,new Size(1000,1000),TextFormatFlags.SingleLine);
-    int desired=size.Width+24;
-    if(button.Image!=null)desired+=button.Image.Width+8;
-    if(button.Width<desired && button.Dock==DockStyle.None &&
-      button.Parent is FlowLayoutPanel &&
-      !(button.MinimumSize.Width>0&&button.MaximumSize.Width==button.MinimumSize.Width))
-     button.Width=desired;
-    button.TextAlign=ContentAlignment.MiddleCenter;
+   // Não expandir botões além das faixas do layout: evita desalinhar o
+   // menu e esconder botões vizinhos em computadores com tela pequena.
+   if(button.Font!=null&&button.Text!=null&&button.Text.Length>4){
+    float points=button.Font.SizeInPoints;
+    float best=points;
+    var available=Math.Max(30,button.Width-button.Padding.Horizontal-15-
+     (button.Image==null?0:button.Image.Width+8));
+    while(best>8.2f){
+     using(var font=new Font(button.Font.FontFamily,best,button.Font.Style)){
+      var measured=TextRenderer.MeasureText(button.Text,font,new Size(2000,140),
+       TextFormatFlags.SingleLine|TextFormatFlags.NoPadding);
+      if(measured.Width<=available)break;
+     }
+     best-=0.5f;
+    }
+    if(best<points-0.3f)
+     button.Font=new Font(button.Font.FontFamily,Math.Max(8.2f,best),button.Font.Style);
    }
+   button.TextAlign=ContentAlignment.MiddleCenter;
    inspected[button]=button.Text+"|"+button.Font.SizeInPoints+"|"+button.Width;
   }
   static void Watch(Control c){
@@ -366,10 +425,11 @@ namespace ArmazemGratidao {
 
    grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;grid.MultiSelect=false;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(20,69,147);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=38;grid.RowTemplate.Height=32;grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(241,245,252);
    status.BackColor=Color.FromArgb(14,54,116);status.ForeColor=Color.White;status.Padding=new Padding(12,0,0,0);
-   menuToggle.Left=14;menuToggle.Top=13;menuToggle.FlatAppearance.BorderSize=0;
+   menuToggle.FlatAppearance.BorderSize=0;
    menuToggle.FlatAppearance.MouseOverBackColor=Color.FromArgb(36,96,185);
    menuToggle.FlatAppearance.MouseDownBackColor=Color.FromArgb(13,53,128);
    menuToggle.Text="⊞  Iniciar";
+   menuToggle.Name="amzgStartHeader";
    menuToggle.BackColor=Color.FromArgb(200,34,54);
    menuToggle.Click+=(sender,args)=>ToggleStartMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
@@ -396,7 +456,52 @@ namespace ArmazemGratidao {
    calculatorHeader.FlatAppearance.MouseOverBackColor=Color.FromArgb(200,52,79);
    calculatorHeader.Click+=(sender,args)=>{CloseStartMenu();ShowCalculator();};
    RoundHomeControl(calculatorHeader,11);header.Controls.Add(calculatorHeader);
-   // Marca exibida no conteudo, nao duplicada sobre a barra de botoes.
+   // Identidade da loja sempre visivel ANTES do botao Iniciar.
+   // Reutiliza o logotipo incorporado: nao ha download nem marca d'agua.
+   var brandPicture=new PictureBox{Name="amzgHeaderLogo",
+    Width=49,Height=49,Left=12,Top=8,
+    SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
+   try{
+    using(var source=typeof(MainForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(source!=null)using(var img=Image.FromStream(source))
+      brandPicture.Image=new Bitmap(img);
+    }
+   }catch(Exception){/* Nome permanece legivel mesmo se a imagem falhar. */}
+   if(brandPicture.Image==null)brandPicture.Image=HomeShortcutImage("PDV");
+   brandPicture.Disposed+=(sender,args)=>{if(brandPicture.Image!=null){
+    brandPicture.Image.Dispose();brandPicture.Image=null;}};
+   var brandCaption=new Label{Name="amzgHeaderBrand",Text="ARMAZÉM\nGRATIDÃO",
+    Font=new Font("Segoe UI",12.2f,FontStyle.Bold),
+    ForeColor=Color.White,BackColor=Color.Transparent,
+    TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=false,
+    Left=69,Top=9,Width=166,Height=49};
+   header.Controls.Add(brandPicture);
+   header.Controls.Add(brandCaption);
+   // Distribuicao horizontal compacta sem sobrepor controles em 950-1280 px.
+   Action alignHeader=()=>{
+    if(header.IsDisposed)return;
+    const int gap=8;
+    int x=brandCaption.Right+14;
+    int usable=header.ClientSize.Width-x-12;
+    int[] baseWidths={108,174,86,145};
+    int total=baseWidths.Sum()+3*gap;
+    float factor=usable>=total?1f:
+     Math.Max(0.78f,(float)(usable-3*gap)/(total-3*gap));
+    Button[] items={menuToggle,updateHeader,inicioHeader,calculatorHeader};
+    for(int i=0;i<items.Length;i++){
+     var btn=items[i];
+     btn.Left=x;btn.Top=13;btn.Height=39;
+     btn.Width=Math.Max(70,(int)(baseWidths[i]*factor));
+     btn.Font=new Font("Segoe UI",factor<0.9f?8.5f:9.3f,FontStyle.Bold);
+     x+=btn.Width+gap;
+    }
+    header.Height=66;
+   };
+   header.Resize+=(sender,args)=>alignHeader();
+   alignHeader();
+   brandCaption.BringToFront();brandPicture.BringToFront();
+
    AddSection(bar,"PRINCIPAL");
    AddButton(bar,"Início / Indicadores",ShowHome);
    AddButton(bar,"Verificar atualização",async (s,e)=>await CheckUpdates());
@@ -1118,19 +1223,11 @@ namespace ArmazemGratidao {
     BackColor=Color.FromArgb(245,249,254)};
    // Painel COMUM sem desenho em segundo plano.
    var canvas=new Panel{Name="amzgDashboardCanvas",Left=0,Top=0,
-    Width=1015,Height=697,BackColor=Color.FromArgb(245,249,254)};
+    Width=1015,Height=622,BackColor=Color.FromArgb(245,249,254)};
    page.Controls.Add(canvas);
-   var title=new Label{Name="amzgHomeTitle",Text="Armazém Gratidão",
-    Left=26,Top=12,Width=530,Height=49,AutoEllipsis=false,
-    Font=new Font("Segoe UI",25f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(26,68,135)};
-   canvas.Controls.Add(title);
-   var subtitle=new Label{Text="Sistema de Gestão  •  Mercearia  •  Bebidas  •  Gelo  •  PDV",
-    Left=29,Top=60,Width=685,Height=29,
-    Font=new Font("Segoe UI",10f),ForeColor=Color.FromArgb(90,104,130)};
-   canvas.Controls.Add(subtitle);
+   // A marca ja esta no cabecalho, sem duplicar nome nem descricao.
    // O botao Iniciar do cabecalho continua sempre presente.
-   var metrics=new Panel{Name="amzgDashboardMetrics",Left=22,Top=108,
+   var metrics=new Panel{Name="amzgDashboardMetrics",Left=22,Top=22,
     Width=971,Height=87,BackColor=Color.Transparent};
    canvas.Controls.Add(metrics);
    string[] labels={"VENDAS DO DIA","TOTAL VENDIDO HOJE",
@@ -1152,8 +1249,8 @@ namespace ArmazemGratidao {
     card.Controls.Add(bar);card.Controls.Add(caption);card.Controls.Add(figure);
     metrics.Controls.Add(card);metricCards[i]=card;values[i]=figure;
    }
-   var tiles=new Panel{Name="amzgDashboardTiles",Left=22,Top=211,
-    Width=971,Height=138,BackColor=Color.Transparent};
+   var tiles=new Panel{Name="amzgDashboardTiles",Left=22,Top=128,
+    Width=971,Height=128,BackColor=Color.Transparent};
    canvas.Controls.Add(tiles);
    var quick=new[]{
     Tuple.Create("PDV","PDV  •  Nova venda"),Tuple.Create("Vendas","Vendas"),
@@ -1174,7 +1271,7 @@ namespace ArmazemGratidao {
      Image=HomeWhiteTileIcon(entry.Item1),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      TextAlign=ContentAlignment.MiddleCenter,Cursor=Cursors.Hand,UseMnemonic=false,
-     AutoEllipsis=true,Padding=new Padding(7,0,4,0),Width=177,Height=61};
+     AutoEllipsis=true,Padding=new Padding(7,0,4,0),Width=177,Height=56};
     btn.FlatAppearance.BorderSize=0;
     btn.FlatAppearance.MouseOverBackColor=Color.FromArgb(35,103,202);
     RoundHomeControl(btn,11);
@@ -1183,7 +1280,7 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(btn);buttons.Add(btn);
    }
    // Ranking em duas tabelas compactas: 1-10 e 11-20.
-   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=365,
+   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=22,Top=274,
     Width=971,Height=309,BackColor=Color.White};
    RoundHomeControl(ranking,12);
    var rankHeader=new Panel{Name="amzgDashboardRankingHeader",
@@ -1230,7 +1327,7 @@ namespace ArmazemGratidao {
     int buttonWidth=(tiles.Width-4*tGap)/5;
     for(int i=0;i<buttons.Count;i++){
      buttons[i].Left=(i%5)*(buttonWidth+tGap);
-     buttons[i].Top=(i/5)*69;
+     buttons[i].Top=(i/5)*63;
      buttons[i].Width=buttonWidth;
     }
     ranking.Width=width-44;
@@ -1243,7 +1340,7 @@ namespace ArmazemGratidao {
     leftGrid.Width=tableWidth;rightGrid.Width=tableWidth;
     int h=Math.Max(210,rankArea.ClientSize.Height-rankArea.Padding.Vertical);
     leftGrid.Height=h;rightGrid.Height=h;
-    page.AutoScrollMinSize=new Size(width,698);
+    page.AutoScrollMinSize=new Size(width,625);
    };
    page.Resize+=(sender,args)=>fit();
    rankArea.Resize+=(sender,args)=>fit();

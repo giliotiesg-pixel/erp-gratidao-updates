@@ -273,5 +273,20 @@ jobs:
           name: Armazem-Gratidao-Reparador-Atualizacao
           path: novo-win8/bin/x64/Release/Reparador-Atualizacao-Armazem-Gratidao.exe
           if-no-files-found: error
+      # Previa independente dos testes de pagamento/edicao: somente apresenta UI.
+      - name: Capturar tema de Produtos Estoque Clientes Caixa Cascos Lucro e Consultas
+        timeout-minutes: 3
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          .\\novo-win8\\teste-tema-todos-modulos.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Previas-Modulos'
+      - name: Guardar galeria real dos modulos para revisao visual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Previa-Tema-Todos-Modulos
+          path: dist/Previas-Modulos/Previa-Modulo-*.png
+          if-no-files-found: warn
+          retention-days: 30
       # Esta CI verifica o ZIP, backup e reparo, mas nao publica versoes.
       # A publicacao oficial ocorre exclusivamente no fluxo unificado, apos revisao.

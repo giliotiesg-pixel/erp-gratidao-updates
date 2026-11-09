@@ -33,23 +33,46 @@ namespace ArmazemGratidao {
    BackColor=Color.FromArgb(238,243,251);
    Font=new Font("Segoe UI",10,FontStyle.Regular);
 
-   var top=new Panel{Dock=DockStyle.Top,Height=51,BackColor=Color.FromArgb(24,49,89)};
-   var name=new Label{Text="  ▦  CALCULADORA",Dock=DockStyle.Left,Width=203,
+   // Identidade no topo conforme modulo Vendas: icone proporcional,
+   // nome inteiro visivel e comando Copiar sem sobreposicao.
+   var top=new Panel{Name="amzgCalcHeader",Dock=DockStyle.Top,Height=66,
+    BackColor=Color.FromArgb(16,59,130)};
+   var logo=new PictureBox{Name="amzgCalcLogo",Left=10,Top=9,
+    Width=47,Height=47,BackColor=Color.Transparent,
+    SizeMode=PictureBoxSizeMode.Zoom};
+   try{
+    using(var embedded=typeof(ModernCalculatorForm).Assembly.GetManifestResourceStream(
+     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
+     if(embedded!=null)using(var img=Image.FromStream(embedded))
+      logo.Image=new Bitmap(img);
+    }
+   }catch(Exception){/* Mantem nome sempre visivel sem depender de imagem. */}
+   if(logo.Image==null)logo.Image=CreateFallbackCart();
+   logo.Disposed+=(sender,args)=>{
+    if(logo.Image!=null){logo.Image.Dispose();logo.Image=null;}
+   };
+   var name=new Label{Name="amzgCalcBrand",
+    Text="ARMAZÉM GRATIDÃO\nCALCULADORA",
+    Left=65,Top=10,Width=231,Height=49,AutoEllipsis=false,
     TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.White,
-    Font=new Font("Segoe UI",11,FontStyle.Bold)};
-   var copy=new Button{Text="Copiar",Dock=DockStyle.Right,Width=108,
-    Margin=new Padding(9),FlatStyle=FlatStyle.Flat,
-    BackColor=Color.FromArgb(46,91,164),ForeColor=Color.White,
-    Cursor=Cursors.Hand,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+    BackColor=Color.Transparent,
+    Font=new Font("Segoe UI",11.9f,FontStyle.Bold)};
+   var copy=new Button{Name="amzgCalcCopy",Text="Copiar",
+    Left=310,Top=16,Width=105,Height=35,Margin=new Padding(0),
+    FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(43,103,189),
+    ForeColor=Color.White,Cursor=Cursors.Hand,
+    Font=new Font("Segoe UI",9.2f,FontStyle.Bold)};
    copy.FlatAppearance.BorderSize=0;
-   copy.Click+=(s,e)=>CopyResult();
-   top.Controls.Add(name);top.Controls.Add(copy);
+   copy.FlatAppearance.MouseOverBackColor=Color.FromArgb(55,126,211);
+   copy.Click+=(sender,args)=>CopyResult();
+   copy.Resize+=(sender,args)=>Round(copy);
+   top.Controls.Add(logo);top.Controls.Add(name);top.Controls.Add(copy);
 
-   // Dois visores: a digitacao pequena fica acima; o resultado da
-   // operacao tem a area maior e sempre aparece no campo principal.
+   // Dois visores sem historico: o de cima acompanha a operacao inteira,
+   // o de baixo exibe com destaque o resultado (inclusive provisório).
    var screen=new Panel{Name="amzgCalcScreen",Dock=DockStyle.Top,Height=200,
     BackColor=Color.FromArgb(24,49,89)};
-   expression=new Label{Name="amzgCalcExpression",Text="PRONTO PARA CALCULAR",
+   expression=new Label{Name="amzgCalcExpression",Text="0",
     Left=16,Top=5,Width=398,Height=22,
     Font=new Font("Segoe UI",9,FontStyle.Bold),
     ForeColor=Color.FromArgb(187,208,236),Visible=false};
@@ -62,7 +85,7 @@ namespace ArmazemGratidao {
     Font=new Font("Segoe UI",18f,FontStyle.Bold),AutoEllipsis=false,
     ForeColor=Color.FromArgb(22,66,130)};
    displayFrame.Controls.Add(display);
-   result=new Label{Name="amzgCalcResult",Text="0",Visible=false,
+   result=new Label{Name="amzgCalcResult",Text="0,00",Visible=false,
     Font=new Font("Segoe UI",43f,FontStyle.Bold),
     ForeColor=Color.FromArgb(10,51,125)};
    preview=new Label{Name="amzgCalcPreview",Visible=false,
@@ -96,11 +119,11 @@ namespace ArmazemGratidao {
     }
     using(var caption=new Font("Segoe UI",9f,FontStyle.Bold))
     using(var small=new Font("Segoe UI",19f,FontStyle.Bold)){
-     TextRenderer.DrawText(g,"DIGITAÇÃO",caption,
+     TextRenderer.DrawText(g,"CÁLCULO",caption,
       new Rectangle(inputArea.Left+11,inputArea.Top+5,96,inputArea.Height-10),
       Color.FromArgb(66,98,143),
       TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding);
-     TextRenderer.DrawText(g,string.IsNullOrEmpty(display.Text)?"0":display.Text,small,
+     TextRenderer.DrawText(g,string.IsNullOrEmpty(expression.Text)?"0":expression.Text,small,
       new Rectangle(inputArea.Left+107,inputArea.Top+5,inputArea.Width-120,inputArea.Height-10),
       Color.FromArgb(36,76,132),
       TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPadding|
@@ -174,6 +197,21 @@ namespace ArmazemGratidao {
    Shown+=(s,e)=>Activate();
   }
 
+  // Icone sem arquivos externos caso o recurso embutido esteja indisponivel.
+  static Image CreateFallbackCart(){
+   var b=new Bitmap(47,47);
+   using(var g=Graphics.FromImage(b))
+   using(var pen=new Pen(Color.White,3f)){
+    g.SmoothingMode=SmoothingMode.AntiAlias;
+    g.Clear(Color.Transparent);
+    g.DrawLine(pen,5,11,10,11);g.DrawLine(pen,10,11,16,32);
+    g.DrawLine(pen,16,32,37,32);g.DrawLine(pen,13,17,42,17);
+    g.DrawLine(pen,42,17,37,28);g.DrawLine(pen,37,28,15,28);
+    g.DrawEllipse(pen,17,35,5,5);g.DrawEllipse(pen,30,35,5,5);
+   }
+   return b;
+  }
+
   static void AddCalculatorRoundedRect(GraphicsPath path,Rectangle r,int radius){
    int d=radius*2,w=r.Width-1,h=r.Height-1,x=r.X,y=r.Y;
    path.AddArc(x,y,d,d,180,90);
@@ -199,6 +237,7 @@ namespace ArmazemGratidao {
   }
 
   string Format(decimal value){return value.ToString("0.############################",locale);}
+  string FormatResult(decimal value){return value.ToString("0.00##########################",locale);}
   decimal Current(){
    decimal value;
    return decimal.TryParse(display.Text,NumberStyles.Number,locale,out value)?value:0m;
@@ -224,20 +263,25 @@ namespace ArmazemGratidao {
     return false;
    }
   }
+  // O visor superior SEMPRE mostra a conta escrita, e nao apenas o
+  // ultimo numero digitado; o inferior mostra a resposta em tempo real.
   void RefreshPreview(){
    if(operation==null){
-    result.Text=display.Text;
+    expression.Text=display.Text;
+    result.Text=FormatResult(Current());
     preview.Text="Resultado";
     return;
    }
    if(entering){
-    result.Text=Format(stored);
+    expression.Text=Format(stored)+" "+operation;
+    result.Text=FormatResult(stored);
     preview.Text="Digite o próximo valor";
     return;
    }
+   expression.Text=Format(stored)+" "+operation+" "+display.Text;
    decimal answer;
    bool ok=Calculate(stored,Current(),operation,out answer,false);
-   result.Text=ok?Format(answer):"—";
+   result.Text=ok?FormatResult(answer):"—";
    preview.Text=ok?"Resultado parcial":"Verifique a operação";
   }
   void Press(string key){
@@ -255,7 +299,7 @@ namespace ArmazemGratidao {
     }
     if(key=="C"){
      stored=0m;operation=null;entering=true;
-     display.Text="0";result.Text="0";expression.Text="PRONTO PARA CALCULAR";
+     display.Text="0";result.Text="0,00";expression.Text="0";
      preview.Text="Use os botões ou o teclado";return;
     }
     if(key=="CE"){
@@ -293,7 +337,7 @@ namespace ArmazemGratidao {
      expression.Text=Format(stored)+" "+operation+" "+Format(right)+" =";
      SetValue(answer);
      operation=null;entering=true;
-     result.Text=Format(answer);
+     result.Text=FormatResult(answer);
      preview.Text="Resultado";return;
     }
     if(key=="+"||key=="−"||key=="×"||key=="÷"){
@@ -305,7 +349,7 @@ namespace ArmazemGratidao {
      }else if(operation==null)stored=current;
      operation=key;entering=true;
      expression.Text=Format(stored)+" "+key;
-     result.Text=Format(stored);
+     result.Text=FormatResult(stored);
      preview.Text="Digite o próximo valor";
     }
    }catch(OverflowException){Error("Número muito grande.");}

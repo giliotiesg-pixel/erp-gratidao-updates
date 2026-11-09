@@ -64,9 +64,22 @@ try{
     $rankHeader[0].Bottom -gt $rankTables[0].Top){
   throw 'Cabecalho azul do ranking esta oculto pelas tabelas.'
  }
- $windowTitle=@($form.Controls.Find('amzgHomeTitle',$true))
- if($windowTitle.Count -ne 1 -or ($windowTitle[0].Text -notmatch 'Armaz' -or $windowTitle[0].Text -notmatch 'Gratid')){
-  throw 'Titulo Armazem Gratidao desapareceu ou foi cortado.'
+ $brandLogo=@($form.Controls.Find('amzgHeaderLogo',$true))
+ $brandName=@($form.Controls.Find('amzgHeaderBrand',$true))
+ $headerStart=@($form.Controls.Find('amzgStartHeader',$true))
+ if($brandLogo.Count -ne 1 -or $brandName.Count -ne 1 -or $headerStart.Count -ne 1 -or
+    $null -eq $brandLogo[0].Image -or
+    $brandLogo[0].Right -gt $brandName[0].Left -or
+    $brandName[0].Right -ge $headerStart[0].Left -or
+    $brandName[0].Text -notmatch 'Armaz' -or
+    $brandName[0].Text -notmatch 'Gratid'){
+  throw 'O logotipo e o nome estao ausentes, cortados ou sobrepostos ao botao Iniciar.'
+ }
+ if(@($form.Controls.Find('amzgHomeTitle',$true)).Count -gt 0){
+  throw 'Nome duplicado sobre os indicadores da pagina inicial.'
+ }
+ if(@($form.Controls.Find('amzgDashboardCanvas',$true)).Count -ne 1){
+  throw 'Painel inicial ausente.'
  }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
  if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
@@ -131,7 +144,7 @@ try{
  if($calcDisplay.Text -ne '1'){throw "Primeiro numero invisivel: $($calcDisplay.Text)"}
  & $press '2'
  if($calcDisplay.Text -ne '12'){throw "Segundo numero invisivel: $($calcDisplay.Text)"}
- if($calcResult.Text -ne '12'){throw "Resultado provisório inicial não aparece: $($calcResult.Text)"}
+ if($calcResult.Text -ne '12,00'){throw "Resultado inicial ausente: $($calcResult.Text)"}
  # O numero deve estar pintado no visor, nao somente guardado em memoria.
  $render=[Drawing.Bitmap]::new($calcScreen.ClientSize.Width,$calcScreen.ClientSize.Height)
  try{
@@ -146,6 +159,26 @@ try{
   }
   if($pixels -lt 8){throw "Digitos nao foram pintados no visor ($pixels pixels)."}
  }finally{$render.Dispose()}
+ # O visor superior deve exibir a operacao completa, e nao apenas o ultimo numero.
+ & $press 'C'
+ foreach($key in @('1','5','0',([string][char]0x00D7),'1',',','1','0')){& $press $key}
+ $calcExpr=@($calculator.Controls.Find('amzgCalcExpression',$true))[0]
+ if($calcExpr.Text -notmatch '^150' -or $calcExpr.Text -notmatch '1,10' -or
+    $calcResult.Text -ne '165,00'){
+  throw "A conta e o resultado nao aparecem simultaneamente: $($calcExpr.Text) / $($calcResult.Text)"
+ }
+ $calcLogo=@($calculator.Controls.Find('amzgCalcLogo',$true))
+ $calcBrand=@($calculator.Controls.Find('amzgCalcBrand',$true))
+ $calcCopy=@($calculator.Controls.Find('amzgCalcCopy',$true))
+ if($calcLogo.Count -ne 1 -or $calcBrand.Count -ne 1 -or
+    $calcCopy.Count -ne 1 -or $null -eq $calcLogo[0].Image -or
+    $calcLogo[0].Right -gt $calcBrand[0].Left -or
+    $calcBrand[0].Right -ge $calcCopy[0].Left){
+  throw 'Logo, nome e botao Copiar sobrepostos na calculadora.'
+ }
+ if(@($calculator.Controls.Find('amzgCalcHistory',$true)).Count -ne 0){
+  throw 'Historico de calculos nao deve existir.'
+ }
  & $press 'C'
  foreach($key in @('9',([string][char]0x00F7),'2','=')){& $press $key}
  if($calcDisplay.Text -ne '4,5'){throw "Erro em 9/2: $($calcDisplay.Text)"}
@@ -157,9 +190,9 @@ try{
  if($calcDisplay.Text -ne '7'){throw "Erro em 10-3: $($calcDisplay.Text)"}
  & $press 'C'
  foreach($key in @('1','0','0','+','1','0','%')){& $press $key}
- if($calcResult.Text -ne '110'){throw "Visor grande nao previu 100+10%: $($calcResult.Text)"}
+ if($calcResult.Text -ne '110,00'){throw "Visor grande nao previu 100+10%: $($calcResult.Text)"}
  & $press '='
- if($calcDisplay.Text -ne '110' -or $calcResult.Text -ne '110'){
+ if($calcDisplay.Text -ne '110' -or $calcResult.Text -ne '110,00'){
   throw "Erro em 100 + 10%: entrada=$($calcDisplay.Text) resultado=$($calcResult.Text)"
  }
  $calcPreview=Join-Path $folder 'Previa-Calculadora.png'

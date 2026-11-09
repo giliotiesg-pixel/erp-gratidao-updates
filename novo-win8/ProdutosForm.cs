@@ -114,6 +114,44 @@ namespace ArmazemGratidao {
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
    Controls.Add(grid);Controls.Add(info);Controls.Add(metrics);Controls.Add(searchBar);grid.Visible=false;
+   // A listagem continua sob demanda para preservar velocidade no Windows 8.
+   // Em vez de uma tela vazia, mostrar orientacao e o mesmo atalho existente.
+   var productsEmpty=new Panel{Name="amzgProductsEmpty",
+    Dock=DockStyle.Fill,BackColor=Color.FromArgb(244,248,254)};
+   var emptyCard=new Panel{Name="amzgProductsEmptyCard",Width=522,Height=215,
+    BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
+   var emptyTitle=new Label{Text="PRODUTOS CADASTRADOS",
+    Left=18,Top=17,Width=480,Height=40,
+    Font=new Font("Segoe UI",19f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(19,64,137),TextAlign=ContentAlignment.MiddleCenter};
+   var emptyInfo=new Label{
+    Text="Consulte os produtos, quantidades, custo e preços.\nA listagem é carregada apenas quando solicitada para manter o sistema rápido.",
+    Left=19,Top=71,Width=483,Height=60,
+    Font=new Font("Segoe UI",10.1f),
+    ForeColor=Color.FromArgb(66,86,117),TextAlign=ContentAlignment.MiddleCenter};
+   var emptyAction=new Button{Name="amzgProductsShowAll",
+    Text="Mostrar todos os produtos",Left=115,Top=149,
+    Width=290,Height=43,BackColor=Color.FromArgb(19,77,165),
+    ForeColor=Color.White,FlatStyle=FlatStyle.Flat,
+    Font=new Font("Segoe UI",11f,FontStyle.Bold),Cursor=Cursors.Hand};
+   emptyAction.FlatAppearance.BorderSize=0;
+   emptyAction.Click+=(sender,args)=>showList.PerformClick();
+   emptyCard.Controls.Add(emptyTitle);emptyCard.Controls.Add(emptyInfo);
+   emptyCard.Controls.Add(emptyAction);productsEmpty.Controls.Add(emptyCard);
+   Action centerEmpty=()=>{
+    emptyCard.Left=Math.Max(14,(productsEmpty.ClientSize.Width-emptyCard.Width)/2);
+    emptyCard.Top=Math.Max(20,(productsEmpty.ClientSize.Height-emptyCard.Height)/3);
+   };
+   productsEmpty.Resize+=(sender,args)=>centerEmpty();
+   Controls.Add(productsEmpty);
+   productsEmpty.BringToFront();
+   searchBar.BringToFront();metrics.BringToFront();info.BringToFront();
+   showList.Click+=(sender,args)=>{
+    productsEmpty.Visible=!listVisible;
+    if(listVisible)grid.BringToFront();else productsEmpty.BringToFront();
+    searchBar.BringToFront();metrics.BringToFront();info.BringToFront();
+   };
+   centerEmpty();
    if(rapidInventoryMode){
     // Botao fixo na parte inferior: selecionar produto do estoque e voltar ao carrinho.
     var saleBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=52,Padding=new Padding(10,6,6,5),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(218,233,250)};
@@ -127,6 +165,7 @@ namespace ArmazemGratidao {
    if(rapidInventoryMode){
     Text="Lançamento rápido | Estoque completo - editar produtos";
     listVisible=true;grid.Visible=true;showList.Text="Ocultar lista de produtos";
+    productsEmpty.Visible=false;
     Shown+=(sender,args)=>{LoadProducts();search.Focus();};
    }
   }
