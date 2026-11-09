@@ -127,16 +127,15 @@ try{
   if($null -eq $target){throw "Tecla ausente na calculadora: $Key"}
   $target.PerformClick()
  }
- # Nao aceitar somente PerformClick: pressionar a tecla de verdade via mouse.
- # Detecta botao coberto/fora da tela, como na falha informada pelo usuario.
+ # Testar clique NATIVO enviado diretamente ao botao (BM_CLICK).
+ # Nao depender de Cursor.Position, foco do desktop remoto ou automacao
+ # de mouse global: podem clicar fora do programa e travar o runner.
  Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class AMZGMouse {
  [DllImport("user32.dll")]
- public static extern bool SetCursorPos(int x,int y);
- [DllImport("user32.dll")]
- public static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
+ public static extern IntPtr SendMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
 }
 '@
  $calculator.Activate()
@@ -145,17 +144,13 @@ public static class AMZGMouse {
   Select-Object -First 1
  if($null -eq $physical -or !$physical.Visible -or !$physical.Enabled -or
     $physical.ClientRectangle.Height -lt 30){
-  throw 'A tecla 7 nao esta visivel e clicavel no teclado fisico.'
+  throw 'A tecla 7 nao esta visivel e clicavel.'
  }
- $center=$physical.PointToScreen([System.Drawing.Point]::new(
-  [int]($physical.Width/2),[int]($physical.Height/2)))
- [AMZGMouse]::SetCursorPos($center.X,$center.Y) | Out-Null
- [System.Windows.Forms.Application]::DoEvents()
- [AMZGMouse]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
- [AMZGMouse]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+ $physical.Focus()
+ [AMZGMouse]::SendMessage($physical.Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
  [System.Windows.Forms.Application]::DoEvents()
  if($calcDisplay.Text -ne '7'){
-  throw "Clique REAL no teclado nao inseriu 7 no visor: $($calcDisplay.Text)"
+  throw "Mensagem nativa de clique na tecla 7 nao inseriu valor: $($calcDisplay.Text)"
  }
  $formula=@($calculator.Controls.Find('amzgCalcExpression',$true)) |
   Select-Object -First 1
