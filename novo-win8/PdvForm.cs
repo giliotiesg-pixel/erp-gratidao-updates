@@ -13,7 +13,7 @@ using System.Web.Script.Serialization;
 using System.Security.Cryptography;
 
 namespace ArmazemGratidao {
- public sealed class PdvForm : Form {
+ public sealed class PdvForm : StyledDialogForm {
   sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
@@ -193,7 +193,7 @@ namespace ArmazemGratidao {
   void ChooseCustomerInWindow(){
    try{
     var names=GetCustomerNames();
-    using(var dialog=new Form{Text="PDV | Selecionar cliente",Width=535,Height=535,MinimumSize=new Size(430,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="PDV | Selecionar cliente",Width=535,Height=535,MinimumSize=new Size(430,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=36};
      var hint=new Label{Text="Pesquisar cliente pelo nome:",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),IntegralHeight=false};
@@ -248,7 +248,7 @@ namespace ArmazemGratidao {
   bool QuickRegisterCustomer(){
    string initial=customer.Text.Trim();
    if(string.Equals(initial,"Consumidor",StringComparison.OrdinalIgnoreCase))initial="";
-   using(var form=new Form{Text="PDV | Cadastro rápido de cliente",Width=550,Height=335,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var form=new StyledDialogForm{Text="PDV | Cadastro rápido de cliente",Width=550,Height=335,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var name=new TextBox{Left=165,Top=20,Width=335,Text=initial,MaxLength=180,Font=new Font("Segoe UI",11)};
     var phone=new TextBox{Left=165,Top=70,Width=335,MaxLength=40,Font=new Font("Segoe UI",11)};
     var doc=new TextBox{Left=165,Top=120,Width=335,MaxLength=20,Font=new Font("Segoe UI",11)};
@@ -379,7 +379,7 @@ namespace ArmazemGratidao {
   }
   // Conferência explícita do estoque real antes da venda. Não permite estoque negativo.
   bool AdjustEmptyStock(Item item,decimal previous,decimal required){
-   using(var dlg=new Form{Text="PDV | Ajustar estoque para continuar a venda",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var dlg=new StyledDialogForm{Text="PDV | Ajustar estoque para continuar a venda",Width=610,Height=345,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var info=new Label{Left=15,Top=12,Width=565,Height=75,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(18,65,143),
      Text=item.Name+"\nEstoque registrado: "+previous.ToString("N3")+"  |  Necessário para a venda: "+required.ToString("N3")};
     var quantity=new NumericUpDown{Left=220,Top=100,Width=225,DecimalPlaces=3,Minimum=0,Maximum=10000000,Value=Math.Min(10000000,Math.Max(0,required))};
@@ -446,7 +446,7 @@ namespace ArmazemGratidao {
   // Ao escolher um produto da lista, informar a quantidade antes de inserir no carrinho.
   // Leitura direta por codigo de barras continua usando a quantidade do PDV, sem abrir popup.
   decimal? AskProductQuantity(Item product,decimal defaultQuantity){
-   using(var dialog=new Form{Text="PDV | Quantidade do produto",Width=540,Height=290,MinimumSize=new Size(480,265),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255),KeyPreview=true}){
+   using(var dialog=new StyledDialogForm{Text="PDV | Quantidade do produto",Width=540,Height=290,MinimumSize=new Size(480,265),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255),KeyPreview=true}){
     var name=new Label{Text=product.Name,Left=20,Top=19,Width=475,Height=54,Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,69,147)};
     bool byWeight=Convert.ToString(saleUnit.SelectedItem)=="KG";
     var caption=new Label{Text=byWeight?"Quantidade (kg):":"Quantidade (unidades):",Left=20,Top=92,Width=210,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold)};
@@ -531,7 +531,7 @@ namespace ArmazemGratidao {
     if(selected==null){MessageBox.Show("Produto não encontrado.");return;}
     string unit=Convert.ToString(saleUnit.SelectedItem)=="KG"?"KG":"UN";
     Item existing=cart.FirstOrDefault(x=>x.Id==id&&x.Unit==unit);
-    using(var dialog=new Form{Text="Lançamento rápido | Quantidade e preço",
+    using(var dialog=new StyledDialogForm{Text="Lançamento rápido | Quantidade e preço",
      Width=510,Height=300,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,
      MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
      var name=new Label{Text=selected.Name,Left=16,Top=16,Width=465,Height=45,Font=new Font("Segoe UI",11,FontStyle.Bold)};
@@ -681,7 +681,7 @@ namespace ArmazemGratidao {
     if(matches.Count>100){matches.RemoveAt(100);MessageBox.Show("A pesquisa encontrou mais de 100 produtos. Exibindo os primeiros 100; refine a descrição ou informe o código para localizar o produto desejado.","Muitos resultados");}
     Item selected=matches[0];
     if(matches.Count>1){
-     using(var dialog=new Form {Text="Selecione o produto",Width=780,Height=500,StartPosition=FormStartPosition.CenterParent,MinimumSize=new Size(580,350)}){
+     using(var dialog=new StyledDialogForm {Text="Selecione o produto",Width=780,Height=500,StartPosition=FormStartPosition.CenterParent,MinimumSize=new Size(580,350)}){
       var list=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
       var dt=new DataTable();dt.Columns.Add("Código de barras");dt.Columns.Add("Código interno");dt.Columns.Add("Descrição");dt.Columns.Add("Preço");dt.Columns.Add("Estoque");
       foreach(var item in matches)dt.Rows.Add(item.Barcode,item.InternalCode,item.Name,item.Price.ToString("N2"),stocks[item.Id].ToString("N3"));
@@ -731,7 +731,7 @@ namespace ArmazemGratidao {
   }
   decimal FinalAmount(){return cart.Sum(i=>i.Total)-DiscountAmount();}
   void ConfigureDiscount(){
-   using(var dlg=new Form{Text="Desconto na venda",Width=440,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+   using(var dlg=new StyledDialogForm{Text="Desconto na venda",Width=440,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var mode=new ComboBox{Left=20,Top=28,Width=175,DropDownStyle=ComboBoxStyle.DropDownList};
     mode.Items.AddRange(new object[]{"Valor em R$","Porcentagem %"});mode.SelectedIndex=discountPercent?1:0;
     var value=new NumericUpDown{Left=210,Top=28,Width=175,Maximum=10000000,DecimalPlaces=2,Value=discountValue};
@@ -851,7 +851,7 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Adicione produtos ao carrinho.");return;}
    try{
     using(var conn=Open())
-    using(var dialog=new Form{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(650,400),StartPosition=FormStartPosition.CenterParent}){
+    using(var dialog=new StyledDialogForm{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(650,400),StartPosition=FormStartPosition.CenterParent}){
      var table=new DataTable();
      table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");table.Columns.Add("Produto");
      table.Columns.Add("Quantidade",typeof(decimal));table.Columns.Add("Preço atual",typeof(decimal));table.Columns.Add("Novo preço",typeof(decimal));
@@ -924,7 +924,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show("Não foi possível abrir os preços do carrinho: "+ex.Message);}
   }
   void ChooseEditAction(){
-   using(var dialog=new Form{Text="PDV | Editar produto",Width=430,Height=185,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+   using(var dialog=new StyledDialogForm{Text="PDV | Editar produto",Width=430,Height=185,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
     var hint=new Label{Text="O que deseja alterar?",Left=18,Top=17,Width=380,Height=28,Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var item=new Button{Text="Quantidade / preço desta venda",Left=18,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     var registered=new Button{Text="Preço cadastrado do produto",Left=214,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
@@ -937,7 +937,7 @@ namespace ArmazemGratidao {
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
    var item=cart[grid.CurrentRow.Index];
    try{
-    using(var dialog=new Form {Text="Editar item da venda",Width=450,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    using(var dialog=new StyledDialogForm {Text="Editar item da venda",Width=450,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
      var nameLabel=new Label {Text=item.Name,Left=15,Top=15,Width=400,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
      var quantityLabel=new Label {Text="Quantidade:",Left=15,Top=65,Width=125};
      var quantityInput=new NumericUpDown {Left=150,Top=60,Width=210,DecimalPlaces=3,Minimum=0.001M,Maximum=999999,Value=item.Qty};
@@ -997,7 +997,7 @@ namespace ArmazemGratidao {
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
    var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
-   using(var dialog=new Form {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+   using(var dialog=new StyledDialogForm {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var combos=new ComboBox[3];var values=new NumericUpDown[3];
     var info=new Label {Left=18,Top=15,Width=440,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     dialog.Controls.Add(info);
@@ -1172,7 +1172,7 @@ namespace ArmazemGratidao {
   }
   void OfferSaleReceipt(long saleId,string clientName,decimal saleTotal){
    try{
-    using(var dialog=new Form{Text="Comprovantes e WhatsApp - Venda #"+saleId,Width=660,Height=330,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dialog=new StyledDialogForm{Text="Comprovantes e WhatsApp - Venda #"+saleId,Width=660,Height=330,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var title=new Label{Text="Escolha o documento para o cliente:",Left=16,Top=18,Width=610,Height=30,Font=new Font("Segoe UI",12,FontStyle.Bold)};
      var option=new ComboBox{Left=16,Top=58,Width=600,DropDownStyle=ComboBoxStyle.DropDownList};
      option.Items.AddRange(new object[]{"Cupom de venda (TXT - não fiscal)","Comprovante da venda (PDF - não fiscal)","Total em aberto do cliente (PDF - não fiscal)"});
@@ -1205,7 +1205,7 @@ namespace ArmazemGratidao {
   // Alerta de possível repetição; não bloqueia vendas legítimas do mesmo dia.
   bool ConfirmManualSaleDate(){
    if(!manualEntry)return true;
-   using(var dialog=new Form{Text="Conferir data da venda anotada",Width=500,Height=250,MinimumSize=new Size(460,220),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
+   using(var dialog=new StyledDialogForm{Text="Conferir data da venda anotada",Width=500,Height=250,MinimumSize=new Size(460,220),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
     var title=new Label{Text="Produtos lançados. Confira a data e hora ORIGINAL desta venda:",Left=18,Top=17,Width=450,Height=42,Font=new Font("Segoe UI",10,FontStyle.Bold)};
     var picker=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm:ss",ShowUpDown=true,Left=18,Top=70,Width=255,Value=manualDate.Value};
     var ok=new Button{Text="Confirmar data e continuar",Left=18,Top=128,Width=240,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,DialogResult=DialogResult.OK};
@@ -1217,7 +1217,7 @@ namespace ArmazemGratidao {
    }
   }
   bool ShowPaymentChoice(){
-   using(var dialog=new Form{Text="Escolha a forma de pagamento",Width=690,Height=530,
+   using(var dialog=new StyledDialogForm{Text="Escolha a forma de pagamento",Width=690,Height=530,
     MinimumSize=new Size(570,450),StartPosition=FormStartPosition.CenterParent,
     BackColor=Color.FromArgb(238,245,252)}){
     var title=new Label{Text="TOTAL DA VENDA: R$ "+FinalAmount().ToString("N2"),Dock=DockStyle.Top,
@@ -1242,7 +1242,7 @@ namespace ArmazemGratidao {
   bool SelectBottleLoan(out int count,out bool paid){
    count=0;paid=false;
    if(!cart.Any(i=>i.Name.IndexOf("COCA",StringComparison.OrdinalIgnoreCase)>=0 || i.Name.IndexOf("RETORN",StringComparison.OrdinalIgnoreCase)>=0))return true;
-   using(var dialog=new Form{Text="Cascos retornáveis — controle separado",Width=520,Height=285,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var dialog=new StyledDialogForm{Text="Cascos retornáveis — controle separado",Width=520,Height=285,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var title=new Label{Text="O cliente levou casco retornável junto com a bebida?",Left=18,Top=16,Width=475,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var qtyLabel=new Label{Text="Quantidade de cascos:",Left=18,Top=64,Width=195,Height=28};
     var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=1,Left=215,Top=61,Width=90};
@@ -1259,7 +1259,7 @@ namespace ArmazemGratidao {
    }
   }
   bool ConfirmCashReceived(decimal totalDue){
-   using(var dialog=new Form{
+   using(var dialog=new StyledDialogForm{
     Text=manualEntry?"Lançamento rápido | Dinheiro recebido":"PDV | Pagamento em dinheiro",Width=530,Height=355,
     MinimumSize=new Size(490,325),StartPosition=FormStartPosition.CenterParent,
     FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
