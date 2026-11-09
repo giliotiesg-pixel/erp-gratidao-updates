@@ -135,9 +135,10 @@ using System;
 using System.Runtime.InteropServices;
 public static class AMZGMouse {
  [DllImport("user32.dll")]
- public static extern IntPtr SendMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+ public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
 }
 '@
+ Write-Host 'TESTE CALCULADORA: preparando clique nativo.'
  $calculator.Activate()
  [System.Windows.Forms.Application]::DoEvents()
  $physical=@($keypad.Controls | Where-Object {$_.Tag -eq '7'}) |
@@ -147,11 +148,12 @@ public static class AMZGMouse {
   throw 'A tecla 7 nao esta visivel e clicavel.'
  }
  $physical.Focus()
- [AMZGMouse]::SendMessage($physical.Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+ [AMZGMouse]::PostMessage($physical.Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
  [System.Windows.Forms.Application]::DoEvents()
  if($calcDisplay.Text -ne '7'){
   throw "Mensagem nativa de clique na tecla 7 nao inseriu valor: $($calcDisplay.Text)"
  }
+ Write-Host 'TESTE CALCULADORA: clique nativo aceito.'
  $formula=@($calculator.Controls.Find('amzgCalcExpression',$true)) |
   Select-Object -First 1
  $value=@($calculator.Controls.Find('amzgCalcResult',$true)) |
