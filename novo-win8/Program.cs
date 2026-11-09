@@ -37,6 +37,7 @@ namespace ArmazemGratidao {
    try{
     WindowBoundsGuard.Prepare(form);
     PdvShortcutButtons.Prepare(form);
+    CompactModuleToolbars.Apply(form);
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
@@ -48,6 +49,72 @@ namespace ArmazemGratidao {
   protected override void OnLoad(EventArgs e){
    VisualStartup.Prepare(this);
    base.OnLoad(e);
+  }
+ }
+ // Reduz as barras de acoes em TODOS os modulos sem alterar nenhum handler.
+ // Abre espaço para o DataGridView e mantem a pesquisa/acoes acessiveis
+ // pela rolagem horizontal do toolbar no Windows 8.
+ static class CompactModuleToolbars {
+  static readonly System.Collections.Generic.HashSet<Form> done=
+   new System.Collections.Generic.HashSet<Form>();
+  static System.Collections.Generic.IEnumerable<Control> Descendants(Control parent){
+   foreach(Control child in parent.Controls){
+    yield return child;
+    if(child is DataGridView)continue;
+    foreach(Control nested in Descendants(child))yield return nested;
+   }
+  }
+  public static void Apply(Form form){
+   if(form==null||form.IsDisposed||!done.Add(form))return;
+   form.FormClosed+=(sender,args)=>done.Remove(form);
+   if(form is MainForm||form is ModernCalculatorForm||form is StartMenuPopup)return;
+   var toolTip=new ToolTip{AutoPopDelay=7000,InitialDelay=500};
+   form.Disposed+=(sender,args)=>toolTip.Dispose();
+   var flows=Descendants(form).OfType<FlowLayoutPanel>().ToArray();
+   foreach(var flow in flows){
+    if(flow.Dock!=DockStyle.Top && flow.Dock!=DockStyle.Bottom)continue;
+    var buttons=flow.Controls.OfType<Button>().Where(btn=>btn.Dock==DockStyle.None).ToArray();
+    if(buttons.Length==0)continue;
+    bool hasEditor=flow.Controls.Cast<Control>().Any(c=>
+     c is TextBox||c is ComboBox||c is NumericUpDown||
+     c is DateTimePicker||c is DataGridView);
+    foreach(var button in buttons){
+     if(button.IsDisposed)continue;
+     string label=button.Text??"";
+     button.AutoSize=false;
+     button.AutoEllipsis=true;
+     button.UseMnemonic=false;
+     if(button.Height>29)button.Height=29;
+     var oldFont=button.Font;
+     if(oldFont!=null&&oldFont.SizeInPoints>8.5f)
+      button.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
+     // Nunca transformar um botao em campo minusculo; conservar o texto
+     // inteiro quando couber e mostrar Tooltip quando houver truncamento.
+     int natural=TextRenderer.MeasureText(label,button.Font,
+      new Size(3000,100),TextFormatFlags.SingleLine).Width+18;
+     int maxWidth=Math.Min(190,Math.Max(78,natural));
+     if(button.Width>maxWidth)button.Width=maxWidth;
+     button.Margin=new Padding(3,2,3,2);
+     if(label.Length>0)toolTip.SetToolTip(button,label);
+    }
+    if(flow.Dock==DockStyle.Top && flow.Height>49 && !hasEditor){
+     flow.WrapContents=false;
+     flow.AutoScroll=true;
+     flow.Height=39;
+     flow.Padding=new Padding(5,3,5,2);
+    }else if(flow.Dock==DockStyle.Top && flow.Height>49 && hasEditor){
+     // Acesso direto aos filtros: reduzir a faixa mas preservar o campo.
+     flow.AutoScroll=true;
+     flow.WrapContents=false;
+     flow.Height=48;
+     flow.Padding=new Padding(5,3,5,3);
+    }else if(flow.Dock==DockStyle.Bottom && flow.Height>50 && !hasEditor){
+     flow.AutoScroll=true;
+     flow.WrapContents=false;
+     flow.Height=40;
+     flow.Padding=new Padding(5,2,5,2);
+    }
+   }
   }
  }
  // Mantém cabeçalho, botões de controle e rodapé acessíveis em monitores menores.
