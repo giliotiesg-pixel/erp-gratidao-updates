@@ -66,10 +66,10 @@ if($LASTEXITCODE -ne 0){throw 'Falha ao criar banco de dados visual descartavel.
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 [Windows.Forms.Application]::EnableVisualStyles()
 $assembly=[Reflection.Assembly]::LoadFrom($exe)
-$theme=$assembly.GetType('ArmazemGratidao.ModuleVisualTheme',$true)
-$style=$theme.GetMethod('CheckOpenForms',[Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Static)
-$gridTheme=$assembly.GetType('ArmazemGratidao.RoundedGridTheme',$true)
-$styleGrid=$gridTheme.GetMethod('CheckOpenForms',[Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Static)
+$theme=$assembly.GetType('ArmazemGratidao.VisualStartup',$true)
+$style=$theme.GetMethod('Prepare',[Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Static)
+if($null -eq $style){throw 'Preparacao antecipada do layout indisponivel'}
+$dialogType=$assembly.GetType('ArmazemGratidao.StyledDialogForm',$true)
 $items=@(
  @{Class='ConsultaPrecoForm';Name='Consulta-Preco';Args=@($database)},
  @{Class='ProdutosForm';Name='Produtos';Args=@($database)},
@@ -107,10 +107,16 @@ foreach($sample in $items){
   $form.Size=[Drawing.Size]::new(
    [Math]::Min(1050,[Math]::Max(650,$form.Width)),
    [Math]::Min(690,[Math]::Max(520,$form.Height)))
+  # Preparar os controles ANTES de apresentar um unico pixel.
+  $style.Invoke($null,[object[]]@($form))|Out-Null
+  if($null -eq $form.Icon){throw "Marca ausente ANTES de Show em $($sample.Name)"}
+  $preButtons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button' -and $_.Visible})
+  foreach($b in $preButtons){
+   if($b.Width -ge 80 -and $null -eq $b.Region){
+    throw "Layout aplicado tarde: botao $($b.Text) de $($sample.Name) sem estilo ANTES de Show."
+   }
+  }
   $form.Show()
-  [Windows.Forms.Application]::DoEvents()
-  $style.Invoke($null,@())|Out-Null
-  $styleGrid.Invoke($null,@())|Out-Null
   [Windows.Forms.Application]::DoEvents()
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
   $buttons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
@@ -137,4 +143,26 @@ foreach($sample in $items){
  }
 }
 if($success.Count -ne $items.Count){throw "Faltam modulos testados."}
-Write-Host ('MODULOS COM TEMA PADRONIZADO: '+($success -join ', '))
+# Verificar abertura de um dialogo avulso: seu estilo precisa estar pronto
+# no OnLoad, sem depender de loop Idle ou de um segundo redesenho.
+$dlg=[Activator]::CreateInstance($dialogType)
+try{
+ $dlg.Text='Janela de teste'
+ $btn=[Windows.Forms.Button]::new()
+ $btn.Text='Confirmar';$btn.Width=140;$btn.Height=34
+ $dlg.Controls.Add($btn)
+ $checked=$false
+ $dlg.add_Load({
+  if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
+   throw 'Dialogo exibiu visual antigo no primeiro OnLoad.'
+  }
+  $script:checked=$true
+ })
+ $dlg.Show()
+ [Windows.Forms.Application]::DoEvents()
+ if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
+  throw 'Dialogo auxiliar permaneceu sem estilo apos Show.'
+ }
+}finally{$dlg.Close();$dlg.Dispose()}
+Write-Host ('MODULOS COM LAYOUT PRONTO ANTES DO SHOW: '+($success -join ', '))
+Write-Host 'DIALOGO SEM FLASH DE TEMA: OK'
