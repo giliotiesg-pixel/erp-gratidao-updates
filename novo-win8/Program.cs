@@ -92,7 +92,9 @@ namespace ArmazemGratidao {
      // inteiro quando couber e mostrar Tooltip quando houver truncamento.
      int natural=TextRenderer.MeasureText(label,button.Font,
       new Size(3000,100),TextFormatFlags.SingleLine).Width+18;
-     int desiredWidth=Math.Min(192,Math.Max(78,natural));
+     int desiredWidth=label.Trim().Length<=2?
+      Math.Min(46,Math.Max(30,button.Width)):
+      Math.Min(192,Math.Max(78,natural));
      // Um AutoSize antigo pode ter deixado Width pequeno antes de medirmos.
      // A largura deve acompanhar o nome, e nao somente encolher: evita
      // 'Cadastrar...', 'Editar clie...' e 'Importar 1...' no toolbar.
