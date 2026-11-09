@@ -37,10 +37,11 @@ namespace ArmazemGratidao {
    try{
     WindowBoundsGuard.Prepare(form);
     PdvShortcutButtons.Prepare(form);
-    CompactModuleToolbars.Apply(form);
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
+    // Medir DEPOIS do tema final: negrito altera a largura renderizada.
+    CompactModuleToolbars.Apply(form);
    }finally{form.ResumeLayout(true);}
   }
  }
