@@ -266,6 +266,7 @@ jobs:
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-bloqueio-downgrade.ps1 -Updater 'novo-win8/bin/x64/Release/AtualizadorGratidao.exe' -ProgramExe 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe'
       - name: Testar menu estilo Iniciar com atalhos e pesquisa
+        timeout-minutes: 4
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
