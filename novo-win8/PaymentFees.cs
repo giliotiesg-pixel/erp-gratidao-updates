@@ -52,7 +52,7 @@ namespace ArmazemGratidao {
     using(var c=Open(db)){Prepare(c);}
     using(var c=Open(db)){
      var rates=Load(c);
-     using(var dlg=new Form{Text="Configurar Taxas de Cartões e Pagamentos",Width=680,Height=690,MinimumSize=new Size(590,570),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var dlg=new StyledDialogForm{Text="Configurar Taxas de Cartões e Pagamentos",Width=680,Height=690,MinimumSize=new Size(590,570),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var intro=new Label{Dock=DockStyle.Top,Height=84,Padding=new Padding(15,10,15,0),Text="Configure o percentual cobrado pela operadora para cada forma.\n0,00% significa sem taxa. Cada bandeira pode ter taxa própria. A taxa reduz o valor líquido da loja; o cliente paga o mesmo total.",Font=new Font("Segoe UI",10,FontStyle.Bold)};
       var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=Methods.Length,AutoScroll=true,Padding=new Padding(12,8,12,8),BackColor=Color.White,CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
       panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,39));
