@@ -5,7 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
- public sealed class FiadoClientesForm:Form {
+ public sealed class FiadoClientesForm:StyledDialogForm {
   readonly string db;
   readonly FlowLayoutPanel clients=new FlowLayoutPanel {Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(8)};
   readonly DataGridView openSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
@@ -267,7 +267,7 @@ namespace ArmazemGratidao {
    try{
     var rows=Query("SELECT p.id AS id,p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY p.paid_at DESC,p.id DESC","@name",customer);
     if(rows.Rows.Count==0){MessageBox.Show("Este cliente não possui pagamentos registrados.");return;}
-    using(var form=new Form {Text="Corrigir data de pagamento - "+customer,Width=850,Height=530,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Corrigir data de pagamento - "+customer,Width=850,Height=530,StartPosition=FormStartPosition.CenterParent}){
      var grid=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=rows};
      var bottomBar=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=54,Padding=new Padding(8)};
      var change=new Button {Text="Alterar data do pagamento selecionado",AutoSize=true,Height=36};
@@ -276,7 +276,7 @@ namespace ArmazemGratidao {
       var row=((DataRowView)grid.CurrentRow.DataBoundItem).Row;
       long id=Convert.ToInt64(row["id"]);string original=Convert.ToString(row["data"]);
       DateTime parsed;if(!DateTime.TryParse(original,out parsed))parsed=DateTime.Today;
-      using(var dialog=new Form {Text="Data do pagamento #"+id,Width=430,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+      using(var dialog=new StyledDialogForm {Text="Data do pagamento #"+id,Width=430,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var date=new DateTimePicker {Left=18,Top=38,Width=370,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy HH:mm",ShowUpDown=true,Value=parsed};
        var reason=new TextBox {Left=18,Top=116,Width=370};
        var save=new Button {Text="Salvar correção",Left=210,Top=156,Width=178,Height=34};
@@ -327,7 +327,7 @@ namespace ArmazemGratidao {
      if(balance>0)outstanding+=balance;
      received+=paid;
     }
-    using(var form=new Form {Text="Conferência do Fiado - somente leitura",Width=1080,Height=650,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Conferência do Fiado - somente leitura",Width=1080,Height=650,StartPosition=FormStartPosition.CenterParent}){
      var summary=new Label {Dock=DockStyle.Top,Height=76,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(20,45,83),BackColor=Color.FromArgb(232,242,251),Text="  Vendas: "+data.Rows.Count+"    |    Saldo em aberto: R$ "+outstanding.ToString("N2")+"    |    Recebido: R$ "+received.ToString("N2")+"\\n  Pagamentos acima do valor: "+overpaid+"    |    Saldos negativos: "+negative+"    |    Vendas sem cliente: "+unassigned+"\\n  Consulta sem alteração dos registros."};
      var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=data,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
      table.RowTemplate.Height=32;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(240,246,253);
@@ -366,7 +366,7 @@ namespace ArmazemGratidao {
      }
     }
     if(names.Rows.Count==0){MessageBox.Show("Nenhum outro cliente cadastrado foi encontrado. Cadastre o cliente correto antes de transferir.");return;}
-    using(var dlg=new Form{Text="Fiado | Transferir para cliente cadastrado",Width=690,Height=565,MinimumSize=new Size(550,430),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    using(var dlg=new StyledDialogForm{Text="Fiado | Transferir para cliente cadastrado",Width=690,Height=565,MinimumSize=new Size(550,430),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var header=new Label{Text="Origem: "+source+"\nEscolha o cadastro correto para receber as vendas fiadas.",Dock=DockStyle.Top,Height=77,Padding=new Padding(12,11,5,5),Font=new Font("Segoe UI",11,FontStyle.Bold)};
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12)};
      var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,MultiSelect=false,AllowUserToAddRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
@@ -533,7 +533,7 @@ namespace ArmazemGratidao {
   void CorrectWholeClientName(){
    string oldName=(customer??"").Trim();
    if(oldName.Length<2||oldName=="SEM CLIENTE"){MessageBox.Show("Selecione o cliente do Fiado primeiro.");return;}
-   using(var dlg=new Form{Text="Fiado | Corrigir nome do cliente",Width=550,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+   using(var dlg=new StyledDialogForm{Text="Fiado | Corrigir nome do cliente",Width=550,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var caption=new Label{Text="Nome cadastrado atualmente:",Left=16,Top=15,Width=470,Height=27,Font=new Font("Segoe UI",10,FontStyle.Bold)};
     var current=new Label{Text=oldName,Left=16,Top=44,Width=485,Height=34,ForeColor=Color.FromArgb(22,75,160),Font=new Font("Segoe UI",14,FontStyle.Bold)};
     var newLabel=new Label{Text="Nome correto do cliente:",Left=16,Top=96,Width=470,Height=25};
@@ -625,7 +625,7 @@ namespace ArmazemGratidao {
    var view=SelectedSaleGrid();
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
    long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
-   using(var form=new Form {Text="Corrigir cliente - venda #"+id,Width=510,Height=205,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+   using(var form=new StyledDialogForm {Text="Corrigir cliente - venda #"+id,Width=510,Height=205,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var input=new TextBox {Left=18,Top=52,Width=455,Font=new Font("Segoe UI",12),Text=customer=="SEM CLIENTE"?"":customer};
     var label=new Label {Left=18,Top=16,Width=450,Height=30,Text="Nome correto do cliente:",Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var save=new Button {Text="Salvar cliente",Left=290,Top=103,Width=183,Height=39,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};
@@ -674,7 +674,7 @@ namespace ArmazemGratidao {
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda para consultar.");return;}
    try{
     var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
-    var form=new Form {Text="Venda #"+id+" - Itens e recebimentos",Width=960,Height=620,StartPosition=FormStartPosition.CenterParent};
+    var form=new StyledDialogForm {Text="Venda #"+id+" - Itens e recebimentos",Width=960,Height=620,StartPosition=FormStartPosition.CenterParent};
     var tabs=new TabControl {Dock=DockStyle.Fill};
     var items=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
     items.DataSource=Query("SELECT id,name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
@@ -690,7 +690,7 @@ namespace ArmazemGratidao {
   void EditSaleItem(long saleId,long selectedItemId){
    try{
     var rows=Query("SELECT id, name AS produto, quantity AS quantidade, unit_price AS preco, total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",saleId);
-    using(var form=new Form {Text="Auditoria de itens - venda #"+saleId,Width=880,Height=550,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Auditoria de itens - venda #"+saleId,Width=880,Height=550,StartPosition=FormStartPosition.CenterParent}){
      var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=rows};
      foreach(DataGridViewRow candidate in table.Rows){if(candidate.Cells["id"].Value!=null && Convert.ToInt64(candidate.Cells["id"].Value)==selectedItemId){candidate.Selected=true;table.CurrentCell=candidate.Cells["produto"];break;}}
      var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=60,Padding=new Padding(8)};
@@ -702,7 +702,7 @@ namespace ArmazemGratidao {
       long itemId=Convert.ToInt64(row["id"]);
       string oldName=Convert.ToString(row["produto"]);
       decimal oldQty=Convert.ToDecimal(row["quantidade"]),oldPrice=Convert.ToDecimal(row["preco"]),oldTotal=Convert.ToDecimal(row["valor"]);
-      using(var dialog=new Form {Text="Editar item #"+itemId,Width=530,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+      using(var dialog=new StyledDialogForm {Text="Editar item #"+itemId,Width=530,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
        var name=new TextBox {Left=20,Top=42,Width=465,Text=oldName};
        var qty=new NumericUpDown {Left=20,Top=112,Width=210,DecimalPlaces=3,Maximum=1000000,Minimum=0.001M,Value=Math.Max(0.001M,oldQty)};
        var price=new NumericUpDown {Left=250,Top=112,Width=235,DecimalPlaces=2,Maximum=1000000,Value=Math.Max(0,oldPrice)};
@@ -783,7 +783,7 @@ namespace ArmazemGratidao {
     }
     var data=Query("SELECT changed_at AS data,item_id AS item,old_name AS produto_anterior,new_name AS produto_novo,old_qty AS quantidade_anterior,new_qty AS quantidade_nova,old_price AS preco_anterior,new_price AS preco_novo,old_total AS item_anterior,new_total AS item_novo,old_sale_total AS venda_anterior,new_sale_total AS venda_nova,reason AS motivo FROM fiado_item_audit WHERE sale_id=@sale ORDER BY id DESC","@sale",saleId);
     if(data.Rows.Count==0){MessageBox.Show("Nenhuma alteração de itens registrada para a venda #"+saleId+".");return;}
-    using(var form=new Form {Text="Histórico de alterações - venda #"+saleId,Width=1100,Height=580,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Histórico de alterações - venda #"+saleId,Width=1100,Height=580,StartPosition=FormStartPosition.CenterParent}){
      var header=new Label {Text="  AUDITORIA DA VENDA #"+saleId+" | "+data.Rows.Count+" alteração(ões) | Somente leitura",Dock=DockStyle.Top,Height=46,Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.FromArgb(229,242,255),ForeColor=Color.FromArgb(20,73,158),TextAlign=ContentAlignment.MiddleLeft};
      var table=new DataGridView {Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells};
      form.Controls.Add(table);form.Controls.Add(header);form.ShowDialog(this);
@@ -819,7 +819,7 @@ namespace ArmazemGratidao {
     }
     sb.AppendLine("TOTAL EM ABERTO: R$ "+totalDue.ToString("N2"));
     sb.AppendLine("Documento informativo, nao fiscal.");
-    using(var form=new Form {Text="Extrato do cliente - "+customer,Width=720,Height=660,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Extrato do cliente - "+customer,Width=720,Height=660,StartPosition=FormStartPosition.CenterParent}){
      var preview=new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,Dock=DockStyle.Fill,Font=new Font("Consolas",10),Text=sb.ToString()};
      var actions=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=60,Padding=new Padding(8)};
      var copy=new Button {Text="Copiar extrato",Width=160,Height=38};
@@ -855,7 +855,7 @@ namespace ArmazemGratidao {
     sb.AppendLine("Recebido: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["pago"].Value).ToString("N2"));
     sb.AppendLine("Saldo: R$ "+Convert.ToDecimal(view.CurrentRow.Cells["saldo"].Value).ToString("N2"));
     sb.AppendLine("Documento informativo, nao fiscal.");
-    using(var form=new Form {Text="Cupom da venda #"+id,Width=640,Height=610,StartPosition=FormStartPosition.CenterParent}){
+    using(var form=new StyledDialogForm {Text="Cupom da venda #"+id,Width=640,Height=610,StartPosition=FormStartPosition.CenterParent}){
      var preview=new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Consolas",11),Text=sb.ToString()};
      var actions=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=55,Padding=new Padding(8)};
      var copy=new Button {Text="Copiar cupom",Width=145,Height=34};copy.Click+=(s,e)=>{Clipboard.SetText(sb.ToString());MessageBox.Show("Cupom copiado.");};
@@ -1100,7 +1100,7 @@ namespace ArmazemGratidao {
     EnsureCustomerCredit(db);
     decimal current;
     using(var cn=Open(true))current=CustomerCreditBalance(cn,null,customer);
-    using(var dlg=new Form{Text="Ajustar credito depositado - "+customer,Width=500,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    using(var dlg=new StyledDialogForm{Text="Ajustar credito depositado - "+customer,Width=500,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
      var old=new Label{Text="Credito atual: R$ "+current.ToString("N2"),Left=18,Top=17,Width=435,Height=32,Font=new Font("Segoe UI",11,FontStyle.Bold)};
      var label=new Label{Text="Novo saldo de credito (R$):",Left=18,Top=62,Width=420,Height=26};
      var amountNew=new NumericUpDown{Left=18,Top=91,Width=220,DecimalPlaces=2,Maximum=100000000,Value=Math.Max(0,Math.Min(100000000,current))};
@@ -1189,7 +1189,7 @@ namespace ArmazemGratidao {
        }
       }
      }
-     using(var dlg=new Form{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var dlg=new StyledDialogForm{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White};
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
       // As colunas podem ser geradas somente apos o DataGridView receber o binding.
@@ -1248,7 +1248,7 @@ namespace ArmazemGratidao {
     if(sale!=DBNull.Value||!(kind=="DEPOSITO"||kind=="AJUSTE_AUDITADO")){
      MessageBox.Show("Por seguranca, esta correcao so permite depositos e ajustes sem venda vinculada. Abatimentos de vendas exigem estorno da venda.");return false;
     }
-    using(var dlg=new Form{Text="Corrigir lancamento - "+customer,Width=480,Height=260,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    using(var dlg=new StyledDialogForm{Text="Corrigir lancamento - "+customer,Width=480,Height=260,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
      var title=new Label{Left=16,Top=14,Width=430,Height=44,Text="Valor registrado: R$ "+original.ToString("N2")+"\nInforme o valor correto. Zero retira o lancamento do extrato."};
      var value=new NumericUpDown{Left=16,Top=66,Width=200,DecimalPlaces=2,Minimum=-100000000,Maximum=100000000,Value=original};
      var confirm=new Button{Left=16,Top=122,Width=205,Height=36,Text="Salvar correcao",DialogResult=DialogResult.OK};
@@ -1303,7 +1303,7 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@sale",saleId);
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(items);
      }
-     using(var dlg=new Form{Text="Produtos da venda "+saleId+" - "+customer,Width=780,Height=470,MinimumSize=new Size(600,350),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var dlg=new StyledDialogForm{Text="Produtos da venda "+saleId+" - "+customer,Width=780,Height=470,MinimumSize=new Size(600,350),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var summary=new Label{Dock=DockStyle.Top,Height=78,Padding=new Padding(12),Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156),Text="Venda "+saleId+"  |  Total: R$ "+total.ToString("N2")+"\nOperacao: "+operation+"  |  Valor do movimento: R$ "+entryAmount.ToString("N2")};
       var table=new DataGridView{Dock=DockStyle.Fill,DataSource=items,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
       table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
@@ -1368,7 +1368,7 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@client",customer);
      using(var rd=cmd.ExecuteReader())if(rd.Read()){existing=Convert.ToDecimal(rd[0]);existingPeriod=Convert.ToString(rd[1]);}
     }
-    using(var dialog=new Form{Text="Limite de Fiado - "+customer,Width=480,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+    using(var dialog=new StyledDialogForm{Text="Limite de Fiado - "+customer,Width=480,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
      var label=new Label{Text="Limite atual / novo (R$):",Left=16,Top=18,Width=290,Height=28};
      var value=new NumericUpDown{Left=16,Top=51,Width=195,DecimalPlaces=2,Maximum=100000000,Value=Math.Max(0,Math.Min(existing,100000000))};
      var periodLabel=new Label{Text="Renovacao do limite:",Left=235,Top=18,Width=190,Height=28};
