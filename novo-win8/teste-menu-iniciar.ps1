@@ -127,6 +127,52 @@ try{
   if($null -eq $target){throw "Tecla ausente na calculadora: $Key"}
   $target.PerformClick()
  }
+ # Testar clique NATIVO enviado diretamente ao botao (BM_CLICK).
+ # Nao depender de Cursor.Position, foco do desktop remoto ou automacao
+ # de mouse global: podem clicar fora do programa e travar o runner.
+ Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AMZGMouse {
+ [DllImport("user32.dll")]
+ public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+}
+'@
+ Write-Host 'TESTE CALCULADORA: preparando clique nativo.'
+ $calculator.Activate()
+ [System.Windows.Forms.Application]::DoEvents()
+ $physical=@($keypad.Controls | Where-Object {$_.Tag -eq '7'}) |
+  Select-Object -First 1
+ if($null -eq $physical -or !$physical.Visible -or !$physical.Enabled -or
+    $physical.ClientRectangle.Height -lt 30){
+  throw 'A tecla 7 nao esta visivel e clicavel.'
+ }
+ $physical.Focus()
+ [AMZGMouse]::PostMessage($physical.Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+ [System.Windows.Forms.Application]::DoEvents()
+ if($calcDisplay.Text -ne '7'){
+  throw "Mensagem nativa de clique na tecla 7 nao inseriu valor: $($calcDisplay.Text)"
+ }
+ Write-Host 'TESTE CALCULADORA: clique nativo aceito.'
+ $formula=@($calculator.Controls.Find('amzgCalcExpression',$true)) |
+  Select-Object -First 1
+ $value=@($calculator.Controls.Find('amzgCalcResult',$true)) |
+  Select-Object -First 1
+ if($null -eq $formula -or $null -eq $value -or
+    !$formula.Visible -or !$value.Visible -or
+    $formula.Text -ne '7' -or $value.Text -ne '7,00'){
+  throw 'Os dois visores visiveis nao receberam o numero digitado.'
+ }
+ $zero=@($keypad.Controls | Where-Object {$_.Tag -eq '0'}) |
+  Select-Object -First 1
+ $zeroBottom=$calculator.PointToClient($zero.PointToScreen(
+  [System.Drawing.Point]::new([int]($zero.Width/2),$zero.Height)))
+ if($null -eq $zero -or !$zero.Visible -or $zero.Height -lt 30 -or
+    $zero.Bottom -gt $keypad.ClientSize.Height -or
+    $zeroBottom.Y -gt ($calculator.ClientSize.Height-8)){
+  throw "A ultima fileira do teclado ficou cortada: y=$($zeroBottom.Y) janela=$($calculator.ClientSize.Height)"
+ }
+ & $press 'C'
  $frame=@($calculator.Controls.Find('amzgCalcDisplayFrame',$true)) |
   Select-Object -First 1
  $calcScreen=@($calculator.Controls.Find('amzgCalcScreen',$true)) |
