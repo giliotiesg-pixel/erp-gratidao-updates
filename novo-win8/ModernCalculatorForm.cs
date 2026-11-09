@@ -23,7 +23,7 @@ namespace ArmazemGratidao {
    // Dimensoes reais para o visor nao ficar cortado em Windows 8 / DPI maior.
    // Ajustar a altura a tela real: nenhuma fileira do teclado pode ficar fora.
    int usable=Screen.PrimaryScreen.WorkingArea.Height;
-   ClientSize=new Size(430,Math.Min(640,Math.Max(490,usable-55)));
+   ClientSize=new Size(430,Math.Min(685,Math.Max(490,usable-40)));
    AutoScaleMode=AutoScaleMode.None;
    MinimumSize=Size;MaximumSize=Size;
    FormBorderStyle=FormBorderStyle.FixedSingle;
