@@ -321,9 +321,11 @@ public static class AMZGMouse {
   throw "Menu incompleto: $categoryCount categorias, $moduleCount modulos."
  }
  foreach($button in @($categories[0].Controls)){
-  if($button.Width -lt 260 -or $button.Height -lt 64 -or
-     $null -eq $button.Image -or $button.Image.Width -lt 38){
-   throw 'Botao de categoria pequeno ou sem icone grande.'
+  if($button.Width -gt 218 -or $button.Width -lt 190 -or
+     $button.Height -gt 48 -or $button.Height -lt 36 -or
+     $null -eq $button.Image -or $button.Image.Width -lt 20 -or
+     $button.Image.Width -gt 28){
+   throw 'Botao de categoria fora do padrao compacto com icone.'
   }
  }
  $isBranch=[bool]$popup.GetType().GetProperty('IsBranchOpen').GetValue($popup,$null)
@@ -343,8 +345,27 @@ public static class AMZGMouse {
   }
  }
  if(@($modules[0].Controls | Where-Object {$null -eq $_.Image -or
-   $_.Image.Width -lt 38 -or $_.Width -lt 220 -or $_.Height -lt 75}).Count -gt 0){
-  throw 'Modulo sem botao grande ou sem icone 40px.'
+   $_.Image.Width -lt 20 -or $_.Image.Width -gt 28 -or
+   $_.Width -lt 218 -or $_.Width -gt 240 -or
+   $_.Height -lt 38 -or $_.Height -gt 48}).Count -gt 0){
+  throw 'Modulo fora do padrao compacto ou sem icone.'
+ }
+ if($modules[0].FlowDirection -ne [System.Windows.Forms.FlowDirection]::TopDown -or
+    $modules[0].WrapContents){
+  throw 'Submenu deve mostrar os modulos em uma coluna vertical sem quebra.'
+ }
+ $tiles=@($modules[0].Controls | Where-Object {$_ -is [System.Windows.Forms.Button]})
+ if($tiles.Count -lt 2){throw 'Submenu de vendas incompleto.'}
+ $left0=$tiles[0].Left
+ $lastTop=-1
+ foreach($tile in $tiles){
+  if($tile.Left -ne $left0 -or $tile.Top -le $lastTop){
+   throw 'Botoes do submenu nao ficaram empilhados em uma coluna.'
+  }
+  $lastTop=$tile.Top
+ }
+ if($popup.Width -gt 530 -or $popup.Height -gt 450){
+  throw 'Janela Iniciar ainda usa dimensoes grandes antigas.'
  }
  if(@($modules[0].Controls | Where-Object {
   $_.BackColor.B -lt 120 -or $_.ForeColor -ne [Drawing.Color]::White -or $null -eq $_.Region
