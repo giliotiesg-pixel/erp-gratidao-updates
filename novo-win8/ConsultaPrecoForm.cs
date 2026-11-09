@@ -5,7 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
 namespace ArmazemGratidao {
- public sealed class ConsultaPrecoForm:Form {
+ public sealed class ConsultaPrecoForm:StyledDialogForm {
   readonly string db;
   readonly TextBox busca=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",17)};
   readonly Label descricao=new Label{Dock=DockStyle.Top,Height=90,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",18,FontStyle.Bold)};
