@@ -388,7 +388,7 @@ namespace ArmazemGratidao {
   }
   public static void Prepare(Form form){Watch(form);}
  }
- public sealed class MainForm : Form {
+ public sealed class MainForm : StyledDialogForm {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   MobileStockServer mobileStock;
