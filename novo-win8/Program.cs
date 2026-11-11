@@ -37,6 +37,7 @@ namespace ArmazemGratidao {
    try{
     WindowBoundsGuard.Prepare(form);
     PdvShortcutButtons.Prepare(form);
+    CalculatorShortcut.Prepare(form);
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
@@ -50,6 +51,37 @@ namespace ArmazemGratidao {
   protected override void OnLoad(EventArgs e){
    VisualStartup.Prepare(this);
    base.OnLoad(e);
+  }
+ }
+ // Botao comum em todas as janelas, sem cobrir campos ou menus.
+ static class CalculatorShortcut {
+  static readonly System.Collections.Generic.HashSet<Form> installed=new System.Collections.Generic.HashSet<Form>();
+  static ModernCalculatorForm independent;
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||form is MainForm||form is ModernCalculatorForm||
+     form is StartMenuPopup||!installed.Add(form))return;
+   var bar=new Panel{Name="amzgCalculatorShortcutBar",Dock=DockStyle.Top,Height=33,
+    BackColor=Color.FromArgb(230,240,252),Padding=new Padding(4,2,8,2)};
+   var button=new Button{Name="amzgOpenCalculatorModule",Text="▦  Calculadora",
+    Dock=DockStyle.Right,Width=126,TabStop=false,
+    BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold),FlatStyle=FlatStyle.Flat};
+   button.FlatAppearance.BorderSize=0;
+   button.Click+=(sender,args)=>Open();
+   bar.Controls.Add(button);form.Controls.Add(bar);bar.BringToFront();
+   form.FormClosed+=(sender,args)=>installed.Remove(form);
+  }
+  static void Open(){
+   var main=Application.OpenForms.OfType<MainForm>().FirstOrDefault(x=>!x.IsDisposed);
+   if(main!=null){main.OpenCalculatorFromModule();return;}
+   if(independent!=null&&!independent.IsDisposed){
+    if(independent.WindowState==FormWindowState.Minimized)
+      independent.WindowState=FormWindowState.Normal;
+    independent.BringToFront();independent.Activate();return;
+   }
+   var calc=new ModernCalculatorForm();independent=calc;
+   calc.FormClosed+=(sender,args)=>{if(ReferenceEquals(independent,calc))independent=null;};
+   calc.Show();calc.Activate();
   }
  }
  // Reduz as barras de acoes em TODOS os modulos sem alterar nenhum handler.
@@ -1113,6 +1145,7 @@ namespace ArmazemGratidao {
   }
   // Instancia unica: ao clicar novamente, traz a janela movel para frente.
   ModernCalculatorForm calculatorWindow;
+  internal void OpenCalculatorFromModule(){ShowCalculator();}
   void ShowCalculator(){
    if(calculatorWindow!=null&&!calculatorWindow.IsDisposed){
     if(calculatorWindow.WindowState==FormWindowState.Minimized)

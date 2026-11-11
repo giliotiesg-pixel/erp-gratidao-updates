@@ -1253,13 +1253,33 @@ namespace ArmazemGratidao {
     return dialog.ShowDialog(this)==DialogResult.OK;
    }
   }
+  // Controle de casco APENAS para Coca retornavel de 1 litro vidro ou de 2 litros.
+  internal static bool IsCocaReturnableBottle(string description){
+   if(string.IsNullOrWhiteSpace(description))return false;
+   string normalized=description.Normalize(NormalizationForm.FormD);
+   var clean=new StringBuilder(normalized.Length);
+   foreach(char character in normalized)
+    if(CharUnicodeInfo.GetUnicodeCategory(character)!=UnicodeCategory.NonSpacingMark)
+     clean.Append(char.ToLowerInvariant(character));
+   string name=System.Text.RegularExpressions.Regex.Replace(clean.ToString(),@"[^a-z0-9]+"," ").Trim();
+   if(!System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )coca(?: |$)"))return false;
+   bool liter1=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:1\\s*(?:l|litro|litros)|1000\\s*ml)(?: |$)");
+   bool liter2=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:2\\s*(?:l|litro|litros)|2000\\s*ml)(?: |$)");
+   if(!liter1&&!liter2)return false;
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\\b(?:nao|sem)\\s+retorn\\w*\\b"))return false;
+   bool returnable=System.Text.RegularExpressions.Regex.IsMatch(name,@"\\b(?:retorn\\w*|ret|casco)\\b");
+   bool glass1=liter1&&System.Text.RegularExpressions.Regex.IsMatch(name,@"\\bvidro\\b");
+   return returnable||glass1;
+  }
   bool SelectBottleLoan(out int count,out bool paid){
    count=0;paid=false;
-   if(!cart.Any(i=>i.Name.IndexOf("COCA",StringComparison.OrdinalIgnoreCase)>=0 || i.Name.IndexOf("RETORN",StringComparison.OrdinalIgnoreCase)>=0))return true;
+   var eligible=cart.Where(i=>IsCocaReturnableBottle(i.Name)).ToList();
+   if(eligible.Count==0)return true;
    using(var dialog=new StyledDialogForm{Text="Cascos retornáveis — controle separado",Width=520,Height=285,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
     var title=new Label{Text="O cliente levou casco retornável junto com a bebida?",Left=18,Top=16,Width=475,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var qtyLabel=new Label{Text="Quantidade de cascos:",Left=18,Top=64,Width=195,Height=28};
-    var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=1,Left=215,Top=61,Width=90};
+    decimal suggested=Math.Max(1m,Math.Min(999m,Math.Ceiling(eligible.Sum(i=>i.Qty))));
+    var qty=new NumericUpDown{Minimum=1,Maximum=999,Value=suggested,Left=215,Top=61,Width=90};
     var deposit=new CheckBox{Text="Recebeu a caução de R$ 4 por casco",Left=18,Top=108,Width=445,Height=30,Checked=true};
     var note=new Label{Text="A caução não entra no valor da venda. O nome e a retirada entram no controle de cascos.",Left=18,Top=145,Width=475,Height=36};
     var yes=new Button{Text="Registrar casco",Left=18,Top=195,Width=150,Height=35,DialogResult=DialogResult.OK};

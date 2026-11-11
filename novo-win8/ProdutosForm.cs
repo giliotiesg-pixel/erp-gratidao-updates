@@ -1070,15 +1070,9 @@ namespace ArmazemGratidao {
    return side;
   }
   void AttachProductCalculator(Form form,TableLayoutPanel fields,NumericUpDown cost,NumericUpDown price){
-   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=Color.FromArgb(229,242,255)};
-   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,62));
-   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));
-   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   // A calculadora antiga nao ocupa mais a lateral. Botao global abre a do Inicio.
    fields.Dock=DockStyle.Fill;
-   var side=ProductSideCalculator(cost,price);
-   layout.Controls.Add(fields,0,0);
-   layout.Controls.Add(side,1,0);
-   form.Controls.Add(layout);
+   form.Controls.Add(fields);
   }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
@@ -1299,7 +1293,7 @@ namespace ArmazemGratidao {
    using(var form=new StyledDialogForm {Text="Inserir produto",Width=1100,Height=780,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var barcode=new TextBox();var ownCode=new CheckBox {Text="Não pesquisar este código na internet (opcional)",AutoSize=true};var name=new TextBox {Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
+    var barcode=new TextBox{Name="amzgInsertBarcode"};var ownCode=new CheckBox {Text="Não pesquisar este código na internet (opcional)",AutoSize=true};var name=new TextBox {Name="amzgInsertName",Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{1,64}$"))barcode.Text=initial;
     else name.Text=initial;
@@ -1311,7 +1305,7 @@ namespace ArmazemGratidao {
     var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true};
     expiry.Enabled=availableColumns.Contains("expiry_date")||availableColumns.Contains("expiration_date")||availableColumns.Contains("validade");
     byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
-    var price=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {DecimalPlaces=3,Maximum=10000000,Width=170};
+    var price=new NumericUpDown {Name="amzgInsertPrice",DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {Name="amzgInsertCost",DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {Name="amzgInsertStock",DecimalPlaces=3,Maximum=10000000,Width=170};
     
     Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade inicial","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
     for(int i=0;i<fields.Length;i++){int row=i>=5?i+1:i;panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,row);panel.Controls.Add(fields[i],1,row);}
@@ -1337,6 +1331,10 @@ namespace ArmazemGratidao {
     pricingRow.Controls.Add(gainValue,3,0);
     panel.Controls.Remove(price);
     panel.Controls.Add(pricingRow,1,4);
+    // Campo Preco fica em painel aninhado: TabIndex explicito evita pulo para Marca.
+    barcode.TabIndex=0;name.TabIndex=1;stock.TabIndex=2;cost.TabIndex=3;
+    pricingRow.TabIndex=4;price.TabIndex=0;gainPercent.TabIndex=1;
+    brand.TabIndex=5;category.TabIndex=6;expiry.TabIndex=7;byWeight.TabIndex=8;
     bool changingPricing=false;
     Action updateGain=()=>{
      if(changingPricing)return;
@@ -1404,7 +1402,12 @@ namespace ArmazemGratidao {
      }catch(Exception ex){lastLookupCode="";lookupStatus.Text="Falha na consulta online. Confira a conexão e clique em Buscar dados do código para tentar novamente.";MessageBox.Show("Não foi possível consultar o catálogo online.\n\nDetalhes: "+ex.Message+"\n\nO cadastro manual permanece disponível e nenhum produto foi alterado.","Busca de produto");}
      finally{lookingUp=false;if(!lookup.IsDisposed){lookup.Enabled=true;lookup.Text="Buscar dados do código";if(!form.IsDisposed&&barcode.Text.Trim()!=code)lookupStatus.Text="Código alterado. Pressione Enter para pesquisar o novo código.";}}
     };
-    barcode.KeyDown+=async (s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;await fetchProduct();}};
+    barcode.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;name.Focus();}};
+    // Tab nativo usa TabIndex. Enter avanca para o campo seguinte na mesma ordem.
+    name.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;stock.Focus();}};
+    stock.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;cost.Focus();}};
+    cost.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;price.Focus();}};
+    price.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;gainPercent.Focus();}};
     barcode.Leave+=async (s,e)=>{if(!ownCode.Checked&&System.Text.RegularExpressions.Regex.IsMatch(barcode.Text.Trim(),@"^\d{8,14}$"))await fetchProduct();};
     barcode.TextChanged+=(s,e)=>{lookupGeneration++;if(barcode.Text.Trim()!=lastLookupCode)lookupStatus.Text="Pressione Enter para consultar o código.";};
     barcode.MaxLength=64;
@@ -1455,6 +1458,7 @@ namespace ArmazemGratidao {
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
     panel.Controls.Add(save,1,11);StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
+    form.Shown+=(s,e)=>{if(barcode.Text.Length>0)name.Focus();else barcode.Focus();};
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
   }
