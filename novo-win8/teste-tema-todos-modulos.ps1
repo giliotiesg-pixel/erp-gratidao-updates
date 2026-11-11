@@ -187,6 +187,14 @@ foreach($sample in $items){
    $menu[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
    if(!$side[0].Visible){throw 'Fiado: o botao Serviços nao abriu o menu.'}
+   $salesArea=$type.GetField('saleTabs',$flags).GetValue($form)
+   [Windows.Forms.Application]::DoEvents()
+   if($salesArea.Bounds.Right -gt ($side[0].Bounds.Left+2)){
+    throw "Fiado: o menu lateral ficou sob a lista de vendas (tabela direita=$($salesArea.Right), menu esquerda=$($side[0].Left))."
+   }
+   if($side[0].Left -lt 0 -or $side[0].Right -gt $workspace[0].ClientSize.Width){
+    throw 'Fiado: o menu lateral ultrapassou os limites da meia tela.'
+   }
    $header=@($groups[2].Controls.Find('amzgFiadoSectionHeader',$true))
    if($header.Count -ne 1){throw 'Fiado: botao de Correcoes ausente.'}
    $closedHeight=$groups[2].Height

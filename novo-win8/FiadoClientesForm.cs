@@ -149,7 +149,10 @@ namespace ArmazemGratidao {
     int width=Math.Max(182,Math.Min(225,content.ClientSize.Width*43/100));
     if(side.Width!=width)side.Width=width;
    };
-   content.Controls.Add(tabs);content.Controls.Add(side);side.BringToFront();
+   // Dock Right deve reservar espaco ANTES de Dock Fill; nao deixar o menu sob a lista.
+   content.Controls.Add(side);
+   content.Controls.Add(tabs);
+   tabs.BringToFront();
    split.Panel2.Controls.Add(content);
    split.Panel2.Controls.Add(switchBar);
    split.Panel2.Controls.Add(selected);
