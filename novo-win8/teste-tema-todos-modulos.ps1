@@ -115,9 +115,12 @@ foreach($sample in $items){
    $top.Controls.Add($nav)
    $form.Controls.Add($top);$top.BringToFront()
   }
-  $form.Size=[Drawing.Size]::new(
-   [Math]::Min(1050,[Math]::Max(650,$form.Width)),
-   [Math]::Min(690,[Math]::Max(520,$form.Height)))
+  $originalFiadoSize=$form.Size
+  if($sample.Name -ne 'Fiado'){
+   $form.Size=[Drawing.Size]::new(
+    [Math]::Min(1050,[Math]::Max(650,$form.Width)),
+    [Math]::Min(690,[Math]::Max(520,$form.Height)))
+  }
   # Preparar os controles ANTES de apresentar um unico pixel.
   $style.Invoke($null,[object[]]@($form))|Out-Null
   if($null -eq $form.Icon){throw "Marca ausente ANTES de Show em $($sample.Name)"}
@@ -137,7 +140,11 @@ foreach($sample in $items){
    throw "Barra de calculadora ausente/duplicada em $($sample.Name)"
   }
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
-  if($form.Width -gt 950 -or $form.Height -gt 640){
+  if($sample.Name -eq 'Fiado'){
+   if($form.Size -ne $originalFiadoSize){
+    throw "Janela normal do Fiado foi diminuida: $originalFiadoSize para $($form.Size)"
+   }
+  }elseif($form.Width -gt 950 -or $form.Height -gt 640){
    throw "Janela ainda grande em $($sample.Name): $($form.Width)x$($form.Height)"
   }
   if($sample.Name -ne 'Estoque' -and $sample.Name -ne 'Fiado'){
@@ -200,10 +207,16 @@ foreach($sample in $items){
       $workspace.Count -ne 1 -or $classes.Count -ne 1){
     throw 'Fiado: navegacao local ou botoes por classe nao apareceram.'
    }
-   $groups=@($classes[0].Controls | Where-Object {
-    $_ -is [Windows.Forms.Panel] -and $_.Name -like 'amzgFiadoSection*'
+   $categoryButtons=@($classes[0].Controls | Where-Object {
+    $_ -is [Windows.Forms.Button] -and $_.Name -like 'amzgFiadoCategory*'
    })
-   if($groups.Count -ne 4){throw 'Fiado: categorias recolhiveis incompletas.'}
+   if($categoryButtons.Count -ne 4){throw 'Fiado: faltam quatro categorias do Iniciar.'}
+   $categoryPane=@($form.Controls.Find('amzgFiadoMenuCategories',$true))
+   $flyout=@($form.Controls.Find('amzgFiadoServiceFlyout',$true))
+   $branch=@($form.Controls.Find('amzgFiadoBranchContent',$true))
+   if($categoryPane.Count -ne 1 -or $flyout.Count -ne 1 -or $branch.Count -ne 1){
+    throw 'Fiado: nao possui as duas colunas do Menu Iniciar.'
+   }
    $menu=@($form.Controls.Find('amzgFiadoToggleServices',$true))
    if($menu.Count -ne 1){throw 'Fiado: botao Serviços nao encontrado.'}
    $top=@($form.Controls.Find('amzgBackBar',$true))
@@ -221,7 +234,27 @@ foreach($sample in $items){
    if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
    $menu[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
-   if(!$side[0].Visible){throw 'Fiado: o botao Serviços nao abriu o menu.'}
+   if(!$side[0].Visible -or $flyout[0].Visible){
+    throw 'Fiado: ao abrir, mostrar so categorias da esquerda.'
+   }
+   if($side[0].Width -gt 215){throw 'Fiado: categorias demasiado largas.'}
+   $categoryButtons[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   if(!$flyout[0].Visible -or $side[0].Width -lt 390){
+    throw 'Fiado: Recebimentos nao abriu submenu a direita.'
+   }
+   foreach($category in @($categoryButtons)){
+    $category.PerformClick()
+    [Windows.Forms.Application]::DoEvents()
+    if(!$flyout[0].Visible){
+     throw "Fiado: submenu $($category.Text) nao abriu."
+    }
+    if(@($branch[0].Controls | Where-Object {$_.Visible}).Count -ne 1){
+     throw "Fiado: $($category.Text) nao mostrou apenas os seus controles."
+    }
+   }
+   $categoryButtons[2].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
    $salesArea=$type.GetField('saleTabs',$flags).GetValue($form)
    [Windows.Forms.Application]::DoEvents()
    # Menu agora fica sobre a tabela, como o Menu Iniciar.
@@ -232,15 +265,10 @@ foreach($sample in $items){
     if($side[0].Left -lt 0 -or $side[0].Right -gt $workspace[0].ClientSize.Width){
     throw 'Fiado: o menu lateral ultrapassou os limites da meia tela.'
    }
-   $header=@($groups[2].Controls.Find('amzgFiadoSectionHeader',$true))
-   if($header.Count -ne 1){throw 'Fiado: botao de Correcoes ausente.'}
-   $closedHeight=$groups[2].Height
-   $header[0].PerformClick()
-   [Windows.Forms.Application]::DoEvents()
-   if($groups[2].Height -le $closedHeight){throw 'Fiado: o submenu Correcoes nao abriu.'}
-   $header[0].PerformClick()
-   [Windows.Forms.Application]::DoEvents()
-   if($groups[2].Height -ne $closedHeight){throw 'Fiado: o submenu Correcoes nao fechou.'}
+   $visibleGroup=@($branch[0].Controls | Where-Object {$_.Visible})
+   if($visibleGroup.Count -ne 1 -or $visibleGroup[0].Name -notlike '*CORRECOES*'){
+    throw 'Fiado: Correcoes nao aparece na coluna direita.'
+   }
    $tabs=$type.GetField('saleTabs',$flags).GetValue($form)
    if(@($tabs.TabPages[0].Controls | Where-Object {$_ -is [Windows.Forms.SplitContainer]}).Count -ne 0){
     throw 'Fiado: area inferior de produtos nao foi removida.'
@@ -283,7 +311,7 @@ foreach($sample in $items){
       $form.Size -ne $oldSize){
     throw 'Fiado: a seta nao retornou aos clientes mantendo a janela.'
    }
-   Write-Host 'FIADO OK: cliente, grupos à direita e seta Voltar aos clientes em meia tela.'
+   Write-Host 'FIADO OK: tamanho normal preservado, quatro categorias do Iniciar e submenus a direita.'
   }
   $out=Join-Path $directory ('Previa-Modulo-'+$sample.Name+'.png')
   $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
