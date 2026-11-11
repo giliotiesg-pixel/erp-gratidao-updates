@@ -60,6 +60,16 @@ try{
    $null=$dlg.SelectNextControl($cost,$true,$true,$true,$true)
    [Windows.Forms.Application]::DoEvents()
    if(!$price.ContainsFocus){throw 'Ao sair do Custo, o foco pulou o Preco de venda.'}
+   if($dlg.Text -ne 'Cadastrar Produto' -or $dlg.Width -gt 790 -or $dlg.Height -gt 660){
+    throw 'O cadastro de produtos nao esta com titulo e tamanho compactos.'
+   }
+   $layout=$price.Parent.Parent
+   $search=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Buscar dados do código'})
+   $register=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Cadastrar Produto'})
+   if($search.Count -ne 1 -or $register.Count -ne 1 -or
+      $layout.GetRow($search[0]) -ne 10 -or $layout.GetRow($register[0]) -ne 11){
+    throw 'Botoes de consulta e cadastro estao sobrepostos.'
+   }
    $script:done=$true
   }catch{$script:errorMessage=$_.Exception.Message}
   finally{

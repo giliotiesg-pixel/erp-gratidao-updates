@@ -159,6 +159,45 @@ foreach($sample in $items){
     throw "Faixa de botoes de $($sample.Name) ocupa espaco excessivo: $($toolbar.Height) px"
    }
   }
+  if($sample.Name -eq 'Fiado'){
+   $flags=[Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance
+   $clientList=$type.GetField('clients',$flags).GetValue($form)
+   $split=$type.GetField('detailSplit',$flags).GetValue($form)
+   $form.Size=[Drawing.Size]::new(660,520)
+   [Windows.Forms.Application]::DoEvents()
+   $buttonsClients=@($clientList.Controls | Where-Object {$_ -is [Windows.Forms.Button]})
+   if($buttonsClients.Count -lt 1){throw 'Cliente do Fiado nao encontrado no banco de teste.'}
+   $buttonsClients[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   $back=@($form.Controls.Find('amzgFiadoBackClients',$true))
+   $side=@($form.Controls.Find('amzgFiadoCommandsRight',$true))
+   $workspace=@($form.Controls.Find('amzgFiadoClientWorkspace',$true))
+   $classes=@($form.Controls.Find('amzgFiadoServiceClasses',$true))
+   if($back.Count -ne 1 -or !$back[0].Visible -or $side.Count -ne 1 -or
+      $workspace.Count -ne 1 -or $classes.Count -ne 1){
+    throw 'Fiado: navegacao local ou botoes por classe nao apareceram.'
+   }
+   $groups=@($classes[0].Controls | Where-Object {$_ -is [Windows.Forms.GroupBox]})
+   if($groups.Count -ne 4){throw 'Fiado: grupos de recebimentos, credito, correcoes e consultas incompletos.'}
+   if(!$split.Panel1Collapsed -or $split.Panel2Collapsed -or
+      $workspace[0].Width -lt 420 -or $side[0].Width -ge $workspace[0].Width){
+    throw 'Fiado: pagina do cliente nao cabe na meia tela.'
+   }
+   $detailFile=Join-Path $directory 'Previa-Modulo-Fiado-Cliente.png'
+   $img=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
+   try{
+    $form.DrawToBitmap($img,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
+    $img.Save($detailFile,[Drawing.Imaging.ImageFormat]::Png)
+   }finally{$img.Dispose()}
+   $oldSize=$form.Size
+   $back[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   if(!$form.Visible -or !$split.Panel2Collapsed -or $split.Panel1Collapsed -or
+      $form.Size -ne $oldSize){
+    throw 'Fiado: a seta nao retornou aos clientes mantendo a janela.'
+   }
+   Write-Host 'FIADO OK: cliente, grupos à direita e seta Voltar aos clientes em meia tela.'
+  }
   $out=Join-Path $directory ('Previa-Modulo-'+$sample.Name+'.png')
   $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
   try{
