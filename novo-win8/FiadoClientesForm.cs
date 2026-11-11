@@ -38,26 +38,17 @@ namespace ArmazemGratidao {
    saleTabs=tabs;
    var pending=new TabPage("Fiado atual - em aberto");
    var previous=new TabPage("Fiados anteriores - pagos");
-   var pendingItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both};
-   var previousItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both};
-   var pendingSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=140,Panel1MinSize=70,Panel2MinSize=70,IsSplitterFixed=false};
-   var previousSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=140,Panel1MinSize=70,Panel2MinSize=70,IsSplitterFixed=false};
-   var pendingPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-   var previousPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-   var pendingDetailTabs=new TabControl {Dock=DockStyle.Fill};
-   var previousDetailTabs=new TabControl {Dock=DockStyle.Fill};
-   var pendingItemTab=new TabPage("Produtos da venda selecionada");pendingItemTab.Controls.Add(pendingItems);
-   var pendingPaymentTab=new TabPage("Pagamentos desta venda");pendingPaymentTab.Controls.Add(pendingPayments);
-   pendingDetailTabs.TabPages.Add(pendingItemTab);pendingDetailTabs.TabPages.Add(pendingPaymentTab);
-   var previousItemTab=new TabPage("Produtos da venda selecionada");previousItemTab.Controls.Add(previousItems);
-   var previousPaymentTab=new TabPage("Pagamentos desta venda");previousPaymentTab.Controls.Add(previousPayments);
-   previousDetailTabs.TabPages.Add(previousItemTab);previousDetailTabs.TabPages.Add(previousPaymentTab);
-   CompactFiadoItemGrid(pendingItems);CompactFiadoItemGrid(previousItems);
-   SetupSaleSelection(openSales,pendingSplit.Panel1,false);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
-   SetupSaleSelection(paidSales,previousSplit.Panel1,true);previousSplit.Panel2.Controls.Add(previousDetailTabs);
-   pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
-   openSales.SelectionChanged+=(s,e)=>{RefreshSelectedSaleDetails(openSales,pendingItems,pendingPayments);UpdatePaymentSelection(true);};
-   paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(paidSales,previousItems,previousPayments);
+   // A lista de vendas ocupa toda a area. Produtos/pagamentos abrem em janela.
+   SetupSaleSelection(openSales,pending,false);
+   SetupSaleSelection(paidSales,previous,true);
+   openSales.SelectionChanged+=(sender,args)=>UpdatePaymentSelection(true);
+   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=24,Text="Duplo clique na venda para ver produtos e pagamentos",
+    TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
+    Font=new Font("Segoe UI",8.5f)};
+   var paidTip=new Label{Dock=DockStyle.Bottom,Height=24,Text="Duplo clique para consultar a venda paga",
+    TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
+    Font=new Font("Segoe UI",8.5f)};
+   pending.Controls.Add(pendingTip);previous.Controls.Add(paidTip);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
    var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Top,Height=38,WrapContents=false,AutoScroll=true,Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(229,242,255)};
@@ -70,6 +61,12 @@ namespace ArmazemGratidao {
    var localNav=new Panel{Name="amzgFiadoLocalNav",Dock=DockStyle.Top,Height=38,
     BackColor=Color.FromArgb(228,239,252),Padding=new Padding(5,3,5,3)};
    backSmall.Dock=DockStyle.Left;localNav.Controls.Add(backSmall);
+   var servicesToggle=new Button{Name="amzgFiadoToggleServices",Text="☰ Serviços",
+    Dock=DockStyle.Right,Width=133,Height=30,BackColor=Color.FromArgb(22,75,160),
+    ForeColor=Color.White,FlatStyle=FlatStyle.Flat,TabStop=false,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+   servicesToggle.FlatAppearance.BorderSize=0;
+   localNav.Controls.Add(servicesToggle);
    var fixClientName=new Button{Text="Corrigir nome do cliente",Width=220,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
    fixClientName.Click+=(sender,args)=>CorrectWholeClientName();
    switchBar.Controls.Add(fixClientName);
@@ -123,18 +120,23 @@ namespace ArmazemGratidao {
    var actionList=new FlowLayoutPanel{Name="amzgFiadoServiceClasses",Dock=DockStyle.Fill,
     FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
     Padding=new Padding(5,4,4,4),BackColor=Color.FromArgb(239,246,253)};
-   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.Right,Width=255,
-    BackColor=Color.FromArgb(239,246,253)};
+   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.Right,Width=225,
+    BackColor=Color.FromArgb(239,246,253),Visible=false};
    side.Controls.Add(actionList);
+   servicesToggle.Click+=(sender,args)=>{
+    side.Visible=!side.Visible;
+    servicesToggle.Text=side.Visible?"✕ Fechar menu":"☰ Serviços";
+    if(side.Visible)side.BringToFront();
+   };
    var groups=new []{
-    FiadoServiceGroup("RECEBIMENTOS",
+    FiadoServiceGroup("RECEBIMENTOS",true,
      new Label{Text="Forma de pagamento"},method,
      new Label{Text="Valor R$"},amount,receivedBalance,fillAll,pay,settle),
-    FiadoServiceGroup("CREDITO E LIMITE",
+    FiadoServiceGroup("CREDITO E LIMITE",false,
      new Label{Text="Credito R$"},creditDepositAmount,creditSaveTop,
      limitTop,adjustTop,creditPayTop,creditExtractTop),
-    FiadoServiceGroup("CORRECOES",fixClientName,transferClient,rename,fixDate),
-    FiadoServiceGroup("CONSULTAS E DOCUMENTOS",
+    FiadoServiceGroup("CORRECOES",false,fixClientName,transferClient,rename,fixDate),
+    FiadoServiceGroup("CONSULTAS E DOCUMENTOS",false,
      inspect,audit,auditHistory,statement,receipt,refresh)
    };
    foreach(var section in groups)actionList.Controls.Add(section);
@@ -144,7 +146,7 @@ namespace ArmazemGratidao {
    };
    actionList.ClientSizeChanged+=(sender,args)=>fitGroups();
    content.Resize+=(sender,args)=>{
-    int width=Math.Max(226,Math.Min(280,content.ClientSize.Width*39/100));
+    int width=Math.Max(182,Math.Min(225,content.ClientSize.Width*43/100));
     if(side.Width!=width)side.Width=width;
    };
    content.Controls.Add(tabs);content.Controls.Add(side);side.BringToFront();
@@ -181,7 +183,7 @@ namespace ArmazemGratidao {
     || normalized=="EMERSON SIMONE GILIOTI" || normalized=="EMERSON SIMONE GIGLIOTTI"
     || normalized=="LUIZ PAULO GILIOTI" || normalized=="LUIZ PAULO GIGLIOTTI";
   }
-  void SetupSaleSelection(DataGridView grid, SplitterPanel panel, bool paid) {
+  void SetupSaleSelection(DataGridView grid, Control panel, bool paid) {
    var mark=new DataGridViewCheckBoxColumn();
    mark.Name="marcar";mark.HeaderText="Selecionar";mark.ReadOnly=false;mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
    grid.Columns.Add(mark);
@@ -222,34 +224,42 @@ namespace ArmazemGratidao {
    clientHome.Visible=true;clientHome.BringToFront();
    LoadClients();clientSearch.Focus();
   }
-  static GroupBox FiadoServiceGroup(string title,params Control[] controls){
-   var box=new GroupBox{Text=title,Width=225,BackColor=Color.FromArgb(239,246,253),
-    ForeColor=Color.FromArgb(170,36,53),Font=new Font("Segoe UI",9,FontStyle.Bold),
-    Margin=new Padding(3,2,3,7)};
-   var stack=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(3,3,3,2),
-    FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=false};
+  // Menu de categorias recolhiveis, semelhante ao Iniciar.
+  static Panel FiadoServiceGroup(string title,bool expanded,params Control[] controls){
+   var group=new Panel{Name="amzgFiadoSection"+title.Replace(" ",""),Width=225,
+    BackColor=Color.White,Margin=new Padding(2,2,2,7)};
+   var header=new Button{Name="amzgFiadoSectionHeader",Dock=DockStyle.Top,Height=37,
+    TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.White,
+    BackColor=Color.FromArgb(22,75,160),FlatStyle=FlatStyle.Flat,
+    Font=new Font("Segoe UI",8.7f,FontStyle.Bold)};
+   header.FlatAppearance.BorderSize=0;
+   var body=new FlowLayoutPanel{Name="amzgFiadoSectionContent",Dock=DockStyle.Fill,
+    Padding=new Padding(4,4,3,4),FlowDirection=FlowDirection.TopDown,
+    WrapContents=false,AutoScroll=true};
    foreach(Control c in controls){
     c.Dock=DockStyle.None;c.Margin=new Padding(2,2,2,3);
     if(c is Button){
-     var b=(Button)c;b.AutoSize=false;b.AutoEllipsis=true;b.Height=30;
-     b.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
-     b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=0;
+     var button=(Button)c;button.AutoSize=false;button.AutoEllipsis=true;
+     button.Height=30;button.Font=new Font("Segoe UI",8.3f,FontStyle.Bold);
+     button.FlatStyle=FlatStyle.Flat;button.FlatAppearance.BorderSize=0;
     }else if(c is Label){
      var label=(Label)c;label.AutoSize=false;label.AutoEllipsis=true;
-     label.Height=label.Text.StartsWith("Saldo selecionado:")?45:23;
-    }else if(c is NumericUpDown)c.Height=29;
-    stack.Controls.Add(c);
+     label.Height=label.Text.StartsWith("Saldo selecionado:")?48:23;
+    }else if(c is NumericUpDown)c.Height=28;
+    body.Controls.Add(c);
    }
-   int height=29+stack.Padding.Vertical;
-   foreach(Control c in stack.Controls)height+=c.Height+c.Margin.Vertical;
-   box.Height=height+8;
-   box.Controls.Add(stack);
-   Action resize=()=>{
-    int w=Math.Max(160,box.ClientSize.Width-stack.Padding.Horizontal-13);
-    foreach(Control c in stack.Controls)c.Width=w;
+   int openHeight=header.Height+body.Padding.Vertical+5;
+   foreach(Control c in body.Controls)openHeight+=c.Height+c.Margin.Vertical;
+   Action refresh=()=>{group.Height=expanded?openHeight:header.Height;
+    body.Visible=expanded;header.Text=(expanded?"▾ ":"▸ ")+title;};
+   header.Click+=(sender,args)=>{expanded=!expanded;refresh();};
+   group.Controls.Add(body);group.Controls.Add(header);
+   group.Resize+=(sender,args)=>{
+    int width=Math.Max(130,group.ClientSize.Width-body.Padding.Horizontal-13);
+    foreach(Control c in body.Controls)c.Width=width;
    };
-   box.Resize+=(sender,args)=>resize();resize();
-   return box;
+   refresh();
+   return group;
   }
   static void CompactFiadoItemGrid(DataGridView grid){
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
@@ -761,7 +771,11 @@ namespace ArmazemGratidao {
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda para consultar.");return;}
    try{
     var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
-    var form=new StyledDialogForm {Text="Venda #"+id+" - Itens e recebimentos",Width=960,Height=620,StartPosition=FormStartPosition.CenterParent};
+    var work=Screen.FromControl(this).WorkingArea;
+    var form=new StyledDialogForm {Text="Venda #"+id+" | Produtos e pagamentos",
+     Width=Math.Min(760,Math.Max(370,work.Width-28)),Height=Math.Min(520,Math.Max(305,work.Height-32)),
+     MinimumSize=new Size(360,300),StartPosition=FormStartPosition.CenterParent,
+     FormBorderStyle=FormBorderStyle.Sizable};
     var tabs=new TabControl {Dock=DockStyle.Fill};
     var items=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
     items.DataSource=Query("SELECT id,name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
