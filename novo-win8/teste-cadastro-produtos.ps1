@@ -64,11 +64,14 @@ try{
     throw 'O cadastro de produtos nao esta com titulo e tamanho compactos.'
    }
    $layout=$price.Parent.Parent
-   $search=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Buscar dados do código'})
+   $search=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -like 'Buscar dados*'})
    $register=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Cadastrar Produto'})
    if($search.Count -ne 1 -or $register.Count -ne 1 -or
       $layout.GetRow($search[0]) -ne 10 -or $layout.GetRow($register[0]) -ne 11){
-    throw 'Botoes de consulta e cadastro estao sobrepostos.'
+    throw ("Layout incorreto: consulta={0}, cadastro={1}, linhaConsulta={2}, linhaCadastro={3}" -f
+      $search.Count,$register.Count,
+      $(if($search.Count -gt 0){$layout.GetRow($search[0])}else{-1}),
+      $(if($register.Count -gt 0){$layout.GetRow($register[0])}else{-1}))
    }
    $script:done=$true
   }catch{$script:errorMessage=$_.Exception.Message}
