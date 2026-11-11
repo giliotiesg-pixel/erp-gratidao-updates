@@ -120,13 +120,15 @@ namespace ArmazemGratidao {
    var actionList=new FlowLayoutPanel{Name="amzgFiadoServiceClasses",Dock=DockStyle.Fill,
     FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
     Padding=new Padding(5,4,4,4),BackColor=Color.FromArgb(239,246,253)};
-   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.Right,Width=225,
-    BackColor=Color.FromArgb(239,246,253),Visible=false};
+   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.None,Width=225,
+    BackColor=Color.FromArgb(239,246,253),Visible=false,
+    BorderStyle=BorderStyle.FixedSingle};
    side.Controls.Add(actionList);
+   Action fitServiceMenu=null;
    servicesToggle.Click+=(sender,args)=>{
     side.Visible=!side.Visible;
     servicesToggle.Text=side.Visible?"✕ Fechar menu":"☰ Serviços";
-    if(side.Visible)side.BringToFront();
+    if(side.Visible){if(fitServiceMenu!=null)fitServiceMenu();side.BringToFront();}
    };
    var groups=new []{
     FiadoServiceGroup("RECEBIMENTOS",true,
@@ -145,14 +147,17 @@ namespace ArmazemGratidao {
     foreach(var section in groups)section.Width=width;
    };
    actionList.ClientSizeChanged+=(sender,args)=>fitGroups();
-   content.Resize+=(sender,args)=>{
-    int width=Math.Max(182,Math.Min(225,content.ClientSize.Width*43/100));
-    if(side.Width!=width)side.Width=width;
+   fitServiceMenu=()=>{
+    int w=content.ClientSize.Width,h=content.ClientSize.Height;
+    if(w<=0||h<=0)return;
+    int width=Math.Min(224,Math.Max(172,w*43/100));
+    side.Bounds=new Rectangle(Math.Max(0,w-width),0,width,h);
    };
-   // Dock Right deve reservar espaco ANTES de Dock Fill; nao deixar o menu sob a lista.
-   content.Controls.Add(side);
+   content.Resize+=(sender,args)=>fitServiceMenu();
+   // Ao abrir, o menu flutua SOBRE a lista e nao fica atras do Dock.Fill.
    content.Controls.Add(tabs);
-   tabs.BringToFront();
+   content.Controls.Add(side);
+   side.BringToFront();fitServiceMenu();
    split.Panel2.Controls.Add(content);
    split.Panel2.Controls.Add(switchBar);
    split.Panel2.Controls.Add(selected);
