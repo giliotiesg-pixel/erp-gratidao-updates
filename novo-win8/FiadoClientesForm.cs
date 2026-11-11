@@ -25,7 +25,7 @@ namespace ArmazemGratidao {
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=88,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,4,4,4)};
   public FiadoClientesForm(string database) {
-   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(820,Math.Max(620,area.Width-32));Height=Math.Min(575,Math.Max(485,area.Height-32));MinimumSize=new Size(600,450);
+   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=new Size(640,480);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){
     table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
     table.DefaultCellStyle.Format="N2";
@@ -134,40 +134,106 @@ namespace ArmazemGratidao {
    creditExtractTop.Click+=(sender,args)=>ShowCustomerCreditHistory();creditBar.Controls.Add(creditExtractTop);
    // Mover os comandos existentes para grupos por servico sem perder nenhum Click.
    var content=new Panel{Name="amzgFiadoClientWorkspace",Dock=DockStyle.Fill,BackColor=Color.White};
+   // O MESMO LAYOUT do menu Iniciar: categorias azuis à esquerda e ramificações à direita.
+   // As ações de Fiado continuam sendo os controles originais, com seus handlers.
    var actionList=new FlowLayoutPanel{Name="amzgFiadoServiceClasses",Dock=DockStyle.Fill,
     FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
-    Padding=new Padding(5,4,4,4),BackColor=Color.FromArgb(239,246,253)};
-   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.None,Width=225,
-    BackColor=Color.FromArgb(239,246,253),Visible=false,
+    Padding=new Padding(6,5,4,5),BackColor=Color.FromArgb(29,47,79)};
+   var categoryPane=new Panel{Name="amzgFiadoMenuCategories",Dock=DockStyle.Left,
+    Width=201,BackColor=Color.FromArgb(18,52,107)};
+   var menuTitle=new Label{Text="  ☰  FIADO | SERVIÇOS",Dock=DockStyle.Top,Height=49,
+    BackColor=Color.FromArgb(12,39,90),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9.5f,FontStyle.Bold),
+    TextAlign=ContentAlignment.MiddleLeft};
+   var closeMenu=new Button{Name="amzgFiadoCloseMenu",Text="×  Fechar menu",
+    Dock=DockStyle.Bottom,Height=34,BackColor=Color.FromArgb(20,37,67),
+    ForeColor=Color.White,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),
+    TextAlign=ContentAlignment.MiddleLeft,FlatStyle=FlatStyle.Flat};
+   closeMenu.FlatAppearance.BorderSize=0;
+   categoryPane.Controls.Add(actionList);
+   categoryPane.Controls.Add(menuTitle);
+   categoryPane.Controls.Add(closeMenu);
+   var branchPane=new Panel{Name="amzgFiadoServiceFlyout",Dock=DockStyle.Fill,
+    Visible=false,BackColor=Color.FromArgb(246,249,254),
+    Padding=new Padding(7,6,6,6)};
+   var branchTitle=new Label{Name="amzgFiadoBranchTitle",Dock=DockStyle.Top,Height=36,
+    ForeColor=Color.FromArgb(22,75,160),
+    Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+   var serviceContent=new Panel{Name="amzgFiadoBranchContent",Dock=DockStyle.Fill,
+    BackColor=Color.White};
+   branchPane.Controls.Add(serviceContent);
+   branchPane.Controls.Add(branchTitle);
+   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.None,
+    Width=201,BackColor=Color.FromArgb(18,52,107),Visible=false,
     BorderStyle=BorderStyle.FixedSingle};
-   side.Controls.Add(actionList);
-   Action fitServiceMenu=null;
-   servicesToggle.Click+=(sender,args)=>{
-    side.Visible=!side.Visible;
-    servicesToggle.Text=side.Visible?"✕ Fechar menu":"☰ Serviços";
-    if(side.Visible){if(fitServiceMenu!=null)fitServiceMenu();side.BringToFront();}
-   };
+   side.Controls.Add(branchPane);
+   side.Controls.Add(categoryPane);
+   // Apenas uma categoria ativa de cada vez, exatamente como no menu Iniciar.
+   var sectionLabels=new[]{"RECEBIMENTOS","CREDITO E LIMITE",
+    "CORRECOES","CONSULTAS E DOCUMENTOS"};
    var groups=new []{
     FiadoServiceGroup("RECEBIMENTOS",true,
      new Label{Text="Forma de pagamento"},method,
      new Label{Text="Valor R$"},amount,receivedBalance,fillAll,pay,settle),
-    FiadoServiceGroup("CREDITO E LIMITE",false,
+    FiadoServiceGroup("CREDITO E LIMITE",true,
      new Label{Text="Credito R$"},creditDepositAmount,creditSaveTop,
      limitTop,adjustTop,creditPayTop,creditExtractTop),
-    FiadoServiceGroup("CORRECOES",false,fixClientName,transferClient,rename,fixDate),
-    FiadoServiceGroup("CONSULTAS E DOCUMENTOS",false,
+    FiadoServiceGroup("CORRECOES",true,fixClientName,transferClient,rename,fixDate),
+    FiadoServiceGroup("CONSULTAS E DOCUMENTOS",true,
      inspect,audit,auditHistory,statement,receipt,refresh)
    };
-   foreach(var section in groups)actionList.Controls.Add(section);
-   Action fitGroups=()=>{
-    int width=Math.Max(197,actionList.ClientSize.Width-actionList.Padding.Horizontal-13);
-    foreach(var section in groups)section.Width=width;
+   var categoryButtons=new List<Button>();
+   Action fitServiceMenu=null;
+   Action<int> selectCategory=index=>{
+    for(int i=0;i<groups.Length;i++){
+     groups[i].Visible=i==index;
+     categoryButtons[i].BackColor=i==index?
+      Color.FromArgb(30,117,218):Color.FromArgb(23,81,169);
+    }
+    branchTitle.Text=sectionLabels[index]+"  ›";
+    branchPane.Visible=true;
+    if(fitServiceMenu!=null)fitServiceMenu();
+    groups[index].BringToFront();
+    branchPane.BringToFront();
    };
-   actionList.ClientSizeChanged+=(sender,args)=>fitGroups();
+   for(int i=0;i<sectionLabels.Length;i++){
+    int index=i;
+    var category=new Button{Name="amzgFiadoCategory"+i,
+     Text="  "+sectionLabels[i]+"  ›",
+     Size=new Size(186,42),MinimumSize=new Size(186,42),
+     MaximumSize=new Size(186,42),Margin=new Padding(0,2,0,2),
+     BackColor=Color.FromArgb(23,81,169),ForeColor=Color.White,
+     TextAlign=ContentAlignment.MiddleLeft,FlatStyle=FlatStyle.Flat,
+     AutoEllipsis=true,UseMnemonic=false,
+     Font=new Font("Segoe UI",8.3f,FontStyle.Bold)};
+    category.FlatAppearance.BorderSize=0;
+    category.Click+=(sender,args)=>selectCategory(index);
+    categoryButtons.Add(category);
+    actionList.Controls.Add(category);
+    groups[i].Dock=DockStyle.Fill;
+    groups[i].Visible=false;
+    serviceContent.Controls.Add(groups[i]);
+   }
+   Action closeServiceMenu=()=>{
+    side.Visible=false;
+    branchPane.Visible=false;
+    servicesToggle.Text="☰ Serviços";
+   };
+   closeMenu.Click+=(sender,args)=>closeServiceMenu();
+   servicesToggle.Click+=(sender,args)=>{
+    if(side.Visible){closeServiceMenu();return;}
+    branchPane.Visible=false;
+    foreach(var group in groups)group.Visible=false;
+    foreach(var category in categoryButtons)category.BackColor=Color.FromArgb(23,81,169);
+    side.Visible=true;
+    servicesToggle.Text="✕ Fechar menu";
+    if(fitServiceMenu!=null)fitServiceMenu();
+    side.BringToFront();
+   };
    fitServiceMenu=()=>{
     int w=content.ClientSize.Width,h=content.ClientSize.Height;
     if(w<=0||h<=0)return;
-    int width=Math.Min(224,Math.Max(172,w*43/100));
+    int width=Math.Min(w,branchPane.Visible?463:201);
     side.Bounds=new Rectangle(Math.Max(0,w-width),0,width,h);
    };
    content.Resize+=(sender,args)=>fitServiceMenu();
@@ -917,7 +983,7 @@ namespace ArmazemGratidao {
     var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
     var work=Screen.FromControl(this).WorkingArea;
     var form=new StyledDialogForm {Text="Venda #"+id+" | Produtos e pagamentos",
-     Width=Math.Min(760,Math.Max(370,work.Width-28)),Height=Math.Min(520,Math.Max(305,work.Height-32)),
+     Width=Math.Min(620,Math.Max(370,work.Width-28)),Height=Math.Min(450,Math.Max(305,work.Height-32)),
      MinimumSize=new Size(360,300),StartPosition=FormStartPosition.CenterParent,
      FormBorderStyle=FormBorderStyle.Sizable};
     var tabs=new TabControl {Dock=DockStyle.Fill};

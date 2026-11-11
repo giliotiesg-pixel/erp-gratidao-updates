@@ -64,10 +64,10 @@ namespace ArmazemGratidao {
    if(form==null||form.IsDisposed||!done.Add(form))return;
    form.Disposed+=(sender,args)=>done.Remove(form);
    if(form is MainForm||form is PdvForm||form is StartMenuPopup||
-      form is ModernCalculatorForm)return;
+      form is ModernCalculatorForm||form is FiadoClientesForm)return;
    var bounds=Screen.FromControl(form).WorkingArea;
-   int width=Math.Min(form.Width,Math.Max(500,Math.Min(form is FiadoClientesForm?820:940,bounds.Width-28)));
-   int height=Math.Min(form.Height,Math.Max(370,Math.Min(form is FiadoClientesForm?575:635,bounds.Height-38)));
+   int width=Math.Min(form.Width,Math.Max(500,Math.Min(940,bounds.Width-28)));
+   int height=Math.Min(form.Height,Math.Max(370,Math.Min(635,bounds.Height-38)));
    if(form.MinimumSize.Width>width||form.MinimumSize.Height>height)
     form.MinimumSize=new Size(Math.Min(form.MinimumSize.Width,width),
      Math.Min(form.MinimumSize.Height,height));
