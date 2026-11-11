@@ -293,6 +293,7 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-pdv-layout.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-PDV.png'
+          .\\novo-win8\\teste-cadastro-produtos.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe'
       - uses: actions/upload-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
