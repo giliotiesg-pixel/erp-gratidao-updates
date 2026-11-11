@@ -11,7 +11,7 @@ namespace ArmazemGratidao {
   readonly DataGridView openSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly DataGridView paymentHistory=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly DataGridView paidSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-  readonly Label selected=new Label {Dock=DockStyle.Top,Height=42,Font=new Font("Segoe UI",14,FontStyle.Bold)};
+  readonly Label selected=new Label {Dock=DockStyle.Top,Height=42,Padding=new Padding(7,4,5,2),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoEllipsis=true};
   readonly NumericUpDown amount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=130};
   readonly NumericUpDown creditDepositAmount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=135};
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
@@ -24,9 +24,9 @@ namespace ArmazemGratidao {
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=88,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,4,4,4)};
   public FiadoClientesForm(string database) {
-   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=new Size(640,480);
+   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1080,Math.Max(635,area.Width-32));Height=Math.Min(720,Math.Max(500,area.Height-32));MinimumSize=new Size(625,475);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;}
-   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=265,IsSplitterFixed=true};
+   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=230,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
    split.Panel1.Controls.Add(overview);
@@ -38,10 +38,10 @@ namespace ArmazemGratidao {
    saleTabs=tabs;
    var pending=new TabPage("Fiado atual - em aberto");
    var previous=new TabPage("Fiados anteriores - pagos");
-   var pendingItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-   var previousItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-   var pendingSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235,IsSplitterFixed=false};
-   var previousSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=235,IsSplitterFixed=false};
+   var pendingItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both};
+   var previousItems=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,ScrollBars=ScrollBars.Both};
+   var pendingSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=140,Panel1MinSize=70,Panel2MinSize=70,IsSplitterFixed=false};
+   var previousSplit=new SplitContainer {Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=140,Panel1MinSize=70,Panel2MinSize=70,IsSplitterFixed=false};
    var pendingPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
    var previousPayments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
    var pendingDetailTabs=new TabControl {Dock=DockStyle.Fill};
@@ -52,6 +52,7 @@ namespace ArmazemGratidao {
    var previousItemTab=new TabPage("Produtos da venda selecionada");previousItemTab.Controls.Add(previousItems);
    var previousPaymentTab=new TabPage("Pagamentos desta venda");previousPaymentTab.Controls.Add(previousPayments);
    previousDetailTabs.TabPages.Add(previousItemTab);previousDetailTabs.TabPages.Add(previousPaymentTab);
+   CompactFiadoItemGrid(pendingItems);CompactFiadoItemGrid(previousItems);
    SetupSaleSelection(openSales,pendingSplit.Panel1,false);pendingSplit.Panel2.Controls.Add(pendingDetailTabs);
    SetupSaleSelection(paidSales,previousSplit.Panel1,true);previousSplit.Panel2.Controls.Add(previousDetailTabs);
    pending.Controls.Add(pendingSplit);previous.Controls.Add(previousSplit);
@@ -59,13 +60,16 @@ namespace ArmazemGratidao {
    paidSales.SelectionChanged+=(s,e)=>RefreshSelectedSaleDetails(paidSales,previousItems,previousPayments);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
-   var switchBar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,Padding=new Padding(5),BackColor=Color.FromArgb(229,242,255)};
-   var showOpen=new Button {Text="Fiado atual - em aberto",Width=190,Height=32,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
-   var showPrevious=new Button {Text="Fiados anteriores - pagos",Width=210,Height=32,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
-   var backSmall=new Button{Text="← Voltar",Width=95,Height=32,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Top,Height=38,WrapContents=false,AutoScroll=true,Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(229,242,255)};
+   var showOpen=new Button {Text="Em aberto",Width=114,Height=29,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
+   var showPrevious=new Button {Text="Pagas",Width=86,Height=29,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
+   var backSmall=new Button{Name="amzgFiadoBackClients",Text="← Voltar aos clientes",Width=174,Height=30,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    backSmall.FlatAppearance.BorderSize=0;
-   backSmall.Click+=(sender,args)=>{customer="";detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;clientHome.Visible=true;clientHome.BringToFront();WindowState=FormWindowState.Normal;};
-   switchBar.Controls.Add(backSmall);
+   backSmall.Click+=(sender,args)=>BackToFiadoClients();
+   // Seta para a tela anterior, separada do botao Menu Inicial global.
+   var localNav=new Panel{Name="amzgFiadoLocalNav",Dock=DockStyle.Top,Height=38,
+    BackColor=Color.FromArgb(228,239,252),Padding=new Padding(5,3,5,3)};
+   backSmall.Dock=DockStyle.Left;localNav.Controls.Add(backSmall);
    var fixClientName=new Button{Text="Corrigir nome do cliente",Width=220,Height=32,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
    fixClientName.Click+=(sender,args)=>CorrectWholeClientName();
    switchBar.Controls.Add(fixClientName);
@@ -114,7 +118,41 @@ namespace ArmazemGratidao {
    creditPayTop.Click+=(sender,args)=>PayFiadoWithCredit();creditBar.Controls.Add(creditPayTop);
    var creditExtractTop=new Button{Text="Extrato do credito",Width=150,Height=35};
    creditExtractTop.Click+=(sender,args)=>ShowCustomerCreditHistory();creditBar.Controls.Add(creditExtractTop);
-   split.Panel2.Controls.Add(tabs);split.Panel2.Controls.Add(bottom);split.Panel2.Controls.Add(creditBar);split.Panel2.Controls.Add(switchBar);split.Panel2.Controls.Add(selected);
+   // Mover os comandos existentes para grupos por servico sem perder nenhum Click.
+   var content=new Panel{Name="amzgFiadoClientWorkspace",Dock=DockStyle.Fill,BackColor=Color.White};
+   var actionList=new FlowLayoutPanel{Name="amzgFiadoServiceClasses",Dock=DockStyle.Fill,
+    FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,
+    Padding=new Padding(5,4,4,4),BackColor=Color.FromArgb(239,246,253)};
+   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.Right,Width=255,
+    BackColor=Color.FromArgb(239,246,253)};
+   side.Controls.Add(actionList);
+   var groups=new []{
+    FiadoServiceGroup("RECEBIMENTOS",
+     new Label{Text="Forma de pagamento"},method,
+     new Label{Text="Valor R$"},amount,receivedBalance,fillAll,pay,settle),
+    FiadoServiceGroup("CREDITO E LIMITE",
+     new Label{Text="Credito R$"},creditDepositAmount,creditSaveTop,
+     limitTop,adjustTop,creditPayTop,creditExtractTop),
+    FiadoServiceGroup("CORRECOES",fixClientName,transferClient,rename,fixDate),
+    FiadoServiceGroup("CONSULTAS E DOCUMENTOS",
+     inspect,audit,auditHistory,statement,receipt,refresh)
+   };
+   foreach(var section in groups)actionList.Controls.Add(section);
+   Action fitGroups=()=>{
+    int width=Math.Max(197,actionList.ClientSize.Width-actionList.Padding.Horizontal-13);
+    foreach(var section in groups)section.Width=width;
+   };
+   actionList.ClientSizeChanged+=(sender,args)=>fitGroups();
+   content.Resize+=(sender,args)=>{
+    int width=Math.Max(226,Math.Min(280,content.ClientSize.Width*39/100));
+    if(side.Width!=width)side.Width=width;
+   };
+   content.Controls.Add(tabs);content.Controls.Add(side);side.BringToFront();
+   split.Panel2.Controls.Add(content);
+   split.Panel2.Controls.Add(switchBar);
+   split.Panel2.Controls.Add(selected);
+   split.Panel2.Controls.Add(localNav);
+   fitGroups();
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
    openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
    paidSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=1;ShowSaleDetails();}};
@@ -177,6 +215,55 @@ namespace ArmazemGratidao {
    grid.CellValueChanged+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex==grid.Columns["marcar"].Index)sum();};
    grid.DataBindingComplete+=(s,e)=>{all.Checked=false;sum();};
    panel.Controls.Add(grid);panel.Controls.Add(bar);
+  }
+  void BackToFiadoClients(){
+   customer="";
+   detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;
+   clientHome.Visible=true;clientHome.BringToFront();
+   LoadClients();clientSearch.Focus();
+  }
+  static GroupBox FiadoServiceGroup(string title,params Control[] controls){
+   var box=new GroupBox{Text=title,Width=225,BackColor=Color.FromArgb(239,246,253),
+    ForeColor=Color.FromArgb(170,36,53),Font=new Font("Segoe UI",9,FontStyle.Bold),
+    Margin=new Padding(3,2,3,7)};
+   var stack=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(3,3,3,2),
+    FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=false};
+   foreach(Control c in controls){
+    c.Dock=DockStyle.None;c.Margin=new Padding(2,2,2,3);
+    if(c is Button){
+     var b=(Button)c;b.AutoSize=false;b.AutoEllipsis=true;b.Height=30;
+     b.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
+     b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=0;
+    }else if(c is Label){
+     var label=(Label)c;label.AutoSize=false;label.AutoEllipsis=true;
+     label.Height=label.Text.StartsWith("Saldo selecionado:")?45:23;
+    }else if(c is NumericUpDown)c.Height=29;
+    stack.Controls.Add(c);
+   }
+   int height=29+stack.Padding.Vertical;
+   foreach(Control c in stack.Controls)height+=c.Height+c.Margin.Vertical;
+   box.Height=height+8;
+   box.Controls.Add(stack);
+   Action resize=()=>{
+    int w=Math.Max(160,box.ClientSize.Width-stack.Padding.Horizontal-13);
+    foreach(Control c in stack.Controls)c.Width=w;
+   };
+   box.Resize+=(sender,args)=>resize();resize();
+   return box;
+  }
+  static void CompactFiadoItemGrid(DataGridView grid){
+   grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   grid.DataBindingComplete+=(sender,args)=>{
+    foreach(DataGridViewColumn col in grid.Columns){
+     switch(col.Name.ToLowerInvariant()){
+      case "produto":col.Width=185;break;
+      case "quantidade":col.Width=85;break;
+      case "preco":col.Width=86;break;
+      case "valor":col.Width=92;break;
+      default:col.Width=105;break;
+     }
+    }
+   };
   }
   void ArrangeClientBoxes(){
    // Cartões compactos, uniformes e sem esticar para ocupar toda a largura.
