@@ -35,9 +35,11 @@ namespace ArmazemGratidao {
    form.FormClosed+=(sender,args)=>prepared.Remove(form);
    form.SuspendLayout();
    try{
+    CompactFormDimensions.Prepare(form);
     WindowBoundsGuard.Prepare(form);
     PdvShortcutButtons.Prepare(form);
     CalculatorShortcut.Prepare(form);
+    FiadoGlobalHeader.Prepare(form);
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
@@ -51,6 +53,45 @@ namespace ArmazemGratidao {
   protected override void OnLoad(EventArgs e){
    VisualStartup.Prepare(this);
    base.OnLoad(e);
+  }
+ }
+ // Dimensoes iniciais compactas; evita desperdiçar metade do monitor.
+ static class CompactFormDimensions {
+  static readonly System.Collections.Generic.HashSet<Form> done=
+   new System.Collections.Generic.HashSet<Form>();
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||!done.Add(form))return;
+   form.Disposed+=(sender,args)=>done.Remove(form);
+   if(form is MainForm||form is PdvForm||form is StartMenuPopup||
+      form is ModernCalculatorForm)return;
+   var bounds=Screen.FromControl(form).WorkingArea;
+   int width=Math.Min(form.Width,Math.Max(500,Math.Min(form is FiadoClientesForm?820:940,bounds.Width-28)));
+   int height=Math.Min(form.Height,Math.Max(370,Math.Min(form is FiadoClientesForm?575:635,bounds.Height-38)));
+   if(form.MinimumSize.Width>width||form.MinimumSize.Height>height)
+    form.MinimumSize=new Size(Math.Min(form.MinimumSize.Width,width),
+     Math.Min(form.MinimumSize.Height,height));
+   if(form.Width!=width||form.Height!=height)form.Size=new Size(width,height);
+  }
+ }
+ // Botao de Servicos do Fiado fica no alto como no menu Iniciar.
+ static class FiadoGlobalHeader {
+  public static void Prepare(Form form){
+   if(!(form is FiadoClientesForm))return;
+   var header=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
+    .FirstOrDefault(x=>x.Parent==form&&x.Dock==DockStyle.Top);
+   var back=form.Controls.Find("amzgFiadoBackClients",true).OfType<Button>().FirstOrDefault();
+   var toggle=form.Controls.Find("amzgFiadoToggleServices",true).OfType<Button>().FirstOrDefault();
+   var local=form.Controls.Find("amzgFiadoLocalNav",true).OfType<Panel>().FirstOrDefault();
+   if(header==null||back==null||toggle==null)return;
+   if(local!=null){local.Controls.Remove(back);local.Controls.Remove(toggle);
+    local.Visible=false;local.Height=0;}
+   var mainBack=header.Controls.OfType<Button>().FirstOrDefault();
+   if(mainBack!=null){mainBack.Text="← Menu Inicial";mainBack.Width=124;}
+   back.Dock=DockStyle.Right;back.Width=149;back.Height=28;
+   toggle.Dock=DockStyle.Right;toggle.Width=116;toggle.Height=28;
+   back.Visible=false;toggle.Visible=false;
+   header.Controls.Add(toggle);header.Controls.Add(back);
+   toggle.BringToFront();back.BringToFront();
   }
  }
  // Botao comum em todas as janelas, sem cobrir campos ou menus.
@@ -68,7 +109,13 @@ namespace ArmazemGratidao {
     Font=new Font("Segoe UI",9f,FontStyle.Bold),FlatStyle=FlatStyle.Flat};
    button.FlatAppearance.BorderSize=0;
    button.Click+=(sender,args)=>Open();
-   bar.Controls.Add(button);form.Controls.Add(bar);bar.BringToFront();
+   bar.Controls.Add(button);
+   var shared=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
+    .FirstOrDefault(x=>x.Parent==form&&x.Dock==DockStyle.Top);
+   if(shared!=null){
+    bar.Dock=DockStyle.Right;bar.Width=109;bar.Height=29;button.Dock=DockStyle.Fill;
+    shared.Controls.Add(bar);bar.BringToFront();
+   }else{form.Controls.Add(bar);bar.BringToFront();}
    form.FormClosed+=(sender,args)=>installed.Remove(form);
   }
   static void Open(){
@@ -183,7 +230,7 @@ namespace ArmazemGratidao {
    new System.Collections.Generic.HashSet<Form>();
   public static void Prepare(Form form){
    if(form==null||form.IsDisposed||installed.Contains(form))return;
-   bool module=form is ConsultaForm || form is FiadoClientesForm ||
+   bool module=form is ConsultaForm ||
     form is ProdutosForm || form is LucroForm || form is ModuloConsultaForm;
    if(!module)return;
    installed.Add(form);
@@ -215,8 +262,13 @@ namespace ArmazemGratidao {
     position();
    }else{
     strip.Controls.Add(shortcut);
-    form.Controls.Add(strip);
-    strip.BringToFront();
+    var shared=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
+     .FirstOrDefault(x=>x.Parent==form&&x.Dock==DockStyle.Top);
+    if(shared!=null){
+     strip.Dock=DockStyle.Right;strip.Width=140;strip.Height=29;
+     shortcut.Height=27;shortcut.Width=131;
+     shared.Controls.Add(strip);strip.BringToFront();
+    }else{form.Controls.Add(strip);strip.BringToFront();}
    }
    form.FormClosed+=(sender,args)=>installed.Remove(form);
   }
