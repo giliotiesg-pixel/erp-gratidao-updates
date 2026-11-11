@@ -24,9 +24,12 @@ namespace ArmazemGratidao {
   readonly TextBox clientSearch=new TextBox {Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11)};
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=88,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,4,4,4)};
   public FiadoClientesForm(string database) {
-   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1080,Math.Max(635,area.Width-32));Height=Math.Min(720,Math.Max(500,area.Height-32));MinimumSize=new Size(625,475);
-   foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;}
-   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=230,IsSplitterFixed=true};
+   db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(820,Math.Max(620,area.Width-32));Height=Math.Min(575,Math.Max(485,area.Height-32));MinimumSize=new Size(600,450);
+   foreach(var table in new[]{openSales,paidSales,paymentHistory}){
+    table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+    table.DefaultCellStyle.Format="N2";
+   }
+   var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=205,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
    split.Panel1.Controls.Add(overview);
@@ -42,10 +45,10 @@ namespace ArmazemGratidao {
    SetupSaleSelection(openSales,pending,false);
    SetupSaleSelection(paidSales,previous,true);
    openSales.SelectionChanged+=(sender,args)=>UpdatePaymentSelection(true);
-   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=24,Text="Duplo clique na venda para ver produtos e pagamentos",
+   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Clique em Detalhes para ver produtos e pagamentos",
     TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
     Font=new Font("Segoe UI",8.5f)};
-   var paidTip=new Label{Dock=DockStyle.Bottom,Height=24,Text="Duplo clique para consultar a venda paga",
+   var paidTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Clique em Detalhes para consultar a venda paga",
     TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
     Font=new Font("Segoe UI",8.5f)};
    pending.Controls.Add(pendingTip);previous.Controls.Add(paidTip);
@@ -191,43 +194,155 @@ namespace ArmazemGratidao {
     || normalized=="EMERSON SIMONE GILIOTI" || normalized=="EMERSON SIMONE GIGLIOTTI"
     || normalized=="LUIZ PAULO GILIOTI" || normalized=="LUIZ PAULO GIGLIOTTI";
   }
-  void SetupSaleSelection(DataGridView grid, Control panel, bool paid) {
-   var mark=new DataGridViewCheckBoxColumn();
-   mark.Name="marcar";mark.HeaderText="Selecionar";mark.ReadOnly=false;mark.Width=75;mark.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
+  // A grade interna continua existente para pagamentos e selecao multipla.
+  // A interface passa a exibir cartoes compactos, responsivos e legiveis.
+  void SetupSaleSelection(DataGridView grid, Control panel, bool paid){
+   var mark=new DataGridViewCheckBoxColumn{
+    Name="marcar",HeaderText="Selecionar",ReadOnly=false,Width=70,
+    AutoSizeMode=DataGridViewAutoSizeColumnMode.None};
    grid.Columns.Add(mark);
-   // Apenas a coluna de seleção é editável; as informações das vendas permanecem protegidas.
-   grid.ReadOnly=false;
-   grid.MultiSelect=true;
-   grid.CellClick+=(s,e)=>{
+   grid.ReadOnly=false;grid.MultiSelect=true;
+   grid.CellClick+=(sender,e)=>{
     if(e.RowIndex<0||e.ColumnIndex<0||grid.Columns[e.ColumnIndex].Name=="marcar")return;
     var cell=grid.Rows[e.RowIndex].Cells["marcar"];
     cell.Value=!Convert.ToBoolean(cell.Value??false);
    };
-   grid.DataBindingComplete+=(s,e)=>{
-    foreach(DataGridViewColumn col in grid.Columns)col.ReadOnly=col.Name!="marcar";
-   };
-   var bar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=44,WrapContents=false,AutoScroll=true,BackColor=Color.FromArgb(246,249,253)};
-   var all=new CheckBox {Text="Selecionar todas as vendas",AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),Margin=new Padding(12,10,16,0)};
-   var total=new Label {Text="Total selecionado: R$ 0,00",AutoSize=true,Margin=new Padding(5,10,0,0)};
-   bar.Controls.Add(all);bar.Controls.Add(total);
-   Action sum=()=>{
-    decimal value=0;
-    foreach(DataGridViewRow row in grid.Rows) {
-     if(row.IsNewRow||!Convert.ToBoolean(row.Cells["marcar"].Value??false))continue;
-     var v=row.Cells[paid?"valor":"saldo"].Value;
-     if(v!=null&&v!=DBNull.Value)value+=Convert.ToDecimal(v);
+   grid.DataBindingComplete+=(sender,e)=>{
+    foreach(DataGridViewColumn col in grid.Columns) {
+     col.ReadOnly=col.Name!="marcar";
+     if(col.Name=="valor"||col.Name=="pago"||col.Name=="saldo")
+      col.DefaultCellStyle.Format="N2";
     }
-    total.Text="Total selecionado: R$ "+value.ToString("N2");
+   };
+   var bar=new FlowLayoutPanel{Name=paid?"amzgFiadoPaidTop":"amzgFiadoOpenTop",
+    Dock=DockStyle.Top,Height=39,WrapContents=false,AutoScroll=true,
+    Padding=new Padding(5,2,5,2),BackColor=Color.FromArgb(231,240,252)};
+   var all=new CheckBox{Text="Selecionar todas",AutoSize=true,
+    Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(4,6,11,0)};
+   var total=new Label{Text="Selecionado: R$ 0,00",AutoSize=true,
+    Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,8,0,0)};
+   bar.Controls.Add(all);bar.Controls.Add(total);
+   var cards=new FlowLayoutPanel {
+    Name=paid?"amzgFiadoCardsPaid":"amzgFiadoCardsOpen",
+    Dock=DockStyle.Fill,AutoScroll=true,WrapContents=false,
+    FlowDirection=FlowDirection.TopDown,Padding=new Padding(8,6,8,7),
+    BackColor=Color.FromArgb(250,252,255)};
+   Action sum=()=>{
+    decimal amount=0;
+    foreach(DataGridViewRow row in grid.Rows){
+     if(row.IsNewRow||!Convert.ToBoolean(row.Cells["marcar"].Value??false))continue;
+     object value=row.Cells[paid?"valor":"saldo"].Value;
+     if(value!=null&&value!=DBNull.Value)amount+=Convert.ToDecimal(value);
+    }
+    total.Text="Selecionado: R$ "+amount.ToString("N2");
     if(!paid&&grid==openSales)UpdatePaymentSelection(true);
    };
-   all.CheckedChanged+=(s,e)=>{foreach(DataGridViewRow row in grid.Rows)if(!row.IsNewRow)row.Cells["marcar"].Value=all.Checked;sum();};
-   grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
-   grid.CellValueChanged+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex==grid.Columns["marcar"].Index)sum();};
-   grid.DataBindingComplete+=(s,e)=>{all.Checked=false;sum();};
-   panel.Controls.Add(grid);panel.Controls.Add(bar);
+   Action refreshCards=null;
+   refreshCards=()=>{
+    if(cards.IsDisposed||grid.IsDisposed)return;
+    cards.SuspendLayout();
+    try{
+     cards.Controls.Clear();
+     int width=Math.Max(245,cards.ClientSize.Width-cards.Padding.Horizontal-18);
+     foreach(DataGridViewRow row in grid.Rows){
+      if(row.IsNewRow||row.Cells["venda"].Value==null)continue;
+      var selectedRow=row;
+      long saleId=Convert.ToInt64(row.Cells["venda"].Value);
+      string time=Convert.ToString(row.Cells["data"].Value);
+      DateTime parsed;
+      if(DateTime.TryParse(time,out parsed))time=parsed.ToString("dd/MM/yyyy HH:mm");
+      string status=Convert.ToString(row.Cells["situacao"].Value);
+      decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
+      decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
+      decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
+      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=88,
+       BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
+       Margin=new Padding(0,0,0,7)};
+      var check=new CheckBox{Name="amzgFiadoCardSelect",Left=9,Top=10,Width=24,Height=24,
+       Checked=Convert.ToBoolean(row.Cells["marcar"].Value??false)};
+      var title=new Label{Name="amzgFiadoCardTitle",Left=37,Top=6,
+       Width=Math.Max(125,width-174),Height=23,
+       Text="Venda #"+saleId+"  •  "+time,AutoEllipsis=true,
+       Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
+       ForeColor=Color.FromArgb(22,70,142)};
+      var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=31,
+       Width=Math.Max(135,width-50),Height=43,AutoEllipsis=true,
+       Text="Total R$ "+gross.ToString("N2")+"   |   Pago R$ "+received.ToString("N2")+
+        "   |   Saldo R$ "+open.ToString("N2")+
+        (string.IsNullOrWhiteSpace(status)?"":"   • "+status),
+       Font=new Font("Segoe UI",8.8f,FontStyle.Regular),
+       ForeColor=Color.FromArgb(36,54,77)};
+      var details=new Button{Name="amzgFiadoCardDetails",
+       Text="Detalhes",Width=101,Height=27,
+       Left=Math.Max(130,width-111),Top=7,FlatStyle=FlatStyle.Flat,
+       BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
+       Font=new Font("Segoe UI",8.5f,FontStyle.Bold)};
+      details.FlatAppearance.BorderSize=0;
+      Action choose=()=>{
+       if(selectedRow.DataGridView==null)return;
+       if(grid.Columns.Contains("venda"))grid.CurrentCell=selectedRow.Cells["venda"];
+       saleTabs.SelectedIndex=paid?1:0;
+       ShowSaleDetails();
+      };
+      details.Click+=(sender,e)=>choose();
+      title.DoubleClick+=(sender,e)=>choose();
+      figures.DoubleClick+=(sender,e)=>choose();
+      card.DoubleClick+=(sender,e)=>choose();
+      check.CheckedChanged+=(sender,e)=>{
+       if(selectedRow.DataGridView!=null){
+        selectedRow.Cells["marcar"].Value=check.Checked;sum();
+       }
+      };
+      card.Controls.Add(check);card.Controls.Add(title);card.Controls.Add(figures);
+      card.Controls.Add(details);cards.Controls.Add(card);
+     }
+     if(cards.Controls.Count==0){
+      cards.Controls.Add(new Label{Text=paid?"Nenhuma venda paga.":"Nenhuma venda em aberto.",
+       Font=new Font("Segoe UI",10,FontStyle.Bold),
+       ForeColor=Color.FromArgb(44,86,145),AutoSize=true,
+       Margin=new Padding(10,17,8,7)});
+     }
+    }finally{cards.ResumeLayout(true);}
+   };
+   cards.ClientSizeChanged+=(sender,e)=>{
+    int width=Math.Max(245,cards.ClientSize.Width-cards.Padding.Horizontal-18);
+    foreach(Control card in cards.Controls)if(card is Panel){
+     card.Width=width;
+     var details=card.Controls.Find("amzgFiadoCardDetails",false).FirstOrDefault();
+     var title=card.Controls.Find("amzgFiadoCardTitle",false).FirstOrDefault();
+     var figures=card.Controls.Find("amzgFiadoCardAmounts",false).FirstOrDefault();
+     if(details!=null)details.Left=Math.Max(130,width-details.Width-10);
+     if(title!=null)title.Width=Math.Max(125,width-174);
+     if(figures!=null)figures.Width=Math.Max(135,width-50);
+    }
+   };
+   all.CheckedChanged+=(sender,e)=>{
+    foreach(DataGridViewRow row in grid.Rows)
+     if(!row.IsNewRow)row.Cells["marcar"].Value=all.Checked;
+    sum();refreshCards();
+   };
+   grid.CurrentCellDirtyStateChanged+=(sender,e)=>{
+    if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+   };
+   grid.CellValueChanged+=(sender,e)=>{
+    if(e.RowIndex>=0&&e.ColumnIndex==grid.Columns["marcar"].Index)sum();
+   };
+   grid.DataBindingComplete+=(sender,e)=>{
+    all.Checked=false;sum();refreshCards();
+   };
+   // Colocar a grade fora da vista sem eliminar a logica de baixa de fiado.
+   panel.Controls.Add(grid);panel.Controls.Add(cards);panel.Controls.Add(bar);
+   grid.Visible=false;grid.Dock=DockStyle.None;grid.Bounds=new Rectangle(0,0,1,1);
+   cards.BringToFront();bar.BringToFront();
   }
   void BackToFiadoClients(){
    customer="";
+   var toggle=Controls.Find("amzgFiadoToggleServices",true).OfType<Button>().FirstOrDefault();
+   var back=Controls.Find("amzgFiadoBackClients",true).OfType<Button>().FirstOrDefault();
+   var menu=Controls.Find("amzgFiadoCommandsRight",true).OfType<Panel>().FirstOrDefault();
+   if(menu!=null)menu.Visible=false;
+   if(toggle!=null){toggle.Visible=false;toggle.Text="☰ Serviços";}
+   if(back!=null)back.Visible=false;
    detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;
    clientHome.Visible=true;clientHome.BringToFront();
    LoadClients();clientSearch.Focus();
@@ -339,6 +454,11 @@ namespace ArmazemGratidao {
   }
   void SelectClient(string name){
    customer=name;detailSplit.Panel1Collapsed=true;detailSplit.Panel2Collapsed=false;clientHome.Visible=false;selected.Text="FIADO | "+customer;
+   // Sempre mostrar os comandos na barra do topo, nunca dentro do painel oculto.
+   var clientBack=Controls.Find("amzgFiadoBackClients",true).OfType<Button>().FirstOrDefault();
+   var services=Controls.Find("amzgFiadoToggleServices",true).OfType<Button>().FirstOrDefault();
+   if(clientBack!=null)clientBack.Visible=true;
+   if(services!=null)services.Visible=true;
    refreshingClientSales=true;
    try {
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
@@ -363,7 +483,9 @@ namespace ArmazemGratidao {
       }
      }
     }
-    selected.Text="FIADO | "+name+" | Divida R$ "+total.ToString("N2")+" | Credito R$ "+credit.ToString("N2")+" | "+limitText;
+    selected.Text="FIADO | "+name+"   •   Em aberto R$ "+total.ToString("N2")+
+      "   •   Crédito R$ "+credit.ToString("N2");
+     var hint=new ToolTip();hint.SetToolTip(selected,limitText);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
    finally{refreshingClientSales=false;UpdatePaymentSelection(true);}
   }
