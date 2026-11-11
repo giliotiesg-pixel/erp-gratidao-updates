@@ -189,10 +189,12 @@ foreach($sample in $items){
    if(!$side[0].Visible){throw 'Fiado: o botao Serviços nao abriu o menu.'}
    $salesArea=$type.GetField('saleTabs',$flags).GetValue($form)
    [Windows.Forms.Application]::DoEvents()
-   if($salesArea.Bounds.Right -gt ($side[0].Bounds.Left+2)){
-    throw "Fiado: o menu lateral ficou sob a lista de vendas (tabela direita=$($salesArea.Right), menu esquerda=$($side[0].Left))."
-   }
-   if($side[0].Left -lt 0 -or $side[0].Right -gt $workspace[0].ClientSize.Width){
+   # Menu agora fica sobre a tabela, como o Menu Iniciar.
+    if($side[0].Dock -ne [Windows.Forms.DockStyle]::None -or
+       $side[0].Parent.Controls.GetChildIndex($side[0]) -ne 0){
+     throw 'Fiado: menu nao apareceu na frente da lista.'
+    }
+    if($side[0].Left -lt 0 -or $side[0].Right -gt $workspace[0].ClientSize.Width){
     throw 'Fiado: o menu lateral ultrapassou os limites da meia tela.'
    }
    $header=@($groups[2].Controls.Find('amzgFiadoSectionHeader',$true))
@@ -221,7 +223,16 @@ foreach($sample in $items){
     $form.DrawToBitmap($img,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
     $img.Save($detailFile,[Drawing.Imaging.ImageFormat]::Png)
    }finally{$img.Dispose()}
-   $oldSize=$form.Size
+   $menu[0].PerformClick()
+    [Windows.Forms.Application]::DoEvents()
+    if($side[0].Visible){throw 'Fiado: o menu de servicos nao fechou.'}
+    $closedFile=Join-Path $directory 'Previa-Modulo-Fiado-Cliente-Menu-Fechado.png'
+    $closed=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
+    try{
+     $form.DrawToBitmap($closed,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
+     $closed.Save($closedFile,[Drawing.Imaging.ImageFormat]::Png)
+    }finally{$closed.Dispose()}
+    $oldSize=$form.Size
    $back[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
    if(!$form.Visible -or !$split.Panel2Collapsed -or $split.Panel1Collapsed -or
