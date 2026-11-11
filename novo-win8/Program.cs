@@ -92,6 +92,27 @@ namespace ArmazemGratidao {
    back.Visible=false;toggle.Visible=false;
    header.Controls.Add(toggle);header.Controls.Add(back);
    toggle.BringToFront();back.BringToFront();
+   // A barra superior fica fora do Dock.Fill; o WinForms nao pode encobri-la.
+   var fiado=(FiadoClientesForm)form;
+   var page=fiado.Controls.OfType<SplitContainer>().FirstOrDefault();
+   if(page!=null){
+    header.Dock=DockStyle.None;page.Dock=DockStyle.None;
+    header.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+    page.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
+    Action place=()=>{
+     if(fiado.IsDisposed)return;
+     int w=fiado.ClientSize.Width,h=fiado.ClientSize.Height;
+     if(w<=0||h<=33)return;
+     var navBounds=new Rectangle(0,0,w,33);
+     var contentBounds=new Rectangle(0,33,w,h-33);
+     if(header.Bounds!=navBounds)header.Bounds=navBounds;
+     if(page.Bounds!=contentBounds)page.Bounds=contentBounds;
+     header.BringToFront();
+    };
+    fiado.ClientSizeChanged+=(sender,args)=>place();
+    fiado.Shown+=(sender,args)=>place();
+    place();
+   }
   }
  }
  // Botao comum em todas as janelas, sem cobrir campos ou menus.

@@ -204,6 +204,11 @@ foreach($sample in $items){
       $calcBar[0].Parent -ne $top[0]){
     throw 'Fiado: Servicos, retorno aos clientes e Calculadora nao ficam no topo.'
    }
+   if($top[0].Top -ne 0 -or $top[0].Height -ne 33 -or
+      $split.Top -lt $top[0].Bottom -or !$top[0].Visible -or
+      !$menu[0].Visible -or !$back[0].Visible){
+    throw "Fiado: barra encoberta! Cabecalho=$($top[0].Bounds) conteudo=$($split.Bounds)"
+   }
    if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
    $menu[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
