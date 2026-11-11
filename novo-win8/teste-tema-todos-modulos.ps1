@@ -177,8 +177,32 @@ foreach($sample in $items){
       $workspace.Count -ne 1 -or $classes.Count -ne 1){
     throw 'Fiado: navegacao local ou botoes por classe nao apareceram.'
    }
-   $groups=@($classes[0].Controls | Where-Object {$_ -is [Windows.Forms.GroupBox]})
-   if($groups.Count -ne 4){throw 'Fiado: grupos de recebimentos, credito, correcoes e consultas incompletos.'}
+   $groups=@($classes[0].Controls | Where-Object {
+    $_ -is [Windows.Forms.Panel] -and $_.Name -like 'amzgFiadoSection*'
+   })
+   if($groups.Count -ne 4){throw 'Fiado: categorias recolhiveis incompletas.'}
+   $menu=@($form.Controls.Find('amzgFiadoToggleServices',$true))
+   if($menu.Count -ne 1){throw 'Fiado: botao Serviços nao encontrado.'}
+   if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
+   $menu[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   if(!$side[0].Visible){throw 'Fiado: o botao Serviços nao abriu o menu.'}
+   $header=@($groups[2].Controls.Find('amzgFiadoSectionHeader',$true))
+   if($header.Count -ne 1){throw 'Fiado: botao de Correcoes ausente.'}
+   $closedHeight=$groups[2].Height
+   $header[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   if($groups[2].Height -le $closedHeight){throw 'Fiado: o submenu Correcoes nao abriu.'}
+   $header[0].PerformClick()
+   [Windows.Forms.Application]::DoEvents()
+   if($groups[2].Height -ne $closedHeight){throw 'Fiado: o submenu Correcoes nao fechou.'}
+   $tabs=$type.GetField('saleTabs',$flags).GetValue($form)
+   if(@($tabs.TabPages[0].Controls | Where-Object {$_ -is [Windows.Forms.SplitContainer]}).Count -ne 0){
+    throw 'Fiado: area inferior de produtos nao foi removida.'
+   }
+   if(@($tabs.TabPages[0].Controls | Where-Object {$_ -is [Windows.Forms.DataGridView]}).Count -ne 1){
+    throw 'Fiado: a lista principal de vendas nao ocupa a aba.'
+   }
    if(!$split.Panel1Collapsed -or $split.Panel2Collapsed -or
       $workspace[0].Width -lt 420 -or $side[0].Width -ge $workspace[0].Width){
     throw 'Fiado: pagina do cliente nao cabe na meia tela.'
