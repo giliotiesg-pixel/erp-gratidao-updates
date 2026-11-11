@@ -118,6 +118,13 @@ foreach($sample in $items){
   }
   $form.Show()
   [Windows.Forms.Application]::DoEvents()
+  $calc=@($form.Controls.Find('amzgOpenCalculatorModule',$true))
+  if($calc.Count -ne 1 -or !$calc[0].Visible){
+   throw "Botao Calculadora ausente em $($sample.Name)"
+  }
+  if(@($form.Controls.Find('amzgCalculatorShortcutBar',$true)).Count -ne 1){
+   throw "Barra de calculadora ausente/duplicada em $($sample.Name)"
+  }
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
   $buttons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
   $visibleButtons=@($buttons|Where-Object {$_.Visible -and $_.Width -ge 80})

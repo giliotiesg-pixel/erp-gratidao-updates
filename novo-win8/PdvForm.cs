@@ -1263,12 +1263,12 @@ namespace ArmazemGratidao {
      clean.Append(char.ToLowerInvariant(character));
    string name=System.Text.RegularExpressions.Regex.Replace(clean.ToString(),@"[^a-z0-9]+"," ").Trim();
    if(!System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )coca(?: |$)"))return false;
-   bool liter1=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:1\\s*(?:l|litro|litros)|1000\\s*ml)(?: |$)");
-   bool liter2=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:2\\s*(?:l|litro|litros)|2000\\s*ml)(?: |$)");
+   bool liter1=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:1\s*(?:l|litro|litros)|1000\s*ml)(?: |$)");
+   bool liter2=System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:^| )(?:2\s*(?:l|litro|litros)|2000\s*ml)(?: |$)");
    if(!liter1&&!liter2)return false;
-   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\\b(?:nao|sem)\\s+retorn\\w*\\b"))return false;
-   bool returnable=System.Text.RegularExpressions.Regex.IsMatch(name,@"\\b(?:retorn\\w*|ret|casco)\\b");
-   bool glass1=liter1&&System.Text.RegularExpressions.Regex.IsMatch(name,@"\\bvidro\\b");
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\b(?:nao|sem)\s+retorn\w*\b"))return false;
+   bool returnable=System.Text.RegularExpressions.Regex.IsMatch(name,@"\b(?:retorn\w*|ret|casco)\b");
+   bool glass1=liter1&&System.Text.RegularExpressions.Regex.IsMatch(name,@"\bvidro\b");
    return returnable||glass1;
   }
   bool SelectBottleLoan(out int count,out bool paid){

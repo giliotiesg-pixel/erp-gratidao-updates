@@ -40,6 +40,29 @@ try{
  $pdv.Size=[System.Drawing.Size]::new(1180,740)
  $pdv.Show()
  [System.Windows.Forms.Application]::DoEvents()
+ if(@($pdv.Controls.Find('amzgOpenCalculatorModule',$true)).Count -ne 1){throw 'Calculadora ausente no PDV'}
+ $binding=[Reflection.BindingFlags]::Static -bor [Reflection.BindingFlags]::NonPublic
+ $detect=$pdvType.GetMethod('IsCocaReturnableBottle',$binding)
+ if($null -eq $detect){throw 'Detector de cascos ausente.'}
+ foreach($example in @(
+  @{p='Coca Cola 1 L retornavel vidro';b=$true},
+  @{p='Coca-Cola Retornável 2 Litros';b=$true},
+  @{p='Coca Cola 1 litro vidro';b=$true},
+  @{p='Coca Cola 2L RET';b=$true},
+  @{p='Coca Cola 1000 ml retornavel';b=$true},
+  @{p='Coca Cola 2000ml retornavel';b=$true},
+  @{p='Coca Cola 200 ml';b=$false},
+  @{p='Coca Cola 600 ml';b=$false},
+  @{p='Coca Cola 350 ml lata';b=$false},
+  @{p='Coca Cola 2 L PET';b=$false},
+  @{p='Coca Cola 2 L descartavel';b=$false},
+  @{p='Coca Cola 2.5 L retornavel';b=$false},
+  @{p='Guarana retornavel 2 L';b=$false},
+  @{p='Coca Cola 1 L nao retornavel';b=$false}
+ )){
+  $actual=[bool]$detect.Invoke($null,[object[]]@([string]$example.p))
+  if($actual -ne $example.b){throw "Casco incorreto: $($example.p) = $actual"}
+ }
  $find={param([string]$name)
   $controls=@($pdv.Controls.Find($name,$true))
   if($controls.Count -ne 1){throw "Controle obrigatorio ausente ou duplicado: $name ($($controls.Count))"}
