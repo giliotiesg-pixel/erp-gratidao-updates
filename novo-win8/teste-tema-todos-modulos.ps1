@@ -142,10 +142,10 @@ foreach($sample in $items){
   }
   if($sample.Name -ne 'Estoque' -and $sample.Name -ne 'Fiado'){
    $bar=@($form.Controls.Find('amzgBackBar',$true))
-   $host=@($form.Controls.Find('amzgModuleContentHost',$true))
-   if($bar.Count -ne 1 -or $host.Count -ne 1 -or
-      $bar[0].Top -ne 0 -or $host[0].Top -lt $bar[0].Bottom -or
-      $bar[0].Parent -ne $form -or $host[0].Parent -ne $form){
+   $moduleHost=@($form.Controls.Find('amzgModuleContentHost',$true))
+   if($bar.Count -ne 1 -or $moduleHost.Count -ne 1 -or
+      $bar[0].Top -ne 0 -or $moduleHost[0].Top -lt $bar[0].Bottom -or
+      $bar[0].Parent -ne $form -or $moduleHost[0].Parent -ne $form){
     throw "Cabecalho escondido ou conteudo sobreposto em $($sample.Name)"
    }
   }
