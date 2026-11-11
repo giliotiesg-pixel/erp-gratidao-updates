@@ -40,6 +40,7 @@ namespace ArmazemGratidao {
     PdvShortcutButtons.Prepare(form);
     CalculatorShortcut.Prepare(form);
     FiadoGlobalHeader.Prepare(form);
+    SharedModuleHeaderLayout.Prepare(form);
     RoundedGridTheme.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
@@ -113,6 +114,39 @@ namespace ArmazemGratidao {
     fiado.Shown+=(sender,args)=>place();
     place();
    }
+  }
+ }
+ // Impede que Dock.Fill esconda Menu Inicial/Calculadora nos demais modulos.
+ // O conteudo original conserva seus docks relativos dentro de uma area reservada.
+ static class SharedModuleHeaderLayout {
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||form is MainForm||form is PdvForm||
+     form is ConsultaForm||form is FiadoClientesForm||
+     form is ModernCalculatorForm||form is StartMenuPopup)return;
+   var bar=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
+    .FirstOrDefault(p=>p.Parent==form&&p.Dock==DockStyle.Top);
+   if(bar==null||form.Controls.Find("amzgModuleContentHost",false).Length>0)return;
+   var content=new Panel{Name="amzgModuleContentHost",
+    Dock=DockStyle.None,BackColor=form.BackColor,AutoScroll=true};
+   var controls=form.Controls.Cast<Control>().Where(p=>p!=bar).Reverse().ToArray();
+   foreach(Control child in controls){form.Controls.Remove(child);content.Controls.Add(child);}
+   form.Controls.Add(content);
+   bar.Dock=DockStyle.None;
+   bar.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+   content.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
+   Action place=()=>{
+    if(form.IsDisposed)return;
+    int width=form.ClientSize.Width,height=form.ClientSize.Height;
+    if(width<=0||height<=33)return;
+    Rectangle top=new Rectangle(0,0,width,33);
+    Rectangle below=new Rectangle(0,33,width,height-33);
+    if(bar.Bounds!=top)bar.Bounds=top;
+    if(content.Bounds!=below)content.Bounds=below;
+    bar.BringToFront();
+   };
+   form.ClientSizeChanged+=(sender,args)=>place();
+   form.Shown+=(sender,args)=>place();
+   place();
   }
  }
  // Botao comum em todas as janelas, sem cobrir campos ou menus.

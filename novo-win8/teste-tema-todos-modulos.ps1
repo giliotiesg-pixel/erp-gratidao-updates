@@ -104,7 +104,7 @@ foreach($sample in $items){
   $form=$ctor.Invoke($argsList)
   $form.StartPosition='Manual'
   $form.Location=[Drawing.Point]::new(40,40)
-  if($sample.Name -eq 'Fiado'){
+  if($sample.Name -ne 'Estoque'){
    # Simula a barra realmente adicionada pelo menu principal antes de Show.
    $top=New-Object Windows.Forms.Panel
    $top.Name='amzgBackBar';$top.Dock=[Windows.Forms.DockStyle]::Top
@@ -139,6 +139,15 @@ foreach($sample in $items){
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
   if($form.Width -gt 950 -or $form.Height -gt 640){
    throw "Janela ainda grande em $($sample.Name): $($form.Width)x$($form.Height)"
+  }
+  if($sample.Name -ne 'Estoque' -and $sample.Name -ne 'Fiado'){
+   $bar=@($form.Controls.Find('amzgBackBar',$true))
+   $host=@($form.Controls.Find('amzgModuleContentHost',$true))
+   if($bar.Count -ne 1 -or $host.Count -ne 1 -or
+      $bar[0].Top -ne 0 -or $host[0].Top -lt $bar[0].Bottom -or
+      $bar[0].Parent -ne $form -or $host[0].Parent -ne $form){
+    throw "Cabecalho escondido ou conteudo sobreposto em $($sample.Name)"
+   }
   }
   $buttons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
   $visibleButtons=@($buttons|Where-Object {$_.Visible -and $_.Width -ge 80})
