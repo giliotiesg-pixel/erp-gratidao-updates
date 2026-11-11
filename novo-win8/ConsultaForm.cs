@@ -31,6 +31,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    TextAlign=ContentAlignment.MiddleCenter};
   readonly Label footerCount=new Label(),footerToday=new Label(),footerMonth=new Label();
   readonly Label headerToday=new Label(),headerMonth=new Label();
+  readonly Label headerDayCaption=new Label();
   bool selectedRange=false;bool customerOptionsLoading=false;
   string chosenCustomer="";
   readonly Color salesBlue=Color.FromArgb(18,70,153);
@@ -202,7 +203,10 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    bannerTotals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
    bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,40));
    bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,60));
-   bannerTotals.Controls.Add(SalesText("Total do Dia",new Font("Segoe UI",9,FontStyle.Bold),Color.White),0,0);
+   headerDayCaption.Dock=DockStyle.Fill;headerDayCaption.Text="Total do Dia";
+   headerDayCaption.Font=new Font("Segoe UI",9,FontStyle.Bold);headerDayCaption.ForeColor=Color.White;
+   headerDayCaption.TextAlign=ContentAlignment.MiddleCenter;headerDayCaption.AutoEllipsis=true;
+   bannerTotals.Controls.Add(headerDayCaption,0,0);
    bannerTotals.Controls.Add(SalesText("Total do Mês",new Font("Segoe UI",9,FontStyle.Bold),Color.White),1,0);
    foreach(var lbl in new[]{headerToday,headerMonth}){
     lbl.Dock=DockStyle.Fill;lbl.Text="R$ 0,00";
@@ -362,6 +366,13 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    };
    update.Click+=(sender,args)=>{if(saleSearch.Text.Trim().Length>0)SearchSale();else LoadMaster();};
    saleSearch.KeyDown+=(sender,args)=>{if(args.KeyCode==Keys.Enter){search.PerformClick();args.SuppressKeyPress=true;}};
+   // Em Vendas Anteriores, escolher uma data mostra as vendas daquele dia.
+   dateFilter.ValueChanged+=(sender,args)=>{
+    if(previous&&!loadingMaster){
+     selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;
+     rangeEnd.Value=dateFilter.Value.Date;LoadMaster();
+    }
+   };
    customerFilter.SelectedIndexChanged+=(sender,args)=>{
     if(customerOptionsLoading)return;
     chosenCustomer=customerFilter.SelectedIndex<=0?"":Convert.ToString(customerFilter.SelectedItem);
@@ -585,6 +596,25 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     }
    }
   }
+  // Total de TODAS as vendas da data, mesmo fora das 3000 linhas carregadas.
+  void DisplayDayTotal(string dateTime){
+   DateTime day;
+   if(string.IsNullOrWhiteSpace(dateTime)||dateTime.Length<10||
+      !DateTime.TryParseExact(dateTime.Substring(0,10),"yyyy-MM-dd",
+       System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out day))return;
+   var result=Query("SELECT COUNT(*) AS quantidade, COALESCE(SUM(gross_total),0) AS total FROM sales "+
+    "WHERE created_at>=@day AND created_at<date(@day,'+1 day')","@day",day.ToString("yyyy-MM-dd"));
+   long quantity=Convert.ToInt64(result.Rows[0]["quantidade"]);
+   decimal amount=Convert.ToDecimal(result.Rows[0]["total"]);
+   string value="R$ "+amount.ToString("N2");
+   bool today=day.Date==DateTime.Today;
+   headerDayCaption.Text=today?"Total do Dia":"Total da Data";
+   headerToday.Text=value;
+   footerCount.Text=today?"Vendas do Dia: "+quantity.ToString("N0"):
+    "Vendas em "+day.ToString("dd/MM/yyyy")+": "+quantity.ToString("N0");
+   footerToday.Text=today?"Total Vendido Hoje: "+value:
+    "Total em "+day.ToString("dd/MM/yyyy")+": "+value;
+  }
   string SalesFilterTitle(){
    return selectedRange?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy")+" a "+rangeEnd.Value.ToString("dd/MM/yyyy"):selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
   }
@@ -663,8 +693,10 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      footerCount.Text="Vendas do Dia: "+todayCount.ToString("N0");
      footerToday.Text="Total Vendido Hoje: "+dayText;
      footerMonth.Text="Total do Mês: "+monthText;
+     headerDayCaption.Text="Total do Dia";
      headerToday.Text=dayText;
      headerMonth.Text=monthText;
+     if(rows.Rows.Count==0&&selectedDate)DisplayDayTotal(dateFilter.Value.ToString("yyyy-MM-dd"));
      summary.Text=SalesFilterTitle()+" | Quantidade: "+selectedCount+
       " | TOTAL VENDIDO: R$ "+Convert.ToDecimal(totals.Rows[0]["total"]).ToString("N2")+
       " | TOTAL DO MÊS: "+monthText;
@@ -1331,6 +1363,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
        Convert.ToString(sale["created_at"])+Environment.NewLine+
        Convert.ToString(sale["payment_method"]);
       saleTotal.Text="R$ "+Convert.ToDecimal(sale["gross_total"]).ToString("N2");
+      DisplayDayTotal(Convert.ToString(sale["created_at"]));
      }else{
       saleInfo.Text="Venda não encontrada";saleTotal.Text="R$ 0,00";
      }

@@ -190,10 +190,13 @@ namespace ArmazemGratidao {
    names.Insert(0,"Consumidor");
    return names;
   }
-  void ChooseCustomerInWindow(){
+  void ChooseCustomerInWindow(){ChooseCustomerInWindow(false);}
+  bool ChooseCustomerInWindow(bool fiadoRequired){
    try{
     var names=GetCustomerNames();
-    using(var dialog=new StyledDialogForm{Text="PDV | Selecionar cliente",Width=535,Height=535,MinimumSize=new Size(430,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+    if(fiadoRequired)names.RemoveAll(name=>
+     string.Equals(name,"Consumidor",StringComparison.OrdinalIgnoreCase));
+    using(var dialog=new StyledDialogForm{Text=fiadoRequired?"PDV | Fiado - Selecionar cliente":"PDV | Selecionar cliente",Width=535,Height=535,MinimumSize=new Size(430,380),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
      var search=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",12),Height=36};
      var hint=new Label{Text="Pesquisar cliente pelo nome:",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),IntegralHeight=false};
@@ -210,7 +213,7 @@ namespace ArmazemGratidao {
         if(filter.Length==0||name.IndexOf(filter,StringComparison.CurrentCultureIgnoreCase)>=0)
          list.Items.Add(name);
       }finally{list.EndUpdate();}
-      if(list.Items.Count>0)list.SelectedIndex=0;
+      if(!fiadoRequired&&list.Items.Count>0)list.SelectedIndex=0;
      };
      search.TextChanged+=(sender,args)=>fill();
      select.Click+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
@@ -220,9 +223,20 @@ namespace ArmazemGratidao {
      actions.Controls.Add(select);actions.Controls.Add(register);
      dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.Controls.Add(cancel);
      fill();
-     if(dialog.ShowDialog(this)==DialogResult.OK && dialog.Tag is string)customer.Text=(string)dialog.Tag;
+     if(dialog.ShowDialog(this)!=DialogResult.OK||!(dialog.Tag is string))return false;
+     string selected=((string)dialog.Tag).Trim();
+     if(fiadoRequired && (selected.Length<2||
+      string.Equals(selected,"Consumidor",StringComparison.OrdinalIgnoreCase)||
+      !CustomerRegistered(selected))){
+      MessageBox.Show("Selecione ou cadastre um cliente identificado para o Fiado.","Cliente obrigatorio");
+      return false;
+     }
+     customer.Text=selected;return true;
     }
-   }catch(Exception ex){MessageBox.Show("Não foi possível listar os clientes: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   }catch(Exception ex){
+    MessageBox.Show("Não foi possível listar os clientes: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);
+    return false;
+   }
   }
   bool CustomerRegistered(string name){
    if(string.IsNullOrWhiteSpace(name))return false;
@@ -1301,6 +1315,9 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    if(!ShowPaymentChoice())return;
+   // FIADO puro: abrir a lista de clientes logo apos selecionar a forma de pagamento.
+   // Cancelar a lista retorna ao carrinho sem gravar a venda.
+   if(Convert.ToString(payment.SelectedItem)=="FIADO"&&!ChooseCustomerInWindow(true))return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
@@ -1335,16 +1352,12 @@ namespace ArmazemGratidao {
    var method=Convert.ToString(payment.SelectedItem);
    string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor":customer.Text.Trim();
    if(method=="FIADO"){
-    if(string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
-     if(MessageBox.Show("Cliente não informado. Cadastrar cliente agora para finalizar a venda Fiado?","Cadastro rápido",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-     if(!QuickRegisterCustomer())return;
-     customerName=customer.Text.Trim();
+    if(customerName.Length<2||string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
+     MessageBox.Show("Selecione um cliente identificado para o Fiado.");return;
     }
     try{
      if(!CustomerRegistered(customerName)){
-      if(MessageBox.Show("O cliente "+customerName+" não está cadastrado. Cadastrar agora?","Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-      if(!QuickRegisterCustomer())return;
-      customerName=customer.Text.Trim();
+      MessageBox.Show("Cliente nao cadastrado. Selecione ou cadastre na lista.","Fiado");return;
      }
     }catch(Exception ex){MessageBox.Show("Não foi possível verificar o cadastro do cliente: "+ex.Message,"Fiado");return;}
    }

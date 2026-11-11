@@ -22,6 +22,11 @@ CREATE TABLE sale_items (id INTEGER PRIMARY KEY,sale_id INTEGER,barcode TEXT,nam
 today=datetime.datetime.now().strftime("%Y-%m-%d")
 conn.execute("INSERT INTO sales VALUES (1924,?,?,?,?)",(today+" 20:55:02","Cliente de teste","Dinheiro",56.24))
 conn.execute("INSERT INTO sales VALUES (1923,?,?,?,?)",(today+" 20:21:45","Consumidor","Pix",31.48))
+yesterday=(datetime.datetime.now()-datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+older=(datetime.datetime.now()-datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+conn.execute("INSERT INTO sales VALUES (1922,?,?,?,?)",(yesterday+" 10:00:00","Cliente A","Dinheiro",10.00))
+conn.execute("INSERT INTO sales VALUES (1921,?,?,?,?)",(yesterday+" 15:00:00","Cliente B","Fiado",20.00))
+conn.execute("INSERT INTO sales VALUES (1920,?,?,?,?)",(older+" 10:00:00","Cliente C","Pix",500.00))
 conn.execute("INSERT INTO sale_items VALUES (1,1924,?,?,?,?,?)",("78901","Refrigerante de teste 2 L",2,6.50,13.00))
 conn.execute("INSERT INTO sale_items VALUES (2,1924,?,?,?,?,?)",("78902","Biscoito de teste",3,14.413333,43.24))
 conn.execute("INSERT INTO sale_items VALUES (3,1923,?,?,?,?,?)",("78903","Agua de teste",4,7.87,31.48))
@@ -84,6 +89,23 @@ try{
  if($info.Count -ne 1 -or $info[0].Width -lt 165){
   throw 'Cliente, data ou pagamento estao espremidos no painel de detalhes.'
  }
+ $flags=[Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance
+ $form.Controls.Find('amzgSalesPrevious',$true)[0].PerformClick()
+ [Windows.Forms.Application]::DoEvents()
+ $headerDay=$salesType.GetField('headerToday',$flags).GetValue($form)
+ $labelDay=$salesType.GetField('headerDayCaption',$flags).GetValue($form)
+ $footerDay=$salesType.GetField('footerToday',$flags).GetValue($form)
+ if($headerDay.Text -ne 'R$ 30,00' -or $labelDay.Text -ne 'Total da Data' -or
+  $footerDay.Text -notmatch '30,00'){throw "Data anterior incorreta: $($headerDay.Text) / $($footerDay.Text)"}
+ $picker=$salesType.GetField('dateFilter',$flags).GetValue($form)
+ $picker.Value=[DateTime]::Today.AddDays(-2)
+ [Windows.Forms.Application]::DoEvents()
+ if($headerDay.Text -ne 'R$ 500,00' -or $grid.Rows.Count -ne 1){
+  throw "Filtro de data nao atualizou o total: $($headerDay.Text) / linhas=$($grid.Rows.Count)"
+ }
+ $form.Controls.Find('amzgSalesToday',$true)[0].PerformClick()
+ [Windows.Forms.Application]::DoEvents()
+ if($headerDay.Text -ne 'R$ 87,72'){throw "Retorno ao dia atual incorreto: $($headerDay.Text)"}
  $snapshot=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try{
   $form.DrawToBitmap($snapshot,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
