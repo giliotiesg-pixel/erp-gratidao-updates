@@ -1,7 +1,11 @@
 param([Parameter(Mandatory=$true)][string]$Executable)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
-$exe=[IO.Path]::GetFullPath($Executable)
+# Resolver caminho contra a raiz do repositorio, nao contra CurrentDirectory do teste anterior.
+$repoRoot=Split-Path -Parent $PSScriptRoot
+$exe=if([IO.Path]::IsPathRooted($Executable)){[IO.Path]::GetFullPath($Executable)}
+     else{[IO.Path]::GetFullPath((Join-Path $repoRoot $Executable))}
+if(!(Test-Path -LiteralPath $exe)){throw "Executavel de Produtos nao encontrado: $exe"}
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 $db=Join-Path $env:RUNNER_TEMP ('amzg-produtos-tabulacao-'+[Guid]::NewGuid().ToString('N')+'.db')
 $seed='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT)"); c.commit(); c.close()'
