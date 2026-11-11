@@ -368,7 +368,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    saleSearch.KeyDown+=(sender,args)=>{if(args.KeyCode==Keys.Enter){search.PerformClick();args.SuppressKeyPress=true;}};
    // Em Vendas Anteriores, escolher uma data mostra as vendas daquele dia.
    dateFilter.ValueChanged+=(sender,args)=>{
-    if(previous&&!loadingMaster){
+    if((previous||selectedDate)&&!loadingMaster){
      selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;
      rangeEnd.Value=dateFilter.Value.Date;LoadMaster();
     }

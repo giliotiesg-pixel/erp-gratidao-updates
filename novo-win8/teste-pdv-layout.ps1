@@ -22,6 +22,12 @@ try{
  $invokePdv=New-Object 'System.Object[]' 1
  $invokePdv[0]=[string]$database
  $pdv=$ctor.Invoke($invokePdv)
+ # O clique em FIADO deve usar uma selecao de cliente obrigatoria distinta.
+ $private=[Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::NonPublic
+ $fiadoPicker=$pdvType.GetMethod('ChooseCustomerInWindow',$private,$null,[type[]]@([bool]),$null)
+ if($null -eq $fiadoPicker -or $fiadoPicker.ReturnType -ne [bool]){
+  throw 'Fiado sem lista de clientes obrigatoria ao finalizar.'
+ }
  # Reproduz a mesma injecao de navegacao feita ao abrir PDV via menu Iniciar.
  $flags=[System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
  $backMethod=$mainType.GetMethod('AddBackToMenu',$flags)

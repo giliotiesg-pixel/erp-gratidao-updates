@@ -95,17 +95,23 @@ try{
  $headerDay=$salesType.GetField('headerToday',$flags).GetValue($form)
  $labelDay=$salesType.GetField('headerDayCaption',$flags).GetValue($form)
  $footerDay=$salesType.GetField('footerToday',$flags).GetValue($form)
- if($headerDay.Text -ne 'R$ 30,00' -or $labelDay.Text -ne 'Total da Data' -or
-  $footerDay.Text -notmatch '30,00'){throw "Data anterior incorreta: $($headerDay.Text) / $($footerDay.Text)"}
+ if($headerDay.Text -notmatch 'R\$\s*30[,.]00' -or $labelDay.Text -ne 'Total da Data' -or
+  $footerDay.Text -notmatch '30[,.]00'){throw "Data anterior incorreta: $($headerDay.Text) / $($footerDay.Text)"}
  $picker=$salesType.GetField('dateFilter',$flags).GetValue($form)
  $picker.Value=[DateTime]::Today.AddDays(-2)
  [Windows.Forms.Application]::DoEvents()
- if($headerDay.Text -ne 'R$ 500,00' -or $grid.Rows.Count -ne 1){
+ if($headerDay.Text -notmatch 'R\$\s*500[,.]00' -or $grid.Rows.Count -ne 1){
   throw "Filtro de data nao atualizou o total: $($headerDay.Text) / linhas=$($grid.Rows.Count)"
+ }
+ # A data pode ser trocada repetidas vezes sem voltar ao botao Vendas Anteriores.
+ $picker.Value=[DateTime]::Today.AddDays(-1)
+ [Windows.Forms.Application]::DoEvents()
+ if($headerDay.Text -notmatch 'R\$\s*30[,.]00' -or $grid.Rows.Count -ne 2){
+  throw "Segunda selecao de data anterior incorreta: $($headerDay.Text)"
  }
  $form.Controls.Find('amzgSalesToday',$true)[0].PerformClick()
  [Windows.Forms.Application]::DoEvents()
- if($headerDay.Text -ne 'R$ 87,72'){throw "Retorno ao dia atual incorreto: $($headerDay.Text)"}
+ if($headerDay.Text -notmatch 'R\$\s*87[,.]72'){throw "Retorno ao dia atual incorreto: $($headerDay.Text)"}
  $snapshot=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try{
   $form.DrawToBitmap($snapshot,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
