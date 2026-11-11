@@ -221,6 +221,15 @@ foreach($sample in $items){
    $img=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
    try{
     $form.DrawToBitmap($img,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
+    # WinForms DrawToBitmap pode omitir um painel sobreposto: compor seu bitmap real.
+    $sideBmp=[Drawing.Bitmap]::new($side[0].ClientSize.Width,$side[0].ClientSize.Height)
+    try{
+     $side[0].DrawToBitmap($sideBmp,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$side[0].ClientSize))
+     $sideBmp.Save((Join-Path $directory 'Previa-Modulo-Fiado-Servicos.png'),[Drawing.Imaging.ImageFormat]::Png)
+     $origin=$form.PointToClient($side[0].PointToScreen([Drawing.Point]::Empty))
+     $graphics=[Drawing.Graphics]::FromImage($img)
+     try{$graphics.DrawImageUnscaled($sideBmp,$origin)}finally{$graphics.Dispose()}
+    }finally{$sideBmp.Dispose()}
     $img.Save($detailFile,[Drawing.Imaging.ImageFormat]::Png)
    }finally{$img.Dispose()}
    $menu[0].PerformClick()
