@@ -8,8 +8,17 @@ $exe=if([IO.Path]::IsPathRooted($Executable)){[IO.Path]::GetFullPath($Executable
 if(!(Test-Path -LiteralPath $exe)){throw "Executavel de Produtos nao encontrado: $exe"}
 [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
 $db=Join-Path $env:RUNNER_TEMP ('amzg-produtos-tabulacao-'+[Guid]::NewGuid().ToString('N')+'.db')
-$seed='import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT)"); c.commit(); c.close()'
-python -c $seed $db
+$seed=@'
+import sqlite3
+import sys
+connection=sqlite3.connect(sys.argv[1])
+connection.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT)")
+connection.commit()
+connection.close()
+'@
+$seedPath=Join-Path $env:RUNNER_TEMP ('amzg-seed-produtos-'+[Guid]::NewGuid().ToString('N')+'.py')
+[IO.File]::WriteAllText($seedPath,$seed,(New-Object System.Text.UTF8Encoding($false)))
+python $seedPath $db
 if($LASTEXITCODE -ne 0){throw 'Nao criou SQLite de teste.'}
 $asm=[Reflection.Assembly]::LoadFrom($exe)
 $type=$asm.GetType('ArmazemGratidao.ProdutosForm',$true)
@@ -68,4 +77,5 @@ try{
  if($null -ne $timer){$timer.Stop();$timer.Dispose()}
  if($null -ne $products){$products.Close();$products.Dispose()}
  if(Test-Path $db){Remove-Item -LiteralPath $db -Force}
+ if(Test-Path $seedPath){Remove-Item -LiteralPath $seedPath -Force}
 }
