@@ -38,7 +38,9 @@ namespace ArmazemGratidao {
    clientSearch.TextChanged+=(s,e)=>LoadClients();
    split.Panel1.Controls.Add(clientSearch);
    split.Panel1.Controls.Add(new Label {Text="  PESQUISAR CLIENTE",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.White,BackColor=Color.FromArgb(220,95,105)});
-   var tabs=new TabControl {Dock=DockStyle.Fill};
+   // As tres opcoes no topo substituem a fileira duplicada de abas.
+   var tabs=new TabControl {Dock=DockStyle.Fill,Appearance=TabAppearance.FlatButtons,
+    SizeMode=TabSizeMode.Fixed,ItemSize=new Size(1,1)};
    saleTabs=tabs;
    var pending=new TabPage("Fiado atual - em aberto");
    var previous=new TabPage("Fiados anteriores - pagos");
@@ -58,6 +60,10 @@ namespace ArmazemGratidao {
    var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Top,Height=38,WrapContents=false,AutoScroll=true,Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(229,242,255)};
    var showOpen=new Button {Text="Em aberto",Width=114,Height=29,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
    var showPrevious=new Button {Text="Pagas",Width=86,Height=29,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
+   var showHistory=new Button{Text="Histórico",Width=102,Height=29,
+    BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};
+   showHistory.Click+=(sender,args)=>tabs.SelectedIndex=2;
+   switchBar.Controls.Add(showHistory);
    var backSmall=new Button{Name="amzgFiadoBackClients",Text="← Voltar aos clientes",Width=174,Height=30,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    backSmall.FlatAppearance.BorderSize=0;
    backSmall.Click+=(sender,args)=>BackToFiadoClients();
@@ -77,7 +83,14 @@ namespace ArmazemGratidao {
    var transferClient=new Button{Text="Trocar por cliente cadastrado",Width=255,Height=32,BackColor=Color.FromArgb(12,113,88),ForeColor=Color.White};
    transferClient.Click+=(sender,args)=>TransferFiadoToRegisteredClient();
    switchBar.Controls.Add(transferClient);
-   tabs.SelectedIndexChanged+=(s,e)=>{showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);};
+   tabs.SelectedIndexChanged+=(s,e)=>{
+    showOpen.BackColor=tabs.SelectedIndex==0?Color.FromArgb(20,73,158):Color.White;
+    showOpen.ForeColor=tabs.SelectedIndex==0?Color.White:Color.FromArgb(20,73,158);
+    showPrevious.BackColor=tabs.SelectedIndex==1?Color.FromArgb(20,73,158):Color.White;
+    showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);
+    showHistory.BackColor=tabs.SelectedIndex==2?Color.FromArgb(20,73,158):Color.White;
+    showHistory.ForeColor=tabs.SelectedIndex==2?Color.White:Color.FromArgb(20,73,158);
+   };
    var bottom=new Panel {Dock=DockStyle.Bottom,Height=225,Padding=new Padding(6),BackColor=Color.FromArgb(235,241,250)};
    var paymentRow=new FlowLayoutPanel{Dock=DockStyle.Top,Height=82,WrapContents=true,AutoScroll=true};
    var toolsRow=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};
@@ -252,7 +265,7 @@ namespace ArmazemGratidao {
       string time=Convert.ToString(row.Cells["data"].Value);
       DateTime parsed;
       if(DateTime.TryParse(time,out parsed))time=parsed.ToString("dd/MM/yyyy HH:mm");
-      string status=Convert.ToString(row.Cells["situacao"].Value);
+      string status=paid?"PAGA":"EM ABERTO";
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
@@ -1131,7 +1144,8 @@ namespace ArmazemGratidao {
      if(row.IsNewRow||row.Cells["venda"].Value==null||row.Cells["saldo"].Value==null)continue;
      if(ids.Contains(Convert.ToInt64(row.Cells["venda"].Value)))selectedTotal+=Math.Max(0,Convert.ToDecimal(row.Cells["saldo"].Value));
     }
-    receivedBalance.Text="Saldo selecionado: R$ "+selectedTotal.ToString("N2")+"  |  Total em aberto: R$ "+VisibleOpenBalance().ToString("N2");
+    receivedBalance.Text="Selecionado R$ "+selectedTotal.ToString("N2")+
+      Environment.NewLine+"Em aberto R$ "+VisibleOpenBalance().ToString("N2");
     if(fill)SetPaymentAmount(selectedTotal);
    }catch(Exception ex){receivedBalance.Text="Selecione uma venda para receber. "+ex.Message;}
   }
@@ -1139,7 +1153,8 @@ namespace ArmazemGratidao {
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
    if(saleTabs!=null&&saleTabs.SelectedIndex!=0){MessageBox.Show("Abra Fiado atual - em aberto.");return;}
    SetPaymentAmount(VisibleOpenBalance());
-   receivedBalance.Text="Todas as vendas: R$ "+VisibleOpenBalance().ToString("N2")+" (pode diminuir o valor)";
+   receivedBalance.Text="Todas as vendas R$ "+VisibleOpenBalance().ToString("N2")+
+     Environment.NewLine+"Aceita recebimento parcial";
    amount.Focus();
    amount.Select(0,amount.Text.Length);
   }

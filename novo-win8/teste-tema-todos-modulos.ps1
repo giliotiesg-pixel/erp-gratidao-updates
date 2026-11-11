@@ -104,6 +104,17 @@ foreach($sample in $items){
   $form=$ctor.Invoke($argsList)
   $form.StartPosition='Manual'
   $form.Location=[Drawing.Point]::new(40,40)
+  if($sample.Name -eq 'Fiado'){
+   # Simula a barra realmente adicionada pelo menu principal antes de Show.
+   $top=New-Object Windows.Forms.Panel
+   $top.Name='amzgBackBar';$top.Dock=[Windows.Forms.DockStyle]::Top
+   $top.Height=33
+   $nav=New-Object Windows.Forms.Button
+   $nav.Text='Voltar ao Menu Principal'
+   $nav.Left=7;$nav.Top=3;$nav.Width=163;$nav.Height=26
+   $top.Controls.Add($nav)
+   $form.Controls.Add($top);$top.BringToFront()
+  }
   $form.Size=[Drawing.Size]::new(
    [Math]::Min(1050,[Math]::Max(650,$form.Width)),
    [Math]::Min(690,[Math]::Max(520,$form.Height)))
@@ -126,6 +137,9 @@ foreach($sample in $items){
    throw "Barra de calculadora ausente/duplicada em $($sample.Name)"
   }
   if($null -eq $form.Icon){throw "Marca Armazem Gratidao nao aplicada no modulo $($sample.Name)"}
+  if($form.Width -gt 950 -or $form.Height -gt 640){
+   throw "Janela ainda grande em $($sample.Name): $($form.Width)x$($form.Height)"
+  }
   $buttons=@(Get-ThemeControls $form | Where-Object {$_.GetType().Name -eq 'Button'})
   $visibleButtons=@($buttons|Where-Object {$_.Visible -and $_.Width -ge 80})
   foreach($button in $visibleButtons){
@@ -183,6 +197,13 @@ foreach($sample in $items){
    if($groups.Count -ne 4){throw 'Fiado: categorias recolhiveis incompletas.'}
    $menu=@($form.Controls.Find('amzgFiadoToggleServices',$true))
    if($menu.Count -ne 1){throw 'Fiado: botao Serviços nao encontrado.'}
+   $top=@($form.Controls.Find('amzgBackBar',$true))
+   $calcBar=@($form.Controls.Find('amzgCalculatorShortcutBar',$true))
+   if($top.Count -ne 1 -or $menu[0].Parent -ne $top[0] -or
+      $back[0].Parent -ne $top[0] -or $calcBar.Count -ne 1 -or
+      $calcBar[0].Parent -ne $top[0]){
+    throw 'Fiado: Servicos, retorno aos clientes e Calculadora nao ficam no topo.'
+   }
    if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
    $menu[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
