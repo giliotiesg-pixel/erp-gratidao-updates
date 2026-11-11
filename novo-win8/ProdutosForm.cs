@@ -48,7 +48,7 @@ namespace ArmazemGratidao {
    statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
    showList.Click+=(s,e)=>{listVisible=!listVisible;grid.Visible=listVisible;showList.Text=listVisible?"Ocultar lista de produtos":"Mostrar lista de produtos";if(listVisible)LoadProducts();else{grid.DataSource=null;info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";metrics.Text="";}};bar.Controls.Add(showList);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
-   var add=new Button {Text="Inserir produto",Width=135,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
+   var add=new Button {Text="Cadastrar Produto",Width=150,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
    var qrButton=new Button {Text="QR Code produto",Width=145,Height=33};qrButton.Click+=(s,e)=>ShowProductQr();bar.Controls.Add(qrButton);
    var clear=new Button {Text="Limpar busca",Width=110,Height=33};clear.Click+=(s,e)=>{search.Clear();currentPage=0;LoadProducts();search.Focus();};bar.Controls.Add(clear);
@@ -1290,9 +1290,9 @@ namespace ArmazemGratidao {
    InsertProduct(initialInput);
   }
   void InsertProduct(string initialInput=""){
-   using(var form=new StyledDialogForm {Text="Inserir produto",Width=1100,Height=780,MinimumSize=new Size(700,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(15)};
-    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   using(var form=new StyledDialogForm {Text="Cadastrar Produto",Width=730,Height=620,MinimumSize=new Size(555,480),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=false,AutoScroll=true}){
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=13,Padding=new Padding(12,9,12,9),Margin=Padding.Empty,AutoScroll=true};
+    panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox{Name="amzgInsertBarcode"};var ownCode=new CheckBox {Text="Não pesquisar este código na internet (opcional)",AutoSize=true};var name=new TextBox {Name="amzgInsertName",Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
     if(System.Text.RegularExpressions.Regex.IsMatch(initial,@"^\d{1,64}$"))barcode.Text=initial;
@@ -1308,7 +1308,11 @@ namespace ArmazemGratidao {
     var price=new NumericUpDown {Name="amzgInsertPrice",DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {Name="amzgInsertCost",DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {Name="amzgInsertStock",DecimalPlaces=3,Maximum=10000000,Width=170};
     
     Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade inicial","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
-    for(int i=0;i<fields.Length;i++){int row=i>=5?i+1:i;panel.Controls.Add(new Label {Text=labels[i],AutoSize=true},0,row);panel.Controls.Add(fields[i],1,row);}
+    for(int i=0;i<fields.Length;i++){
+     panel.Controls.Add(new Label{Text=labels[i],AutoSize=true,Margin=new Padding(2,8,3,1)},0,i);
+     fields[i].Margin=new Padding(3,3,5,3);
+     panel.Controls.Add(fields[i],1,i);
+    }
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
        barcode.Width=240;barcode.MaxLength=64;brand.Width=160;category.Width=160;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.Top;
@@ -1360,8 +1364,8 @@ namespace ArmazemGratidao {
     };
     updateGain();
     panel.Controls.Add(ownCode,1,12);
-    var lookup=new Button {Text="Buscar dados do código",Width=225,Height=36};
-    var lookupStatus=new Label {Text="Aceita código original ou próprio. A pesquisa online é opcional para códigos comerciais.",AutoSize=true,MaximumSize=new Size(450,55),ForeColor=Color.FromArgb(20,73,158)};
+    var lookup=new Button {Text="Buscar dados do código",Width=190,Height=32};
+    var lookupStatus=new Label {Text="Aceita código original ou próprio. A pesquisa online é opcional para códigos comerciais.",AutoSize=false,Dock=DockStyle.Fill,Margin=new Padding(3,3,3,3),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
     string lastLookupCode="";
     int lookupGeneration=0;
@@ -1415,11 +1419,11 @@ namespace ArmazemGratidao {
     barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
     ownCode.CheckedChanged+=(s,e)=>{lookup.Enabled=!ownCode.Checked;lookupStatus.Text=ownCode.Checked?"Código salvo sem consulta online.":"Consulta online opcional para códigos comerciais.";};
-    for(int row=0;row<14;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==5?86:38));
-    panel.Controls.Add(lookupStatus,1,10);
-    panel.Controls.Add(lookup,1,11);
+    for(int row=0;row<13;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?46:row==10?39:row==11?40:row==12?36:37));
+    panel.Controls.Add(lookupStatus,1,9);
+    panel.Controls.Add(lookup,1,10);
 
-    var save=new Button {Text="Salvar produto",Width=145,Height=36,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
+    var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      barcode.Text=barcode.Text.Trim();
      if(barcode.Text.Length==0){MessageBox.Show("Informe o código de barras original ou um código próprio.");return;}

@@ -34,7 +34,7 @@ try{
  $timer=New-Object System.Windows.Forms.Timer
  $timer.Interval=150
  $timer.Add_Tick({
-  $dialogs=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'Inserir produto'})
+  $dialogs=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'Cadastrar Produto'})
   if($dialogs.Count -eq 0){return}
   $dlg=$dialogs[0]
   try{
@@ -71,7 +71,7 @@ try{
  $timer.Start()
  $products.OpenNewProduct('')
  if($script:errorMessage){throw $script:errorMessage}
- if(!$script:done){throw 'Janela Inserir Produto nao foi testada.'}
+ if(!$script:done){throw 'Janela Cadastrar Produto nao foi testada.'}
  Write-Host 'CADASTRO OK: foco do Custo passa ao Preco e a calculadora nao ocupa a lateral.'
 }finally{
  if($null -ne $timer){$timer.Stop();$timer.Dispose()}
