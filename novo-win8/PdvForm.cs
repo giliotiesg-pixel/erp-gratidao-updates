@@ -484,21 +484,24 @@ namespace ArmazemGratidao {
   void ShowStockInPdv(){
    if(!manualEntry)return;
    lookupDelay.Stop();suggestions.Visible=false;stockViewOpen=true;
-   grid.Visible=false;stockView.Visible=true;LoadStockInPdv();stockSearch.Focus();
+   grid.Visible=false;stockView.Visible=true;LoadStockInPdv();if(stockSearch!=null&&stockSearch.CanFocus)stockSearch.Focus();
   }
   void ShowSaleCart(){
    if(!manualEntry)return;
    stockViewOpen=false;stockView.Visible=false;grid.Visible=true;code.Focus();
   }
   long StockSelectionId(){
-   if(stockView.CurrentRow==null||!stockView.Columns.Contains("ID"))return 0L;
-   var value=stockView.CurrentRow.Cells["ID"].Value;
+   if(stockView==null||stockView.IsDisposed||stockView.CurrentRow==null||!stockView.Columns.Contains("ID"))return 0L;
+   var cell=stockView.CurrentRow.Cells["ID"];
+   if(cell==null)return 0L;
+   var value=cell.Value;
    return value==null||value==DBNull.Value?0L:Convert.ToInt64(value);
   }
   void LoadStockInPdv(){
    if(!manualEntry||!stockViewOpen)return;
    try{
-    long beforeSelection=StockSelectionId();
+    long beforeSelection=0;
+    try{beforeSelection=StockSelectionId();}catch(NullReferenceException){beforeSelection=0;}
     var table=new DataTable();
     table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");
     table.Columns.Add("Código de barras");table.Columns.Add("Descrição");
@@ -517,6 +520,7 @@ namespace ArmazemGratidao {
      }
     }
     stockView.DataSource=table;
+    if(stockView==null||stockView.IsDisposed)return;
     if(stockView.Columns.Contains("ID"))stockView.Columns["ID"].Visible=false;
     if(stockView.Columns.Contains("Descrição"))stockView.Columns["Descrição"].MinimumWidth=295;
     foreach(string column in new[]{"Em estoque","Preço","Custo","Qtd. lançada"})
@@ -524,7 +528,7 @@ namespace ArmazemGratidao {
       stockView.Columns[column].DefaultCellStyle.Format=(column=="Em estoque"||column=="Qtd. lançada")?"N3":"N2";
     stockHint.Text=table.Rows.Count+" produtos | Selecione e clique em Editar Qtd. / Preço (ou dê duplo clique)";
     if(beforeSelection>0){
-     foreach(DataGridViewRow row in stockView.Rows)if(Convert.ToInt64(row.Cells["ID"].Value)==beforeSelection){
+     foreach(DataGridViewRow row in stockView.Rows)if(!row.IsNewRow && row.Cells["ID"]!=null && row.Cells["ID"].Value!=null && row.Cells["ID"].Value!=DBNull.Value && Convert.ToInt64(row.Cells["ID"].Value)==beforeSelection){
       stockView.CurrentCell=row.Cells["Descrição"];break;
      }
     }
