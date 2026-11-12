@@ -795,7 +795,7 @@ namespace ArmazemGratidao {
        }
       }
       if(MessageBox.Show("Gravar "+resolved.Count+" vendas diretamente no historico?\\nNao sera necessario finalizar nenhuma venda.\\nO estoque atual NAO sera baixado novamente.","Confirmar importacao",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-      using(var cn=Open(false)){
+      using(var cn=Open()){
        string backup=db+".antes-importar-caderno-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
        using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
         copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
