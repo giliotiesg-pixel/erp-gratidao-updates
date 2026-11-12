@@ -88,6 +88,9 @@ namespace ArmazemGratidao {
    var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
+   var compareBarcode=new Button {Text="Confrontar cadastro x internet",Width=235,Height=33};
+   compareBarcode.Click+=async (sender,args)=>await CompareSelectedProductOnline(compareBarcode);
+   bar.Controls.Add(compareBarcode);
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
@@ -1201,6 +1204,58 @@ namespace ArmazemGratidao {
     lines.Add(name+": "+value);
    }
    MessageBox.Show(string.Join("\n",lines),"Detalhes do produto",MessageBoxButtons.OK,MessageBoxIcon.Information);
+  }
+  async System.Threading.Tasks.Task CompareSelectedProductOnline(Button trigger){
+   if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para conferir.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id))return;
+   string code="",name="";
+   using(var cn=Open())
+   using(var cmd=new SQLiteCommand("SELECT barcode,name FROM products WHERE id=@id",cn)){
+    cmd.Parameters.AddWithValue("@id",id);
+    using(var rd=cmd.ExecuteReader()){
+     if(!rd.Read())return;
+     code=Convert.ToString(rd["barcode"]).Trim();
+     name=Convert.ToString(rd["name"]).Trim();
+    }
+   }
+   bool format=System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{8,14}$");
+   bool checksum=format&&ValidBarcodeCheckDigit(code);
+   int duplicates=0;
+   if(format)using(var cn=Open())
+   using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE TRIM(COALESCE(barcode,''))=@code",cn)){
+    cmd.Parameters.AddWithValue("@code",code);
+    duplicates=Convert.ToInt32(cmd.ExecuteScalar());
+   }
+   string prefix="CADASTRO LOCAL\r\nProduto: "+name+"\r\nCodigo: "+code+
+    "\r\nFormato: "+(format?"valido":"invalido")+"\r\nDigito verificador: "+(checksum?"correto":"invalido ou nao verificavel")+
+    "\r\nCadastros com este codigo: "+duplicates+"\r\n\r\n";
+   if(!format||!checksum){
+    MessageBox.Show(prefix+"Confira o codigo digitado ou bipado antes de consultar. Nenhum dado foi alterado.","Confrontamento de produto",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+    return;
+   }
+   try{
+    trigger.Enabled=false;
+    // Consultar a fonte online, mesmo quando o produto ja existe no banco local.
+    var online=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(code));
+    if(IsDisposed)return;
+    if(online==null){
+     MessageBox.Show(prefix+"Nao localizado no Open Food Facts. Isso NAO comprova codigo errado.\r\nNenhum dado alterado.","Confrontamento de produto");
+     return;
+    }
+    string a=SearchFold(name),b=SearchFold(online.Name);
+    bool same=a==b;
+    bool similar=!same&&(a.Contains(b)||b.Contains(a));
+    string verdict=same?"DESCRICOES IGUAIS":similar?"DESCRICOES PARECIDAS - REVISAR":"DESCRICOES DIFERENTES - CONFERIR EMBALAGEM";
+    MessageBox.Show(prefix+"INTERNET - Open Food Facts\r\nProduto: "+online.Name+
+     "\r\nMarca: "+online.Brand+"\r\nCategoria: "+online.Category+
+     "\r\n\r\nRESULTADO: "+verdict+
+     (duplicates>1?"\r\nATENCAO: codigo duplicado no cadastro.":"")+
+     "\r\n\r\nFonte colaborativa; confirme no rotulo fisico antes de corrigir. Nenhum dado alterado.",
+     "Confrontamento de produto",MessageBoxButtons.OK,same&&duplicates<=1?MessageBoxIcon.Information:MessageBoxIcon.Warning);
+   }catch(Exception ex){
+    if(!IsDisposed)MessageBox.Show(prefix+"Consulta online indisponivel: "+ex.Message+"\r\nNenhum dado alterado.","Confrontamento de produto");
+   }finally{if(!IsDisposed)trigger.Enabled=true;}
   }
   async System.Threading.Tasks.Task ConsultBarcode(Button trigger){
    using(var dialog=new StyledDialogForm {Text="Consulta de código de barras",Width=650,Height=270,MinimumSize=new Size(600,240),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
