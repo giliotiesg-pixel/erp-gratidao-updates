@@ -755,15 +755,15 @@ namespace ArmazemGratidao {
       var label=new Label{Dock=DockStyle.Top,Height=65,Text=groups.Count+" vendas / "+entries.Count+" itens. Importacao direta no historico, sem finalizar no PDV.\\nInforme a data das vendas e o cliente da venda fiada, se houver."};
       var date=new DateTimePicker{Dock=DockStyle.Top,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy",Value=saleDay};
       var customer=new TextBox{Dock=DockStyle.Top,Text="",Font=new Font("Segoe UI",11)};
-      var customerLabel=new Label{Dock=DockStyle.Top,Height=25,Text="Cliente do Fiado (obrigatorio se houver Fiado):"};
+      var customerLabel=new Label{Dock=DockStyle.Top,Height=25,Text="Cliente do Fiado (opcional; pode editar depois em Vendas):"};
       var ok=new Button{Dock=DockStyle.Bottom,Height=44,Text="IMPORTAR TODAS AS VENDAS NO HISTORICO",DialogResult=DialogResult.OK};
       form.Controls.Add(customer);form.Controls.Add(customerLabel);form.Controls.Add(date);form.Controls.Add(label);form.Controls.Add(ok);
       if(form.ShowDialog(this)!=DialogResult.OK)return;
       saleDay=date.Value.Date;
       string fiadoCustomer=customer.Text.Trim();
-      if(groups.Any(g=>SearchFold(g.First().Payment)=="fiado")&&
-       (fiadoCustomer.Length==0||SearchFold(fiadoCustomer)=="consumidor"))
-       throw new Exception("Informe o cliente responsavel pela venda fiada. Nada foi importado.");
+      // Cliente ausente no caderno nao impede importacao historica.
+      // O nome podera ser corrigido depois no modulo Vendas.
+      if(fiadoCustomer.Length==0)fiadoCustomer="Consumidor";
       var resolved=new List<Tuple<string,List<Item>,string,DateTime,string>>();
       using(var cn=Open()){
        foreach(var group in groups){
