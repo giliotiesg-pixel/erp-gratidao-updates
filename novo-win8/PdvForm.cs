@@ -733,7 +733,20 @@ namespace ArmazemGratidao {
           InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
           Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
         }
-        if(matches.Count!=1)throw new Exception("Produto '"+entry.Product+"' encontrado "+matches.Count+" vez(es). Corrija o cadastro ou o CSV. Nenhum item foi carregado.");
+        // Se o nome do CSV nao for identico ao cadastro, procurar equivalencia normalizada.
+        // Nunca selecionar automaticamente quando houver mais de um candidato.
+        if(matches.Count==0){
+         string wanted=SearchFold(entry.Product).Trim();
+         using(var fallback=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products ORDER BY name,id",cn))
+         using(var rd=fallback.ExecuteReader())while(rd.Read()){
+          string registered=SearchFold(Convert.ToString(rd["name"])).Trim();
+          if(registered!=wanted)continue;
+          matches.Add(new Item{Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
+           InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
+           Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
+         }
+        }
+        if(matches.Count!=1)throw new Exception("Produto '"+entry.Product+"' encontrado "+matches.Count+" vez(es). Confira a descricao no cadastro ou informe o codigo de barras/interno no CSV. Nenhum item foi carregado.");
         imported.Add(matches[0]);
        }
       }
