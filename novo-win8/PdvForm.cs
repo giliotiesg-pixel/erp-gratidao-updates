@@ -746,6 +746,19 @@ namespace ArmazemGratidao {
            Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
          }
         }
+        // Alias confirmado pelo codigo de barras exibido no cadastro.
+        if(matches.Count==0 && SearchFold(entry.Product).Trim()=="suco mid de abacaxi"){
+         using(var alias=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products WHERE barcode=@barcode",cn)){
+          alias.Parameters.AddWithValue("@barcode","7891132082407");
+          using(var rd=alias.ExecuteReader())while(rd.Read()){
+           string registered=SearchFold(Convert.ToString(rd["name"]));
+           if(registered.Contains("mid") && registered.Contains("abacaxi"))
+            matches.Add(new Item{Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
+             InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
+             Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
+          }
+         }
+        }
         if(matches.Count!=1)throw new Exception("Produto '"+entry.Product+"' encontrado "+matches.Count+" vez(es). Confira a descricao no cadastro ou informe o codigo de barras/interno no CSV. Nenhum item foi carregado.");
         imported.Add(matches[0]);
        }
