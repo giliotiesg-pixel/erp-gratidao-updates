@@ -1083,6 +1083,11 @@ namespace ArmazemGratidao {
         if(cost<0||price<=0||amount<0||amount>999999)throw new Exception("Valor invalido: "+row["Descricao"]);
         updates.Add(Tuple.Create(id,cost,price,amount));
        }
+       foreach(var u in updates){
+        var row=data.Rows.Cast<DataRow>().First(x=>Convert.ToInt64(x["ID"])==u.Item1);
+        if(u.Item4>Convert.ToDecimal(row["Estoque"]))
+         throw new Exception("Estoque insuficiente para "+row["Descricao"]+". Atualize pelo modulo Estoque.");
+       }
        using(var cn=Open()){
         using(var tx=cn.BeginTransaction()){
          foreach(var u in updates){
@@ -1099,8 +1104,7 @@ namespace ArmazemGratidao {
         var row=data.Rows.Cast<DataRow>().First(x=>Convert.ToInt64(x["ID"])==u.Item1);
         var current=cart.FirstOrDefault(x=>x.Id==u.Item1);
         if(u.Item4==0){cart.RemoveAll(x=>x.Id==u.Item1);continue;}
-        decimal available=Convert.ToDecimal(row["Estoque"]);
-        if(u.Item4>available)throw new Exception("Estoque insuficiente para "+row["Descricao"]+". Atualize pelo modulo Estoque.");
+
         if(current!=null){current.Qty=u.Item4;current.Price=u.Item3;current.Cost=u.Item2;}
         else cart.Add(new Item{Id=u.Item1,InternalCode=Convert.ToString(row["Codigo"]),
          Name=Convert.ToString(row["Descricao"]),Qty=u.Item4,Price=u.Item3,Cost=u.Item2});
