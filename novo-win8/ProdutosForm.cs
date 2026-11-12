@@ -1251,6 +1251,32 @@ namespace ArmazemGratidao {
     var code=new TextBox{Width=160,Text=barcode};
     top.Controls.Add(new Label{Text="Produto",AutoSize=true});top.Controls.Add(name);
     top.Controls.Add(new Label{Text="EAN",AutoSize=true});top.Controls.Add(code);
+    // Ficha de conferência fiscal: campos de trabalho, sem aplicar tributação automaticamente.
+    var fiscalFields=new FlowLayoutPanel{Dock=DockStyle.Top,Height=125,WrapContents=true,AutoScroll=true,Padding=new Padding(6)};
+    var regime=new ComboBox{Width=160,DropDownStyle=ComboBoxStyle.DropDownList};
+    regime.Items.AddRange(new object[]{"Simples Nacional","Excesso de sublimite","Regime normal","A confirmar"});
+    regime.SelectedIndex=0;
+    var uf=new ComboBox{Width=70,DropDownStyle=ComboBoxStyle.DropDownList};
+    uf.Items.AddRange(new object[]{"AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"});
+    uf.SelectedItem="SP";
+    var operation=new ComboBox{Width=185,DropDownStyle=ComboBoxStyle.DropDownList};
+    operation.Items.AddRange(new object[]{"Venda interna consumidor","Venda interestadual","Compra para revenda","Devolucao","Outra operacao"});
+    operation.SelectedIndex=0;
+    var ncmCode=new TextBox{Width=100,MaxLength=8};
+    var cestCode=new TextBox{Width=95,MaxLength=7};
+    var cfopCode=new TextBox{Width=75,MaxLength=4};
+    var csosnCode=new ComboBox{Width=100,DropDownStyle=ComboBoxStyle.DropDownList};
+    csosnCode.Items.AddRange(new object[]{"A confirmar","101","102","103","201","202","203","300","400","500","900"});
+    csosnCode.SelectedIndex=0;
+    var cstIbs=new TextBox{Width=80,MaxLength=3};
+    var classTrib=new TextBox{Width=100,MaxLength=6};
+    Action<string,Control> field=(caption,control)=>{
+     fiscalFields.Controls.Add(new Label{Text=caption,AutoSize=true,Padding=new Padding(2,8,0,0)});
+     fiscalFields.Controls.Add(control);
+    };
+    field("Regime",regime);field("UF",uf);field("Operacao",operation);
+    field("NCM",ncmCode);field("CEST",cestCode);field("CFOP",cfopCode);
+    field("CSOSN",csosnCode);field("CST IBS/CBS",cstIbs);field("cClassTrib",classTrib);
     var info=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Font=new Font("Segoe UI",10),
      Text="PESQUISA FISCAL - CONFERENCIA OBRIGATORIA\r\n\r\nNCM (8 digitos): verificar classificacao, composicao e embalagem no Classif da Receita.\r\nCEST: verificar se o produto se enquadra em segmento sujeito a substituicao tributaria.\r\nCFOP: depende da operacao, nao somente do produto.\r\nCST / CSOSN: depende do regime tributario e do tratamento aplicavel.\r\nICMS / ICMS-ST / FCP: verificar regras do estado e da operacao.\r\nPIS / Cofins / IPI: verificar regime e legislacao especifica.\r\nIBS / CBS: conferir CST e cClassTrib nas tabelas vigentes da NF-e.\r\n\r\nNenhum codigo ou aliquota e atribuido automaticamente.\r\nA ausencia de resultado na pesquisa nao significa isencao."};
     var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=102,AutoScroll=true,WrapContents=true,Padding=new Padding(8)};
@@ -1263,10 +1289,30 @@ namespace ArmazemGratidao {
      string query=(name.Text+" "+code.Text+" NCM classificacao fiscal").Trim();
      if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?q="+Uri.EscapeDataString(query));
     };
+    var exportReview=new Button{Text="EXPORTAR FICHA FISCAL",Width=200,Height=36};
+    exportReview.Click+=(sender,args)=>{
+     if(ncmCode.Text.Length>0&&!System.Text.RegularExpressions.Regex.IsMatch(ncmCode.Text,@"^\d{8}$")){
+      MessageBox.Show("NCM deve ter 8 digitos.");return;
+     }
+     if(cfopCode.Text.Length>0&&!System.Text.RegularExpressions.Regex.IsMatch(cfopCode.Text,@"^\d{4}$")){
+      MessageBox.Show("CFOP deve ter 4 digitos.");return;
+     }
+     using(var save=new SaveFileDialog{Title="Exportar ficha fiscal para conferencia",Filter="CSV (*.csv)|*.csv",FileName="ficha-fiscal-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv"}){
+      if(save.ShowDialog(dlg)!=DialogResult.OK)return;
+      Func<string,string> csv=value=>"\""+(value??"").Replace("\"","\"\"")+"\"";
+      var values=new[]{name.Text,code.Text,Convert.ToString(regime.SelectedItem),Convert.ToString(uf.SelectedItem),
+       Convert.ToString(operation.SelectedItem),ncmCode.Text,cestCode.Text,cfopCode.Text,
+       Convert.ToString(csosnCode.SelectedItem),cstIbs.Text,classTrib.Text,"PENDENTE DE VALIDACAO FISCAL"};
+      var header="Produto;EAN;Regime;UF;Operacao;NCM;CEST;CFOP;CSOSN;CST_IBS_CBS;cClassTrib;Status";
+      System.IO.File.WriteAllText(save.FileName,header+Environment.NewLine+string.Join(";",values.Select(csv)),
+       new System.Text.UTF8Encoding(true));
+      MessageBox.Show("Ficha exportada para conferencia. Nenhum tributo foi aplicado ao cadastro.");
+     }
+    };
     var close=new Button{Text="FECHAR",Width=95,Height=36};
     close.Click+=(sender,args)=>dlg.Close();
-    actions.Controls.Add(classif);actions.Controls.Add(nfe);actions.Controls.Add(google);actions.Controls.Add(close);
-    dlg.Controls.Add(info);dlg.Controls.Add(actions);dlg.Controls.Add(top);
+    actions.Controls.Add(classif);actions.Controls.Add(nfe);actions.Controls.Add(google);actions.Controls.Add(exportReview);actions.Controls.Add(close);
+    dlg.Controls.Add(info);dlg.Controls.Add(actions);dlg.Controls.Add(fiscalFields);dlg.Controls.Add(top);
     dlg.ShowDialog(this);
    }
   }
