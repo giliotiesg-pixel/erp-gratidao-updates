@@ -1254,7 +1254,7 @@ namespace ArmazemGratidao {
     // Ficha de conferência fiscal: campos de trabalho, sem aplicar tributação automaticamente.
     var fiscalFields=new FlowLayoutPanel{Dock=DockStyle.Top,Height=125,WrapContents=true,AutoScroll=true,Padding=new Padding(6)};
     var regime=new ComboBox{Width=160,DropDownStyle=ComboBoxStyle.DropDownList};
-    regime.Items.AddRange(new object[]{"Simples Nacional","Excesso de sublimite","Regime normal","A confirmar"});
+    regime.Items.AddRange(new object[]{"MEI - SIMEI (CRT 4)","Simples Nacional (CRT 1)","Excesso de sublimite","Regime normal","A confirmar"});
     regime.SelectedIndex=0;
     var uf=new ComboBox{Width=70,DropDownStyle=ComboBoxStyle.DropDownList};
     uf.Items.AddRange(new object[]{"AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"});
@@ -1266,8 +1266,17 @@ namespace ArmazemGratidao {
     var cestCode=new TextBox{Width=95,MaxLength=7};
     var cfopCode=new TextBox{Width=75,MaxLength=4};
     var csosnCode=new ComboBox{Width=100,DropDownStyle=ComboBoxStyle.DropDownList};
-    csosnCode.Items.AddRange(new object[]{"A confirmar","101","102","103","201","202","203","300","400","500","900"});
+    csosnCode.Items.AddRange(new object[]{"A confirmar","102","300"});
     csosnCode.SelectedIndex=0;
+    regime.SelectedIndexChanged+=(sender,args)=>{
+     csosnCode.Items.Clear();
+     if(regime.SelectedIndex==0)
+      csosnCode.Items.AddRange(new object[]{"A confirmar","102","300"});
+     else
+      csosnCode.Items.AddRange(new object[]{"A confirmar","101","102","103","201","202","203","300","400","500","900"});
+     csosnCode.SelectedIndex=0;
+    };
+
     var cstIbs=new TextBox{Width=80,MaxLength=3};
     var classTrib=new TextBox{Width=100,MaxLength=6};
     Action<string,Control> field=(caption,control)=>{
@@ -1279,6 +1288,7 @@ namespace ArmazemGratidao {
     field("CSOSN",csosnCode);field("CST IBS/CBS",cstIbs);field("cClassTrib",classTrib);
     var info=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Font=new Font("Segoe UI",10),
      Text="PESQUISA FISCAL - CONFERENCIA OBRIGATORIA\r\n\r\nNCM (8 digitos): verificar classificacao, composicao e embalagem no Classif da Receita.\r\nCEST: verificar se o produto se enquadra em segmento sujeito a substituicao tributaria.\r\nCFOP: depende da operacao, nao somente do produto.\r\nCST / CSOSN: depende do regime tributario e do tratamento aplicavel.\r\nICMS / ICMS-ST / FCP: verificar regras do estado e da operacao.\r\nPIS / Cofins / IPI: verificar regime e legislacao especifica.\r\nIBS / CBS: conferir CST e cClassTrib nas tabelas vigentes da NF-e.\r\n\r\nNenhum codigo ou aliquota e atribuido automaticamente.\r\nA ausencia de resultado na pesquisa nao significa isencao."};
+    info.Text+="\r\n\r\nMEI (CRT 4): para NFC-e, a regra de validacao oficial admite CSOSN 102 ou 300 e CFOP 5102 em operacoes internas comuns.\r\nOs codigos dependem do documento fiscal, da operacao e da UF; nao copiar automaticamente regras de ME/EPP para MEI.\r\nExemplo nao e classificacao definitiva. Confirme com contador e SEFAZ antes de emitir.";
     var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=102,AutoScroll=true,WrapContents=true,Padding=new Padding(8)};
     var classif=new Button{Text="CLASSIF RECEITA / NCM",Width=205,Height=36};
     classif.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://portalunico.siscomex.gov.br/classif/");
