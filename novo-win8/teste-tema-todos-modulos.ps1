@@ -189,6 +189,55 @@ foreach($sample in $items){
     throw "Faixa de botoes de $($sample.Name) ocupa espaco excessivo: $($toolbar.Height) px"
    }
   }
+  if($sample.Name -eq 'Produtos'){
+   # Reproduzir exatamente o erro: bipar codigo, banco localiza 1 produto,
+   # mas a antiga camada branca escondia a tabela.
+   $flags=[Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance
+   $searchField=$type.GetField('search',$flags).GetValue($form)
+   $grid=$type.GetField('grid',$flags).GetValue($form)
+   $timer=$type.GetField('searchDelay',$flags).GetValue($form)
+   $layout=@($form.Controls.Find('amzgProductsMainLayout',$true))
+   $head=@($form.Controls.Find('amzgProductsHeader',$true))
+   $pagebar=@($form.Controls.Find('amzgProductsPager',$true))
+   if($layout.Count -ne 1 -or $head.Count -ne 1 -or $pagebar.Count -ne 1){
+    throw 'Produtos: faltam tabela e cabecalho fixados no mesmo layout.'
+   }
+   if($grid.Parent -ne $layout[0] -or !$grid.Visible -or
+      $grid.ClientSize.Width -lt 210 -or $grid.ClientSize.Height -lt 140){
+    throw "Produtos: tabela nao visivel na tela! Bounds=$($grid.Bounds)"
+   }
+   if(@($form.Controls.Find('amzgProductsEmpty',$true)).Count -gt 0){
+    throw 'Produtos: painel vazio ainda esta cobrindo os resultados.'
+   }
+   $searchField.Text='78900005'
+   [Windows.Forms.Application]::DoEvents()
+   # Disparar a pesquisa via evento normal da caixa, sem acionar Mostrar todos.
+   for($attempt=0;$attempt -lt 12;$attempt++){
+    Start-Sleep -Milliseconds 100
+    [Windows.Forms.Application]::DoEvents()
+    if($grid.DataSource -is [System.Data.DataTable] -and
+       $grid.DataSource.Rows.Count -eq 1 -and
+       [string]$grid.Rows[0].Cells['codigo_barras'].Value -eq '78900005'){break}
+   }
+   if($grid.DataSource -isnot [System.Data.DataTable] -or
+      $grid.DataSource.Rows.Count -ne 1 -or
+      [string]$grid.Rows[0].Cells['codigo_barras'].Value -ne '78900005'){
+    throw 'Produtos: o codigo bipado nao apareceu na tabela automaticamente.'
+   }
+   $gridTop=$form.PointToClient($grid.PointToScreen([Drawing.Point]::Empty)).Y
+   $headerBottom=$form.PointToClient($head[0].PointToScreen([Drawing.Point]::new(0,$head[0].Height))).Y
+   if($gridTop -lt $headerBottom -or !$grid.Visible){
+    throw 'Produtos: tabela ficou sobreposta pelo cabecalho ou oculta.'
+   }
+   $shot=Join-Path $directory 'Previa-Modulo-Produtos-Codigo-Bipado.png'
+   $capture=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
+   try{
+    $form.DrawToBitmap($capture,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
+    $capture.Save($shot,[Drawing.Imaging.ImageFormat]::Png)
+   }finally{$capture.Dispose()}
+   $timer.Stop();$searchField.Clear();$timer.Stop()
+   Write-Host 'PRODUTOS OK: 78900005 localizado e realmente visivel abaixo do cabecalho.'
+  }
   if($sample.Name -eq 'Fiado'){
    $flags=[Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance
    $clientList=$type.GetField('clients',$flags).GetValue($form)
