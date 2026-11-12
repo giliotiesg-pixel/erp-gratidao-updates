@@ -76,6 +76,10 @@ namespace ArmazemGratidao {
     var inventory=new Button{Text="TODOS OS PRODUTOS NO PDV",Width=235,Height=36,
      Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     inventory.Click+=(s,e)=>ShowStockInPdv();
+    var importNotes=new Button{Text="IMPORTAR VENDAS ANOTADAS",Width=235,Height=36,
+     Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+    importNotes.Click+=(s,e)=>ImportNotebookSales();
+    rapidInventoryBar.Controls.Add(importNotes);
     rapidInventoryBar.Controls.Add(inventory);
     var back=new Button{Text="VOLTAR AOS ITENS DA VENDA",Width=228,Height=36,BackColor=Color.FromArgb(175,35,48),ForeColor=Color.White};
     back.Click+=(s,e)=>ShowSaleCart();
@@ -655,6 +659,99 @@ namespace ArmazemGratidao {
     qty.Value=1;Render();
     MessageBox.Show(selected.Name+" adicionado a venda anotada. Para alterar a quantidade ou o preco apenas desta venda, use Editar Qtd./Preco.","Lancamento rapido",MessageBoxButtons.OK,MessageBoxIcon.Information);
    }catch(Exception ex){MessageBox.Show("Nao foi possivel adicionar o produto: "+ex.Message,"Lancamento rapido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+
+  // Importacao assistida: uma venda por vez, sem gravacao automatica.
+  // CSV UTF-8: venda;produto;quantidade;pagamento (data e hora opcionais).
+  sealed class NotebookLine {public string Sale,Product,Payment,Date;public decimal Quantity;}
+  static string[] SplitNotebookCsv(string line,char separator){
+   var fields=new List<string>();var value=new StringBuilder();bool quoted=false;
+   for(int i=0;i<line.Length;i++){
+    char ch=line[i];
+    if(ch=='"'){if(quoted&&i+1<line.Length&&line[i+1]=='"'){value.Append('"');i++;}else quoted=!quoted;}
+    else if(ch==separator&&!quoted){fields.Add(value.ToString().Trim());value.Length=0;}
+    else value.Append(ch);
+   }
+   if(quoted)throw new FormatException("Aspas nao fechadas no CSV.");
+   fields.Add(value.ToString().Trim());return fields.ToArray();
+  }
+  static string NotebookField(string[] cells,Dictionary<string,int> columns,params string[] keys){
+   foreach(string key in keys){int index;if(columns.TryGetValue(key,out index)&&index<cells.Length)return cells[index].Trim();}
+   return "";
+  }
+  void ImportNotebookSales(){
+   if(cart.Count>0){MessageBox.Show("Finalize ou limpe a venda atual antes de importar. O carrinho existente foi preservado.","Importar vendas");return;}
+   using(var picker=new OpenFileDialog{Title="Selecionar vendas anotadas (CSV)",Filter="Planilha CSV (*.csv)|*.csv",CheckFileExists=true}){
+    if(picker.ShowDialog(this)!=DialogResult.OK)return;
+    try{
+     var lines=File.ReadAllLines(picker.FileName,Encoding.UTF8);
+     if(lines.Length<2)throw new Exception("Arquivo sem linhas de vendas.");
+     char separator=lines[0].Count(x=>x==';')>=lines[0].Count(x=>x==',')?';':',';
+     string[] headers=SplitNotebookCsv(lines[0].TrimStart('\uFEFF'),separator);
+     var columns=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+     for(int i=0;i<headers.Length;i++)columns[SearchFold(headers[i]).Replace(" ","").Replace("_","")]=i;
+     if(!columns.ContainsKey("produto")&&!columns.ContainsKey("descricao"))throw new Exception("Falta coluna Produto ou Descricao.");
+     if(!columns.ContainsKey("venda")&&!columns.ContainsKey("numerovenda"))throw new Exception("Falta coluna Venda.");
+     var entries=new List<NotebookLine>();
+     for(int i=1;i<lines.Length;i++){
+      if(string.IsNullOrWhiteSpace(lines[i]))continue;
+      var cells=SplitNotebookCsv(lines[i],separator);
+      string number=NotebookField(cells,columns,"venda","numerovenda");
+      string product=NotebookField(cells,columns,"produto","descricao");
+      string quantity=NotebookField(cells,columns,"quantidade","qtd");
+      decimal amount;
+      if(string.IsNullOrWhiteSpace(number)||string.IsNullOrWhiteSpace(product)||!decimal.TryParse(quantity,NumberStyles.Number,CultureInfo.GetCultureInfo("pt-BR"),out amount)||amount<=0)
+       throw new Exception("Linha "+(i+1)+": venda, produto ou quantidade invalida.");
+      entries.Add(new NotebookLine{Sale=number,Product=product,Quantity=amount,
+       Payment=NotebookField(cells,columns,"pagamento","formapagamento"),
+       Date=NotebookField(cells,columns,"data","datavenda")});
+     }
+     if(entries.Count==0)throw new Exception("Nenhum produto para importar.");
+     var groups=entries.GroupBy(x=>x.Sale).ToList();
+     using(var dialog=new StyledDialogForm{Text="Selecionar venda anotada",Width=720,Height=480,StartPosition=FormStartPosition.CenterParent}){
+      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",11)};
+      foreach(var group in groups)list.Items.Add("Venda "+group.Key+" | "+group.Sum(x=>x.Quantity).ToString("N3")+" unidades | "+group.First().Payment+" | "+group.Count()+" produtos");
+      var info=new Label{Text="Selecione UMA venda. Confira itens, valores, data e pagamento antes de finalizar. O arquivo nao e gravado automaticamente.",Dock=DockStyle.Top,Height=58};
+      var choose=new Button{Text="CARREGAR VENDA SELECIONADA",Dock=DockStyle.Bottom,Height=42,DialogResult=DialogResult.OK};
+      dialog.Controls.Add(list);dialog.Controls.Add(info);dialog.Controls.Add(choose);
+      if(list.Items.Count>0)list.SelectedIndex=0;
+      dialog.AcceptButton=choose;
+      if(dialog.ShowDialog(this)!=DialogResult.OK||list.SelectedIndex<0)return;
+      var selected=groups[list.SelectedIndex].ToList();
+      // Exigir correspondencia unica no cadastro; nunca escolher produto parecido silenciosamente.
+      var imported=new List<Item>();
+      using(var cn=Open()){
+       foreach(var entry in selected){
+        var matches=new List<Item>();
+        using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products WHERE lower(name)=lower(@name) OR barcode=@name OR internal_code=@name",cn)){
+         cmd.Parameters.AddWithValue("@name",entry.Product);
+         using(var rd=cmd.ExecuteReader())while(rd.Read())matches.Add(new Item{
+          Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
+          InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
+          Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
+        }
+        if(matches.Count!=1)throw new Exception("Produto '"+entry.Product+"' encontrado "+matches.Count+" vez(es). Corrija o cadastro ou o CSV. Nenhum item foi carregado.");
+        imported.Add(matches[0]);
+       }
+      }
+      string method=selected[0].Payment.Trim().ToUpperInvariant();
+      if(selected.Any(x=>!string.Equals(x.Payment.Trim(),selected[0].Payment.Trim(),StringComparison.OrdinalIgnoreCase)))
+       throw new Exception("Formas de pagamento diferentes na mesma venda. Confira o arquivo.");
+      DateTime parsed;
+      if(!string.IsNullOrWhiteSpace(selected[0].Date)&&DateTime.TryParse(selected[0].Date,CultureInfo.GetCultureInfo("pt-BR"),DateTimeStyles.None,out parsed)&&parsed<=DateTime.Now)
+       manualDate.Value=parsed;
+      foreach(var item in imported){
+       var existing=cart.FirstOrDefault(x=>x.Id==item.Id);
+       if(existing!=null)existing.Qty+=item.Qty;else cart.Add(item);
+      }
+      foreach(var choice in payment.Items.Cast<object>()){
+       if(string.Equals(Convert.ToString(choice),method,StringComparison.OrdinalIgnoreCase)){payment.SelectedItem=choice;break;}
+      }
+      Render();SaveDraft();
+      MessageBox.Show("Venda "+selected[0].Sale+" carregada no carrinho. Confira data, pagamento, quantidade e preco antes de finalizar. Para as demais vendas, repita a importacao. Nao importe uma venda ja registrada.","Conferencia obrigatoria");
+     }
+    }catch(Exception ex){MessageBox.Show("Importacao cancelada: "+ex.Message,"Importar vendas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }
   }
   void AddProduct(bool askQuantity=false) {
    string search=code.Text.Trim();if(search.Length==0)return;
