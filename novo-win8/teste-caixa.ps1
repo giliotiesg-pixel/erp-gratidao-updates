@@ -51,7 +51,9 @@ try{
  [Windows.Forms.Application]::EnableVisualStyles()
  $assembly=[Reflection.Assembly]::LoadFrom($exe)
  $type=$assembly.GetType('ArmazemGratidao.CashControlForm',$true)
- $form=[Activator]::CreateInstance($type,[object[]]@($db))
+ $ctor=$type.GetConstructor([Type[]]@([string]))
+ if($null -eq $ctor){throw 'Construtor do Caixa nao encontrado.'}
+ $form=$ctor.Invoke([object[]]@([string]$db))
  try{
   $form.Show()
   [Windows.Forms.Application]::DoEvents()
