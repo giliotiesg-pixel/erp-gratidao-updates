@@ -54,11 +54,11 @@ namespace ArmazemGratidao {
   public PdvForm(string database):this(database,false){}
   public PdvForm(string database,bool manualMode) {
    manualEntry=manualMode;
-   db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(1000,650);BackColor=Color.FromArgb(246,249,253);
+   db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(720,490);BackColor=Color.FromArgb(246,249,253);
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
-   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
-   FlowLayoutPanel rapidInventoryBar=manualEntry?new FlowLayoutPanel{Dock=DockStyle.Top,Height=47,Padding=new Padding(10,4,6,3),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(229,242,255)}:null;
+   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=62,Padding=new Padding(6,6,6,3),BackColor=Color.White,AutoScroll=true,WrapContents=false};
+   FlowLayoutPanel rapidInventoryBar=manualEntry?new FlowLayoutPanel{Dock=DockStyle.Top,Height=48,Padding=new Padding(5,4,5,3),WrapContents=false,AutoScroll=true,BackColor=Color.FromArgb(229,242,255)}:null;
    if(manualEntry){
     Text="Armazem Gratidao - Lançamento rápido de vendas anotadas";
     // A data será conferida somente depois que todos os produtos forem lançados.
@@ -80,6 +80,9 @@ namespace ArmazemGratidao {
      Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     importNotes.Click+=(s,e)=>ImportNotebookSales();
     rapidInventoryBar.Controls.Add(importNotes);
+    var refreshStock=new Button{Text="ATUALIZAR TELA",Width=145,Height=36,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White};
+    refreshStock.Click+=(s,e)=>{if(stockViewOpen)LoadStockInPdv();else Render();};
+    rapidInventoryBar.Controls.Add(refreshStock);
     rapidInventoryBar.Controls.Add(inventory);
     var back=new Button{Text="VOLTAR AOS ITENS DA VENDA",Width=228,Height=36,BackColor=Color.FromArgb(175,35,48),ForeColor=Color.White};
     back.Click+=(s,e)=>ShowSaleCart();
@@ -98,7 +101,7 @@ namespace ArmazemGratidao {
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.MouseClick+=(s,e)=>{int index=suggestions.IndexFromPoint(e.Location);if(e.Button==MouseButtons.Left&&index>=0){suggestions.SelectedIndex=index;ChooseSuggestion();}};
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
-   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=180,Padding=new Padding(12,10,12,10),BackColor=Color.White,AutoScroll=true,WrapContents=true};
+   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=132,Padding=new Padding(6,4,6,4),BackColor=Color.White,AutoScroll=true,WrapContents=true};
    // As formas permanecem disponíveis na janela de pagamento aberta ao finalizar.
    // O seletor fica apenas como estado interno, sem caixa antecipada no PDV.
    payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;
@@ -968,7 +971,7 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Adicione produtos ao carrinho.");return;}
    try{
     using(var conn=Open())
-    using(var dialog=new StyledDialogForm{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(650,400),StartPosition=FormStartPosition.CenterParent}){
+    using(var dialog=new StyledDialogForm{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(580,350),StartPosition=FormStartPosition.CenterParent}){
      var table=new DataTable();
      table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");table.Columns.Add("Produto");
      table.Columns.Add("Quantidade",typeof(decimal));table.Columns.Add("Preço atual",typeof(decimal));table.Columns.Add("Novo preço",typeof(decimal));
@@ -1040,7 +1043,84 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Não foi possível abrir os preços do carrinho: "+ex.Message);}
   }
+
+  // Editor em grade: mostra todo o cadastro e altera somente as linhas modificadas.
+  // O estoque nunca e alterado aqui: entradas e correcoes devem usar o modulo Estoque.
+  void EditAllStockInPdv(){
+   if(!manualEntry)return;
+   try{
+    var data=new DataTable();
+    data.Columns.Add("ID",typeof(long));data.Columns.Add("Codigo");data.Columns.Add("Descricao");
+    data.Columns.Add("Estoque",typeof(decimal));data.Columns.Add("Custo",typeof(decimal));
+    data.Columns.Add("Preco",typeof(decimal));data.Columns.Add("Qtd. venda",typeof(decimal));
+    using(var cn=Open())
+    using(var cmd=new SQLiteCommand("SELECT id,internal_code,name,stock,cost,price FROM products ORDER BY name COLLATE NOCASE,id",cn))
+    using(var rd=cmd.ExecuteReader())while(rd.Read()){
+     long id=Convert.ToInt64(rd["id"]);
+     data.Rows.Add(id,Convert.ToString(rd["internal_code"]),Convert.ToString(rd["name"]),
+      Dec(rd["stock"]),Dec(rd["cost"]),Dec(rd["price"]),cart.Where(x=>x.Id==id).Sum(x=>x.Qty));
+    }
+    data.AcceptChanges();
+    using(var dialog=new StyledDialogForm{Text="Lançamento rapido | Editar todos os produtos",Width=1100,Height=700,StartPosition=FormStartPosition.CenterParent}){
+     var table=new DataGridView{Dock=DockStyle.Fill,DataSource=data,AllowUserToAddRows=false,
+      AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,
+      SelectionMode=DataGridViewSelectionMode.CellSelect,BackgroundColor=Color.White};
+     foreach(string name in new[]{"ID","Codigo","Descricao","Estoque"})table.Columns[name].ReadOnly=true;
+     table.Columns["ID"].Visible=false;
+     table.Columns["Descricao"].MinimumWidth=290;
+     var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,WrapContents=false};
+     var save=new Button{Text="SALVAR ALTERACOES",Width=190,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="CANCELAR",Width=125,Height=38};
+     var hint=new Label{Text="Edite custo, preco e quantidade da venda. Estoque: somente leitura. Nada e vendido ate finalizar.",Dock=DockStyle.Top,Height=36};
+     save.Click+=(sender,args)=>{
+      try{
+       table.EndEdit();
+       var changed=data.Rows.Cast<DataRow>().Where(x=>x.RowState==DataRowState.Modified).ToList();
+       var updates=new List<Tuple<long,decimal,decimal,decimal>>();
+       foreach(DataRow row in changed){
+        long id=Convert.ToInt64(row["ID"]);
+        decimal cost=Convert.ToDecimal(row["Custo"]),price=Convert.ToDecimal(row["Preco"]),amount=Convert.ToDecimal(row["Qtd. venda"]);
+        if(cost<0||price<=0||amount<0||amount>999999)throw new Exception("Valor invalido: "+row["Descricao"]);
+        updates.Add(Tuple.Create(id,cost,price,amount));
+       }
+       foreach(var u in updates){
+        var row=data.Rows.Cast<DataRow>().First(x=>Convert.ToInt64(x["ID"])==u.Item1);
+        if(u.Item4>Convert.ToDecimal(row["Estoque"]))
+         throw new Exception("Estoque insuficiente para "+row["Descricao"]+". Atualize pelo modulo Estoque.");
+       }
+       using(var cn=Open()){
+        using(var tx=cn.BeginTransaction()){
+         foreach(var u in updates){
+          using(var cmd=new SQLiteCommand("UPDATE products SET cost=@cost,price=@price WHERE id=@id",cn,tx)){
+           cmd.Parameters.AddWithValue("@cost",u.Item2);cmd.Parameters.AddWithValue("@price",u.Item3);
+           cmd.Parameters.AddWithValue("@id",u.Item1);
+           if(cmd.ExecuteNonQuery()!=1)throw new Exception("Produto nao encontrado: "+u.Item1);
+          }
+         }
+         tx.Commit();
+        }
+       }
+       foreach(var u in updates){
+        var row=data.Rows.Cast<DataRow>().First(x=>Convert.ToInt64(x["ID"])==u.Item1);
+        var current=cart.FirstOrDefault(x=>x.Id==u.Item1);
+        if(u.Item4==0){cart.RemoveAll(x=>x.Id==u.Item1);continue;}
+
+        if(current!=null){current.Qty=u.Item4;current.Price=u.Item3;current.Cost=u.Item2;}
+        else cart.Add(new Item{Id=u.Item1,InternalCode=Convert.ToString(row["Codigo"]),
+         Name=Convert.ToString(row["Descricao"]),Qty=u.Item4,Price=u.Item3,Cost=u.Item2});
+       }
+       Render();LoadStockInPdv();dialog.DialogResult=DialogResult.OK;
+      }catch(Exception ex){MessageBox.Show("Alteracoes nao concluidas: "+ex.Message,"Conferencia",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+     };
+     cancel.Click+=(sender,args)=>dialog.DialogResult=DialogResult.Cancel;
+     bar.Controls.Add(save);bar.Controls.Add(cancel);
+     dialog.Controls.Add(table);dialog.Controls.Add(bar);dialog.Controls.Add(hint);
+     dialog.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Erro ao abrir produtos: "+ex.Message,"Lançamento rapido",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
   void ChooseEditAction(){
+   if(manualEntry&&stockViewOpen){EditAllStockInPdv();return;}
    using(var dialog=new StyledDialogForm{Text="PDV | Editar produto",Width=430,Height=185,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Color.White}){
     var hint=new Label{Text="O que deseja alterar?",Left=18,Top=17,Width=380,Height=28,Font=new Font("Segoe UI",11,FontStyle.Bold)};
     var item=new Button{Text="Quantidade / preço desta venda",Left=18,Top=62,Width=187,Height=48,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
