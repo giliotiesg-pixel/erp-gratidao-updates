@@ -1118,14 +1118,14 @@ namespace ArmazemGratidao {
    if(!manualEntry)return;
    try{
     var data=new DataTable();
-    data.Columns.Add("ID",typeof(long));data.Columns.Add("Codigo");data.Columns.Add("Descricao");
+    data.Columns.Add("ID",typeof(long));data.Columns.Add("Codigo interno");data.Columns.Add("Codigo de barras");data.Columns.Add("Descricao");
     data.Columns.Add("Estoque",typeof(decimal));data.Columns.Add("Custo",typeof(decimal));
-    data.Columns.Add("Preco",typeof(decimal));data.Columns.Add("Qtd. venda",typeof(decimal));
+    data.Columns.Add("Preco",typeof(decimal));data.Columns.Add("Qtd. venda",typeof(decimal));data.Columns.Add("Total venda",typeof(decimal),"[Preco] * [Qtd. venda]");
     using(var cn=Open())
-    using(var cmd=new SQLiteCommand("SELECT id,internal_code,name,stock,cost,price FROM products ORDER BY name COLLATE NOCASE,id",cn))
+    using(var cmd=new SQLiteCommand("SELECT id,internal_code,barcode,name,stock,cost,price FROM products ORDER BY name COLLATE NOCASE,id",cn))
     using(var rd=cmd.ExecuteReader())while(rd.Read()){
      long id=Convert.ToInt64(rd["id"]);
-     data.Rows.Add(id,Convert.ToString(rd["internal_code"]),Convert.ToString(rd["name"]),
+     data.Rows.Add(id,Convert.ToString(rd["internal_code"]),Convert.ToString(rd["barcode"]),Convert.ToString(rd["name"]),
       Dec(rd["stock"]),Dec(rd["cost"]),Dec(rd["price"]),cart.Where(x=>x.Id==id).Sum(x=>x.Qty));
     }
     data.AcceptChanges();
@@ -1136,9 +1136,17 @@ namespace ArmazemGratidao {
      // A vinculacao do DataTable pode criar colunas somente depois da montagem do controle.
      // Configurar apenas colunas existentes, evitando NullReferenceException no Windows 8.
      Action configureColumns=()=>{
-      foreach(string name in new[]{"ID","Codigo","Descricao","Estoque"})
+      foreach(string name in new[]{"ID","Estoque","Total venda"})
        if(table.Columns.Contains(name))table.Columns[name].ReadOnly=true;
       if(table.Columns.Contains("ID"))table.Columns["ID"].Visible=false;
+      table.ColumnHeadersVisible=true;
+      table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+      table.ColumnHeadersHeight=42;
+      table.EnableHeadersVisualStyles=false;
+      table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9,FontStyle.Bold);
+      table.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
+      if(table.Columns.Contains("Codigo de barras"))table.Columns["Codigo de barras"].MinimumWidth=150;
+      if(table.Columns.Contains("Codigo interno"))table.Columns["Codigo interno"].MinimumWidth=105;
       if(table.Columns.Contains("Descricao"))table.Columns["Descricao"].MinimumWidth=290;
      };
      table.DataBindingComplete+=(sender,args)=>configureColumns();
@@ -1146,17 +1154,19 @@ namespace ArmazemGratidao {
      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,WrapContents=false};
      var save=new Button{Text="SALVAR ALTERACOES",Width=190,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
      var cancel=new Button{Text="CANCELAR",Width=125,Height=38};
-     var hint=new Label{Text="Edite custo, preco e quantidade da venda. Estoque: somente leitura. Nada e vendido ate finalizar.",Dock=DockStyle.Top,Height=36};
+     var hint=new Label{Text="Codigo interno, codigo de barras, descricao, custo, preco e quantidade editaveis. Estoque e total visiveis. Nada e vendido ate finalizar.",Dock=DockStyle.Top,Height=36};
      save.Click+=(sender,args)=>{
       try{
        table.EndEdit();
        var changed=data.Rows.Cast<DataRow>().Where(x=>x.RowState==DataRowState.Modified).ToList();
-       var updates=new List<Tuple<long,decimal,decimal,decimal>>();
+       var updates=new List<Tuple<long,decimal,decimal,decimal,string,string,string>>();
        foreach(DataRow row in changed){
         long id=Convert.ToInt64(row["ID"]);
         decimal cost=Convert.ToDecimal(row["Custo"]),price=Convert.ToDecimal(row["Preco"]),amount=Convert.ToDecimal(row["Qtd. venda"]);
         if(cost<0||price<=0||amount<0||amount>999999)throw new Exception("Valor invalido: "+row["Descricao"]);
-        updates.Add(Tuple.Create(id,cost,price,amount));
+        string barcode=Convert.ToString(row["Codigo de barras"]).Trim(),internalCode=Convert.ToString(row["Codigo interno"]).Trim(),description=Convert.ToString(row["Descricao"]).Trim();
+        if(description.Length==0)throw new Exception("Descricao obrigatoria.");
+        updates.Add(Tuple.Create(id,cost,price,amount,barcode,internalCode,description));
        }
        foreach(var u in updates){
         var row=data.Rows.Cast<DataRow>().First(x=>Convert.ToInt64(x["ID"])==u.Item1);
@@ -1164,11 +1174,17 @@ namespace ArmazemGratidao {
          throw new Exception("Estoque insuficiente para "+row["Descricao"]+". Atualize pelo modulo Estoque.");
        }
        using(var cn=Open()){
+        // Backup integral antes de qualquer alteracao cadastral.
+        string backup=db+".antes-editar-todos-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+        using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+         copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
+        }
         using(var tx=cn.BeginTransaction()){
          foreach(var u in updates){
-          using(var cmd=new SQLiteCommand("UPDATE products SET cost=@cost,price=@price WHERE id=@id",cn,tx)){
+          using(var cmd=new SQLiteCommand("UPDATE products SET cost=@cost,price=@price,barcode=@barcode,internal_code=@internal,name=@name WHERE id=@id",cn,tx)){
            cmd.Parameters.AddWithValue("@cost",u.Item2);cmd.Parameters.AddWithValue("@price",u.Item3);
            cmd.Parameters.AddWithValue("@id",u.Item1);
+           cmd.Parameters.AddWithValue("@barcode",u.Item5);cmd.Parameters.AddWithValue("@internal",u.Item6);cmd.Parameters.AddWithValue("@name",u.Item7);
            if(cmd.ExecuteNonQuery()!=1)throw new Exception("Produto nao encontrado: "+u.Item1);
           }
          }
@@ -1180,9 +1196,9 @@ namespace ArmazemGratidao {
         var current=cart.FirstOrDefault(x=>x.Id==u.Item1);
         if(u.Item4==0){cart.RemoveAll(x=>x.Id==u.Item1);continue;}
 
-        if(current!=null){current.Qty=u.Item4;current.Price=u.Item3;current.Cost=u.Item2;}
-        else cart.Add(new Item{Id=u.Item1,InternalCode=Convert.ToString(row["Codigo"]),
-         Name=Convert.ToString(row["Descricao"]),Qty=u.Item4,Price=u.Item3,Cost=u.Item2});
+        if(current!=null){current.Qty=u.Item4;current.Price=u.Item3;current.Cost=u.Item2;current.Name=u.Item7;current.InternalCode=u.Item6;current.Barcode=u.Item5;}
+        else cart.Add(new Item{Id=u.Item1,InternalCode=u.Item6,Barcode=u.Item5,
+         Name=u.Item7,Qty=u.Item4,Price=u.Item3,Cost=u.Item2});
        }
        Render();LoadStockInPdv();dialog.DialogResult=DialogResult.OK;
       }catch(Exception ex){MessageBox.Show("Alteracoes nao concluidas: "+ex.Message,"Conferencia",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
