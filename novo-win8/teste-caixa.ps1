@@ -114,8 +114,8 @@ try{
      [void]$method.Invoke($form,[object[]]@())
     }else{
      $method=$type.GetMethod('FormFields',$flags)
-     $inputs=New-Object 'Windows.Forms.Control[]' $rows
-     $names=New-Object 'string[]' $rows
+     $inputs=[Windows.Forms.Control[]]::new($rows)
+     $names=[string[]]::new($rows)
      for($i=0;$i -lt $rows;$i++){
       $inputs[$i]=New-Object Windows.Forms.TextBox
       $names[$i]="Campo completo número $i"
