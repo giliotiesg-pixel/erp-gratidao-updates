@@ -94,6 +94,9 @@ namespace ArmazemGratidao {
    var research=new Button{Text="CENTRAL DE PESQUISA",Width=190,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
    research.Click+=(sender,args)=>OpenBarcodeResearchCenter(null,null);
    bar.Controls.Add(research);
+   var fiscalResearch=new Button{Text="PESQUISA FISCAL / NCM",Width=200,Height=33};
+   fiscalResearch.Click+=(sender,args)=>OpenFiscalResearchCenter(null,null);
+   bar.Controls.Add(fiscalResearch);
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
@@ -1229,6 +1232,44 @@ namespace ArmazemGratidao {
     return new BarcodeProductData{Name=name,Brand=JsonProductField(json,"brands"),Category=JsonProductField(json,"categories")};
    }
   }
+  void OpenFiscalResearchCenter(string initialBarcode,string initialName){
+   string barcode=initialBarcode??"",product=initialName??"";
+   if(initialBarcode==null&&grid.CurrentRow!=null){
+    long id;
+    if(long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id))
+     using(var cn=Open())
+     using(var cmd=new SQLiteCommand("SELECT barcode,name FROM products WHERE id=@id",cn)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var rd=cmd.ExecuteReader())if(rd.Read()){
+       barcode=Convert.ToString(rd["barcode"]);product=Convert.ToString(rd["name"]);
+      }
+     }
+   }
+   using(var dlg=new StyledDialogForm{Text="Pesquisa fiscal | NCM e tributacao",Width=810,Height=560,MinimumSize=new Size(560,410),StartPosition=FormStartPosition.CenterParent}){
+    var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=85,AutoScroll=true,WrapContents=true,Padding=new Padding(8)};
+    var name=new TextBox{Width=380,Text=product};
+    var code=new TextBox{Width=160,Text=barcode};
+    top.Controls.Add(new Label{Text="Produto",AutoSize=true});top.Controls.Add(name);
+    top.Controls.Add(new Label{Text="EAN",AutoSize=true});top.Controls.Add(code);
+    var info=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Font=new Font("Segoe UI",10),
+     Text="PESQUISA FISCAL - CONFERENCIA OBRIGATORIA\r\n\r\nNCM (8 digitos): verificar classificacao, composicao e embalagem no Classif da Receita.\r\nCEST: verificar se o produto se enquadra em segmento sujeito a substituicao tributaria.\r\nCFOP: depende da operacao, nao somente do produto.\r\nCST / CSOSN: depende do regime tributario e do tratamento aplicavel.\r\nICMS / ICMS-ST / FCP: verificar regras do estado e da operacao.\r\nPIS / Cofins / IPI: verificar regime e legislacao especifica.\r\nIBS / CBS: conferir CST e cClassTrib nas tabelas vigentes da NF-e.\r\n\r\nNenhum codigo ou aliquota e atribuido automaticamente.\r\nA ausencia de resultado na pesquisa nao significa isencao."};
+    var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=102,AutoScroll=true,WrapContents=true,Padding=new Padding(8)};
+    var classif=new Button{Text="CLASSIF RECEITA / NCM",Width=205,Height=36};
+    classif.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://portalunico.siscomex.gov.br/classif/");
+    var nfe=new Button{Text="TABELAS OFICIAIS NF-e",Width=200,Height=36};
+    nfe.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=/NJarYc9nus=");
+    var google=new Button{Text="PESQUISAR PRODUTO + NCM",Width=225,Height=36};
+    google.Click+=(sender,args)=>{
+     string query=(name.Text+" "+code.Text+" NCM classificacao fiscal").Trim();
+     if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?q="+Uri.EscapeDataString(query));
+    };
+    var close=new Button{Text="FECHAR",Width=95,Height=36};
+    close.Click+=(sender,args)=>dlg.Close();
+    actions.Controls.Add(classif);actions.Controls.Add(nfe);actions.Controls.Add(google);actions.Controls.Add(close);
+    dlg.Controls.Add(info);dlg.Controls.Add(actions);dlg.Controls.Add(top);
+    dlg.ShowDialog(this);
+   }
+  }
   void OpenBarcodeResearchCenter(string initialBarcode,string initialName){
    string localBarcode=initialBarcode??"",localName=initialName??"";
    if(initialBarcode==null&&grid.CurrentRow!=null){
@@ -1605,6 +1646,9 @@ namespace ArmazemGratidao {
     var researchAtRegistration=new Button{Text="CENTRAL DE PESQUISA (3 BASES)",Width=265,Height=34};
     researchAtRegistration.Click+=(sender,args)=>OpenBarcodeResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     panel.Controls.Add(researchAtRegistration,1,11);
+    var fiscalAtRegistration=new Button{Text="PESQUISA FISCAL / NCM",Width=240,Height=33};
+    fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
+    panel.Controls.Add(fiscalAtRegistration,1,12);
 
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
