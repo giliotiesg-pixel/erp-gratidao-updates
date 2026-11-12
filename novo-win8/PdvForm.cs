@@ -725,111 +725,123 @@ namespace ArmazemGratidao {
    }
   }
   void ImportNotebookSales(){
-   if(cart.Count>0){MessageBox.Show("Finalize ou limpe a venda atual antes de importar. O carrinho existente foi preservado.","Importar vendas");return;}
-   using(var picker=new OpenFileDialog{Title="Selecionar vendas anotadas (CSV)",Filter="Planilha CSV (*.csv)|*.csv",CheckFileExists=true}){
+   if(cart.Count>0){MessageBox.Show("O carrinho atual esta em uso. Limpe-o antes de importar, sem perder os dados.");return;}
+   using(var picker=new OpenFileDialog{Title="Importar vendas anotadas diretamente no historico",Filter="CSV (*.csv)|*.csv"}){
     if(picker.ShowDialog(this)!=DialogResult.OK)return;
     try{
      var lines=File.ReadAllLines(picker.FileName,Encoding.UTF8);
-     if(lines.Length<2)throw new Exception("Arquivo sem linhas de vendas.");
+     if(lines.Length<2)throw new Exception("Arquivo vazio.");
      char separator=lines[0].Count(x=>x==';')>=lines[0].Count(x=>x==',')?';':',';
-     string[] headers=SplitNotebookCsv(lines[0].TrimStart('\uFEFF'),separator);
+     var headers=SplitNotebookCsv(lines[0].TrimStart('\uFEFF'),separator);
      var columns=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
      for(int i=0;i<headers.Length;i++)columns[SearchFold(headers[i]).Replace(" ","").Replace("_","")]=i;
-     if(!columns.ContainsKey("produto")&&!columns.ContainsKey("descricao"))throw new Exception("Falta coluna Produto ou Descricao.");
-     if(!columns.ContainsKey("venda")&&!columns.ContainsKey("numerovenda"))throw new Exception("Falta coluna Venda.");
+     if(!columns.ContainsKey("venda")&&!columns.ContainsKey("numerovenda"))throw new Exception("Coluna Venda ausente.");
      var entries=new List<NotebookLine>();
      for(int i=1;i<lines.Length;i++){
       if(string.IsNullOrWhiteSpace(lines[i]))continue;
       var cells=SplitNotebookCsv(lines[i],separator);
-      string number=NotebookField(cells,columns,"venda","numerovenda");
-      string product=NotebookField(cells,columns,"produto","descricao");
-      string quantity=NotebookField(cells,columns,"quantidade","qtd");
-      decimal amount;
-      if(string.IsNullOrWhiteSpace(number)||string.IsNullOrWhiteSpace(product)||!decimal.TryParse(quantity,NumberStyles.Number,CultureInfo.GetCultureInfo("pt-BR"),out amount)||amount<=0)
-       throw new Exception("Linha "+(i+1)+": venda, produto ou quantidade invalida.");
-      entries.Add(new NotebookLine{Sale=number,Product=product,Quantity=amount,
+      string qty=NotebookField(cells,columns,"quantidade","qtd");decimal quantity;
+      if(!decimal.TryParse(qty,NumberStyles.Number,CultureInfo.GetCultureInfo("pt-BR"),out quantity)||quantity<=0)
+       throw new Exception("Quantidade invalida na linha "+(i+1));
+      entries.Add(new NotebookLine{Sale=NotebookField(cells,columns,"venda","numerovenda"),
+       Product=NotebookField(cells,columns,"produto","descricao"),Quantity=quantity,
        Payment=NotebookField(cells,columns,"pagamento","formapagamento"),
        Date=NotebookField(cells,columns,"data","datavenda")});
      }
-     if(entries.Count==0)throw new Exception("Nenhum produto para importar.");
      var groups=entries.GroupBy(x=>x.Sale).ToList();
-     using(var dialog=new StyledDialogForm{Text="Selecionar venda anotada",Width=720,Height=480,StartPosition=FormStartPosition.CenterParent}){
-      var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",11)};
-      foreach(var group in groups)list.Items.Add("Venda "+group.Key+" | "+group.Sum(x=>x.Quantity).ToString("N3")+" unidades | "+group.First().Payment+" | "+group.Count()+" produtos");
-      var info=new Label{Text="Selecione UMA venda. Confira itens, valores, data e pagamento antes de finalizar. O arquivo nao e gravado automaticamente.",Dock=DockStyle.Top,Height=58};
-      var choose=new Button{Text="CARREGAR VENDA SELECIONADA",Dock=DockStyle.Bottom,Height=42,DialogResult=DialogResult.OK};
-      dialog.Controls.Add(list);dialog.Controls.Add(info);dialog.Controls.Add(choose);
-      if(list.Items.Count>0)list.SelectedIndex=0;
-      dialog.AcceptButton=choose;
-      if(dialog.ShowDialog(this)!=DialogResult.OK||list.SelectedIndex<0)return;
-      var selected=groups[list.SelectedIndex].ToList();
-      // Exigir correspondencia unica no cadastro; nunca escolher produto parecido silenciosamente.
-      var imported=new List<Item>();
+     if(groups.Count==0)throw new Exception("Nao ha vendas no arquivo.");
+     DateTime saleDay=new DateTime(2026,10,27);
+     using(var form=new StyledDialogForm{Text="Importar vendas diretamente",Width=620,Height=280,StartPosition=FormStartPosition.CenterParent}){
+      var label=new Label{Dock=DockStyle.Top,Height=65,Text=groups.Count+" vendas / "+entries.Count+" itens. Importacao direta no historico, sem finalizar no PDV.\\nInforme a data das vendas e o cliente da venda fiada, se houver."};
+      var date=new DateTimePicker{Dock=DockStyle.Top,Format=DateTimePickerFormat.Custom,CustomFormat="dd/MM/yyyy",Value=saleDay};
+      var customer=new TextBox{Dock=DockStyle.Top,Text="",Font=new Font("Segoe UI",11)};
+      var customerLabel=new Label{Dock=DockStyle.Top,Height=25,Text="Cliente do Fiado (obrigatorio se houver Fiado):"};
+      var ok=new Button{Dock=DockStyle.Bottom,Height=44,Text="IMPORTAR TODAS AS VENDAS NO HISTORICO",DialogResult=DialogResult.OK};
+      form.Controls.Add(customer);form.Controls.Add(customerLabel);form.Controls.Add(date);form.Controls.Add(label);form.Controls.Add(ok);
+      if(form.ShowDialog(this)!=DialogResult.OK)return;
+      saleDay=date.Value.Date;
+      string fiadoCustomer=customer.Text.Trim();
+      if(groups.Any(g=>SearchFold(g.First().Payment)=="fiado")&&
+       (fiadoCustomer.Length==0||SearchFold(fiadoCustomer)=="consumidor"))
+       throw new Exception("Informe o cliente responsavel pela venda fiada. Nada foi importado.");
+      var resolved=new List<Tuple<string,List<Item>,string,DateTime,string>>();
       using(var cn=Open()){
-       foreach(var entry in selected){
-        var matches=new List<Item>();
-        using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products WHERE lower(name)=lower(@name) OR barcode=@name OR internal_code=@name",cn)){
-         cmd.Parameters.AddWithValue("@name",entry.Product);
-         using(var rd=cmd.ExecuteReader())while(rd.Read())matches.Add(new Item{
-          Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
-          InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
-          Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
+       foreach(var group in groups){
+        if(group.Any(x=>x.Payment!=group.First().Payment))throw new Exception("Pagamento diferente na venda "+group.Key);
+        string method=SearchFold(group.First().Payment).ToUpperInvariant().Replace(" ","_");
+        if(!new[]{"DINHEIRO","PIX","DEBITO","CREDITO","FIADO","ALIMENTACAO"}.Contains(method))
+         throw new Exception("Pagamento nao reconhecido: "+group.First().Payment);
+        DateTime when=saleDay.AddHours(12).AddSeconds(resolved.Count);
+        if(!string.IsNullOrWhiteSpace(group.First().Date)){
+         DateTime parsed;
+         if(!DateTime.TryParse(group.First().Date,CultureInfo.GetCultureInfo("pt-BR"),DateTimeStyles.None,out parsed))
+          throw new Exception("Data invalida na venda "+group.Key);
+         when=parsed;
         }
-        // Se o nome do CSV nao for identico ao cadastro, procurar equivalencia normalizada.
-        // Nunca selecionar automaticamente quando houver mais de um candidato.
-        if(matches.Count==0){
-         string wanted=SearchFold(entry.Product).Trim();
-         using(var fallback=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products ORDER BY name,id",cn))
-         using(var rd=fallback.ExecuteReader())while(rd.Read()){
-          string registered=SearchFold(Convert.ToString(rd["name"])).Trim();
-          if(registered!=wanted)continue;
-          matches.Add(new Item{Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
-           InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
-           Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
+        var items=new List<Item>();
+        foreach(var entry in group){
+         var matches=new List<Item>();
+         using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products WHERE lower(name)=lower(@name) OR barcode=@name OR internal_code=@name",cn)){
+          cmd.Parameters.AddWithValue("@name",entry.Product);
+          using(var rd=cmd.ExecuteReader())while(rd.Read())matches.Add(new Item{Id=Convert.ToInt64(rd["id"]),
+           Barcode=Convert.ToString(rd["barcode"]),InternalCode=Convert.ToString(rd["internal_code"]),
+           Name=Convert.ToString(rd["name"]),Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
          }
+         if(matches.Count!=1)matches=new List<Item>{ResolveNotebookProduct(cn,entry.Product,entry.Quantity)};
+         if(matches[0].Price<=0)throw new Exception("Preco nao cadastrado: "+entry.Product);
+         items.Add(matches[0]);
         }
-        // Alias confirmado pelo codigo de barras exibido no cadastro.
-        if(matches.Count==0 && SearchFold(entry.Product).Trim()=="suco mid de abacaxi"){
-         using(var alias=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products WHERE barcode=@barcode",cn)){
-          alias.Parameters.AddWithValue("@barcode","7891132082407");
-          using(var rd=alias.ExecuteReader())while(rd.Read()){
-           string registered=SearchFold(Convert.ToString(rd["name"]));
-           if(registered.Contains("mid") && registered.Contains("abacaxi"))
-            matches.Add(new Item{Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
-             InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
-             Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=entry.Quantity});
-          }
-         }
-        }
-        if(matches.Count!=1)matches=new List<Item>{ResolveNotebookProduct(cn,entry.Product,entry.Quantity)};
-        imported.Add(matches[0]);
+        resolved.Add(Tuple.Create(group.Key,items,method,when,method=="FIADO"?fiadoCustomer:"Consumidor"));
        }
       }
-      string method=SearchFold(selected[0].Payment.Trim()).ToUpperInvariant().Replace(" ","_");
-      if(method=="DEBITO")method="DEBITO";
-      if(method=="CREDITO")method="CREDITO";
-      if(selected.Any(x=>!string.Equals(x.Payment.Trim(),selected[0].Payment.Trim(),StringComparison.OrdinalIgnoreCase)))
-       throw new Exception("Formas de pagamento diferentes na mesma venda. Confira o arquivo.");
-      DateTime parsed;
-      if(!string.IsNullOrWhiteSpace(selected[0].Date)){
-       if(!DateTime.TryParse(selected[0].Date,CultureInfo.GetCultureInfo("pt-BR"),DateTimeStyles.None,out parsed)||parsed>DateTime.Now)
-        throw new Exception("Data invalida ou futura na venda "+selected[0].Sale+".");
-       if(selected.Any(x=>x.Date!=selected[0].Date))throw new Exception("Datas diferentes na mesma venda.");
-       manualDate.Value=parsed;
+      if(MessageBox.Show("Gravar "+resolved.Count+" vendas diretamente no historico?\\nNao sera necessario finalizar nenhuma venda.\\nO estoque atual NAO sera baixado novamente.","Confirmar importacao",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+      using(var cn=Open(false)){
+       string backup=db+".antes-importar-caderno-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+        copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
+       }
+       using(var tx=cn.BeginTransaction()){
+        using(var setup=new SQLiteCommand("CREATE TABLE IF NOT EXISTS notebook_imports (id INTEGER PRIMARY KEY AUTOINCREMENT,source_file TEXT NOT NULL,sale_number TEXT NOT NULL,sale_id INTEGER NOT NULL,UNIQUE(source_file,sale_number))",cn,tx))setup.ExecuteNonQuery();
+        string source=Path.GetFileName(picker.FileName);
+        foreach(var sale in resolved){
+         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM notebook_imports WHERE source_file=@source AND sale_number=@number",cn,tx)){
+          check.Parameters.AddWithValue("@source",source);check.Parameters.AddWithValue("@number",sale.Item1);
+          if(Convert.ToInt64(check.ExecuteScalar())>0)throw new Exception("Venda "+sale.Item1+" ja importada deste arquivo. Nenhuma venda duplicada foi gravada.");
+         }
+         decimal total=sale.Item2.Sum(x=>x.Price*x.Qty),cost=sale.Item2.Sum(x=>x.Cost*x.Qty),profit=total-cost;
+         long id;
+         using(var insert=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@date); SELECT last_insert_rowid()",cn,tx)){
+          insert.Parameters.AddWithValue("@customer",sale.Item5);insert.Parameters.AddWithValue("@method",sale.Item3);
+          insert.Parameters.AddWithValue("@total",total);insert.Parameters.AddWithValue("@cost",cost);
+          insert.Parameters.AddWithValue("@profit",profit);insert.Parameters.AddWithValue("@reserve",Math.Round(profit*.10M,2));
+          insert.Parameters.AddWithValue("@date",sale.Item4.ToString("yyyy-MM-dd HH:mm:ss"));
+          id=Convert.ToInt64(insert.ExecuteScalar());
+         }
+         foreach(var item in sale.Item2)using(var insert=new SQLiteCommand("INSERT INTO sale_items(sale_id,product_id,barcode,name,quantity,unit_price,unit_cost,total) VALUES(@sale,@product,@barcode,@name,@qty,@price,@cost,@total)",cn,tx)){
+          insert.Parameters.AddWithValue("@sale",id);insert.Parameters.AddWithValue("@product",item.Id);
+          insert.Parameters.AddWithValue("@barcode",item.Barcode);insert.Parameters.AddWithValue("@name",item.Name);
+          insert.Parameters.AddWithValue("@qty",item.Qty);insert.Parameters.AddWithValue("@price",item.Price);
+          insert.Parameters.AddWithValue("@cost",item.Cost);insert.Parameters.AddWithValue("@total",item.Price*item.Qty);
+          insert.ExecuteNonQuery();
+         }
+         using(var payment=new SQLiteCommand("INSERT INTO sale_payments(sale_id,payment_method,amount) VALUES(@sale,@method,@amount)",cn,tx)){
+          payment.Parameters.AddWithValue("@sale",id);payment.Parameters.AddWithValue("@method",sale.Item3);
+          payment.Parameters.AddWithValue("@amount",total);payment.ExecuteNonQuery();
+         }
+         if(sale.Item3=="FIADO")FiadoClientesForm.ApplyCustomerCredit(cn,tx,id,sale.Item5,total);
+         using(var mark=new SQLiteCommand("INSERT INTO notebook_imports(source_file,sale_number,sale_id) VALUES(@source,@number,@id)",cn,tx)){
+          mark.Parameters.AddWithValue("@source",source);mark.Parameters.AddWithValue("@number",sale.Item1);mark.Parameters.AddWithValue("@id",id);mark.ExecuteNonQuery();
+         }
+        }
+        tx.Commit();
+       }
       }
-      if(!payment.Items.Cast<object>().Any(x=>string.Equals(Convert.ToString(x),method,StringComparison.OrdinalIgnoreCase)))
-       throw new Exception("Forma de pagamento nao reconhecida: "+method);
-      foreach(var item in imported){
-       var existing=cart.FirstOrDefault(x=>x.Id==item.Id);
-       if(existing!=null)existing.Qty+=item.Qty;else cart.Add(item);
-      }
-      payment.SelectedItem=method;
-      Render();SaveDraft();
-      MessageBox.Show("Venda "+selected[0].Sale+" carregada no carrinho. Confira data, pagamento, quantidade e preco antes de finalizar. Para as demais vendas, repita a importacao. Nao importe uma venda ja registrada.","Conferencia obrigatoria");
+      MessageBox.Show(resolved.Count+" vendas importadas diretamente no historico. Nenhuma finalizacao manual necessaria.");
      }
-    }catch(Exception ex){MessageBox.Show("Importacao cancelada: "+ex.Message,"Importar vendas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+    }catch(Exception ex){MessageBox.Show("Importacao nao concluida: "+ex.Message,"Importar vendas",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
    }
   }
+
   void AddProduct(bool askQuantity=false) {
    string search=code.Text.Trim();if(search.Length==0)return;
    try {
