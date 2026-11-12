@@ -1360,40 +1360,88 @@ namespace ArmazemGratidao {
     compareAll.Click+=async (sender,args)=>{
      compareAll.Enabled=false;
      try{
-      var products=new List<Tuple<string,string>>();
+      var products=new List<Tuple<long,string,string>>();
       using(var cn=Open())
-      using(var cmd=new SQLiteCommand("SELECT barcode,name FROM products WHERE TRIM(COALESCE(barcode,''))<>'' ORDER BY name",cn))
+      using(var cmd=new SQLiteCommand("SELECT id,barcode,name FROM products WHERE TRIM(COALESCE(barcode,''))<>'' ORDER BY name",cn))
       using(var rd=cmd.ExecuteReader())while(rd.Read())
-       products.Add(Tuple.Create(Convert.ToString(rd["barcode"]).Trim(),Convert.ToString(rd["name"]).Trim()));
+       products.Add(Tuple.Create(Convert.ToInt64(rd["id"]),Convert.ToString(rd["barcode"]).Trim(),Convert.ToString(rd["name"]).Trim()));
       using(var audit=new StyledDialogForm{Text="Confronto do cadastro com a internet",Width=1100,Height=680,StartPosition=FormStartPosition.CenterParent}){
        var data=new DataTable();
-       foreach(string column in new[]{"Codigo cadastrado","Produto cadastrado","Produto na internet","Fonte","Situacao"})data.Columns.Add(column);
+       foreach(string column in new[]{"ID","Codigo cadastrado","Produto cadastrado","Produto na internet","Fonte","Situacao"})data.Columns.Add(column);
        var table=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,
         AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=data};
+       table.DataBindingComplete+=(o,e)=>{if(table.Columns.Contains("ID"))table.Columns["ID"].Visible=false;};
        var progress=new Label{Dock=DockStyle.Top,Height=36,Text="Preparando confronto...",Font=new Font("Segoe UI",10,FontStyle.Bold)};
        var closeAudit=new Button{Dock=DockStyle.Bottom,Height=40,Text="Fechar conferencia",DialogResult=DialogResult.OK};
-       audit.Controls.Add(table);audit.Controls.Add(progress);audit.Controls.Add(closeAudit);
+       var fix=new Button{Dock=DockStyle.Bottom,Height=42,Text="CORRIGIR CODIGO DO PRODUTO SELECIONADO"};
+       fix.Click+=(o,e)=>{
+        if(table.CurrentRow==null){MessageBox.Show("Selecione o produto na tabela.");return;}
+        var row=table.CurrentRow.DataBoundItem as DataRowView;
+        if(row==null)return;
+        long productId=Convert.ToInt64(row["ID"]);
+        string oldCode=Convert.ToString(row["Codigo cadastrado"]);
+        string productName=Convert.ToString(row["Produto cadastrado"]);
+        using(var edit=new StyledDialogForm{Text="Corrigir codigo de barras",Width=620,Height=290,StartPosition=FormStartPosition.CenterParent}){
+         var label=new Label{Dock=DockStyle.Top,Height=80,Text="Produto: "+productName+"\\nCodigo atual: "+oldCode+"\\nBipe o codigo correto abaixo:",Font=new Font("Segoe UI",10,FontStyle.Bold)};
+         var scan=new TextBox{Dock=DockStyle.Top,Font=new Font("Segoe UI",14)};
+         var confirm=new Button{Dock=DockStyle.Bottom,Height=44,Text="CONFIRMAR CORRECAO"};
+         confirm.Click+=(x,y)=>{
+          string newCode=scan.Text.Trim();
+          if(!System.Text.RegularExpressions.Regex.IsMatch(newCode,@"^\\d{8,14}$")||!ValidBarcodeCheckDigit(newCode)){
+           MessageBox.Show("Codigo invalido. Confira a leitura e o digito verificador.");return;
+          }
+          if(newCode==oldCode){MessageBox.Show("O codigo bipado ja e o codigo cadastrado.");return;}
+          if(MessageBox.Show("Alterar somente o codigo de barras de\\n"+productName+"\\nDe: "+oldCode+"\\nPara: "+newCode+"?","Confirmar alteracao",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+          try{
+           using(var cn=Open(false)){
+            using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE barcode=@code AND id<>@id",cn)){
+             check.Parameters.AddWithValue("@code",newCode);check.Parameters.AddWithValue("@id",productId);
+             if(Convert.ToInt64(check.ExecuteScalar())>0)throw new Exception("Este codigo ja pertence a outro produto. Nenhuma alteracao foi feita.");
+            }
+            string backup=db+".antes-corrigir-codigo-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+            using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+             copy.Open();cn.BackupDatabase(copy,"main","main",-1,null,0);
+            }
+            using(var tx=cn.BeginTransaction())
+            using(var update=new SQLiteCommand("UPDATE products SET barcode=@new WHERE id=@id AND barcode=@old",cn,tx)){
+             update.Parameters.AddWithValue("@new",newCode);update.Parameters.AddWithValue("@id",productId);update.Parameters.AddWithValue("@old",oldCode);
+             if(update.ExecuteNonQuery()!=1)throw new Exception("O cadastro mudou durante a conferencia. Atualize a lista.");
+             tx.Commit();
+            }
+           }
+           row["Codigo cadastrado"]=newCode;
+           row["Situacao"]="CODIGO CORRIGIDO - RECONSULTAR INTERNET";
+           edit.DialogResult=DialogResult.OK;
+           MessageBox.Show("Codigo corrigido. Backup criado antes da alteracao.");
+          }catch(Exception ex){MessageBox.Show("Correcao nao realizada: "+ex.Message);}
+         };
+         edit.Controls.Add(scan);edit.Controls.Add(label);edit.Controls.Add(confirm);
+         edit.AcceptButton=confirm;edit.Shown+=(x,y)=>scan.Focus();
+         edit.ShowDialog(audit);
+        }
+       };
+       audit.Controls.Add(table);audit.Controls.Add(progress);audit.Controls.Add(fix);audit.Controls.Add(closeAudit);
        audit.Shown+=async (o,e)=>{
         int checkedCount=0;
         foreach(var product in products){
          if(audit.IsDisposed)break;
          string verdict,found="",source="Open Food Facts";
-         if(!System.Text.RegularExpressions.Regex.IsMatch(product.Item1,@"^\d{8,14}$")||!ValidBarcodeCheckDigit(product.Item1)){
+         if(!System.Text.RegularExpressions.Regex.IsMatch(product.Item2,@"^\d{8,14}$")||!ValidBarcodeCheckDigit(product.Item2)){
           verdict="CODIGO INVALIDO";source="Validacao GTIN";
          }else{
           try{
-           var online=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(product.Item1));
+           var online=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(product.Item2));
            if(audit.IsDisposed)break;
            if(online==null)verdict="NAO LOCALIZADO";
            else{
             found=online.Name;
-            string local=SearchFold(product.Item2),remote=SearchFold(found);
+            string local=SearchFold(product.Item3),remote=SearchFold(found);
             verdict=local==remote?"CONFERE":local.Contains(remote)||remote.Contains(local)?"REVISAR DESCRICAO":"DIVERGENTE - CONFERIR";
            }
           }catch(Exception){verdict="CONSULTA INDISPONIVEL";}
          }
          if(audit.IsDisposed)break;
-         data.Rows.Add(product.Item1,product.Item2,found,source,verdict);
+         data.Rows.Add(product.Item1,product.Item2,product.Item3,found,source,verdict);
          checkedCount++;
          progress.Text="Conferidos "+checkedCount+" de "+products.Count+" produtos. Nenhum cadastro sera alterado.";
          if(checkedCount%10==0)await System.Threading.Tasks.Task.Delay(100);
