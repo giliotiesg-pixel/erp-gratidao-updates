@@ -1284,19 +1284,27 @@ namespace ArmazemGratidao {
      }
    }
    using(var dlg=new StyledDialogForm{Text="Central de pesquisa de produtos e codigos de barras",Width=840,Height=620,MinimumSize=new Size(590,420),StartPosition=FormStartPosition.CenterParent}){
-    var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=88,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
+    var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=115,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
     var code=new TextBox{Width=190,Text=localBarcode};
     var name=new TextBox{Width=270,Text=localName};
     top.Controls.Add(new Label{Text="Codigo de barras:",AutoSize=true,Padding=new Padding(0,8,0,0)});
     top.Controls.Add(code);
     top.Controls.Add(new Label{Text="Descricao:",AutoSize=true,Padding=new Padding(0,8,0,0)});
     top.Controls.Add(name);
+    var category=new ComboBox{Width=225,DropDownStyle=ComboBoxStyle.DropDownList};
+    category.Items.AddRange(new object[]{"Todas as categorias","Tabaco, fumo e palheiro","Ferragens e materiais eletricos","Fitas, adesivos e utilidades","Alimentos e bebidas","Higiene e limpeza","Outros produtos"});
+    category.SelectedIndex=0;
+    top.Controls.Add(new Label{Text="Categoria:",AutoSize=true,Padding=new Padding(0,8,0,0)});
+    top.Controls.Add(category);
     var results=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,Font=new Font("Consolas",10),WordWrap=true};
     results.Text="Informe ou bipe um codigo e clique em PESQUISAR.\r\nAs fontes sao colaborativas e podem estar incompletas. Nenhum dado sera alterado.";
-    var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=94,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
+    var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=130,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
     var run=new Button{Text="PESQUISAR EM 3 BASES",Width=205,Height=36};
     var webSearch=new Button{Text="Pesquisar na Web",Width=155,Height=36};
     var gs1=new Button{Text="Consultar GS1",Width=145,Height=36};
+    var ncm=new Button{Text="NCM / RECEITA",Width=145,Height=36};
+    var searchByName=new Button{Text="PESQUISAR DESCRICAO",Width=205,Height=36};
+    var searchImages=new Button{Text="CONFERIR IMAGENS",Width=180,Height=36};
     var close=new Button{Text="Fechar",Width=100,Height=36};
     run.Click+=async (sender,args)=>{
      string barcode=code.Text.Trim();
@@ -1328,9 +1336,18 @@ namespace ArmazemGratidao {
      string query=(code.Text+" "+name.Text).Trim();
      if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?q="+Uri.EscapeDataString(query));
     };
-    gs1.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://www.gs1br.org/");
+    gs1.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://verifiedbygs1.gs1br.org/home");
+    ncm.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://portalunico.siscomex.gov.br/classif/");
+    searchByName.Click+=(sender,args)=>{
+     string query=(name.Text+" "+code.Text+" "+(category.SelectedIndex>0?Convert.ToString(category.SelectedItem):"")+" produto marca fabricante").Trim();
+     if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?q="+Uri.EscapeDataString(query));
+    };
+    searchImages.Click+=(sender,args)=>{
+     string query=(name.Text+" "+code.Text).Trim();
+     if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?tbm=isch&q="+Uri.EscapeDataString(query));
+    };
     close.Click+=(sender,args)=>dlg.Close();
-    actions.Controls.Add(run);actions.Controls.Add(webSearch);actions.Controls.Add(gs1);actions.Controls.Add(close);
+    actions.Controls.Add(run);actions.Controls.Add(searchByName);actions.Controls.Add(webSearch);actions.Controls.Add(searchImages);actions.Controls.Add(gs1);actions.Controls.Add(ncm);actions.Controls.Add(close);
     dlg.Controls.Add(results);dlg.Controls.Add(actions);dlg.Controls.Add(top);
     dlg.ShowDialog(this);
    }
