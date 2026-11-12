@@ -261,8 +261,14 @@ namespace ArmazemGratidao {
    if(string.IsNullOrWhiteSpace(note))throw new Exception("Informe uma observação da abertura.");
    long result=0;
    Write((c,tx)=>{
-    using(var q=new SQLiteCommand("SELECT COUNT(*) FROM cash_sessions WHERE UPPER(COALESCE(status,'')) IN ('ABERTO','OPEN','ABERTA')",c,tx))
-     if(Convert.ToInt64(q.ExecuteScalar())>0)throw new Exception("Existe outro caixa aberto. Feche-o antes de abrir um novo.");
+    // Um caixa antigo pendente fica no historico para acerto posterior;
+    // somente outro caixa da MESMA data impede nova abertura.
+    // Nao modificar status nem valores dos caixas anteriores automaticamente.
+    using(var q=new SQLiteCommand("SELECT COUNT(*) FROM cash_sessions WHERE UPPER(COALESCE(status,'')) IN ('ABERTO','OPEN','ABERTA') AND substr(opened_at,1,10)=@day",c,tx)){
+     q.Parameters.AddWithValue("@day",when.ToString("yyyy-MM-dd"));
+     if(Convert.ToInt64(q.ExecuteScalar())>0)
+      throw new Exception("Ja existe um caixa aberto nesta data. Consulte o caixa do dia ou Caixas Anteriores.");
+    }
     Exec(c,tx,"INSERT INTO cash_sessions(opened_at,opening_amount,status) VALUES(@at,@amount,'ABERTO')",
      P("@at",ToStamp(when)),P("@amount",opening));
     result=Id(c,tx);Audit(c,tx,result,null,"ABERTURA",null,"Troco R$ "+opening.ToString("N2"),note);
