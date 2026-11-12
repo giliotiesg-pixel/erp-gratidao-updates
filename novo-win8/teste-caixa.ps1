@@ -58,6 +58,77 @@ try{
   $form.Show()
   [Windows.Forms.Application]::DoEvents()
   $flags=[Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Public
+  # Regressão da foto: a Calculadora não pode cobrir DATA/HORA nem os rótulos.
+  # Testar tanto Abrir Caixa quanto o formulário longo de 7 campos.
+  function Check-CashEditor([bool]$isOpen,[int]$rows,[string]$name){
+   $script:cashEditorError=$null
+   $script:cashEditorSeen=$false
+   $script:cashEditorShot=Join-Path $out $name
+   $timer=New-Object Windows.Forms.Timer
+   $timer.Interval=180
+   $timer.add_Tick({
+    $window=[Windows.Forms.Application]::OpenForms |
+     Where-Object {$_.Name -eq 'amzgCashEditorDialog'} | Select-Object -First 1
+    if($null -eq $window){return}
+    $timer.Stop()
+    try{
+     $header=@($window.Controls.Find('amzgDialogActionHeader',$true))
+     $body=@($window.Controls.Find('amzgCashEditorFields',$true))
+     $calc=@($window.Controls.Find('amzgOpenCalculatorModule',$true))
+     if($header.Count -ne 1 -or $body.Count -ne 1 -or $calc.Count -ne 1){
+      throw 'Cabeçalho, formulário ou calculadora não encontrado.'
+     }
+     if($calc[0].Parent.Parent -ne $header[0]){
+      throw 'A calculadora está fora do cabeçalho reservado.'
+     }
+     if($body[0].Top -lt $header[0].Bottom -or $header[0].Top -ne 0){
+      throw 'A faixa da Calculadora está cobrindo os dados.'
+     }
+     for($i=0;$i -lt $rows;$i++){
+      $labels=@($window.Controls.Find("amzgCashFieldLabel$i",$true))
+      $inputs=@($window.Controls.Find("amzgCashField$i",$true))
+      if($labels.Count -ne 1 -or $inputs.Count -ne 1){
+       throw "Campo ou rótulo $i ausente do diálogo."
+      }
+      $labelPos=$window.PointToClient($labels[0].PointToScreen([Drawing.Point]::Empty))
+      $inputPos=$window.PointToClient($inputs[0].PointToScreen([Drawing.Point]::Empty))
+      if($labelPos.X -lt 12 -or $labelPos.Y -lt $header[0].Bottom -or
+         $inputPos.X -le $labelPos.X -or $inputPos.Y -lt $header[0].Bottom -or
+         $inputPos.X+$inputs[0].Width -gt $window.ClientSize.Width){
+       throw "Informações cortadas ou sobrepostas no campo $i : $labelPos / $inputPos."
+      }
+     }
+     $img=[Drawing.Bitmap]::new($window.ClientSize.Width,$window.ClientSize.Height)
+     try{
+      $window.DrawToBitmap($img,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$window.ClientSize))
+      $img.Save($script:cashEditorShot,[Drawing.Imaging.ImageFormat]::Png)
+     }finally{$img.Dispose()}
+     $script:cashEditorSeen=$true
+    }catch{$script:cashEditorError=$_.Exception.Message}
+    finally{$window.Close()}
+   })
+   $timer.Start()
+   try{
+    if($isOpen){
+     $method=$type.GetMethod('OpenDialog',$flags)
+     [void]$method.Invoke($form,[object[]]@())
+    }else{
+     $method=$type.GetMethod('FormFields',$flags)
+     $inputs=New-Object 'Windows.Forms.Control[]' $rows
+     $names=New-Object 'string[]' $rows
+     for($i=0;$i -lt $rows;$i++){
+      $inputs[$i]=New-Object Windows.Forms.TextBox
+      $names[$i]="Campo completo número $i"
+     }
+     [void]$method.Invoke($form,[object[]]@('Editar Caixa - verificação visual',$inputs,$names,[Action]{}))
+    }
+   }finally{$timer.Stop();$timer.Dispose()}
+   if($null -ne $script:cashEditorError){throw "Caixa: formulário não ajustado: $script:cashEditorError"}
+   if(!$script:cashEditorSeen){throw 'Caixa: o formulário de edição não foi exibido.'}
+  }
+  Check-CashEditor $true 3 'Previa-Caixa-Abrir-Sem-Cortes.png'
+  Check-CashEditor $false 7 'Previa-Caixa-Editar-Sete-Campos.png'
+  Write-Host 'CAIXA FORMULARIOS OK: data, hora, rótulos e valores visíveis; Calculadora isolada no cabeçalho.'
   function Invoke-Cash([string]$name,[object[]]$arguments){
    $method=@($type.GetMethods($flags) | Where-Object {
     $_.Name -eq $name -and $_.GetParameters().Length -eq $arguments.Length
