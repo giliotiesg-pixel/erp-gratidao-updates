@@ -744,7 +744,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Estoque pelo celular",(s,e)=>OpenMobileStock());
    AddButton(bar,"Lucro",(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));});
    AddSection(bar,"GESTÃO");
-   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new ModuloConsultaForm(dbPath,module));});
+   foreach(var module in new[]{"Estoque","Clientes","Compras","Caixa","Financeiro","Relatorios","Sistema"}) AddButton(bar,module,(s,e)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}if(module=="Caixa"){OpenModuleWindow(new CashControlForm(dbPath));return;}OpenModuleWindow(new ModuloConsultaForm(dbPath,module));});
    Controls.Add(grid);Controls.Add(status);Controls.Add(bar);Controls.Add(header);
    EnableWheelScrolling(bar);
    bar.Visible=false;Directory.CreateDirectory(dataDir);

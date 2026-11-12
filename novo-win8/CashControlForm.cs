@@ -14,6 +14,7 @@ namespace ArmazemGratidao {
   readonly DataGridView today=new DataGridView();
   readonly DataGridView history=new DataGridView();
   readonly DataGridView movements=new DataGridView();
+  readonly DataGridView previousMovements=new DataGridView();
   readonly Label totals=new Label();
   readonly Label caption=new Label();
   readonly TabControl pages=new TabControl();
@@ -83,10 +84,12 @@ namespace ArmazemGratidao {
    todayLayout.Controls.Add(Heading("ENTRADAS, SANGRIAS E SAÍDAS DO CAIXA SELECIONADO"),0,2);
    todayLayout.Controls.Add(movements,0,3);
    day.Controls.Add(todayLayout);
-   var archiveLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,
+   var archiveLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,
     Padding=new Padding(7),BackColor=Color.White};
    archiveLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
    archiveLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+   archiveLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,182));
+   archiveLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,29));
    archiveLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    var archiveHead=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
    archiveHead.Controls.Add(new Label{Text="Caixas Anteriores  |  Buscar por data:",
@@ -96,9 +99,12 @@ namespace ArmazemGratidao {
    historyDate.Width=118;historyDate.ShowCheckBox=true;historyDate.Checked=false;
    historyDate.ValueChanged+=(s,e)=>LoadHistory();archiveHead.Controls.Add(historyDate);
    archiveHead.Controls.Add(ActionButton("Ver todos",99,blue,()=>{historyDate.Checked=false;LoadHistory();}));
-   archiveLayout.Controls.Add(archiveHead,0,0);archiveLayout.Controls.Add(history,0,1);
+   archiveLayout.Controls.Add(archiveHead,0,0);
+   archiveLayout.Controls.Add(history,0,1);
+   archiveLayout.Controls.Add(Heading("MOVIMENTOS DO CAIXA ANTERIOR SELECIONADO"),0,2);
+   archiveLayout.Controls.Add(previousMovements,0,3);
    previous.Controls.Add(archiveLayout);
-   foreach(var view in new[]{today,history,movements})StyleGrid(view);
+   foreach(var view in new[]{today,history,movements,previousMovements})StyleGrid(view);
    today.SelectionChanged+=(s,e)=>{
     if(pages.SelectedIndex!=0)return;
     activeSelection=SelectedId(today);
@@ -428,8 +434,10 @@ namespace ArmazemGratidao {
    return id.Value;
   }
   long SelectedMovement(){
-   if(movements.CurrentRow==null||!movements.Columns.Contains("ID"))throw new Exception("Selecione um lançamento do caixa do dia.");
-   return Convert.ToInt64(movements.CurrentRow.Cells["ID"].Value);
+   var view=pages.SelectedIndex==1?previousMovements:movements;
+   if(view.CurrentRow==null||!view.Columns.Contains("ID"))
+    throw new Exception("Selecione um movimento da lista antes de editar.");
+   return Convert.ToInt64(view.CurrentRow.Cells["ID"].Value);
   }
   void RefreshAll(){
    if(IsDisposed||!File.Exists(database))return;
@@ -462,8 +470,9 @@ namespace ArmazemGratidao {
     string query="SELECT "+SessionColumns+" FROM cash_sessions WHERE date(opened_at)<>date('now','localtime')";
     if(historyDate.Checked)query+=" AND date(opened_at)=@date";
     query+=" ORDER BY opened_at DESC,id DESC LIMIT 2000";
-    history.DataSource=Read(c,query,historyDate.Checked?
-     P("@date",historyDate.Value.ToString("yyyy-MM-dd")):P("@unused",0));
+    history.DataSource=historyDate.Checked?
+     Read(c,query,P("@date",historyDate.Value.ToString("yyyy-MM-dd"))):
+     Read(c,query);
    }
    if(prev.HasValue)SelectId(history,prev.Value);
   }
@@ -474,10 +483,13 @@ namespace ArmazemGratidao {
     }
   }
   void LoadMovements(){
-   if(pages.SelectedIndex!=0){movements.DataSource=null;return;}
-   long? id=SelectedId(today);if(!id.HasValue){movements.DataSource=null;return;}
+   bool older=pages.SelectedIndex==1;
+   var target=older?previousMovements:movements;
+   if(older)movements.DataSource=null;else previousMovements.DataSource=null;
+   long? id=SelectedId(older?history:today);
+   if(!id.HasValue){target.DataSource=null;return;}
    using(var c=Connect(true))
-    movements.DataSource=Read(c,"SELECT id AS 'ID',occurred_at AS 'Data / hora',"+
+    target.DataSource=Read(c,"SELECT id AS 'ID',occurred_at AS 'Data / hora',"+
      "kind AS 'Tipo',amount AS 'Valor (R$)',description AS 'Descrição' "+
      "FROM cash_movements WHERE session_id=@id ORDER BY occurred_at DESC,id DESC",P("@id",id.Value));
   }
@@ -563,7 +575,7 @@ namespace ArmazemGratidao {
   }
   void MovementDialog(string type){
    try{
-    long sid=SelectedSession();var dt=DateField(DateTime.Now),kind=Kinds(type),amount=Money(0),note=Note();
+    long sid=SelectedSession();var dt=DateField(DateTime.Now);var kind=Kinds(type);var amount=Money(0);var note=Note();
     FormFields("Registrar entrada, sangria ou saída | Caixa #"+sid,
      new Control[]{dt,kind,amount,note},
      new[]{"Data e hora","Tipo de movimento","Valor R$","Motivo / descrição"},
@@ -584,8 +596,9 @@ namespace ArmazemGratidao {
      }
     }
     decimal expected=Expected(id,opened,dt,initial);
-    var date=DateField(dt),counted=Money(expected<0?0:expected),
-     note=Note("Contagem de dinheiro em espécie");
+    var date=DateField(dt);
+    var counted=Money(expected<0?0:expected);
+    var note=Note("Contagem de dinheiro em espécie");
     var tip=new Label{Text="Saldo previsto: R$ "+expected.ToString("N2")+
      "  |  Compare com a contagem física.",Dock=DockStyle.Fill,ForeColor=blue};
     FormFields("Fechar Caixa #"+id,new Control[]{date,counted,note,tip},
@@ -607,9 +620,13 @@ namespace ArmazemGratidao {
       closing=Dec(rd[3]);expected=Dec(rd[4]);
      }
     }
-    var date=DateField(opened),initial=Money(opening),isClosed=new CheckBox{Text="Caixa fechado",Checked=closed},
-     finish=DateField(closedAt),counted=Money(closing),forecast=Money(expected),
-     reason=Note();
+    var date=DateField(opened);
+    var initial=Money(opening);
+    var isClosed=new CheckBox{Text="Caixa fechado",Checked=closed};
+    var finish=DateField(closedAt);
+    var counted=Money(closing);
+    var forecast=Money(expected);
+    var reason=Note();
     FormFields("Editar todos os dados | Caixa #"+id,
      new Control[]{date,initial,isClosed,finish,counted,forecast,reason},
      new[]{"Abertura: data e hora","Troco inicial R$","Situação","Fechamento: data e hora",
@@ -630,8 +647,11 @@ namespace ArmazemGratidao {
       amount=Dec(rd[2]);description=Convert.ToString(rd[3]);
      }
     }
-    var when=DateField(date),type=Kinds(kind),money=Money(amount),
-     text=Note(description),reason=Note();
+    var when=DateField(date);
+    var type=Kinds(kind);
+    var money=Money(amount);
+    var text=Note(description);
+    var reason=Note();
     FormFields("Editar movimento #"+id,
      new Control[]{when,type,money,text,reason},
      new[]{"Data e hora","Tipo","Valor R$","Descrição","Motivo da correção"},
