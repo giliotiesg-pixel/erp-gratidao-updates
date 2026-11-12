@@ -686,6 +686,44 @@ namespace ArmazemGratidao {
    foreach(string key in keys){int index;if(columns.TryGetValue(key,out index)&&index<cells.Length)return cells[index].Trim();}
    return "";
   }
+  Item ResolveNotebookProduct(SQLiteConnection cn,string requested,decimal quantity){
+   var options=new List<Item>();
+   using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost FROM products ORDER BY name,id",cn))
+   using(var rd=cmd.ExecuteReader())while(rd.Read())options.Add(new Item{
+    Id=Convert.ToInt64(rd["id"]),Barcode=Convert.ToString(rd["barcode"]),
+    InternalCode=Convert.ToString(rd["internal_code"]),Name=Convert.ToString(rd["name"]),
+    Price=Dec(rd["price"]),Cost=Dec(rd["cost"]),Qty=quantity});
+   using(var dialog=new StyledDialogForm{Text="Conferir produto do caderno",Width=720,Height=510,
+    MinimumSize=new Size(530,390),StartPosition=FormStartPosition.CenterParent}){
+    var title=new Label{Text="Produto anotado: "+requested+"\nEscolha o produto correto do cadastro:",Dock=DockStyle.Top,Height=64,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var search=new TextBox{Dock=DockStyle.Top,Text=requested,Font=new Font("Segoe UI",11)};
+    var list=new ListBox{Dock=DockStyle.Fill,Font=new Font("Segoe UI",10),IntegralHeight=false};
+    var panel=new Panel{Dock=DockStyle.Bottom,Height=54};
+    var ok=new Button{Text="Usar produto selecionado",Width=220,Height=38,Left=10,Top=7};
+    var cancel=new Button{Text="Cancelar importacao",Width=160,Height=38,Left=245,Top=7,DialogResult=DialogResult.Cancel};
+    panel.Controls.Add(ok);panel.Controls.Add(cancel);
+    var visible=new List<Item>();
+    Action refresh=()=>{
+     visible.Clear();list.Items.Clear();
+     string term=SearchFold(search.Text).Trim();
+     var words=term.Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+     foreach(var product in options){
+      string name=SearchFold(product.Name);
+      if(words.Length>0&&!words.All(w=>name.Contains(w))&&
+       !name.Contains(term)&&product.Barcode!=search.Text.Trim()&&product.InternalCode!=search.Text.Trim())continue;
+      visible.Add(product);
+      list.Items.Add(product.Name+" | "+product.Barcode+" | R$ "+product.Price.ToString("N2"));
+     }
+    };
+    search.TextChanged+=(sender,args)=>refresh();
+    ok.Click+=(sender,args)=>{if(list.SelectedIndex<0){MessageBox.Show("Selecione um produto.");return;}dialog.DialogResult=DialogResult.OK;};
+    list.DoubleClick+=(sender,args)=>{if(list.SelectedIndex>=0)dialog.DialogResult=DialogResult.OK;};
+    dialog.Controls.Add(list);dialog.Controls.Add(panel);dialog.Controls.Add(search);dialog.Controls.Add(title);
+    dialog.AcceptButton=ok;dialog.CancelButton=cancel;refresh();
+    if(dialog.ShowDialog(this)!=DialogResult.OK||list.SelectedIndex<0)throw new Exception("Selecao de produto cancelada. Nenhum item foi carregado.");
+    return visible[list.SelectedIndex];
+   }
+  }
   void ImportNotebookSales(){
    if(cart.Count>0){MessageBox.Show("Finalize ou limpe a venda atual antes de importar. O carrinho existente foi preservado.","Importar vendas");return;}
    using(var picker=new OpenFileDialog{Title="Selecionar vendas anotadas (CSV)",Filter="Planilha CSV (*.csv)|*.csv",CheckFileExists=true}){
@@ -763,7 +801,7 @@ namespace ArmazemGratidao {
           }
          }
         }
-        if(matches.Count!=1)throw new Exception("Produto '"+entry.Product+"' encontrado "+matches.Count+" vez(es). Confira a descricao no cadastro ou informe o codigo de barras/interno no CSV. Nenhum item foi carregado.");
+        if(matches.Count!=1)matches=new List<Item>{ResolveNotebookProduct(cn,entry.Product,entry.Quantity)};
         imported.Add(matches[0]);
        }
       }
