@@ -2016,6 +2016,7 @@ namespace ArmazemGratidao {
   }
   void OpenHomeModule(string module){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}
+   if(module=="Caixa"){OpenModuleWindow(new CashControlForm(dbPath));return;}
    OpenModuleWindow(new ModuloConsultaForm(dbPath,module));
   }
   void AddSection(Control parent,string title){
