@@ -1356,6 +1356,56 @@ namespace ArmazemGratidao {
     results.Text="Informe ou bipe um codigo e clique em PESQUISAR.\r\nAs fontes sao colaborativas e podem estar incompletas. Nenhum dado sera alterado.";
     var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=130,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
     var run=new Button{Text="PESQUISAR EM 3 BASES",Width=205,Height=36};
+    var compareAll=new Button{Text="CONFRONTAR TODOS OS PRODUTOS",Width=265,Height=36};
+    compareAll.Click+=async (sender,args)=>{
+     compareAll.Enabled=false;
+     try{
+      var products=new List<Tuple<string,string>>();
+      using(var cn=Open())
+      using(var cmd=new SQLiteCommand("SELECT barcode,name FROM products WHERE TRIM(COALESCE(barcode,''))<>'' ORDER BY name",cn))
+      using(var rd=cmd.ExecuteReader())while(rd.Read())
+       products.Add(Tuple.Create(Convert.ToString(rd["barcode"]).Trim(),Convert.ToString(rd["name"]).Trim()));
+      using(var audit=new StyledDialogForm{Text="Confronto do cadastro com a internet",Width=1100,Height=680,StartPosition=FormStartPosition.CenterParent}){
+       var data=new DataTable();
+       foreach(string column in new[]{"Codigo cadastrado","Produto cadastrado","Produto na internet","Fonte","Situacao"})data.Columns.Add(column);
+       var table=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,
+        AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=data};
+       var progress=new Label{Dock=DockStyle.Top,Height=36,Text="Preparando confronto...",Font=new Font("Segoe UI",10,FontStyle.Bold)};
+       var closeAudit=new Button{Dock=DockStyle.Bottom,Height=40,Text="Fechar conferencia",DialogResult=DialogResult.OK};
+       audit.Controls.Add(table);audit.Controls.Add(progress);audit.Controls.Add(closeAudit);
+       audit.Shown+=async (o,e)=>{
+        int checkedCount=0;
+        foreach(var product in products){
+         if(audit.IsDisposed)break;
+         string verdict,found="",source="Open Food Facts";
+         if(!System.Text.RegularExpressions.Regex.IsMatch(product.Item1,@"^\d{8,14}$")||!ValidBarcodeCheckDigit(product.Item1)){
+          verdict="CODIGO INVALIDO";source="Validacao GTIN";
+         }else{
+          try{
+           var online=await System.Threading.Tasks.Task.Run(()=>LookupBarcodeProduct(product.Item1));
+           if(audit.IsDisposed)break;
+           if(online==null)verdict="NAO LOCALIZADO";
+           else{
+            found=online.Name;
+            string local=SearchFold(product.Item2),remote=SearchFold(found);
+            verdict=local==remote?"CONFERE":local.Contains(remote)||remote.Contains(local)?"REVISAR DESCRICAO":"DIVERGENTE - CONFERIR";
+           }
+          }catch(Exception){verdict="CONSULTA INDISPONIVEL";}
+         }
+         if(audit.IsDisposed)break;
+         data.Rows.Add(product.Item1,product.Item2,found,source,verdict);
+         checkedCount++;
+         progress.Text="Conferidos "+checkedCount+" de "+products.Count+" produtos. Nenhum cadastro sera alterado.";
+         if(checkedCount%10==0)await System.Threading.Tasks.Task.Delay(100);
+        }
+        if(!audit.IsDisposed)progress.Text="Confronto concluido: "+checkedCount+" produtos. Confira divergencias antes de corrigir.";
+       };
+       audit.ShowDialog(dlg);
+      }
+     }catch(Exception ex){MessageBox.Show("Falha no confronto: "+ex.Message);}
+     finally{if(!dlg.IsDisposed)compareAll.Enabled=true;}
+    };
+    actions.Controls.Add(compareAll);
     var webSearch=new Button{Text="Pesquisar na Web",Width=155,Height=36};
     var gs1=new Button{Text="Consultar GS1",Width=145,Height=36};
     var ncm=new Button{Text="NCM / RECEITA",Width=145,Height=36};
