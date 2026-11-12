@@ -500,21 +500,25 @@ namespace ArmazemGratidao {
      "CAIXAS ANTERIORES  |  Selecione um registro para consultar.";return;}
    try{
     using(var c=Connect(true))
-    using(var q=new SQLiteCommand("SELECT opened_at,opening_amount,closed_at,closing_amount,status FROM cash_sessions WHERE id=@id",c)){
+    using(var q=new SQLiteCommand("SELECT opened_at,opening_amount,closed_at,closing_amount,status,expected_cash,difference FROM cash_sessions WHERE id=@id",c)){
      q.Parameters.AddWithValue("@id",id.Value);
      using(var rd=q.ExecuteReader()){
       if(!rd.Read())return;
       DateTime opened=ParseDate(rd[0]),at=rd.IsDBNull(2)?DateTime.Now:ParseDate(rd[2]);
       decimal initial=Dec(rd[1]),counted=Dec(rd[3]);
       string state=Convert.ToString(rd[4]);
+      bool finished=!rd.IsDBNull(2);
+      decimal savedExpected=Dec(rd[5]),savedDifference=Dec(rd[6]);
       rd.Close();
-      decimal expected=Calculate(c,id.Value,opened,at,initial);
+      decimal systemExpected=Calculate(c,id.Value,opened,at,initial);
       totals.Text="CAIXA #"+id+"  •  "+state+"  •  Abertura: "+opened.ToString("dd/MM/yyyy HH:mm")+
-       Environment.NewLine+"Troco inicial: R$ "+initial.ToString("N2")+
-       "     |     Esperado: R$ "+expected.ToString("N2")+
-       "     |     Contado: R$ "+counted.ToString("N2")+
-       "     |     Diferença: R$ "+(counted-expected).ToString("N2")+
-       Environment.NewLine+"Dinheiro de vendas e recebimentos em Fiado é apurado sem alterar os lançamentos originais.";
+       Environment.NewLine+"Troco inicial R$ "+initial.ToString("N2")+
+       "   |   Esperado R$ "+(finished?savedExpected:systemExpected).ToString("N2")+
+       "   |   Contado R$ "+counted.ToString("N2")+
+       "   |   Diferença R$ "+(finished?savedDifference:counted-systemExpected).ToString("N2")+
+       Environment.NewLine+"Cálculo automático R$ "+systemExpected.ToString("N2")+
+       (finished&&savedExpected!=systemExpected?"   •   Existe correção manual do previsto":"")+
+       "   •   Vendas e pagamentos originais preservados.";
      }
     }
    }catch(Exception ex){totals.Text="Não foi possível apurar o caixa: "+ex.Message;}

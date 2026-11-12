@@ -59,8 +59,11 @@ try{
   [Windows.Forms.Application]::DoEvents()
   $flags=[Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Public
   function Invoke-Cash([string]$name,[object[]]$arguments){
-   $method=$type.GetMethod($name,$flags)
-   if($null -eq $method){throw "Metodo do Caixa ausente: $name"}
+   $method=@($type.GetMethods($flags) | Where-Object {
+    $_.Name -eq $name -and $_.GetParameters().Length -eq $arguments.Length
+   } | Select-Object -First 1)
+   if($method.Count -ne 1){throw "Metodo do Caixa ausente ou ambiguo: $name ($($arguments.Length) argumentos)"}
+   $method=$method[0]
    try{return $method.Invoke($form,$arguments)}
    catch [Reflection.TargetInvocationException]{
     throw "Operacao $name falhou: $($_.Exception.InnerException.Message)"
