@@ -35,9 +35,9 @@ namespace ArmazemGratidao {
 
   const int PageSize=60;
   int currentPage=0;
-  bool listVisible=false;
+  bool listVisible=true;
   bool calculateMetrics=false;
-  readonly Button showList=new Button {Text="Mostrar lista de produtos",Width=210,Height=33};
+  readonly Button showList=new Button {Text="Mostrar todos",Width=130,Height=31};
   readonly Button previousPage=new Button {Text="Página anterior",Width=155,Height=33};
   readonly Button nextPage=new Button {Text="Próxima página",Width=155,Height=33};
   readonly ComboBox statusFilter=new ComboBox {Width=155,DropDownStyle=ComboBoxStyle.DropDownList};
@@ -75,7 +75,7 @@ namespace ArmazemGratidao {
     Height=43,Padding=new Padding(7,3,4,2),BackColor=Color.FromArgb(217,233,251),
     AutoScroll=true,WrapContents=false};
    statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
-   showList.Click+=(s,e)=>{listVisible=!listVisible;grid.Visible=listVisible;showList.Text=listVisible?"Ocultar produtos":"Ver produtos";if(listVisible)LoadProducts();else{grid.DataSource=null;info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";metrics.Text="";}};bar.Controls.Add(showList);
+   showList.Click+=(s,e)=>{searchDelay.Stop();search.Clear();currentPage=0;statusFilter.SelectedIndex=0;grid.Visible=true;LoadProducts();search.Focus();};bar.Controls.Add(showList);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Cadastrar Produto",Width=150,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
    var edit=new Button {Text="Editar selecionado",Width=155,Height=33};edit.Click+=(s,e)=>EditProduct();bar.Controls.Add(edit);
@@ -105,7 +105,7 @@ namespace ArmazemGratidao {
    previousPage.Click+=(s,e)=>{if(currentPage>0){currentPage--;LoadProducts();}};bar.Controls.Add(previousPage);
    nextPage.Click+=(s,e)=>{currentPage++;LoadProducts();};bar.Controls.Add(nextPage);
    searchDelay.Tick+=(s,e)=>{searchDelay.Stop();currentPage=0;LoadProducts();};
-   search.TextChanged+=(s,e)=>{searchDelay.Stop();if(listVisible)searchDelay.Start();};
+   search.TextChanged+=(s,e)=>{searchDelay.Stop();searchDelay.Start();};
    search.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;searchDelay.Stop();currentPage=0;LoadProducts();}};
    grid.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0&&e.ColumnIndex>=0&&grid.Columns[e.ColumnIndex].Name!="selecionar"){grid.CurrentCell=grid.Rows[e.RowIndex].Cells[e.ColumnIndex];if(rapidInventoryMode)ChooseQuickInventoryForSale();else EditProduct();}};
    grid.CurrentCellDirtyStateChanged+=(s,e)=>{if(grid.IsCurrentCellDirty&&grid.CurrentCell!=null&&grid.Columns[grid.CurrentCell.ColumnIndex].Name=="selecionar")grid.CommitEdit(DataGridViewDataErrorContexts.Commit);};
@@ -132,7 +132,7 @@ namespace ArmazemGratidao {
    toggleMenu.Click+=(s,e)=>menu.Show(toggleMenu,0,toggleMenu.Height);
    searchBar.Controls.Add(toggleMenu);
    // Botoes principais fixos, demais comandos permanecem no Menu.
-   showList.Width=126;showList.Height=31;showList.Text="Ver produtos";
+   showList.Width=126;showList.Height=31;showList.Text="Mostrar todos";
    add.Width=145;add.Height=31;
    StyleButton(showList,Color.FromArgb(22,75,160));
    StyleButton(add,Color.FromArgb(193,37,53));
@@ -166,62 +166,45 @@ namespace ArmazemGratidao {
    metrics.BackColor=Color.FromArgb(229,242,255);metrics.ForeColor=Color.FromArgb(20,40,75);metrics.Font=new Font("Segoe UI",11,FontStyle.Bold);
    StyleProductsScreen(bar);
    if(!grid.Columns.Contains("selecionar"))grid.Columns.Add(new DataGridViewCheckBoxColumn {Name="selecionar",HeaderText="☐",Width=45,MinimumWidth=40,ReadOnly=false,Frozen=true});
-   Controls.Add(grid);Controls.Add(pager);Controls.Add(metrics);Controls.Add(header);grid.Visible=false;
-   // A listagem continua sob demanda para preservar velocidade no Windows 8.
-   // Em vez de uma tela vazia, mostrar orientacao e o mesmo atalho existente.
-   var productsEmpty=new Panel{Name="amzgProductsEmpty",
-    Dock=DockStyle.Fill,BackColor=Color.FromArgb(244,248,254)};
-   var emptyCard=new Panel{Name="amzgProductsEmptyCard",Width=522,Height=215,
-    BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
-   var emptyTitle=new Label{Text="PRODUTOS CADASTRADOS",
-    Left=18,Top=17,Width=480,Height=40,
-    Font=new Font("Segoe UI",19f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(19,64,137),TextAlign=ContentAlignment.MiddleCenter};
-   var emptyInfo=new Label{
-    Text="Consulte os produtos, quantidades, custo e preços.\nA listagem é carregada apenas quando solicitada para manter o sistema rápido.",
-    Left=19,Top=71,Width=483,Height=60,
-    Font=new Font("Segoe UI",10.1f),
-    ForeColor=Color.FromArgb(66,86,117),TextAlign=ContentAlignment.MiddleCenter};
-   var emptyAction=new Button{Name="amzgProductsShowAll",
-    Text="Mostrar todos os produtos",Left=115,Top=149,
-    Width=290,Height=43,BackColor=Color.FromArgb(19,77,165),
-    ForeColor=Color.White,FlatStyle=FlatStyle.Flat,
-    Font=new Font("Segoe UI",11f,FontStyle.Bold),Cursor=Cursors.Hand};
-   emptyAction.FlatAppearance.BorderSize=0;
-   emptyAction.Click+=(sender,args)=>showList.PerformClick();
-   emptyCard.Controls.Add(emptyTitle);emptyCard.Controls.Add(emptyInfo);
-   emptyCard.Controls.Add(emptyAction);productsEmpty.Controls.Add(emptyCard);
-   Action centerEmpty=()=>{
-    emptyCard.Left=Math.Max(14,(productsEmpty.ClientSize.Width-emptyCard.Width)/2);
-    emptyCard.Top=Math.Max(20,(productsEmpty.ClientSize.Height-emptyCard.Height)/3);
-   };
-   productsEmpty.Resize+=(sender,args)=>centerEmpty();
-   Controls.Add(productsEmpty);
-   productsEmpty.BringToFront();
-   header.BringToFront();metrics.BringToFront();pager.BringToFront();
-   showList.Click+=(sender,args)=>{
-    productsEmpty.Visible=!listVisible;
-    if(listVisible)grid.BringToFront();else productsEmpty.BringToFront();
-    header.BringToFront();metrics.BringToFront();pager.BringToFront();
-   };
-   centerEmpty();
+   // Layout vertical unico: cabeçalho, informacoes, tabela e paginacao.
+   // Remover o antigo painel branco evita encobrir um resultado encontrado.
+   var productsLayout=new TableLayoutPanel{Name="amzgProductsMainLayout",
+    Dock=DockStyle.Fill,ColumnCount=1,RowCount=rapidInventoryMode?5:4,
+    Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
+   productsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   productsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+   productsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
+   productsLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   productsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+   header.Dock=DockStyle.Fill;header.Margin=Padding.Empty;
+   metrics.Dock=DockStyle.Fill;metrics.Margin=Padding.Empty;
+   grid.Dock=DockStyle.Fill;grid.Margin=Padding.Empty;grid.Visible=true;
+   pager.Dock=DockStyle.Fill;pager.Margin=Padding.Empty;
+   productsLayout.Controls.Add(header,0,0);
+   productsLayout.Controls.Add(metrics,0,1);
+   productsLayout.Controls.Add(grid,0,2);
+   productsLayout.Controls.Add(pager,0,3);
    if(rapidInventoryMode){
-    // Botao fixo na parte inferior: selecionar produto do estoque e voltar ao carrinho.
-    var saleBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=52,Padding=new Padding(10,6,6,5),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(218,233,250)};
-    var addToSale=new Button{Text="ADICIONAR SELECIONADO A VENDA ANOTADA",Width=350,Height=36,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var saleBar=new FlowLayoutPanel{Name="amzgProductsQuickSaleBar",Dock=DockStyle.Fill,
+     Padding=new Padding(7,2,7,2),WrapContents=false,AutoScroll=true,
+     BackColor=Color.FromArgb(218,233,250)};
+    var addToSale=new Button{Text="ADICIONAR SELECIONADO A VENDA ANOTADA",
+     Width=308,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
     addToSale.Click+=(sender,args)=>ChooseQuickInventoryForSale();
-    var correct=new Button{Text="CORRIGIR ESTOQUE / CUSTO / PRECO",Width=285,Height=36,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
+    var correct=new Button{Text="CORRIGIR ESTOQUE / CUSTO / PREÇO",
+     Width=270,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
     correct.Click+=(sender,args)=>CorrectQuickInventoryValues();
     saleBar.Controls.Add(addToSale);saleBar.Controls.Add(correct);
-    Controls.Add(saleBar);
-   }info.Text="  Lista de produtos oculta para abertura rápida. Clique em Mostrar lista de produtos.";previousPage.Enabled=false;nextPage.Enabled=false;
-   if(rapidInventoryMode){
+    productsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+    productsLayout.Controls.Add(saleBar,0,4);
     Text="Lançamento rápido | Estoque completo - editar produtos";
-    listVisible=true;grid.Visible=true;showList.Text="Ocultar produtos";
-    productsEmpty.Visible=false;
-    Load+=(sender,args)=>LoadProducts();
-   Shown+=(sender,args)=>search.Focus();
    }
+   Controls.Add(productsLayout);
+   info.Text="  Bipe ou pesquise pelo codigo de barras ou nome do produto.";
+   previousPage.Enabled=false;nextPage.Enabled=false;
+   // Sem botão extra: a tabela abre e a pesquisa filtra na mesma janela.
+   Load+=(sender,args)=>{LoadProducts();search.Focus();};
+   Shown+=(sender,args)=>search.Focus();
   }
   bool resizingProductsToolbar=false;
   void ResizeProductsToolbar(FlowLayoutPanel bar){
@@ -774,7 +757,7 @@ namespace ArmazemGratidao {
    return result.ToString().Normalize(System.Text.NormalizationForm.FormC);
   }
   void LoadProducts(){
-   if(!listVisible){info.Text="  Lista oculta. Clique em Mostrar lista de produtos para carregar.";return;}
+   // O resultado da consulta e sempre exibido na mesma tabela.
    try{
     using(var c=Open()){
     var cols=ProductColumns(c);
