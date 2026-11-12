@@ -280,6 +280,10 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-tema-todos-modulos.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Previas-Modulos'
+      - name: Validar operacoes financeiras do Caixa em banco descartavel
+        shell: powershell
+        run: |
+          .\novo-win8\teste-caixa.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Teste-Caixa'
       - name: Guardar galeria real dos modulos para revisao visual
         if: always()
         uses: actions/upload-artifact@v4

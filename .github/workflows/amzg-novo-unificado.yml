@@ -46,6 +46,10 @@ jobs:
       - name: Compilar PDV, atualizador, instalador e reparador integrado
         shell: powershell
         run: .\novo-win8\build-unificado.ps1 -Build ([int]$env:AMZG_BUILD)
+      - name: Validar operacoes financeiras do Caixa em banco descartavel
+        shell: powershell
+        run: |
+          .\novo-win8\teste-caixa.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Teste-Caixa'
       - name: Validar integridade do instalador, manifesto e pacote
         shell: powershell
         run: |

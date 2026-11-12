@@ -75,7 +75,7 @@ $items=@(
  @{Class='ProdutosForm';Name='Produtos';Args=@($database)},
  @{Class='ModuloConsultaForm';Name='Estoque';Args=@($database,'Estoque')},
  @{Class='ModuloConsultaForm';Name='Clientes';Args=@($database,'Clientes')},
- @{Class='ModuloConsultaForm';Name='Caixa';Args=@($database,'Caixa')},
+ @{Class='CashControlForm';Name='Caixa';Args=@($database)},
  @{Class='ModuloConsultaForm';Name='Sistema';Args=@($database,'Sistema')},
  @{Class='CascosForm';Name='Cascos-Retornaveis';Args=@($database)},
  @{Class='LucroForm';Name='Lucro';Args=@($database)},
