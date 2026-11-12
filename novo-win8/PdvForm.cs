@@ -54,11 +54,11 @@ namespace ArmazemGratidao {
   public PdvForm(string database):this(database,false){}
   public PdvForm(string database,bool manualMode) {
    manualEntry=manualMode;
-   db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(1000,650);BackColor=Color.FromArgb(246,249,253);
+   db=database;Text="Armazem Gratidao - PDV";Width=1280;Height=800;MinimumSize=new Size(720,490);BackColor=Color.FromArgb(246,249,253);
    grid.ScrollBars=ScrollBars.Both;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells;
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
-   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=74,Padding=new Padding(12,15,12,8),BackColor=Color.White,AutoScroll=true};
-   FlowLayoutPanel rapidInventoryBar=manualEntry?new FlowLayoutPanel{Dock=DockStyle.Top,Height=47,Padding=new Padding(10,4,6,3),WrapContents=false,AutoScroll=false,BackColor=Color.FromArgb(229,242,255)}:null;
+   var header=new FlowLayoutPanel {Dock=DockStyle.Top,Height=62,Padding=new Padding(6,6,6,3),BackColor=Color.White,AutoScroll=true,WrapContents=false};
+   FlowLayoutPanel rapidInventoryBar=manualEntry?new FlowLayoutPanel{Dock=DockStyle.Top,Height=48,Padding=new Padding(5,4,5,3),WrapContents=false,AutoScroll=true,BackColor=Color.FromArgb(229,242,255)}:null;
    if(manualEntry){
     Text="Armazem Gratidao - Lançamento rápido de vendas anotadas";
     // A data será conferida somente depois que todos os produtos forem lançados.
@@ -101,7 +101,7 @@ namespace ArmazemGratidao {
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.MouseClick+=(s,e)=>{int index=suggestions.IndexFromPoint(e.Location);if(e.Button==MouseButtons.Left&&index>=0){suggestions.SelectedIndex=index;ChooseSuggestion();}};
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
-   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=180,Padding=new Padding(12,10,12,10),BackColor=Color.White,AutoScroll=true,WrapContents=true};
+   var footer=new FlowLayoutPanel {Dock=DockStyle.Bottom,Height=132,Padding=new Padding(6,4,6,4),BackColor=Color.White,AutoScroll=true,WrapContents=true};
    // As formas permanecem disponíveis na janela de pagamento aberta ao finalizar.
    // O seletor fica apenas como estado interno, sem caixa antecipada no PDV.
    payment.Items.AddRange(PaymentFees.Methods.Cast<object>().Concat(new object[]{"FIADO","DIVIDIDO"}).ToArray());payment.SelectedIndex=0;
@@ -971,7 +971,7 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Adicione produtos ao carrinho.");return;}
    try{
     using(var conn=Open())
-    using(var dialog=new StyledDialogForm{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(650,400),StartPosition=FormStartPosition.CenterParent}){
+    using(var dialog=new StyledDialogForm{Text="Atualizar preços dos produtos do carrinho",Width=920,Height=590,MinimumSize=new Size(580,350),StartPosition=FormStartPosition.CenterParent}){
      var table=new DataTable();
      table.Columns.Add("ID",typeof(long));table.Columns.Add("Código");table.Columns.Add("Produto");
      table.Columns.Add("Quantidade",typeof(decimal));table.Columns.Add("Preço atual",typeof(decimal));table.Columns.Add("Novo preço",typeof(decimal));
