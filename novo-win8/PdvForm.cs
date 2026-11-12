@@ -734,19 +734,25 @@ namespace ArmazemGratidao {
         imported.Add(matches[0]);
        }
       }
-      string method=selected[0].Payment.Trim().ToUpperInvariant();
+      string method=SearchFold(selected[0].Payment.Trim()).ToUpperInvariant().Replace(" ","_");
+      if(method=="DEBITO")method="DEBITO";
+      if(method=="CREDITO")method="CREDITO";
       if(selected.Any(x=>!string.Equals(x.Payment.Trim(),selected[0].Payment.Trim(),StringComparison.OrdinalIgnoreCase)))
        throw new Exception("Formas de pagamento diferentes na mesma venda. Confira o arquivo.");
       DateTime parsed;
-      if(!string.IsNullOrWhiteSpace(selected[0].Date)&&DateTime.TryParse(selected[0].Date,CultureInfo.GetCultureInfo("pt-BR"),DateTimeStyles.None,out parsed)&&parsed<=DateTime.Now)
+      if(!string.IsNullOrWhiteSpace(selected[0].Date)){
+       if(!DateTime.TryParse(selected[0].Date,CultureInfo.GetCultureInfo("pt-BR"),DateTimeStyles.None,out parsed)||parsed>DateTime.Now)
+        throw new Exception("Data invalida ou futura na venda "+selected[0].Sale+".");
+       if(selected.Any(x=>x.Date!=selected[0].Date))throw new Exception("Datas diferentes na mesma venda.");
        manualDate.Value=parsed;
+      }
+      if(!payment.Items.Cast<object>().Any(x=>string.Equals(Convert.ToString(x),method,StringComparison.OrdinalIgnoreCase)))
+       throw new Exception("Forma de pagamento nao reconhecida: "+method);
       foreach(var item in imported){
        var existing=cart.FirstOrDefault(x=>x.Id==item.Id);
        if(existing!=null)existing.Qty+=item.Qty;else cart.Add(item);
       }
-      foreach(var choice in payment.Items.Cast<object>()){
-       if(string.Equals(Convert.ToString(choice),method,StringComparison.OrdinalIgnoreCase)){payment.SelectedItem=choice;break;}
-      }
+      payment.SelectedItem=method;
       Render();SaveDraft();
       MessageBox.Show("Venda "+selected[0].Sale+" carregada no carrinho. Confira data, pagamento, quantidade e preco antes de finalizar. Para as demais vendas, repita a importacao. Nao importe uma venda ja registrada.","Conferencia obrigatoria");
      }
