@@ -1548,9 +1548,6 @@ namespace ArmazemGratidao {
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    if(!ShowPaymentChoice())return;
-   // FIADO puro: abrir a lista de clientes logo apos selecionar a forma de pagamento.
-   // Cancelar a lista retorna ao carrinho sem gravar a venda.
-   if(Convert.ToString(payment.SelectedItem)=="FIADO"&&!ChooseCustomerInWindow(true))return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
@@ -1584,16 +1581,6 @@ namespace ArmazemGratidao {
    }catch(Exception ex){MessageBox.Show("Conferência de estoque não concluída: "+ex.Message,"PDV",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    var method=Convert.ToString(payment.SelectedItem);
    string customerName=string.IsNullOrWhiteSpace(customer.Text)?"Consumidor":customer.Text.Trim();
-   if(method=="FIADO"){
-    if(customerName.Length<2||string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
-     MessageBox.Show("Selecione um cliente identificado para o Fiado.");return;
-    }
-    try{
-     if(!CustomerRegistered(customerName)){
-      MessageBox.Show("Cliente nao cadastrado. Selecione ou cadastre na lista.","Fiado");return;
-     }
-    }catch(Exception ex){MessageBox.Show("Não foi possível verificar o cadastro do cliente: "+ex.Message,"Fiado");return;}
-   }
    int bottleCount;bool bottlePaid;
    if(!SelectBottleLoan(out bottleCount,out bottlePaid))return;
    if(bottleCount>0 && string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)){
@@ -1606,13 +1593,17 @@ namespace ArmazemGratidao {
    if(sum<=0){MessageBox.Show("A venda precisa ter total maior que zero. Confira os preços dos itens.","Valor inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
    List<KeyValuePair<string,decimal>> split=null;
    if(method=="DIVIDIDO"){split=SelectSplitPayments(sum);if(split==null)return;}
-   if(method=="DIVIDIDO"&&split.Any(p=>p.Key=="FIADO")){
-    if(string.Equals(customerName,"Consumidor",StringComparison.OrdinalIgnoreCase)||!CustomerRegistered(customerName)){
-     MessageBox.Show("Para dividir uma venda com Fiado, selecione ou cadastre um cliente antes de finalizar.","Cliente obrigatório");return;
-    }
-   }
    if(method=="DINHEIRO"&&!ConfirmCashReceived(sum))return;
    if(method=="DINHEIRO"&&received.Value<sum){MessageBox.Show("Valor recebido menor que o total.");return;}
+   // A selecao do cliente e a ultima etapa do pagamento, inclusive no dividido com Fiado.
+   bool requiresFiadoCustomer=method=="FIADO"||(method=="DIVIDIDO"&&split.Any(p=>p.Key=="FIADO"));
+   if(requiresFiadoCustomer){
+    if(!ChooseCustomerInWindow(true))return;
+    customerName=customer.Text.Trim();
+    if(!CustomerRegistered(customerName)){
+     MessageBox.Show("Selecione ou cadastre um cliente valido para o Fiado.","Cliente obrigatorio");return;
+    }
+   }
    string details=method=="DIVIDIDO"?string.Join(Environment.NewLine,split.Select(p=>p.Key+": R$ "+p.Value.ToString("N2"))):"Pagamento: "+method;
    if(method=="DINHEIRO")details+=Environment.NewLine+"Recebido: R$ "+received.Value.ToString("N2")+Environment.NewLine+"Troco: R$ "+(received.Value-sum).ToString("N2");
    // A taxa é custo do estabelecimento e nunca aumenta o valor pago pelo cliente.
