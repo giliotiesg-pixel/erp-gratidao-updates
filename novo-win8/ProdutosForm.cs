@@ -91,6 +91,9 @@ namespace ArmazemGratidao {
    var compareBarcode=new Button {Text="Confrontar cadastro x internet",Width=235,Height=33};
    compareBarcode.Click+=async (sender,args)=>await CompareSelectedProductOnline(compareBarcode);
    bar.Controls.Add(compareBarcode);
+   var research=new Button{Text="CENTRAL DE PESQUISA",Width=190,Height=33,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   research.Click+=(sender,args)=>OpenBarcodeResearchCenter(null,null);
+   bar.Controls.Add(research);
    var copyBarcode=new Button {Text="Copiar código",Width=140,Height=33};copyBarcode.Click+=(s,e)=>CopySelectedBarcode();bar.Controls.Add(copyBarcode);
    var details=new Button {Text="Detalhes do produto",Width=180,Height=33};details.Click+=(s,e)=>ShowSelectedProductDetails();bar.Controls.Add(details);
    var addQuantity=new Button {Text="Adicionar QTD",Width=150,Height=33};addQuantity.Click+=(s,e)=>AddProductQuantity();bar.Controls.Add(addQuantity);
@@ -1204,6 +1207,92 @@ namespace ArmazemGratidao {
     lines.Add(name+": "+value);
    }
    MessageBox.Show(string.Join("\n",lines),"Detalhes do produto",MessageBoxButtons.OK,MessageBoxIcon.Information);
+  }
+  // Pesquisa independente: bases publicas distintas e links para conferencia manual.
+  static BarcodeProductData LookupOtherFacts(string barcode,string host){
+   System.Net.ServicePointManager.SecurityProtocol|=System.Net.SecurityProtocolType.Tls12;
+   string url="https://"+host+"/api/v2/product/"+Uri.EscapeDataString(barcode)+".json?fields=product_name_pt,product_name,brands,categories,status";
+   using(var client=new ProductLookupWebClient()){
+    client.Encoding=System.Text.Encoding.UTF8;
+    client.Headers[System.Net.HttpRequestHeader.UserAgent]="ArmazemGratidao/1.0 (research center)";
+    string json;
+    try{json=client.DownloadString(url);}
+    catch(System.Net.WebException ex){
+     var response=ex.Response as System.Net.HttpWebResponse;
+     if(response!=null&&response.StatusCode==System.Net.HttpStatusCode.NotFound)return null;
+     throw;
+    }
+    if(!System.Text.RegularExpressions.Regex.IsMatch(json,"\\\"status\\\"\\s*:\\s*1(?:\\D|$)"))return null;
+    string name=JsonProductField(json,"product_name_pt");
+    if(string.IsNullOrWhiteSpace(name))name=JsonProductField(json,"product_name");
+    if(string.IsNullOrWhiteSpace(name))return null;
+    return new BarcodeProductData{Name=name,Brand=JsonProductField(json,"brands"),Category=JsonProductField(json,"categories")};
+   }
+  }
+  void OpenBarcodeResearchCenter(string initialBarcode,string initialName){
+   string localBarcode=initialBarcode??"",localName=initialName??"";
+   if(initialBarcode==null&&grid.CurrentRow!=null){
+    long id;
+    if(long.TryParse(Convert.ToString(grid.CurrentRow.Cells["codigo_interno"].Value),out id))
+     using(var cn=Open())
+     using(var cmd=new SQLiteCommand("SELECT barcode,name FROM products WHERE id=@id",cn)){
+      cmd.Parameters.AddWithValue("@id",id);
+      using(var rd=cmd.ExecuteReader())if(rd.Read()){
+       localBarcode=Convert.ToString(rd["barcode"]);localName=Convert.ToString(rd["name"]);
+      }
+     }
+   }
+   using(var dlg=new StyledDialogForm{Text="Central de pesquisa de produtos e codigos de barras",Width=840,Height=620,MinimumSize=new Size(590,420),StartPosition=FormStartPosition.CenterParent}){
+    var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=88,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
+    var code=new TextBox{Width=190,Text=localBarcode};
+    var name=new TextBox{Width=270,Text=localName};
+    top.Controls.Add(new Label{Text="Codigo de barras:",AutoSize=true,Padding=new Padding(0,8,0,0)});
+    top.Controls.Add(code);
+    top.Controls.Add(new Label{Text="Descricao:",AutoSize=true,Padding=new Padding(0,8,0,0)});
+    top.Controls.Add(name);
+    var results=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,Font=new Font("Consolas",10),WordWrap=true};
+    results.Text="Informe ou bipe um codigo e clique em PESQUISAR.\r\nAs fontes sao colaborativas e podem estar incompletas. Nenhum dado sera alterado.";
+    var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=94,WrapContents=true,AutoScroll=true,Padding=new Padding(8)};
+    var run=new Button{Text="PESQUISAR EM 3 BASES",Width=205,Height=36};
+    var webSearch=new Button{Text="Pesquisar na Web",Width=155,Height=36};
+    var gs1=new Button{Text="Consultar GS1",Width=145,Height=36};
+    var close=new Button{Text="Fechar",Width=100,Height=36};
+    run.Click+=async (sender,args)=>{
+     string barcode=code.Text.Trim();
+     if(!System.Text.RegularExpressions.Regex.IsMatch(barcode,@"^\d{8,14}$")){
+      MessageBox.Show("Informe codigo numerico de 8 a 14 digitos.");return;
+     }
+     run.Enabled=false;
+     results.Text="Pesquisando codigo "+barcode+"...\r\n";
+     try{
+      var sources=new[]{"Open Food Facts","Open Beauty Facts","Open Products Facts"};
+      var hosts=new[]{"world.openfoodfacts.org","world.openbeautyfacts.org","world.openproductsfacts.org"};
+      for(int i=0;i<hosts.Length;i++){
+       string source=sources[i],host=hosts[i];
+       try{
+        var data=await System.Threading.Tasks.Task.Run(()=>LookupOtherFacts(barcode,host));
+        if(dlg.IsDisposed)return;
+        results.AppendText("\r\n"+source+": "+(data==null?"Nao localizado (nao comprova erro).":
+         "\r\n  Descricao: "+data.Name+"\r\n  Marca: "+data.Brand+"\r\n  Categoria: "+data.Category+
+         "\r\n  Comparacao: "+(SearchFold(name.Text)==SearchFold(data.Name)?"IGUAL":"CONFERIR"))+"\r\n");
+       }catch(Exception ex){
+        if(dlg.IsDisposed)return;
+        results.AppendText("\r\n"+source+": indisponivel ("+ex.Message+")\r\n");
+       }
+      }
+      results.AppendText("\r\nDigito verificador: "+(ValidBarcodeCheckDigit(barcode)?"valido":"INVALIDO")+"\r\nNao alterar cadastro sem conferir embalagem.");
+     }finally{if(!dlg.IsDisposed)run.Enabled=true;}
+    };
+    webSearch.Click+=(sender,args)=>{
+     string query=(code.Text+" "+name.Text).Trim();
+     if(query.Length>0)System.Diagnostics.Process.Start("https://www.google.com/search?q="+Uri.EscapeDataString(query));
+    };
+    gs1.Click+=(sender,args)=>System.Diagnostics.Process.Start("https://www.gs1br.org/");
+    close.Click+=(sender,args)=>dlg.Close();
+    actions.Controls.Add(run);actions.Controls.Add(webSearch);actions.Controls.Add(gs1);actions.Controls.Add(close);
+    dlg.Controls.Add(results);dlg.Controls.Add(actions);dlg.Controls.Add(top);
+    dlg.ShowDialog(this);
+   }
   }
   async System.Threading.Tasks.Task CompareSelectedProductOnline(Button trigger){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto para conferir.");return;}
