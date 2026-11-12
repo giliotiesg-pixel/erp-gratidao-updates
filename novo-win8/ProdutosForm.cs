@@ -1602,6 +1602,9 @@ namespace ArmazemGratidao {
     for(int row=0;row<13;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?46:row==10?39:row==11?40:row==12?36:37));
     panel.Controls.Add(lookupStatus,1,9);
     panel.Controls.Add(lookup,1,10);
+    var researchAtRegistration=new Button{Text="CENTRAL DE PESQUISA (3 BASES)",Width=265,Height=34};
+    researchAtRegistration.Click+=(sender,args)=>OpenBarcodeResearchCenter(barcode.Text.Trim(),name.Text.Trim());
+    panel.Controls.Add(researchAtRegistration,1,11);
 
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
