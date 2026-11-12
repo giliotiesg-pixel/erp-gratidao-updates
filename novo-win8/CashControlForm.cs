@@ -540,34 +540,79 @@ namespace ArmazemGratidao {
    b.Items.AddRange(new object[]{"ENTRADA","SANGRIA","SAIDA","AJUSTE_ENTRADA","AJUSTE_SAIDA"});
    b.SelectedItem=current;if(b.SelectedIndex<0)b.SelectedIndex=0;return b;
   }
+  // O cabecalho possui espaco proprio; a Calculadora nao cobre os campos.
+  static void PlaceCashDialog(StyledDialogForm dialog,Control content,string heading){
+   var header=new Panel{Name="amzgDialogActionHeader",Dock=DockStyle.None,
+    BackColor=Color.FromArgb(225,237,252),Height=42};
+   var title=new Label{Name="amzgCashDialogHeading",Text=heading,
+    Left=14,Top=8,Width=330,Height=26,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(20,68,137),AutoEllipsis=true};
+   header.Controls.Add(title);
+   content.Dock=DockStyle.None;
+   content.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
+   header.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+   dialog.Controls.Add(content);
+   dialog.Controls.Add(header);
+   Action position=()=>{
+    if(dialog.IsDisposed)return;
+    int width=dialog.ClientSize.Width,height=dialog.ClientSize.Height;
+    if(width<=0||height<=42)return;
+    var headerRect=new Rectangle(0,0,width,42);
+    var contentRect=new Rectangle(0,42,width,height-42);
+    if(header.Bounds!=headerRect)header.Bounds=headerRect;
+    if(content.Bounds!=contentRect)content.Bounds=contentRect;
+    title.Width=Math.Max(120,width-175);
+    header.BringToFront();
+   };
+   dialog.ClientSizeChanged+=(s,e)=>position();
+   dialog.Shown+=(s,e)=>position();
+   position();
+  }
   bool FormFields(string title,Control[] fields,string[] labels,Action save){
-   using(var dialog=new StyledDialogForm{Text=title,StartPosition=FormStartPosition.CenterParent,
-    Width=525,Height=Math.Min(675,150+fields.Length*43),
-    MinimumSize=new Size(465,315),BackColor=Color.FromArgb(243,248,254),
-    FormBorderStyle=FormBorderStyle.Sizable}){
-    var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,
-     RowCount=fields.Length+1,AutoScroll=true,Padding=new Padding(13,12,9,12)};
-    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,177));
+   if(fields.Length!=labels.Length)throw new ArgumentException("Rótulos e campos divergentes.");
+   var available=Screen.FromControl(this).WorkingArea;
+   int dialogWidth=Math.Min(670,Math.Max(480,available.Width-36));
+   int dialogHeight=Math.Min(Math.Max(340,108+fields.Length*52+54),
+    Math.Max(330,available.Height-38));
+   using(var dialog=new StyledDialogForm{Text=title,
+    Name="amzgCashEditorDialog",StartPosition=FormStartPosition.CenterParent,
+    Width=dialogWidth,Height=dialogHeight,
+    MinimumSize=new Size(Math.Min(520,dialogWidth),Math.Min(310,dialogHeight)),
+    BackColor=Color.FromArgb(243,248,254),
+    AutoScaleMode=AutoScaleMode.Dpi,FormBorderStyle=FormBorderStyle.Sizable}){
+    var layout=new TableLayoutPanel{Name="amzgCashEditorFields",
+     Dock=DockStyle.None,ColumnCount=2,RowCount=fields.Length+1,
+     AutoScroll=true,Padding=new Padding(16,11,15,11),
+     BackColor=Color.FromArgb(246,250,255),Margin=Padding.Empty};
+    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));
     layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     for(int i=0;i<fields.Length;i++){
-     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,41));
-     layout.Controls.Add(new Label{Text=labels[i],Dock=DockStyle.Fill,
-      TextAlign=ContentAlignment.MiddleLeft,ForeColor=blue,
-      Font=new Font("Segoe UI",9,FontStyle.Bold)},0,i);
-     fields[i].Dock=DockStyle.Fill;fields[i].Margin=new Padding(3,5,4,5);
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+     var captionLabel=new Label{Name="amzgCashFieldLabel"+i,
+      Text=labels[i],Dock=DockStyle.Fill,AutoEllipsis=false,
+      Padding=new Padding(0,0,7,0),TextAlign=ContentAlignment.MiddleLeft,
+      ForeColor=blue,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+     layout.Controls.Add(captionLabel,0,i);
+     fields[i].Name=string.IsNullOrEmpty(fields[i].Name)?
+      "amzgCashField"+i:fields[i].Name;
+     fields[i].Dock=DockStyle.Fill;
+     fields[i].Margin=new Padding(4,10,5,10);
      layout.Controls.Add(fields[i],1,i);
     }
-    layout.RowStyles.Add(new RowStyle(SizeType.Absolute,49));
-    var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
-    var confirm=ActionButton("Salvar",107,blue,()=>{
+    layout.RowStyles.Add(new RowStyle(SizeType.Absolute,57));
+    var actions=new FlowLayoutPanel{Name="amzgCashSaveActions",
+     Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true,Padding=new Padding(2,5,0,0)};
+    var confirm=ActionButton("Salvar",117,blue,()=>{
      try{save();dialog.DialogResult=DialogResult.OK;dialog.Close();}
      catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Caixa: operação não salva",
       MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     });
-    var cancel=ActionButton("Cancelar",103,red,()=>dialog.Close());
+    var cancel=ActionButton("Cancelar",117,red,()=>dialog.Close());
     actions.Controls.Add(confirm);actions.Controls.Add(cancel);
     layout.Controls.Add(actions,1,fields.Length);
-    dialog.Controls.Add(layout);
+    PlaceCashDialog(dialog,layout,title);
+    dialog.AcceptButton=confirm;dialog.CancelButton=cancel;
     return dialog.ShowDialog(this)==DialogResult.OK;
    }
   }
@@ -680,10 +725,11 @@ namespace ArmazemGratidao {
      "new_values AS 'Depois',reason AS 'Motivo' FROM cash_change_audit ORDER BY id DESC LIMIT 1000");
     using(var form=new StyledDialogForm{Text="Caixa | Auditoria de correções",Width=890,Height=510,
      StartPosition=FormStartPosition.CenterParent}){
-     var view=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,
+     var view=new DataGridView{Dock=DockStyle.None,ReadOnly=true,
       DataSource=dt,AllowUserToAddRows=false,RowHeadersVisible=false,
       AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-     form.Controls.Add(view);form.ShowDialog(this);
+     PlaceCashDialog(form,view,"AUDITORIA DE CORREÇÕES");
+     form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Auditoria do Caixa");}
   }

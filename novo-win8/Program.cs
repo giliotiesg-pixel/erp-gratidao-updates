@@ -167,9 +167,15 @@ namespace ArmazemGratidao {
    bar.Controls.Add(button);
    var shared=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
     .FirstOrDefault(x=>x.Parent==form&&x.Dock==DockStyle.Top);
+   var dialogHeader=form.Controls.Find("amzgDialogActionHeader",true).OfType<Panel>()
+    .FirstOrDefault(x=>x.Parent==form);
    if(shared!=null){
     bar.Dock=DockStyle.Right;bar.Width=109;bar.Height=29;button.Dock=DockStyle.Fill;
     shared.Controls.Add(bar);bar.BringToFront();
+   }else if(dialogHeader!=null){
+    bar.Dock=DockStyle.Right;bar.Width=145;bar.Height=38;button.Dock=DockStyle.Fill;
+    bar.Padding=new Padding(3,3,5,3);
+    dialogHeader.Controls.Add(bar);bar.BringToFront();
    }else{form.Controls.Add(bar);bar.BringToFront();}
    form.FormClosed+=(sender,args)=>installed.Remove(form);
   }
