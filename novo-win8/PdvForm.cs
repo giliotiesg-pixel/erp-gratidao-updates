@@ -1133,9 +1133,16 @@ namespace ArmazemGratidao {
      var table=new DataGridView{Dock=DockStyle.Fill,DataSource=data,AllowUserToAddRows=false,
       AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,
       SelectionMode=DataGridViewSelectionMode.CellSelect,BackgroundColor=Color.White};
-     foreach(string name in new[]{"ID","Codigo","Descricao","Estoque"})table.Columns[name].ReadOnly=true;
-     table.Columns["ID"].Visible=false;
-     table.Columns["Descricao"].MinimumWidth=290;
+     // A vinculacao do DataTable pode criar colunas somente depois da montagem do controle.
+     // Configurar apenas colunas existentes, evitando NullReferenceException no Windows 8.
+     Action configureColumns=()=>{
+      foreach(string name in new[]{"ID","Codigo","Descricao","Estoque"})
+       if(table.Columns.Contains(name))table.Columns[name].ReadOnly=true;
+      if(table.Columns.Contains("ID"))table.Columns["ID"].Visible=false;
+      if(table.Columns.Contains("Descricao"))table.Columns["Descricao"].MinimumWidth=290;
+     };
+     table.DataBindingComplete+=(sender,args)=>configureColumns();
+     configureColumns();
      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,WrapContents=false};
      var save=new Button{Text="SALVAR ALTERACOES",Width=190,Height=38,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
      var cancel=new Button{Text="CANCELAR",Width=125,Height=38};
