@@ -335,18 +335,18 @@ namespace ArmazemGratidao {
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
-      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=88,
+      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=62,
        BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
-       Margin=new Padding(0,0,0,7)};
+       Margin=new Padding(0,0,0,3)};
       var check=new CheckBox{Name="amzgFiadoCardSelect",Left=9,Top=10,Width=24,Height=24,
        Checked=Convert.ToBoolean(row.Cells["marcar"].Value??false)};
-      var title=new Label{Name="amzgFiadoCardTitle",Left=37,Top=6,
-       Width=Math.Max(125,width-174),Height=23,
+      var title=new Label{Name="amzgFiadoCardTitle",Left=37,Top=4,
+       Width=Math.Max(125,width-174),Height=22,
        Text="Venda #"+saleId+"  •  "+time,AutoEllipsis=true,
        Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
        ForeColor=Color.FromArgb(22,70,142)};
-      var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=31,
-       Width=Math.Max(135,width-50),Height=43,AutoEllipsis=true,
+      var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=27,
+       Width=Math.Max(135,width-50),Height=29,AutoEllipsis=true,
        Text="Total R$ "+gross.ToString("N2")+"   |   Pago R$ "+received.ToString("N2")+
         "   |   Saldo R$ "+open.ToString("N2")+
         (string.IsNullOrWhiteSpace(status)?"":"   • "+status),
@@ -354,7 +354,7 @@ namespace ArmazemGratidao {
        ForeColor=Color.FromArgb(36,54,77)};
       var details=new Button{Name="amzgFiadoCardDetails",
        Text="Detalhes",Width=101,Height=27,
-       Left=Math.Max(130,width-111),Top=7,FlatStyle=FlatStyle.Flat,
+       Left=Math.Max(130,width-111),Top=4,FlatStyle=FlatStyle.Flat,
        BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
        Font=new Font("Segoe UI",8.5f,FontStyle.Bold)};
       details.FlatAppearance.BorderSize=0;
