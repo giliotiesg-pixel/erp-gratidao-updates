@@ -412,9 +412,18 @@ namespace ArmazemGratidao {
     all.Checked=false;sum();refreshCards();
    };
    // Colocar a grade fora da vista sem eliminar a logica de baixa de fiado.
-   panel.Controls.Add(grid);panel.Controls.Add(cards);panel.Controls.Add(bar);
+   // Separar fisicamente o cabecalho da lista: Dock.Fill nao pode cobrir a primeira venda.
+   var saleLayout=new TableLayoutPanel{Name=paid?"amzgFiadoPaidLayout":"amzgFiadoOpenLayout",
+    Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty,Padding=Padding.Empty};
+   saleLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   saleLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+   saleLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   bar.Dock=DockStyle.Fill;cards.Dock=DockStyle.Fill;
+   saleLayout.Controls.Add(bar,0,0);saleLayout.Controls.Add(cards,0,1);
+   panel.Controls.Add(saleLayout);
+   panel.Controls.Add(grid);
    grid.Visible=false;grid.Dock=DockStyle.None;grid.Bounds=new Rectangle(0,0,1,1);
-   cards.BringToFront();bar.BringToFront();
+   saleLayout.BringToFront();
   }
   void BackToFiadoClients(){
    customer="";
