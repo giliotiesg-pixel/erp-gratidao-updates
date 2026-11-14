@@ -305,7 +305,7 @@ namespace ArmazemGratidao {
    var cards=new FlowLayoutPanel {
     Name=paid?"amzgFiadoCardsPaid":"amzgFiadoCardsOpen",
     Dock=DockStyle.Fill,AutoScroll=true,WrapContents=false,
-    FlowDirection=FlowDirection.TopDown,Padding=new Padding(8,6,8,7),
+    FlowDirection=FlowDirection.TopDown,Padding=new Padding(4,3,4,3),
     BackColor=Color.FromArgb(250,252,255)};
    Action sum=()=>{
     decimal amount=0;
@@ -323,7 +323,7 @@ namespace ArmazemGratidao {
     cards.SuspendLayout();
     try{
      cards.Controls.Clear();
-     int width=Math.Max(245,cards.ClientSize.Width-cards.Padding.Horizontal-18);
+     int width=Math.Max(210,cards.ClientSize.Width-cards.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-6);
      foreach(DataGridViewRow row in grid.Rows){
       if(row.IsNewRow||row.Cells["venda"].Value==null)continue;
       var selectedRow=row;
@@ -335,26 +335,26 @@ namespace ArmazemGratidao {
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
-      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=62,
+      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=66,
        BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
        Margin=new Padding(0,0,0,3)};
       var check=new CheckBox{Name="amzgFiadoCardSelect",Left=9,Top=10,Width=24,Height=24,
        Checked=Convert.ToBoolean(row.Cells["marcar"].Value??false)};
       var title=new Label{Name="amzgFiadoCardTitle",Left=37,Top=4,
-       Width=Math.Max(125,width-174),Height=22,
+       Width=Math.Max(100,width-170),Height=22,
        Text="Venda #"+saleId+"  •  "+time,AutoEllipsis=true,
        Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
        ForeColor=Color.FromArgb(22,70,142)};
       var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=27,
-       Width=Math.Max(135,width-50),Height=29,AutoEllipsis=true,
+       Width=Math.Max(100,width-46),Height=31,AutoEllipsis=true,
        Text="Total R$ "+gross.ToString("N2")+"   |   Pago R$ "+received.ToString("N2")+
-        "   |   Saldo R$ "+open.ToString("N2")+
+        Environment.NewLine+"Saldo R$ "+open.ToString("N2")+
         (string.IsNullOrWhiteSpace(status)?"":"   • "+status),
        Font=new Font("Segoe UI",8.8f,FontStyle.Regular),
        ForeColor=Color.FromArgb(36,54,77)};
       var details=new Button{Name="amzgFiadoCardDetails",
        Text="Detalhes",Width=101,Height=27,
-       Left=Math.Max(130,width-111),Top=4,FlatStyle=FlatStyle.Flat,
+       Left=Math.Max(105,width-111),Top=4,FlatStyle=FlatStyle.Flat,
        BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
        Font=new Font("Segoe UI",8.5f,FontStyle.Bold)};
       details.FlatAppearance.BorderSize=0;
@@ -385,15 +385,15 @@ namespace ArmazemGratidao {
     }finally{cards.ResumeLayout(true);}
    };
    cards.ClientSizeChanged+=(sender,e)=>{
-    int width=Math.Max(245,cards.ClientSize.Width-cards.Padding.Horizontal-18);
+    int width=Math.Max(210,cards.ClientSize.Width-cards.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-6);
     foreach(Control card in cards.Controls)if(card is Panel){
      card.Width=width;
      var details=card.Controls.Find("amzgFiadoCardDetails",false).FirstOrDefault();
      var title=card.Controls.Find("amzgFiadoCardTitle",false).FirstOrDefault();
      var figures=card.Controls.Find("amzgFiadoCardAmounts",false).FirstOrDefault();
-     if(details!=null)details.Left=Math.Max(130,width-details.Width-10);
-     if(title!=null)title.Width=Math.Max(125,width-174);
-     if(figures!=null)figures.Width=Math.Max(135,width-50);
+     if(details!=null)details.Left=Math.Max(105,width-details.Width-10);
+     if(title!=null)title.Width=Math.Max(100,width-170);
+     if(figures!=null)figures.Width=Math.Max(100,width-46);
     }
    };
    all.CheckedChanged+=(sender,e)=>{
