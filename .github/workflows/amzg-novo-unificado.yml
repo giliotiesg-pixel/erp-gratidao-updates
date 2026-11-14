@@ -356,7 +356,8 @@ jobs:
           if(!(Test-Path $zip) -or !(Test-Path $updater)){throw 'ZIP ou atualizador verificado ausente.'}
           $sha=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if($sha -ne $manifest.sha256){throw 'SHA-256 incorreto, nao publicar.'}
-          if(gh release view $tag --json tagName 2>$null){
+          $existing=gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -eq $tag }
+          if($existing){
             throw "Build $env:AMZG_BUILD ja publicado. Aumente novo-win8/VERSAO.txt para gerar um release imutavel; nao sobrescrever pacote existente."
           }
           gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --latest
