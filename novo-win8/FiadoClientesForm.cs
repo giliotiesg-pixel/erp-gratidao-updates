@@ -323,6 +323,7 @@ namespace ArmazemGratidao {
     cards.SuspendLayout();
     try{
      cards.Controls.Clear();
+     cards.AutoScrollPosition=new Point(0,0);
      int width=Math.Max(210,cards.ClientSize.Width-cards.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-6);
      foreach(DataGridViewRow row in grid.Rows){
       if(row.IsNewRow||row.Cells["venda"].Value==null)continue;
@@ -335,7 +336,7 @@ namespace ArmazemGratidao {
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
-      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=66,
+      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=78,
        BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
        Margin=new Padding(0,0,0,3)};
       var check=new CheckBox{Name="amzgFiadoCardSelect",Left=9,Top=10,Width=24,Height=24,
@@ -346,7 +347,7 @@ namespace ArmazemGratidao {
        Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
        ForeColor=Color.FromArgb(22,70,142)};
       var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=27,
-       Width=Math.Max(100,width-46),Height=31,AutoEllipsis=true,
+       Width=Math.Max(100,width-46),Height=43,AutoEllipsis=true,
        Text="Total R$ "+gross.ToString("N2")+"   |   Pago R$ "+received.ToString("N2")+
         Environment.NewLine+"Saldo R$ "+open.ToString("N2")+
         (string.IsNullOrWhiteSpace(status)?"":"   • "+status),
