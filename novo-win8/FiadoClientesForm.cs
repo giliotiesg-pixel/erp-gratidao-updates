@@ -36,6 +36,7 @@ namespace ArmazemGratidao {
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
    var removeClient=new Button{Name="amzgFiadoRemoveClient",Text="Excluir cliente selecionado",Dock=DockStyle.Bottom,Height=36,BackColor=Color.FromArgb(180,43,57),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   removeClient.FlatStyle=FlatStyle.Flat;removeClient.FlatAppearance.BorderSize=0;removeClient.UseVisualStyleBackColor=false;
    removeClient.Click+=(sender,args)=>RemoveClientFromFiadoList();
    split.Panel1.Controls.Add(removeClient);
    split.Panel1.Controls.Add(overview);
@@ -77,6 +78,7 @@ namespace ArmazemGratidao {
     BackColor=Color.FromArgb(228,239,252),Padding=new Padding(5,3,5,3)};
    backSmall.Dock=DockStyle.Left;localNav.Controls.Add(backSmall);
    var removeSelected=new Button{Name="amzgFiadoRemoveSelected",Text="Excluir cliente",Dock=DockStyle.Left,Width=130,BackColor=Color.FromArgb(180,43,57),ForeColor=Color.White};
+   removeSelected.FlatStyle=FlatStyle.Flat;removeSelected.FlatAppearance.BorderSize=0;removeSelected.UseVisualStyleBackColor=false;
    removeSelected.Click+=(sender,args)=>RemoveClientFromFiadoList();localNav.Controls.Add(removeSelected);
    var servicesToggle=new Button{Name="amzgFiadoToggleServices",Text="☰ Serviços",
     Dock=DockStyle.Right,Width=133,Height=30,BackColor=Color.FromArgb(22,75,160),
