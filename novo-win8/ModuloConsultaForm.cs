@@ -810,7 +810,7 @@ namespace ArmazemGratidao {
      }catch(Exception ex){MessageBox.Show("Não foi possível salvar: "+ex.Message,"Clientes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     };
     var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,Height=45};actions.Controls.Add(save);actions.Controls.Add(cancel);
-    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,55));panel.Controls.Add(actions,1,5);
+    panel.Controls.Add(actions,1,5);
     form.Controls.Add(panel);form.CancelButton=cancel;form.ShowDialog(this);
    }
   }
