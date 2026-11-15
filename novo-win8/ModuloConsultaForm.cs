@@ -8,6 +8,7 @@ using System.Windows.Forms;
 namespace ArmazemGratidao {
  public sealed class ModuloConsultaForm:StyledDialogForm {
   readonly string db;readonly string module;
+  readonly ComboBox reportCategory=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=195,Font=new Font("Segoe UI",10)};
   readonly TextBox stockSearch=new TextBox {Width=220,Font=new Font("Segoe UI",10)};
   readonly TextBox clientSearch=new TextBox {Width=205,Font=new Font("Segoe UI",10)};
   readonly Label stockValuation=new Label {Dock=DockStyle.Top,Height=54,Padding=new Padding(9,4,6,2),BackColor=Color.FromArgb(227,240,255),ForeColor=Color.FromArgb(17,57,110),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Apuração financeira do estoque"};
@@ -18,6 +19,14 @@ namespace ArmazemGratidao {
    var working=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
    var top=new FlowLayoutPanel {Dock=DockStyle.Top,Height=55,Padding=new Padding(8),BackColor=Color.FromArgb(220,95,105)};
    var reload=new Button {Text="Atualizar consulta",AutoSize=true,Height=33};reload.Click+=(s,e)=>LoadData();top.Controls.Add(reload);
+   if(module=="Relatorios"){
+    top.BackColor=Color.FromArgb(222,234,250);top.Height=60;
+    top.Controls.Add(new Label{Text="RELATÓRIOS  |  Categoria:",AutoSize=true,Padding=new Padding(4,9,2,0),Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156)});
+    reportCategory.Items.AddRange(new object[]{"Vendas","Fiado","Produtos","Estoque","Clientes","Modo de pagamento"});
+    reportCategory.SelectedIndex=0;
+    reportCategory.SelectedIndexChanged+=(s,e)=>LoadData();
+    top.Controls.Add(reportCategory);
+   }
    if(module=="Caixa"){
     var bottles=new Button{Text="Cascos retornáveis",Width=170,Height=33};
     bottles.Click+=(s,e)=>{using(var dialog=new CascosForm(db))dialog.ShowDialog(this);LoadData();};top.Controls.Add(bottles);
@@ -112,7 +121,15 @@ namespace ArmazemGratidao {
     case "Compras":sql="SELECT * FROM purchases ORDER BY id DESC LIMIT 1000";break;
     case "Caixa":sql="SELECT id,opened_at,opening_amount,closed_at,closing_amount,expected_cash,difference,status FROM cash_sessions ORDER BY id DESC LIMIT 1000";break;
     case "Financeiro":sql="SELECT id,sale_id,payment_method,amount,fee_percent,fee_amount,created_at FROM sale_payments ORDER BY id DESC LIMIT 2000";break;
-    case "Relatorios":sql="SELECT date(created_at) AS dia,COUNT(*) AS vendas,SUM(gross_total) AS total_vendido,SUM(net_profit) AS lucro FROM sales GROUP BY date(created_at) ORDER BY dia DESC LIMIT 365";break;
+    case "Relatorios":
+     switch(Convert.ToString(reportCategory.SelectedItem)??"Vendas"){
+      case "Fiado":sql="SELECT s.id AS venda,s.created_at AS data,s.gross_total AS total,COALESCE((SELECT SUM(amount) FROM sale_payments p WHERE p.sale_id=s.id),0) AS pago,s.gross_total-COALESCE((SELECT SUM(amount) FROM sale_payments p WHERE p.sale_id=s.id),0) AS saldo FROM sales s WHERE EXISTS (SELECT 1 FROM sale_payments p WHERE p.sale_id=s.id AND LOWER(p.payment_method) LIKE '%fiado%') ORDER BY s.id DESC LIMIT 2000";break;
+      case "Produtos":sql="SELECT p.id AS codigo_interno,p.barcode AS codigo_barras,p.name AS produto,p.price AS preco,p.cost AS custo FROM products p ORDER BY p.name LIMIT 3000";break;
+      case "Estoque":sql="SELECT p.id AS codigo,p.name AS produto,p.quantity AS quantidade,p.cost AS custo,p.price AS preco,p.quantity*p.cost AS valor_custo FROM products p ORDER BY p.name LIMIT 3000";break;
+      case "Clientes":sql="SELECT * FROM customers ORDER BY name LIMIT 2000";break;
+      case "Modo de pagamento":sql="SELECT payment_method AS modalidade,COUNT(*) AS operacoes,SUM(amount) AS total,SUM(COALESCE(fee_amount,0)) AS taxas FROM sale_payments GROUP BY payment_method ORDER BY total DESC";break;
+      default:sql="SELECT date(created_at) AS dia,COUNT(*) AS vendas,SUM(gross_total) AS total_vendido,SUM(net_profit) AS lucro FROM sales GROUP BY date(created_at) ORDER BY dia DESC LIMIT 365";break;
+     }break;
     case "Sistema":sql="SELECT name AS tabela FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name";break;
     default:status.Text="Modulo nao disponivel.";return;
    }
