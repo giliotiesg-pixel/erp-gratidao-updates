@@ -742,18 +742,21 @@ namespace ArmazemGratidao {
     oldDoc=Convert.ToString(grid.CurrentRow.Cells["CPF / CNPJ"].Value);
     object value=grid.CurrentRow.Cells["ID interno"].Value;if(value!=null&&value!=DBNull.Value)id=Convert.ToInt64(value);
    }
-   using(var form=new StyledDialogForm{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=390,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
-    var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(18)};
+   using(var form=new StyledDialogForm{Text=edit?"Editar cliente":"Cadastrar cliente",Width=650,Height=420,MinimumSize=new Size(520,380),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=false,BackColor=Color.FromArgb(229,242,255)}){
+    var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(18,14,18,12),AutoScroll=true};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    for(int row=0;row<4;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,57));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
     var name=new TextBox{Text=oldName,MaxLength=180,Dock=DockStyle.Top};
     var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=190};
     type.Items.AddRange(new object[]{"Pessoa física (CPF)","Pessoa jurídica (CNPJ)"});type.SelectedIndex=OnlyDigits(oldDoc).Length==14?1:0;
     var document=new TextBox{Text=oldDoc,MaxLength=20,Width=230};
     var phone=new TextBox{Text=oldPhone,MaxLength=40,Width=230};
     Control[] fields={name,type,document,phone};string[] labels={"Nome / Razão social","Tipo de cliente","CPF ou CNPJ","Telefone"};
-    for(int i=0;i<fields.Length;i++){panel.RowStyles.Add(new RowStyle(SizeType.Absolute,54));panel.Controls.Add(new Label{Text=labels[i],AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold)},0,i);panel.Controls.Add(fields[i],1,i);}
+    for(int i=0;i<fields.Length;i++){fields[i].Dock=DockStyle.Fill;fields[i].Margin=new Padding(4,6,12,8);panel.Controls.Add(new Label{Text=labels[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold)},0,i);panel.Controls.Add(fields[i],1,i);}
     var tip=new Label{Text=edit?"Altere os dados e confirme para salvar.":"Preencha os dados do novo cliente.",AutoSize=true,ForeColor=Color.FromArgb(21,75,156)};
-    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));panel.Controls.Add(tip,1,4);
+    tip.Dock=DockStyle.Fill;tip.TextAlign=ContentAlignment.MiddleLeft;panel.Controls.Add(tip,1,4);
     var save=new Button{Text=edit?"Salvar alterações":"Salvar cadastro",Width=190,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
     var cancel=new Button{Text="Cancelar",Width=130,Height=38,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.Cancel};
     save.Click+=(s,e)=>{
