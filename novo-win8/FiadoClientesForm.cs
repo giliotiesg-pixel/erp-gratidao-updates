@@ -76,6 +76,8 @@ namespace ArmazemGratidao {
    var localNav=new Panel{Name="amzgFiadoLocalNav",Dock=DockStyle.Top,Height=38,
     BackColor=Color.FromArgb(228,239,252),Padding=new Padding(5,3,5,3)};
    backSmall.Dock=DockStyle.Left;localNav.Controls.Add(backSmall);
+   var removeSelected=new Button{Name="amzgFiadoRemoveSelected",Text="Excluir cliente",Dock=DockStyle.Left,Width=130,BackColor=Color.FromArgb(180,43,57),ForeColor=Color.White};
+   removeSelected.Click+=(sender,args)=>RemoveClientFromFiadoList();localNav.Controls.Add(removeSelected);
    var servicesToggle=new Button{Name="amzgFiadoToggleServices",Text="☰ Serviços",
     Dock=DockStyle.Right,Width=133,Height=30,BackColor=Color.FromArgb(22,75,160),
     ForeColor=Color.White,FlatStyle=FlatStyle.Flat,TabStop=false,
