@@ -18,6 +18,7 @@ namespace ArmazemGratidao {
   readonly NumericUpDown creditDepositAmount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=135};
   readonly ComboBox method=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=160};
   string customer="";
+  string clientMarkedForRemoval="";
   bool refreshingClientSales=false;
   readonly Label receivedBalance=new Label {Text="Saldo selecionado: R$ 0,00",AutoSize=true,Padding=new Padding(5,9,0,0),Font=new Font("Segoe UI",10,FontStyle.Bold)};
   TabControl saleTabs;
@@ -34,6 +35,9 @@ namespace ArmazemGratidao {
    var split=new SplitContainer {Dock=DockStyle.Fill,SplitterDistance=205,IsSplitterFixed=true};
    detailSplit=split;
    split.Panel1.Controls.Add(clients);
+   var removeClient=new Button{Name="amzgFiadoRemoveClient",Text="Excluir cliente selecionado",Dock=DockStyle.Bottom,Height=36,BackColor=Color.FromArgb(180,43,57),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   removeClient.Click+=(sender,args)=>RemoveClientFromFiadoList();
+   split.Panel1.Controls.Add(removeClient);
    split.Panel1.Controls.Add(overview);
    clients.ClientSizeChanged+=(s,e)=>ArrangeClientBoxes();
    clientSearch.TextChanged+=(s,e)=>LoadClients();
@@ -257,6 +261,7 @@ namespace ArmazemGratidao {
    split.Panel2.Controls.Add(clientHome);clientHome.BringToFront();
 
    split.Panel2Collapsed=true;
+   using(var conn=Open())using(var cmd=new SQLiteCommand("CREATE TABLE IF NOT EXISTS fiado_hidden_clients (customer_name TEXT PRIMARY KEY COLLATE NOCASE)",conn))cmd.ExecuteNonQuery();
    LoadClients();
   }
   SQLiteConnection Open(bool readOnly=false) {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,ReadOnly=readOnly,FailIfMissing=true}.ToString());c.Open();return c;}
@@ -505,6 +510,22 @@ namespace ArmazemGratidao {
    }
    clients.ResumeLayout();
   }
+  void RemoveClientFromFiadoList(){
+   if(string.IsNullOrWhiteSpace(clientMarkedForRemoval)){
+    MessageBox.Show("Clique primeiro no cliente que deseja excluir da lista.","Fiado");return;
+   }
+   string name=clientMarkedForRemoval;
+   if(MessageBox.Show("Retirar "+name+" da lista de clientes do Fiado?\\nAs vendas, pagamentos e saldos serão preservados no banco de dados.",
+    "Confirmar exclusão da lista",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+   try{
+    using(var conn=Open()){
+     using(var cmd=new SQLiteCommand("INSERT OR IGNORE INTO fiado_hidden_clients(customer_name) VALUES (@name)",conn)){
+      cmd.Parameters.AddWithValue("@name",name);cmd.ExecuteNonQuery();
+     }
+    }
+    clientMarkedForRemoval="";customer="";LoadClients();
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Excluir cliente");}
+  }
   void LoadClients(){
    try {
     // Na tela do FIADO, so aparecem pessoas com VENDA FIADA registrada.
@@ -518,16 +539,21 @@ namespace ArmazemGratidao {
      "COALESCE((SELECT SUM(CASE WHEN "+Balance+">0.005 THEN "+Balance+" ELSE 0 END) FROM sales s WHERE "+
      CreditFilter+" AND TRIM(s.customer_name)=names.cliente COLLATE NOCASE),0) AS saldo"+
      " FROM ("+names+") names ORDER BY names.cliente COLLATE NOCASE");
+    var hidden=Query("SELECT customer_name FROM fiado_hidden_clients");
+    var hiddenNames=new HashSet<string>(hidden.Rows.Cast<DataRow>().Select(x=>Convert.ToString(x[0])),StringComparer.OrdinalIgnoreCase);
     clients.SuspendLayout();clients.Controls.Clear();
     decimal allBalance=0,internalBalance=0;
     bool selectedClientStillHasFiado=false;
     foreach(DataRow r in dt.Rows) {
      var name=Convert.ToString(r["cliente"]);var balance=Convert.ToDecimal(r["saldo"]);
+     if(hiddenNames.Contains(name))continue;
      if(string.Equals(name,customer,StringComparison.OrdinalIgnoreCase))selectedClientStillHasFiado=true;
      if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
      var b=new Button {Text=name+"  |  R$ "+balance.ToString("N2"),Size=new Size(158,49),AutoSize=false,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9,FontStyle.Bold),BackColor=Color.White,ForeColor=Color.FromArgb(25,75,150),Tag=name};
-     b.Click+=(sender,args)=>SelectClient(Convert.ToString(((Button)sender).Tag));clients.Controls.Add(b);
+     b.Click+=(sender,args)=>{clientMarkedForRemoval=Convert.ToString(((Button)sender).Tag);SelectClient(clientMarkedForRemoval);};
+     b.MouseDown+=(sender,args)=>{clientMarkedForRemoval=Convert.ToString(((Button)sender).Tag);};
+     clients.Controls.Add(b);
     }
     clients.ResumeLayout();
     ArrangeClientBoxes();
