@@ -907,20 +907,17 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
 
      var tools=new TableLayoutPanel{Name="amzgSaleEditActions",
       Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Padding=Padding.Empty};
-     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38f));
      tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34f));
-     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,28f));
+     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33f));
+     tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33f));
      var replace=SalesButton("amzgSaleEditFind","Buscar substituto",salesBlue);
      var remove=SalesButton("amzgSaleEditRemove","Retirar da venda",
       Color.FromArgb(185,39,60));
-     var keep=new Label{Text="Sem substituto: altera só Qtd. / Preço",
-      Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.2f),
-      ForeColor=Color.FromArgb(65,86,115),TextAlign=ContentAlignment.MiddleCenter,
-      AutoEllipsis=true};
+     var addProduct=SalesButton("amzgSaleEditAdd","Inserir produto",Color.FromArgb(16,119,82));
      replace.Margin=new Padding(0,5,6,5);
      remove.Margin=new Padding(0,5,6,5);
      tools.Controls.Add(replace,0,0);tools.Controls.Add(remove,1,0);
-     tools.Controls.Add(keep,2,0);
+     tools.Controls.Add(addProduct,2,0);
      page.Controls.Add(tools,0,3);
 
      var fields=new TableLayoutPanel{Name="amzgSaleEditFields",
@@ -1022,6 +1019,77 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       decimal value=found["price"]==DBNull.Value?0:Convert.ToDecimal(found["price"]);
       price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,value));
       projected();
+     };
+     addProduct.Click+=(sender,args)=>{
+      try{
+       var product=PickReplacementProduct(dialog);
+       if(product==null)return;
+       decimal unitPrice=product["price"]==DBNull.Value?0m:Convert.ToDecimal(product["price"]);
+       decimal unitCost=product["cost"]==DBNull.Value?0m:Convert.ToDecimal(product["cost"]);
+       decimal qty=1m;
+       using(var ask=new Form{Text="Inserir produto na venda #"+sale,
+        StartPosition=FormStartPosition.CenterParent,Width=440,Height=245,
+        FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+        var name=new Label{Left=15,Top=12,Width=390,Height=43,
+         Text=Convert.ToString(product["name"]),AutoEllipsis=true};
+        var qLabel=new Label{Left=15,Top=66,Width=100,Text="Quantidade"};
+        var q=new NumericUpDown{Left=120,Top=63,Width=120,DecimalPlaces=3,
+         Minimum=0.001m,Maximum=1000000m,Value=qty};
+        var pLabel=new Label{Left=15,Top=106,Width=100,Text="Preço (R$)"};
+        var p=new NumericUpDown{Left=120,Top=103,Width=120,DecimalPlaces=2,
+         Maximum=1000000m,Value=Math.Max(0m,Math.Min(1000000m,unitPrice))};
+        var ok=new Button{Text="Inserir na venda",Left=220,Top=149,Width=185,
+         DialogResult=DialogResult.OK};
+        ask.Controls.AddRange(new Control[]{name,qLabel,q,pLabel,p,ok});
+        ask.AcceptButton=ok;
+        if(ask.ShowDialog(dialog)!=DialogResult.OK)return;
+        qty=q.Value;unitPrice=p.Value;
+       }
+       decimal lineTotal=decimal.Round(qty*unitPrice,2);
+       if(subtotal+lineTotal-discount<0m)
+        throw new Exception("O desconto deixaria o total da venda negativo.");
+       var confirm=MessageBox.Show(dialog,
+        "Inserir "+Convert.ToString(product["name"])+" na venda #"+sale+
+        " por R$ "+lineTotal.ToString("N2")+"? O estoque não será movimentado automaticamente.",
+        "Confirmar inclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
+       if(confirm!=DialogResult.Yes)return;
+       using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+        DataSource=db,FailIfMissing=true}.ToString())){
+        conn.Open();
+        using(var tx=conn.BeginTransaction()){
+         using(var cmd=new SQLiteCommand(
+          "INSERT INTO sale_items (sale_id,product_id,barcode,name,quantity,unit_price,unit_cost,total) "+
+          "VALUES (@sale,@product,@barcode,@name,@qty,@price,@cost,@total)",conn,tx)){
+          cmd.Parameters.AddWithValue("@sale",sale);
+          cmd.Parameters.AddWithValue("@product",Convert.ToInt64(product["id"]));
+          cmd.Parameters.AddWithValue("@barcode",Convert.ToString(product["barcode"]));
+          cmd.Parameters.AddWithValue("@name",Convert.ToString(product["name"]));
+          cmd.Parameters.AddWithValue("@qty",qty);
+          cmd.Parameters.AddWithValue("@price",unitPrice);
+          cmd.Parameters.AddWithValue("@cost",unitCost);
+          cmd.Parameters.AddWithValue("@total",lineTotal);
+          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao inserir produto.");
+         }
+         using(var cmd=new SQLiteCommand(@"UPDATE sales SET
+          subtotal=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale),
+          gross_total=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0),
+          total_cost=(SELECT COALESCE(SUM(quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale),
+          net_profit=(SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0),
+          profit_reserve_10=MAX(0,((SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0))*0.1)
+          WHERE id=@sale",conn,tx)){
+          cmd.Parameters.AddWithValue("@sale",sale);
+          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não encontrada.");
+         }
+         WriteAudit(conn,tx,sale,"INSERIR_ITEM",
+          "Inclusão posterior em venda finalizada",
+          "produto="+Convert.ToString(product["name"])+"; quantidade="+qty+
+          "; preco="+unitPrice+"; total_item="+lineTotal);
+         tx.Commit();
+        }
+       }
+       dialog.DialogResult=DialogResult.OK;
+       dialog.Close();
+      }catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Produto não inserido");}
      };
      Action<bool> apply=(removeSelected)=>{
       if(selected==null)throw new Exception("Selecione o produto da venda.");
