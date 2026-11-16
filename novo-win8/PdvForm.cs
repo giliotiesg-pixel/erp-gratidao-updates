@@ -228,7 +228,25 @@ namespace ArmazemGratidao {
      list.DoubleClick+=(sender,args)=>{if(list.SelectedItem!=null){dialog.Tag=Convert.ToString(list.SelectedItem);dialog.DialogResult=DialogResult.OK;}};
      cancel.Click+=(sender,args)=>dialog.DialogResult=DialogResult.Cancel;
      actions.Controls.Add(select);actions.Controls.Add(register);
-     dialog.Controls.Add(list);dialog.Controls.Add(search);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.Controls.Add(cancel);
+     // Layout em linhas fixas: nenhum Dock.Top/Bottom pode cobrir a lista.
+     var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,
+      Padding=new Padding(12,10,12,10),Margin=Padding.Empty};
+     layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+     layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+     hint.Dock=DockStyle.Fill;search.Dock=DockStyle.Fill;
+     list.Dock=DockStyle.Fill;list.Margin=new Padding(0,5,0,5);
+     actions.Dock=DockStyle.Fill;actions.WrapContents=false;
+     cancel.Dock=DockStyle.Fill;
+     layout.Controls.Add(hint,0,0);
+     layout.Controls.Add(search,0,1);
+     layout.Controls.Add(list,0,2);
+     layout.Controls.Add(actions,0,3);
+     layout.Controls.Add(cancel,0,4);
+     dialog.Controls.Add(layout);
      fill();
      if(dialog.ShowDialog(this)!=DialogResult.OK||!(dialog.Tag is string))return false;
      string selected=((string)dialog.Tag).Trim();
