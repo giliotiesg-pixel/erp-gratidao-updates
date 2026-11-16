@@ -1716,7 +1716,7 @@ namespace ArmazemGratidao {
      rd.Close();
      decimal used=PeriodFiadoUsed(cn,tx,name,period);
      if(used+newFiado>limit+0.005m)
-      throw new Exception("Limite de Fiado "+period.ToLowerInvariant()+" excedido para "+name+". Limite R$ "+limit.ToString("N2")+", usado R$ "+used.ToString("N2")+", nova compra fiada R$ "+newFiado.ToString("N2")+". Venda nao registrada.");
+      throw new InvalidOperationException("Limite de Fiado "+period.ToLowerInvariant()+" excedido para "+name+". Limite R$ "+limit.ToString("N2")+", usado R$ "+used.ToString("N2")+", nova compra fiada R$ "+newFiado.ToString("N2")+". Venda nao registrada.");
     }
    }
   }
