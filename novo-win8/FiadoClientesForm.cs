@@ -1544,20 +1544,20 @@ namespace ArmazemGratidao {
        }
       }
      }
-     using(var dlg=new StyledDialogForm{Text="Historico de credito - "+customer,Width=1000,Height=610,MinimumSize=new Size(740,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
-      var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White};
+     using(var dlg=new StyledDialogForm{Text="Historico de credito - "+customer,Width=1160,Height=680,MinimumSize=new Size(780,480),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White,ScrollBars=ScrollBars.Both};
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
       // As colunas podem ser geradas somente apos o DataGridView receber o binding.
       grid.AutoGenerateColumns=true;
       grid.DataBindingComplete+=(sender,args)=>{
        if(grid.Columns["Registro"]!=null)grid.Columns["Registro"].Visible=false;
        var detailsColumn=grid.Columns["Detalhes"];
-       if(detailsColumn!=null)detailsColumn.FillWeight=130;
+       if(detailsColumn!=null){detailsColumn.Width=310;detailsColumn.MinimumWidth=180;}
        var productsColumn=grid.Columns["Produtos"];
-       if(productsColumn!=null){productsColumn.FillWeight=260;productsColumn.MinimumWidth=180;}
+       if(productsColumn!=null){productsColumn.Width=390;productsColumn.MinimumWidth=230;}\n       foreach(DataGridViewColumn column in grid.Columns){if(column.Name!="Produtos"&&column.Name!="Detalhes")column.Width=column.Name=="Operacao"?145:column.Name=="Data"?155:column.Name=="Valor"?110:column.Name=="Forma"?135:95;}\n       grid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;\n       grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
       };
-      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
-      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,Padding=new Padding(8),BackColor=Color.FromArgb(218,233,250)};
+      var hint=new Label{Dock=DockStyle.Top,Height=54,Padding=new Padding(10,10,10,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=94,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
        if(grid.CurrentRow==null)return;
