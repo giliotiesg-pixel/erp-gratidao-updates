@@ -1689,14 +1689,20 @@ namespace ArmazemGratidao {
     }
    }
   }
+  // O limite e rotativo: descontar somente o saldo devedor atual, nao o total comprado no mes.
   public static decimal PeriodFiadoUsed(SQLiteConnection cn,SQLiteTransaction tx,string name,string period){
-   DateTime date=DateTime.Today;
-   if(period=="SEMANAL")date=date.AddDays(-(((int)date.DayOfWeek+6)%7));
-   else date=new DateTime(date.Year,date.Month,1);
-   string sql="SELECT COALESCE(SUM(CASE WHEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp WHERE sp.sale_id=s.id AND UPPER(COALESCE(sp.payment_method,''))<>'FIADO'),0)>0 THEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp WHERE sp.sale_id=s.id AND UPPER(COALESCE(sp.payment_method,''))<>'FIADO'),0) ELSE 0 END),0) FROM sales s WHERE s.customer_name=@client COLLATE NOCASE AND substr(s.created_at,1,10)>=@start AND (UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%') AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%'";
+   const string sql=@"SELECT COALESCE(SUM(CASE
+    WHEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0)>0
+    THEN COALESCE(s.gross_total,0)-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0)
+    ELSE 0 END),0)
+    FROM sales s WHERE TRIM(s.customer_name)=@client COLLATE NOCASE
+    AND (UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%'
+      OR UPPER(COALESCE(s.status,'')) LIKE '%FIADO%'
+      OR EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id=s.id
+       AND UPPER(TRIM(COALESCE(sp.payment_method,''))) LIKE '%FIADO%'))
+    AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%'";
    using(var cmd=new SQLiteCommand(sql,cn,tx)){
     cmd.Parameters.AddWithValue("@client",name.Trim());
-    cmd.Parameters.AddWithValue("@start",date.ToString("yyyy-MM-dd"));
     return Convert.ToDecimal(cmd.ExecuteScalar());
    }
   }
