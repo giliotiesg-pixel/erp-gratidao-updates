@@ -1549,13 +1549,17 @@ namespace ArmazemGratidao {
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
       // As colunas podem ser geradas somente apos o DataGridView receber o binding.
       grid.AutoGenerateColumns=true;
+      var returnButton=new DataGridViewButtonColumn{Name="VoltarFiado",HeaderText="Acao",Text="Voltar ao Fiado",UseColumnTextForButtonValue=true,Width=135,MinimumWidth=125};
+      grid.Columns.Add(returnButton);
       grid.DataBindingComplete+=(sender,args)=>{
        if(grid.Columns["Registro"]!=null)grid.Columns["Registro"].Visible=false;
+       if(grid.Columns["VoltarFiado"]!=null){grid.Columns["VoltarFiado"].DisplayIndex=grid.Columns.Count-1;grid.Columns["VoltarFiado"].Width=135;}
        var detailsColumn=grid.Columns["Detalhes"];
        if(detailsColumn!=null){detailsColumn.Width=310;detailsColumn.MinimumWidth=180;}
        var productsColumn=grid.Columns["Produtos"];
        if(productsColumn!=null){productsColumn.Width=390;productsColumn.MinimumWidth=230;}
-       foreach(DataGridViewColumn column in grid.Columns){if(column.Name!="Produtos"&&column.Name!="Detalhes")column.Width=column.Name=="Operacao"?185:column.Name=="Data"?160:column.Name=="Valor"?110:column.Name=="Forma"?190:100;}\n       grid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
+       foreach(DataGridViewColumn column in grid.Columns){if(column.Name!="Produtos"&&column.Name!="Detalhes"&&column.Name!="VoltarFiado")column.Width=column.Name=="Operacao"?185:column.Name=="Data"?160:column.Name=="Valor"?110:column.Name=="Forma"?190:100;}
+       grid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
        grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
        grid.RowTemplate.MinimumHeight=32;
       };
@@ -1571,7 +1575,14 @@ namespace ArmazemGratidao {
        ShowCreditSaleItems(saleId,Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value),Convert.ToDecimal(grid.CurrentRow.Cells["Valor"].Value));
       };
       show.Click+=(sender,args)=>inspect();
-      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)inspect();};
+      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0 && grid.Columns[args.ColumnIndex].Name!="VoltarFiado")inspect();};
+      grid.CellContentClick+=(sender,args)=>{
+       if(args.RowIndex<0||grid.Columns[args.ColumnIndex].Name!="VoltarFiado")return;
+       var row=grid.Rows[args.RowIndex];
+       if(row.Cells["Registro"].Value==null)return;
+       long entryId=Convert.ToInt64(row.Cells["Registro"].Value);
+       if(ReturnCreditSaleToFiado(entryId)){dlg.Close();ShowCustomerCreditHistory();}
+      };
       bar.Controls.Add(show);
       var correct=new Button{Text="Corrigir / retirar lancamento",Width=230,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       correct.Click+=(sender,args)=>{
@@ -1596,6 +1607,84 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+  // Reabre apenas o abatimento automatico escolhido; pagamentos reais permanecem intactos.
+  bool ReturnCreditSaleToFiado(long entryId){
+   if(string.IsNullOrWhiteSpace(customer))return false;
+   try{
+    EnsureCustomerCredit(db);
+    string name=customer.Trim();
+    using(var cn=Open(false)){
+     long saleId;decimal amountApplied;string kind;
+     using(var cmd=new SQLiteCommand(@"SELECT entry_type,amount,sale_id FROM customer_credit_entries
+      WHERE id=@id AND customer_name=@name COLLATE NOCASE",cn)){
+      cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@name",name);
+      using(var rd=cmd.ExecuteReader()){
+       if(!rd.Read()){MessageBox.Show("Lancamento nao encontrado.");return false;}
+       kind=Convert.ToString(rd[0]);
+       amountApplied=-Convert.ToDecimal(rd[1]);
+       if(rd[2]==DBNull.Value){MessageBox.Show("Este registro nao tem venda vinculada. Selecione um abatimento de venda.");return false;}
+       saleId=Convert.ToInt64(rd[2]);
+      }
+     }
+     if(kind!="UTILIZACAO"||amountApplied<=0){
+      MessageBox.Show("Voltar ao Fiado funciona para abatimento automatico de credito. Outros pagamentos exigem conferencia especifica para nao afetar dinheiro recebido.");return false;
+     }
+     long paymentId;
+     using(var cmd=new SQLiteCommand(@"SELECT id FROM credit_payments WHERE sale_id=@sale AND amount=@amount
+      AND payment_method='CREDITO_CLIENTE' AND note='Credito antecipado aplicado automaticamente'",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);cmd.Parameters.AddWithValue("@amount",amountApplied);
+      var ids=new List<long>();
+      using(var rd=cmd.ExecuteReader())while(rd.Read())ids.Add(Convert.ToInt64(rd[0]));
+      if(ids.Count!=1)throw new Exception("Pagamento ambiguo ou ausente na venda #"+saleId+". Nenhuma alteracao feita.");
+      paymentId=ids[0];
+     }
+     using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE id=@sale AND customer_name=@name COLLATE NOCASE AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);cmd.Parameters.AddWithValue("@name",name);
+      if(Convert.ToInt32(cmd.ExecuteScalar())!=1)throw new Exception("Venda excluida ou pertence a outro cliente.");
+     }
+     if(MessageBox.Show("Venda #"+saleId+" - "+name+"\nAbatimento de credito: R$ "+amountApplied.ToString("N2")+
+      "\n\nVoltar este valor ao Fiado? O pagamento em dinheiro, se existir, sera preservado. "+
+      "O credito utilizado retornara ao saldo de credito guardado.\nA operacao sera auditada.",
+      "Confirmar reabertura de Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return false;
+     string backup=CreditBackupPath(db,"antes-reabrir-fiado-");
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+      using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
+       if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido.");
+     }
+     if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio.");
+     using(var tx=cn.BeginTransaction()){
+      using(var audit=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS fiado_credit_payment_reversals(
+       id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,sale_id INTEGER NOT NULL,
+       entry_id INTEGER NOT NULL,payment_id INTEGER NOT NULL,amount NUMERIC NOT NULL,
+       reversed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))audit.ExecuteNonQuery();
+      using(var audit=new SQLiteCommand(@"INSERT INTO fiado_credit_payment_reversals
+       (customer_name,sale_id,entry_id,payment_id,amount) VALUES(@name,@sale,@entry,@payment,@amount)",cn,tx)){
+       audit.Parameters.AddWithValue("@name",name);audit.Parameters.AddWithValue("@sale",saleId);
+       audit.Parameters.AddWithValue("@entry",entryId);audit.Parameters.AddWithValue("@payment",paymentId);
+       audit.Parameters.AddWithValue("@amount",amountApplied);
+       audit.ExecuteNonQuery();
+      }
+      using(var del=new SQLiteCommand(@"DELETE FROM credit_payments WHERE id=@id AND sale_id=@sale
+       AND payment_method='CREDITO_CLIENTE' AND amount=@amount",cn,tx)){
+       del.Parameters.AddWithValue("@id",paymentId);del.Parameters.AddWithValue("@sale",saleId);
+       del.Parameters.AddWithValue("@amount",amountApplied);
+       if(del.ExecuteNonQuery()!=1)throw new Exception("Pagamento mudou; estorno cancelado.");
+      }
+      using(var del=new SQLiteCommand(@"DELETE FROM customer_credit_entries WHERE id=@id AND
+       customer_name=@name COLLATE NOCASE AND entry_type='UTILIZACAO' AND amount=@amount",cn,tx)){
+       del.Parameters.AddWithValue("@id",entryId);del.Parameters.AddWithValue("@name",name);
+       del.Parameters.AddWithValue("@amount",-amountApplied);
+       if(del.ExecuteNonQuery()!=1)throw new Exception("Abatimento mudou; estorno cancelado.");
+      }
+      tx.Commit();
+     }
+    }
+    LoadClients();SelectClient(customer);
+    MessageBox.Show("Abatimento devolvido ao Fiado. O credito guardado foi restaurado. Consulte o historico de auditoria.");
+    return true;
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel voltar ao Fiado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);return false;}
   }
   // Estorno manual e atomico. Para nao atribuir abatimentos ao deposito errado,
   // esta operacao so aceita carteira com um unico deposito positivo.
