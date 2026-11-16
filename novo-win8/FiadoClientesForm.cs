@@ -1612,6 +1612,24 @@ namespace ArmazemGratidao {
      if(dlg.ShowDialog(this)!=DialogResult.OK||value.Value==original)return false;
      decimal corrected=value.Value;
      if(kind=="DEPOSITO"&&corrected<0){MessageBox.Show("Deposito nao pode ser negativo.");return false;}
+     // Impedir cancelamento isolado de deposito ja usado em vendas.
+     // Sem estornar os pagamentos vinculados, a divida ficaria incorreta.
+     if(kind=="DEPOSITO" && corrected<original){
+      using(var checkCn=Open(true))
+      using(var used=new SQLiteCommand(@"SELECT COUNT(*) FROM customer_credit_entries
+       WHERE customer_name=@client COLLATE NOCASE
+       AND entry_type IN ('UTILIZACAO','UTILIZACAO_FIADO') AND amount<0",checkCn)){
+       used.Parameters.AddWithValue("@client",customer.Trim());
+       if(Convert.ToInt32(used.ExecuteScalar())>0){
+        MessageBox.Show("Este cliente possui compras abatidas com credito depositado. "+
+         "Nao e seguro retirar apenas o deposito: primeiro e necessario identificar "+
+         "e estornar os pagamentos de credito vinculados a cada venda. "+
+         "Nenhum registro foi alterado.","Estorno completo necessario",
+         MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        return false;
+       }
+      }
+     }
      if(MessageBox.Show("Corrigir registro "+entryId+" de R$ "+original.ToString("N2")+" para R$ "+corrected.ToString("N2")+"?\nO saldo sera recalculado e a alteracao sera auditada.","Confirmar correcao",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return false;
      string backup=CreditBackupPath(db,"antes-corrigir-historico-");
      using(var cn=Open(false)){
