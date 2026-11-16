@@ -424,7 +424,15 @@ namespace ArmazemGratidao {
   static readonly Color outline=Color.FromArgb(178,201,232);
   static readonly Color blue=Color.FromArgb(20,69,147);
   static void Round(Control c,int radius){
-   if(c.IsDisposed||c.Width<radius*2+4||c.Height<radius*2+4)return;
+   if(c.IsDisposed)return;
+   // Mesmo controles Dock que ainda nao foram dimensionados precisam de regiao antes de Show.
+   // O evento Resize recalcula a regiao com as dimensoes definitivas.
+   if(c.Width<radius*2+4||c.Height<radius*2+4){
+    var previous=c.Region;
+    c.Region=new Region(new Rectangle(0,0,Math.Max(1,c.Width),Math.Max(1,c.Height)));
+    if(previous!=null)previous.Dispose();
+    return;
+   }
    var rect=new Rectangle(0,0,c.Width,c.Height);
    int diameter=radius*2;
    using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
