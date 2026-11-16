@@ -1741,7 +1741,7 @@ namespace ArmazemGratidao {
       // Lancamentos historicos nao consomem o limite do periodo atual.
       if(!manualEntry){
        try{FiadoClientesForm.EnforceCreditLimit(c,tx,customerName,plannedFiado);}
-       catch(Exception limitError){
+       catch(InvalidOperationException limitError) when (limitError.Message.StartsWith("Limite de Fiado ",StringComparison.Ordinal)){
         if(MessageBox.Show(this,limitError.Message+Environment.NewLine+
           "Autorizar esta venda acima do limite? A autorização será registrada.",
           "Autorizar limite do Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
