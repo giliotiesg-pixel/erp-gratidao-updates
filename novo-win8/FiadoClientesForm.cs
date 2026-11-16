@@ -550,7 +550,9 @@ namespace ArmazemGratidao {
     bool selectedClientStillHasFiado=false;
     foreach(DataRow r in dt.Rows) {
      var name=Convert.ToString(r["cliente"]);var balance=Convert.ToDecimal(r["saldo"]);
-     if(hiddenNames.Contains(name))continue;
+     // Nunca ocultar clientes com saldo devedor: a lista inicial deve refletir o historico.
+     // A exclusao visual so se aplica a contas sem saldo pendente.
+     if(hiddenNames.Contains(name) && balance<=0.005m)continue;
      if(string.Equals(name,customer,StringComparison.OrdinalIgnoreCase))selectedClientStillHasFiado=true;
      if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
