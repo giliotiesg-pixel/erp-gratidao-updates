@@ -1739,7 +1739,24 @@ namespace ArmazemGratidao {
      if(method=="FIADO" || splitFiado){
       decimal plannedFiado=method=="FIADO"?sum:split.Where(part=>part.Key=="FIADO").Sum(part=>part.Value);
       // Lancamentos historicos nao consomem o limite do periodo atual.
-      if(!manualEntry)FiadoClientesForm.EnforceCreditLimit(c,tx,customerName,plannedFiado);
+      if(!manualEntry){
+       try{FiadoClientesForm.EnforceCreditLimit(c,tx,customerName,plannedFiado);}
+       catch(Exception limitError){
+        if(MessageBox.Show(this,limitError.Message+Environment.NewLine+
+          "Autorizar esta venda acima do limite? A autorização será registrada.",
+          "Autorizar limite do Fiado",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+          MessageBoxDefaultButton.Button2)!=DialogResult.Yes)throw;
+        using(var audit=new SQLiteCommand(
+          "CREATE TABLE IF NOT EXISTS fiado_limit_overrides(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,amount NUMERIC NOT NULL,authorized_at TEXT NOT NULL)",c,tx))
+          audit.ExecuteNonQuery();
+        using(var audit=new SQLiteCommand(
+          "INSERT INTO fiado_limit_overrides(customer_name,amount,authorized_at) VALUES(@name,@amount,datetime('now','localtime'))",c,tx)){
+          audit.Parameters.AddWithValue("@name",customerName);
+          audit.Parameters.AddWithValue("@amount",plannedFiado);
+          audit.ExecuteNonQuery();
+        }
+       }
+      }
      }
      long saleId;
      using(var cmd=new SQLiteCommand("INSERT INTO sales(customer_name,payment_method,gross_total,total_cost,net_profit,profit_reserve_10,created_at) VALUES(@customer,@method,@total,@cost,@profit,@reserve,@saleDate); SELECT last_insert_rowid();",c,tx)){
