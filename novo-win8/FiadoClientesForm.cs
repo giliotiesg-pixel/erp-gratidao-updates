@@ -115,7 +115,7 @@ namespace ArmazemGratidao {
    paymentRow.Controls.Add(receivedBalance);
    var fillAll=new Button {Text="Preencher saldo de todas",AutoSize=true,Height=36};fillAll.Click+=(s,e)=>FillAllBalances();paymentRow.Controls.Add(fillAll);
    var pay=new Button {Text="Registrar pagamento",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};pay.Click+=(s,e)=>Pay();paymentRow.Controls.Add(pay);
-   var saveCredit=new Button {Text="Guardar credito do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};saveCredit.Click+=(s,e)=>DepositCustomerCredit();toolsRow.Controls.Add(saveCredit);
+   var saveCredit=new Button {Text="Guardar credito (deposito)",AutoSize=true,Height=36,BackColor=Color.FromArgb(14,112,122),ForeColor=Color.White};saveCredit.Click+=(s,e)=>DepositCustomerCredit();toolsRow.Controls.Add(saveCredit);
    var creditLimit=new Button {Text="Definir limite semanal / mensal",AutoSize=true,Height=36,BackColor=Color.FromArgb(24,82,170),ForeColor=Color.White};creditLimit.Click+=(s,e)=>ConfigureClientCreditLimit();toolsRow.Controls.Add(creditLimit);
    var creditHistory=new Button {Text="Historico de credito",AutoSize=true,Height=36};creditHistory.Click+=(s,e)=>ShowCustomerCreditHistory();toolsRow.Controls.Add(creditHistory);
    var settle=new Button {Text="Receber nas vendas do cliente",AutoSize=true,Height=36,BackColor=Color.FromArgb(12,110,80),ForeColor=Color.White};settle.Click+=(s,e)=>PayAll();paymentRow.Controls.Add(settle);
@@ -1556,7 +1556,7 @@ namespace ArmazemGratidao {
        var productsColumn=grid.Columns["Produtos"];
        if(productsColumn!=null){productsColumn.FillWeight=260;productsColumn.MinimumWidth=180;}
       };
-      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Selecione uma linha. Ver produtos consulta a venda; Corrigir altera deposito/ajuste; Estornar deposito reabre pagamentos vinculados quando identificados com seguranca.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
       var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,Padding=new Padding(8),BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
@@ -1577,7 +1577,7 @@ namespace ArmazemGratidao {
        if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
       };
       bar.Controls.Add(correct);
-      var reverse=new Button{Text="Estornar deposito selecionado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
+      var reverse=new Button{Text="Estornar credito guardado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
       reverse.Click+=(sender,args)=>{
        if(grid.CurrentRow==null)return;
        long id=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
@@ -1606,13 +1606,13 @@ namespace ArmazemGratidao {
      using(var cmd=new SQLiteCommand("SELECT amount FROM customer_credit_entries WHERE id=@id AND customer_name=@name COLLATE NOCASE AND entry_type='DEPOSITO'",cn)){
       cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@name",name);
       object val=cmd.ExecuteScalar();
-      if(val==null||val==DBNull.Value){MessageBox.Show("Selecione um deposito valido no historico.");return false;}
+      if(val==null||val==DBNull.Value){MessageBox.Show("Selecione um credito guardado (deposito) no historico.");return false;}
       deposit=Convert.ToDecimal(val);
      }
      using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customer_credit_entries WHERE customer_name=@name COLLATE NOCASE AND amount>0",cn)){
       cmd.Parameters.AddWithValue("@name",name);
       if(Convert.ToInt32(cmd.ExecuteScalar())!=1){
-       MessageBox.Show("Existem outros creditos positivos no historico. Nao e seguro associar automaticamente os abatimentos a este deposito. Nenhum dado foi alterado.");return false;
+       MessageBox.Show("Existem outros creditos guardados ou ajustes positivos no historico. Nao e seguro associar automaticamente os abatimentos a este deposito. Nenhum dado foi alterado.");return false;
       }
      }
      var movements=new List<Tuple<long,long,decimal>>();
@@ -1749,7 +1749,7 @@ namespace ArmazemGratidao {
      dlg.Controls.AddRange(new Control[]{title,value,confirm,cancel});
      if(dlg.ShowDialog(this)!=DialogResult.OK||value.Value==original)return false;
      decimal corrected=value.Value;
-     if(kind=="DEPOSITO"&&corrected<0){MessageBox.Show("Deposito nao pode ser negativo.");return false;}
+     if(kind=="DEPOSITO"&&corrected<0){MessageBox.Show("Credito guardado nao pode ser negativo.");return false;}
      // Impedir cancelamento isolado de deposito ja usado em vendas.
      // Sem estornar os pagamentos vinculados, a divida ficaria incorreta.
      if(kind=="DEPOSITO" && corrected<original){
