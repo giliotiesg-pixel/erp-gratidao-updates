@@ -1577,6 +1577,13 @@ namespace ArmazemGratidao {
        if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
       };
       bar.Controls.Add(correct);
+      var reverse=new Button{Text="Estornar deposito e reabrir Fiado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
+      reverse.Click+=(sender,args)=>{
+       if(grid.CurrentRow==null)return;
+       long id=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
+       if(ReverseInvalidDeposit(id)){dlg.Close();ShowCustomerCreditHistory();}
+      };
+      bar.Controls.Add(reverse);
       var totals=new Label{Dock=DockStyle.Top,Height=66,Padding=new Padding(12,9,8,5),BackColor=Color.FromArgb(218,233,250),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Credito inserido: R$ "+deposited.ToString("N2")+"    |    Credito abatido: R$ "+debited.ToString("N2")+"\nSaldo atual: R$ "+available.ToString("N2")+"    |    Limite de Fiado atual: "+limitDisplay};
       var adjust=new Button{Text="Ajustar saldo manualmente",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
@@ -1586,6 +1593,114 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+  // Estorno manual e atomico. Para nao atribuir abatimentos ao deposito errado,
+  // esta operacao so aceita carteira com um unico deposito positivo.
+  bool ReverseInvalidDeposit(long entryId){
+   if(string.IsNullOrWhiteSpace(customer))return false;
+   try{
+    EnsureCustomerCredit(db);
+    string name=customer.Trim();
+    using(var cn=Open(false)){
+     decimal deposit=0m;
+     using(var cmd=new SQLiteCommand("SELECT amount FROM customer_credit_entries WHERE id=@id AND customer_name=@name COLLATE NOCASE AND entry_type='DEPOSITO'",cn)){
+      cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@name",name);
+      object val=cmd.ExecuteScalar();
+      if(val==null||val==DBNull.Value){MessageBox.Show("Selecione um deposito valido no historico.");return false;}
+      deposit=Convert.ToDecimal(val);
+     }
+     using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM customer_credit_entries WHERE customer_name=@name COLLATE NOCASE AND amount>0",cn)){
+      cmd.Parameters.AddWithValue("@name",name);
+      if(Convert.ToInt32(cmd.ExecuteScalar())!=1){
+       MessageBox.Show("Existem outros creditos positivos no historico. Nao e seguro associar automaticamente os abatimentos a este deposito. Nenhum dado foi alterado.");return false;
+      }
+     }
+     var movements=new List<Tuple<long,long,decimal>>();
+     decimal totalUsed=0m;
+     using(var cmd=new SQLiteCommand("SELECT id,entry_type,amount,sale_id,details FROM customer_credit_entries WHERE customer_name=@name COLLATE NOCASE AND amount<0 ORDER BY id",cn)){
+      cmd.Parameters.AddWithValue("@name",name);
+      using(var rd=cmd.ExecuteReader())while(rd.Read()){
+       string type=Convert.ToString(rd[1]);decimal value=-Convert.ToDecimal(rd[2]);
+       long saleId=0;
+       if(type=="UTILIZACAO" && rd[3]!=DBNull.Value)saleId=Convert.ToInt64(rd[3]);
+       else if(type=="UTILIZACAO_FIADO"){
+        string note=Convert.ToString(rd[4]);
+        int mark=note.LastIndexOf("venda #",StringComparison.OrdinalIgnoreCase);
+        if(mark<0||!long.TryParse(note.Substring(mark+7).Trim(),out saleId))throw new Exception("Abatimento sem identificacao de venda. Estorno bloqueado.");
+       }else throw new Exception("Existe outra saida de credito que exige conferencia manual. Estorno bloqueado.");
+       if(saleId<=0)throw new Exception("Venda invalida em abatimento.");
+       movements.Add(Tuple.Create(rd.GetInt64(0),saleId,value));
+       totalUsed+=value;
+      }
+     }
+     if(totalUsed>deposit+0.005m)throw new Exception("Abatimentos superam o deposito. Conferencia necessaria.");
+     if(MessageBox.Show("Cliente: "+name+"\nDeposito ficticio: R$ "+deposit.ToString("N2")+
+      "\nAbatimentos a reabrir no Fiado: R$ "+totalUsed.ToString("N2")+
+      "\nVendas afetadas: "+movements.Count+
+      "\n\nConfirmar estorno com backup e auditoria?","Estornar credito inexistente",
+      MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return false;
+     string backup=CreditBackupPath(db,"antes-estornar-credito-");
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+      using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
+       if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido. Nada alterado.");
+     }
+     if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio.");
+     using(var tx=cn.BeginTransaction()){
+      using(var audit=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS customer_credit_reversals
+       (id INTEGER PRIMARY KEY AUTOINCREMENT,deposit_id INTEGER NOT NULL,customer_name TEXT NOT NULL,
+        deposit_amount NUMERIC NOT NULL,restored_amount NUMERIC NOT NULL,
+        reversed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))audit.ExecuteNonQuery();
+      foreach(var m in movements){
+       string note=m.Item2.ToString();
+       string expected=m.Item1.ToString();
+       // Identificar o pagamento exato, nunca remover pagamentos reais.
+       string sql=@"SELECT id FROM credit_payments WHERE sale_id=@sale AND amount=@amount
+        AND payment_method=@method AND note=@note";
+       string methodName="CREDITO_CLIENTE";
+       string paymentNote;
+       using(var kind=new SQLiteCommand("SELECT entry_type FROM customer_credit_entries WHERE id=@id",cn,tx)){
+        kind.Parameters.AddWithValue("@id",m.Item1);
+        paymentNote=Convert.ToString(kind.ExecuteScalar())=="UTILIZACAO"?
+         "Credito antecipado aplicado automaticamente":null;
+       }
+       if(paymentNote==null){
+        sql=@"SELECT id FROM credit_payments WHERE sale_id=@sale AND amount=@amount
+         AND payment_method='CREDITO DEPOSITADO' AND note LIKE 'Recebimento %'";
+       }
+       var matches=new List<long>();
+       using(var payment=new SQLiteCommand(sql,cn,tx)){
+        payment.Parameters.AddWithValue("@sale",m.Item2);
+        payment.Parameters.AddWithValue("@amount",m.Item3);
+        payment.Parameters.AddWithValue("@method",methodName);
+        payment.Parameters.AddWithValue("@note",paymentNote??"");
+        using(var rd=payment.ExecuteReader())while(rd.Read())matches.Add(rd.GetInt64(0));
+       }
+       if(matches.Count!=1)throw new Exception("Pagamento da venda #"+m.Item2+" ambiguo ou ausente. Nenhum dado alterado.");
+       using(var del=new SQLiteCommand("DELETE FROM credit_payments WHERE id=@id",cn,tx)){
+        del.Parameters.AddWithValue("@id",matches[0]);
+        if(del.ExecuteNonQuery()!=1)throw new Exception("Falha ao reabrir venda.");
+       }
+       using(var del=new SQLiteCommand("DELETE FROM customer_credit_entries WHERE id=@id AND customer_name=@name COLLATE NOCASE",cn,tx)){
+        del.Parameters.AddWithValue("@id",m.Item1);del.Parameters.AddWithValue("@name",name);
+        if(del.ExecuteNonQuery()!=1)throw new Exception("Falha ao estornar abatimento.");
+       }
+      }
+      using(var del=new SQLiteCommand("DELETE FROM customer_credit_entries WHERE id=@id AND customer_name=@name COLLATE NOCASE AND entry_type='DEPOSITO' AND amount=@amount",cn,tx)){
+       del.Parameters.AddWithValue("@id",entryId);del.Parameters.AddWithValue("@name",name);del.Parameters.AddWithValue("@amount",deposit);
+       if(del.ExecuteNonQuery()!=1)throw new Exception("Deposito foi alterado. Operacao cancelada.");
+      }
+      using(var audit=new SQLiteCommand("INSERT INTO customer_credit_reversals(deposit_id,customer_name,deposit_amount,restored_amount) VALUES(@id,@name,@deposit,@restored)",cn,tx)){
+       audit.Parameters.AddWithValue("@id",entryId);audit.Parameters.AddWithValue("@name",name);
+       audit.Parameters.AddWithValue("@deposit",deposit);audit.Parameters.AddWithValue("@restored",totalUsed);audit.ExecuteNonQuery();
+      }
+      tx.Commit();
+     }
+    }
+    LoadClients();SelectClient(customer);
+    MessageBox.Show("Credito ficticio estornado. Abatimentos reabertos no Fiado. Confira os saldos.","Estorno concluido");
+    return true;
+   }catch(Exception ex){MessageBox.Show("Estorno nao realizado: "+ex.Message,"Seguranca do Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);return false;}
   }
   bool CorrectCreditHistoryEntry(long entryId){
    if(string.IsNullOrWhiteSpace(customer))return false;
