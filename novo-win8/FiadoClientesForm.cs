@@ -1556,7 +1556,7 @@ namespace ArmazemGratidao {
        var productsColumn=grid.Columns["Produtos"];
        if(productsColumn!=null){productsColumn.FillWeight=260;productsColumn.MinimumWidth=180;}
       };
-      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Selecione um abatimento e clique em Ver produtos da venda, ou dê dois cliques na linha.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var hint=new Label{Dock=DockStyle.Top,Height=42,Padding=new Padding(10,10,0,0),Text="Selecione uma linha. Ver produtos consulta a venda; Corrigir altera deposito/ajuste; Estornar deposito reabre pagamentos vinculados quando identificados com seguranca.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
       var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,Padding=new Padding(8),BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
@@ -1577,7 +1577,7 @@ namespace ArmazemGratidao {
        if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
       };
       bar.Controls.Add(correct);
-      var reverse=new Button{Text="Estornar deposito e reabrir Fiado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
+      var reverse=new Button{Text="Estornar deposito selecionado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
       reverse.Click+=(sender,args)=>{
        if(grid.CurrentRow==null)return;
        long id=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
@@ -1651,6 +1651,20 @@ namespace ArmazemGratidao {
        (id INTEGER PRIMARY KEY AUTOINCREMENT,deposit_id INTEGER NOT NULL,customer_name TEXT NOT NULL,
         deposit_amount NUMERIC NOT NULL,restored_amount NUMERIC NOT NULL,
         reversed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))audit.ExecuteNonQuery();
+      // Arquivo imutavel dos registros originais antes de qualquer estorno.
+      using(var archive=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS customer_credit_reversal_archive(
+       id INTEGER PRIMARY KEY AUTOINCREMENT,deposit_id INTEGER NOT NULL,
+       original_entry_id INTEGER,original_payment_id INTEGER,customer_name TEXT NOT NULL,
+       sale_id INTEGER,amount NUMERIC NOT NULL,entry_type TEXT NOT NULL,
+       method TEXT NOT NULL,details TEXT NOT NULL,
+       archived_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))archive.ExecuteNonQuery();
+      using(var snapshot=new SQLiteCommand(@"INSERT INTO customer_credit_reversal_archive
+       (deposit_id,original_entry_id,customer_name,sale_id,amount,entry_type,method,details)
+       SELECT @deposit,id,customer_name,sale_id,amount,entry_type,method,details
+       FROM customer_credit_entries WHERE id=@deposit AND customer_name=@name COLLATE NOCASE",cn,tx)){
+       snapshot.Parameters.AddWithValue("@deposit",entryId);snapshot.Parameters.AddWithValue("@name",name);
+       if(snapshot.ExecuteNonQuery()!=1)throw new Exception("Falha ao arquivar deposito.");
+      }
       foreach(var m in movements){
        string note=m.Item2.ToString();
        string expected=m.Item1.ToString();
@@ -1677,6 +1691,15 @@ namespace ArmazemGratidao {
         using(var rd=payment.ExecuteReader())while(rd.Read())matches.Add(rd.GetInt64(0));
        }
        if(matches.Count!=1)throw new Exception("Pagamento da venda #"+m.Item2+" ambiguo ou ausente. Nenhum dado alterado.");
+       using(var snapshot=new SQLiteCommand(@"INSERT INTO customer_credit_reversal_archive
+        (deposit_id,original_entry_id,original_payment_id,customer_name,sale_id,amount,entry_type,method,details)
+        SELECT @deposit,e.id,@payment,e.customer_name,@sale,e.amount,e.entry_type,e.method,e.details
+        FROM customer_credit_entries e WHERE e.id=@entry AND e.customer_name=@name COLLATE NOCASE",cn,tx)){
+        snapshot.Parameters.AddWithValue("@deposit",entryId);snapshot.Parameters.AddWithValue("@payment",matches[0]);
+        snapshot.Parameters.AddWithValue("@sale",m.Item2);snapshot.Parameters.AddWithValue("@entry",m.Item1);
+        snapshot.Parameters.AddWithValue("@name",name);
+        if(snapshot.ExecuteNonQuery()!=1)throw new Exception("Falha ao arquivar abatimento.");
+       }
        using(var del=new SQLiteCommand("DELETE FROM credit_payments WHERE id=@id",cn,tx)){
         del.Parameters.AddWithValue("@id",matches[0]);
         if(del.ExecuteNonQuery()!=1)throw new Exception("Falha ao reabrir venda.");
