@@ -1544,27 +1544,32 @@ namespace ArmazemGratidao {
        }
       }
      }
-     using(var dlg=new StyledDialogForm{Text="Historico de credito - "+customer,Width=1160,Height=720,MinimumSize=new Size(780,500),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+     using(var dlg=new StyledDialogForm{Text="Historico de credito - "+customer,Width=1200,Height=740,MinimumSize=new Size(800,520),WindowState=FormWindowState.Maximized,StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
       var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=data,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,RowHeadersVisible=false,BackgroundColor=Color.White,ScrollBars=ScrollBars.Both};
       grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.EnableHeadersVisualStyles=false;
       // As colunas podem ser geradas somente apos o DataGridView receber o binding.
       grid.AutoGenerateColumns=true;
+      grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+      grid.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
+      grid.DefaultCellStyle.Padding=new Padding(3,5,3,5);
+      grid.ReadOnly=true;
       var returnButton=new DataGridViewButtonColumn{Name="VoltarFiado",HeaderText="Acao",Text="Voltar ao Fiado",UseColumnTextForButtonValue=true,Width=135,MinimumWidth=125};
       grid.Columns.Add(returnButton);
       grid.DataBindingComplete+=(sender,args)=>{
        if(grid.Columns["Registro"]!=null)grid.Columns["Registro"].Visible=false;
        if(grid.Columns["VoltarFiado"]!=null){grid.Columns["VoltarFiado"].DisplayIndex=grid.Columns.Count-1;grid.Columns["VoltarFiado"].Width=135;}
        var detailsColumn=grid.Columns["Detalhes"];
-       if(detailsColumn!=null){detailsColumn.Width=310;detailsColumn.MinimumWidth=180;}
+       if(detailsColumn!=null){detailsColumn.Width=360;detailsColumn.MinimumWidth=240;}
        var productsColumn=grid.Columns["Produtos"];
-       if(productsColumn!=null){productsColumn.Width=390;productsColumn.MinimumWidth=230;}
+       if(productsColumn!=null){productsColumn.Width=520;productsColumn.MinimumWidth=320;}
        foreach(DataGridViewColumn column in grid.Columns){if(column.Name!="Produtos"&&column.Name!="Detalhes"&&column.Name!="VoltarFiado")column.Width=column.Name=="Operacao"?185:column.Name=="Data"?160:column.Name=="Valor"?110:column.Name=="Forma"?190:100;}
        grid.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
        grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;
-       grid.RowTemplate.MinimumHeight=32;
+       grid.RowTemplate.MinimumHeight=38;
+       grid.AutoResizeColumnHeadersHeight();
       };
-      var hint=new Label{Dock=DockStyle.Top,Height=54,Padding=new Padding(10,10,10,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
-      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=105,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
+      var hint=new Label{Dock=DockStyle.Top,Height=40,Padding=new Padding(10,10,10,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=100,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
        if(grid.CurrentRow==null)return;
@@ -1575,9 +1580,20 @@ namespace ArmazemGratidao {
        ShowCreditSaleItems(saleId,Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value),Convert.ToDecimal(grid.CurrentRow.Cells["Valor"].Value));
       };
       show.Click+=(sender,args)=>inspect();
-      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0 && grid.Columns[args.ColumnIndex].Name!="VoltarFiado")inspect();};
+      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0 && args.ColumnIndex>=0 && grid.Columns[args.ColumnIndex].Name!="VoltarFiado")inspect();};
+      grid.CellClick+=(sender,args)=>{
+       if(args.RowIndex<0||args.ColumnIndex<0)return;
+       string col=grid.Columns[args.ColumnIndex].Name;
+       if(col!="Produtos"&&col!="Detalhes")return;
+       string full=Convert.ToString(grid.Rows[args.RowIndex].Cells[args.ColumnIndex].Value);
+       if(string.IsNullOrWhiteSpace(full))return;
+       using(var detail=new StyledDialogForm{Text=col+" - texto completo",Width=760,Height=420,MinimumSize=new Size(450,300),StartPosition=FormStartPosition.CenterParent}){
+        var description=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,Font=new Font("Segoe UI",12),Text=full};
+        detail.Controls.Add(description);detail.ShowDialog(dlg);
+       }
+      };
       grid.CellContentClick+=(sender,args)=>{
-       if(args.RowIndex<0||grid.Columns[args.ColumnIndex].Name!="VoltarFiado")return;
+       if(args.RowIndex<0||args.ColumnIndex<0||grid.Columns[args.ColumnIndex].Name!="VoltarFiado")return;
        var row=grid.Rows[args.RowIndex];
        if(row.Cells["Registro"].Value==null)return;
        long entryId=Convert.ToInt64(row.Cells["Registro"].Value);
@@ -1603,6 +1619,8 @@ namespace ArmazemGratidao {
       adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
       bar.Controls.Add(adjust);
       dlg.Controls.Add(grid);dlg.Controls.Add(bar);dlg.Controls.Add(hint);dlg.Controls.Add(totals);
+      // Ordem de encaixe: tabela ocupa somente a area livre, sem cobrir cabecalho e botoes.
+      grid.BringToFront();
       dlg.ShowDialog(this);
      }
     }
