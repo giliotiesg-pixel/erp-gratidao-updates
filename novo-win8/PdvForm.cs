@@ -459,8 +459,8 @@ namespace ArmazemGratidao {
         }
         using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='AJUSTE_MANUAL_PDV_AUDITADO' WHERE id=1",connection,tx))
          if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na autorização de ajuste.");
-        using(var q=new SQLiteCommand("UPDATE products SET stock=@next WHERE id=@id AND stock=@previous",connection,tx)){
-         q.Parameters.AddWithValue("@next",quantity.Value);q.Parameters.AddWithValue("@id",item.Id);q.Parameters.AddWithValue("@previous",before);
+        using(var q=new SQLiteCommand("UPDATE products SET stock=@next WHERE id=@id",connection,tx)){
+         q.Parameters.AddWithValue("@next",quantity.Value);q.Parameters.AddWithValue("@id",item.Id);
          if(q.ExecuteNonQuery()!=1)throw new Exception("Estoque alterado simultaneamente. Nada gravado.");
         }
         using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) VALUES(@id,@name,@barcode,'AJUSTE_MANUAL_PDV',@before,@after,@difference,'ESTOQUE',@reason)",connection,tx)){
