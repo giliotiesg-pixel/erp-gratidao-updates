@@ -493,6 +493,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    BackColor=Color.FromArgb(246,249,253);
    var working=Screen.FromControl(this).WorkingArea;
    Size=new Size(Math.Min(Width,working.Width),Math.Min(Height,working.Height));
+   if(!fiado){StartPosition=FormStartPosition.CenterScreen;WindowState=FormWindowState.Maximized;}
    if(fiado){
     // Nao alterar o modulo Fiado por causa do novo visual de Vendas.
     var split=new SplitContainer{Dock=DockStyle.Fill,
