@@ -1145,8 +1145,8 @@ namespace ArmazemGratidao {
       string oldCategory=columns.Contains("category")?Convert.ToString(r["category"]):"";
       DateTime oldExpiry=DateTime.Today;bool hasExpiry=expiryCol!=null&&DateTime.TryParse(Convert.ToString(r["saved_expiry"]),out oldExpiry);
       bool oldWeight=weightCol!=null&&r["saved_weight"]!=DBNull.Value&&Convert.ToString(r["saved_weight"])!="0";
-      using(var form=new StyledDialogForm {Text="Editar produto #"+id,Width=1100,Height=680,MinimumSize=new Size(700,550),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
-       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(15)};
+      using(var form=new StyledDialogForm {Text="Editar produto #"+id,Width=920,Height=730,MinimumSize=new Size(650,510),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=true}){
+       var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=14,Padding=new Padding(12),AutoScroll=true};
        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
        var code=new TextBox {Text=oldCode};var name=new TextBox {Text=oldName,Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};
        var brand=new TextBox {Text=oldBrand,Enabled=columns.Contains("brand")};
@@ -1191,7 +1191,21 @@ namespace ArmazemGratidao {
          form.DialogResult=DialogResult.OK;form.Close();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Alteração não salva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
        };
-       for(int row=0;row<11;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,10);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));panel.Controls.Add(new Label{Text="Lucro e porcentagem",AutoSize=true},0,5);panel.Controls.Add(ProfitCalculator(cost,price,stock),1,5);panel.Controls.Add(save,1,13);StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
+       // Uma linha por campo. Calculadora e salvar ficam em linhas proprias,
+       // evitando controles sobrepostos e cortes em resolucoes menores.
+       for(int row=0;row<10;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+       panel.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+       panel.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+       panel.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+       panel.RowStyles.Add(new RowStyle(SizeType.Absolute,20));
+       panel.Controls.Add(new Label{Text="Lucro e porcentagem",AutoSize=true},0,10);
+       panel.Controls.Add(ProfitCalculator(cost,price,stock),1,10);
+       panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,11);
+       panel.Controls.Add(ProfitCalculator(cost,price,stock),1,11);
+       panel.Controls.Add(save,1,12);
+       foreach(Control field in fields){field.Margin=new Padding(3,4,3,4);field.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top;}
+       name.MinimumSize=new Size(250,25);
+       StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
