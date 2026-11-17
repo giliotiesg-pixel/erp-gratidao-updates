@@ -282,6 +282,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var reports=SalesButton("amzgSalesReports","▥  Totais / Relatórios",salesBlue);
    var reportMenu=new ContextMenuStrip();
    reportMenu.Items.Add("Totais por dia",null,(sender,args)=>ShowDailyTotals());
+   reportMenu.Items.Add("Metas de vendas e projeção mensal",null,(sender,args)=>ShowSalesGoals());
    reportMenu.Items.Add("Exportar itens da venda CSV",null,(sender,args)=>ExportSale());
    reportMenu.Items.Add("Ver apenas a data inicial",null,(sender,args)=>{
     selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;LoadMaster();});
@@ -543,6 +544,111 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     "FROM sales s LEFT JOIN (SELECT date(created_at) AS dia,SUM(COALESCE(gross_total,0)) AS total "+
     "FROM sales GROUP BY date(created_at)) day ON day.dia=date(s.created_at)";
   }
+  void ShowSalesGoals(){
+   if(credit)return;
+   try{
+    using(var dialog=new StyledDialogForm{Text="Metas de vendas | acompanhamento diario e mensal",
+     Width=990,Height=690,MinimumSize=new Size(760,520),StartPosition=FormStartPosition.CenterParent,
+     BackColor=Color.FromArgb(238,245,253)}){
+     var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=58,Padding=new Padding(10,9,8,4),WrapContents=false};
+     var month=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="MMMM yyyy",ShowUpDown=true,Width=185};
+     var target=new NumericUpDown{DecimalPlaces=2,Maximum=100000000,ThousandsSeparator=true,Width=170};
+     var save=new Button{Text="Salvar meta mensal",Width=160,Height=34};
+     var refresh=new Button{Text="Atualizar resultados",Width=165,Height=34};
+     top.Controls.Add(new Label{Text="Mes:",AutoSize=true,Padding=new Padding(0,8,0,0)});
+     top.Controls.Add(month);
+     top.Controls.Add(new Label{Text="Meta de vendas R$:",AutoSize=true,Padding=new Padding(8,8,0,0)});
+     top.Controls.Add(target);top.Controls.Add(save);top.Controls.Add(refresh);
+     var totals=new Label{Dock=DockStyle.Top,Height=158,Padding=new Padding(15,10,8,6),
+      Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(24,66,128)};
+     var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
+      RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+      BackgroundColor=Color.White,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
+     Action load=()=>{
+      var first=new DateTime(month.Value.Year,month.Value.Month,1);
+      int days=DateTime.DaysInMonth(first.Year,first.Month);
+      string key=first.ToString("yyyy-MM");
+      decimal goal=0m;
+      var byDay=new System.Collections.Generic.Dictionary<int,decimal>();
+      using(var cn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db}.ToString())){
+       cn.Open();
+       using(var cmd=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS monthly_sales_goals(
+        month_key TEXT PRIMARY KEY,goal_amount NUMERIC NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn))cmd.ExecuteNonQuery();
+       using(var cmd=new SQLiteCommand("SELECT goal_amount FROM monthly_sales_goals WHERE month_key=@month",cn)){
+        cmd.Parameters.AddWithValue("@month",key);
+        object value=cmd.ExecuteScalar();if(value!=null&&value!=DBNull.Value)goal=Convert.ToDecimal(value);
+       }
+       using(var cmd=new SQLiteCommand(@"SELECT CAST(strftime('%d',created_at) AS INTEGER),SUM(COALESCE(gross_total,0))
+        FROM sales WHERE created_at>=@first AND created_at<@next
+        AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'
+        GROUP BY date(created_at)",cn)){
+        cmd.Parameters.AddWithValue("@first",first.ToString("yyyy-MM-dd"));
+        cmd.Parameters.AddWithValue("@next",first.AddMonths(1).ToString("yyyy-MM-dd"));
+        using(var rd=cmd.ExecuteReader())while(rd.Read())
+         byDay[Convert.ToInt32(rd[0])]=rd[1]==DBNull.Value?0m:Convert.ToDecimal(rd[1]);
+       }
+      }
+      target.Value=Math.Max(target.Minimum,Math.Min(target.Maximum,goal));
+      decimal dailyGoal=days>0?Math.Round(goal/days,2):0m;
+      var now=DateTime.Today;
+      int elapsed=first.Year==now.Year&&first.Month==now.Month?now.Day:
+       first.AddMonths(1)<=now?days:0;
+      decimal accumulated=0m,actual=0m;
+      var table=new DataTable();
+      table.Columns.Add("Data",typeof(string));
+      table.Columns.Add("Meta diaria (R$)",typeof(decimal));
+      table.Columns.Add("Vendido (R$)",typeof(decimal));
+      table.Columns.Add("Falta no dia (R$)",typeof(decimal));
+      table.Columns.Add("Atingido no dia (%)",typeof(decimal));
+      table.Columns.Add("Acumulado (R$)",typeof(decimal));
+      table.Columns.Add("Meta acumulada (R$)",typeof(decimal));
+      table.Columns.Add("Falta no mes (R$)",typeof(decimal));
+      for(int day=1;day<=days;day++){
+       decimal sold;byDay.TryGetValue(day,out sold);
+       actual+=sold;
+       decimal planned=day==days?goal-dailyGoal*(days-1):dailyGoal;
+       accumulated+=planned;
+       table.Rows.Add(first.AddDays(day-1).ToString("dd/MM/yyyy"),planned,sold,
+        Math.Max(0m,planned-sold),planned>0?Math.Round(sold/planned*100m,1):0m,
+        actual,accumulated,Math.Max(0m,goal-actual));
+      }
+      grid.DataSource=table;
+      foreach(DataGridViewColumn col in grid.Columns)if(col.Name!="Data")col.DefaultCellStyle.Format="N2";
+      decimal soldMonth=byDay.Values.Sum();
+      decimal expected=days>0?goal*elapsed/days:0m;
+      decimal projection=elapsed>0?Math.Round(soldMonth/elapsed*days,2):0m;
+      decimal remaining=Math.Max(0m,goal-soldMonth);
+      decimal required=days>elapsed?Math.Round(remaining/(days-elapsed),2):remaining;
+      totals.Text="Meta mensal: R$ "+goal.ToString("N2")+"  |  Meta diaria media: R$ "+dailyGoal.ToString("N2")+
+       "\nVendido no mes: R$ "+soldMonth.ToString("N2")+"  |  Atingido: "+(goal>0?Math.Round(soldMonth/goal*100m,1):0m).ToString("N1")+"%"+
+       "  |  Falta: R$ "+remaining.ToString("N2")+
+       "\nEsperado ate hoje: R$ "+expected.ToString("N2")+"  |  Diferenca: R$ "+(soldMonth-expected).ToString("N2")+
+       "\nMedia necessaria por dia restante: R$ "+required.ToString("N2")+
+       "  |  Projecao do mes: R$ "+projection.ToString("N2")+
+       "\nBase: vendas registradas, sem vendas excluidas. A projecao usa os dias corridos decorridos.";
+     };
+     save.Click+=(sender,args)=>{
+      try{
+       using(var cn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db}.ToString())){
+        cn.Open();
+        using(var cmd=new SQLiteCommand(@"INSERT OR REPLACE INTO monthly_sales_goals(month_key,goal_amount,updated_at)
+         VALUES(@month,@goal,datetime('now','localtime'))",cn)){
+         cmd.Parameters.AddWithValue("@month",month.Value.ToString("yyyy-MM"));
+         cmd.Parameters.AddWithValue("@goal",target.Value);cmd.ExecuteNonQuery();
+        }
+       }
+       load();
+      }catch(Exception ex){MessageBox.Show("Meta nao salva: "+ex.Message,"Metas");}
+     };
+     refresh.Click+=(sender,args)=>load();
+     month.ValueChanged+=(sender,args)=>load();
+     dialog.Controls.Add(grid);dialog.Controls.Add(totals);dialog.Controls.Add(top);
+     load();dialog.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel abrir as metas: "+ex.Message,"Metas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+
   void ShowDailyTotals(){
    if(credit)return;
    try{
