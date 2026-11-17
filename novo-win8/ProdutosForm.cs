@@ -74,7 +74,7 @@ namespace ArmazemGratidao {
    var searchBar=new FlowLayoutPanel{Name="amzgProductsActionBar",Dock=DockStyle.Bottom,
     Height=43,Padding=new Padding(7,3,4,2),BackColor=Color.FromArgb(217,233,251),
     AutoScroll=true,WrapContents=false};
-   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Inativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
+   statusFilter.Items.AddRange(new object[]{"Todos","Ativos","Sem estoque","Estoque baixo","Vencidos","Vencendo em 30 dias"});statusFilter.SelectedIndex=0;statusFilter.SelectedIndexChanged+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(statusFilter);
    showList.Click+=(s,e)=>{searchDelay.Stop();search.Clear();currentPage=0;statusFilter.SelectedIndex=0;grid.Visible=true;LoadProducts();search.Focus();};bar.Controls.Add(showList);
    var find=new Button {Text="Pesquisar",Width=100,Height=33};find.Click+=(s,e)=>{currentPage=0;LoadProducts();};bar.Controls.Add(find);
    var add=new Button {Text="Cadastrar Produto",Width=150,Height=33};add.Click+=(s,e)=>InsertProduct();bar.Controls.Add(add);
@@ -84,7 +84,7 @@ namespace ArmazemGratidao {
    var metricsButton=new Button {Text="Calcular indicadores",Width=175,Height=33};metricsButton.Click+=(s,e)=>{calculateMetrics=true;LoadProducts();};bar.Controls.Add(metricsButton);
    var refresh=new Button {Text="Atualizar",Width=95,Height=33};refresh.Click+=(s,e)=>LoadProducts();bar.Controls.Add(refresh);
 
-   var reactivate=new Button {Text="Reativar selecionado",Width=165,Height=33};reactivate.Click+=(s,e)=>ReactivateProduct();bar.Controls.Add(reactivate);
+   // Produtos excluidos nao sao apresentados nem oferecidos para reativacao.
    var import=new Button {Text="Importar CSV",Width=125,Height=33};import.Click+=(s,e)=>ImportProductsCsv();bar.Controls.Add(import);
    var export=new Button {Text="Exportar CSV",Width=125,Height=33};export.Click+=(s,e)=>ExportProducts();bar.Controls.Add(export);
    var barcodeLookup=new Button {Text="Consultar código",Width=155,Height=33};barcodeLookup.Click+=async (s,e)=>await ConsultBarcode(barcodeLookup);bar.Controls.Add(barcodeLookup);
@@ -774,11 +774,11 @@ namespace ArmazemGratidao {
     if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
     string filter="";
     int mode=statusFilter.SelectedIndex;
-    if(activeColumn!=null&&mode!=2&&!(rapidInventoryMode&&mode==0))filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
-    if(mode==2&&activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=0";
-    if(mode==3)filter=" AND COALESCE(stock,0)<=0";
-    if(mode==4)filter=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
-    if((mode==1||mode==2)&&activeColumn==null){info.Text="  Este banco não possui campo de status; filtro indisponível.";return;}
+    if(activeColumn!=null)filter=" AND COALESCE(\""+activeColumn+"\",1)=1";
+    
+    if(mode==2)filter+=" AND COALESCE(stock,0)<=0";
+    if(mode==3)filter+=" AND COALESCE(stock,0)>0 AND COALESCE(stock,0)<=5";
+    if(mode==1&&activeColumn==null){info.Text="  Este banco não possui campo de status; filtro indisponível.";return;}
     string searchColumns=string.IsNullOrWhiteSpace(search.Text)?"1=1":SearchFoldSql("name")+" LIKE @q OR TRIM(COALESCE(barcode,'')) LIKE @q";
     if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("internal_code"))searchColumns+=" OR TRIM(COALESCE(internal_code,'')) LIKE @q";
     if(!string.IsNullOrWhiteSpace(search.Text)&&cols.Contains("brand"))searchColumns+=" OR "+SearchFoldSql("brand")+" LIKE @q";
@@ -786,8 +786,8 @@ namespace ArmazemGratidao {
     string extraSelect=(cols.Contains("brand")?",brand AS marca":"")+(cols.Contains("category")?",category AS categoria":"");
     string expiryColumn=cols.Contains("expiry_date")?"expiry_date":cols.Contains("expiration_date")?"expiration_date":cols.Contains("validade")?"validade":null;
     if((mode==5||mode==6)&&expiryColumn==null){info.Text="  Este banco não possui campo de validade; filtro indisponível.";grid.DataSource=null;metrics.Text="";return;}
-    if(mode==5)filter+=" AND date(\""+expiryColumn+"\") < date('now','localtime') AND date(\""+expiryColumn+"\") IS NOT NULL";
-    if(mode==6)filter+=" AND date(\""+expiryColumn+"\") >= date('now','localtime') AND date(\""+expiryColumn+"\") <= date('now','localtime','+30 days')";
+    if(mode==4)filter+=" AND date(\""+expiryColumn+"\") < date('now','localtime') AND date(\""+expiryColumn+"\") IS NOT NULL";
+    if(mode==5)filter+=" AND date(\""+expiryColumn+"\") >= date('now','localtime') AND date(\""+expiryColumn+"\") <= date('now','localtime','+30 days')";
     if(expiryColumn!=null)extraSelect+=",\""+expiryColumn+"\" AS validade";
     string weightColumn=cols.Contains("sold_by_weight")?"sold_by_weight":cols.Contains("is_weighted")?"is_weighted":cols.Contains("por_peso")?"por_peso":null;
     extraSelect+=",COALESCE(stock,0) AS qtd";
@@ -1581,7 +1581,7 @@ namespace ArmazemGratidao {
   }
   string LookupLocalProductName(string barcode){
    using(var connection=Open())
-   using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE TRIM(COALESCE(barcode,''))=@barcode LIMIT 1",connection)){
+   using(var cmd=new SQLiteCommand("SELECT name FROM products WHERE TRIM(COALESCE(barcode,''))=@barcode AND COALESCE(active,1)<>0 LIMIT 1",connection)){
     cmd.Parameters.AddWithValue("@barcode",barcode.Trim());
     var result=cmd.ExecuteScalar();
     return result==null||result==DBNull.Value?null:Convert.ToString(result);
