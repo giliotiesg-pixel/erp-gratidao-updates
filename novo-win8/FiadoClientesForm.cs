@@ -1037,6 +1037,13 @@ namespace ArmazemGratidao {
     tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
     var edit=new Button {Text="Editar item selecionado (com auditoria)",Dock=DockStyle.Bottom,Height=42,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};
     edit.Click+=(s,e)=>{if(items.CurrentRow==null){MessageBox.Show("Selecione um item da venda.");return;}long itemId=Convert.ToInt64(items.CurrentRow.Cells["id"].Value);form.Close();EditSaleItem(id,itemId);};form.Controls.Add(edit);
+    var reopen=new Button {Text="Corrigir baixa / Voltar ao Fiado",Dock=DockStyle.Bottom,Height=42,
+     BackColor=Color.FromArgb(155,55,35),ForeColor=Color.White};
+    reopen.Click+=(s,e)=>{
+     form.Close();
+     ReopenSalePayments(id);
+    };
+    form.Controls.Add(reopen);
     using(form)form.ShowDialog(this);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
   }
