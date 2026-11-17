@@ -1406,6 +1406,7 @@ namespace ArmazemGratidao {
   // Chamar apenas dentro da transacao da venda, depois de gravar sales.
   public static decimal ApplyCustomerCredit(SQLiteConnection cn,SQLiteTransaction tx,long saleId,string name,decimal fiadoAmount){
    if(fiadoAmount<=0 || string.IsNullOrWhiteSpace(name) || string.Equals(name.Trim(),"Consumidor",StringComparison.OrdinalIgnoreCase))return 0m;
+   if(!IsCreditAutoAuthorized(cn,tx,name))return 0m;
    decimal available=CustomerCreditBalance(cn,tx,name);
    decimal applied=Math.Min(Math.Max(0m,available),fiadoAmount);
    applied=Math.Round(applied,2);
@@ -1420,6 +1421,19 @@ namespace ArmazemGratidao {
    }
    return applied;
   }
+  static void EnsureCreditAutoAuthorization(SQLiteConnection cn,SQLiteTransaction tx){
+   using(var cmd=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS customer_credit_auto_authorization(
+    customer_name TEXT PRIMARY KEY COLLATE NOCASE,authorized INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))cmd.ExecuteNonQuery();
+  }
+  static bool IsCreditAutoAuthorized(SQLiteConnection cn,SQLiteTransaction tx,string name){
+   EnsureCreditAutoAuthorization(cn,tx);
+   using(var cmd=new SQLiteCommand("SELECT authorized FROM customer_credit_auto_authorization WHERE customer_name=@name COLLATE NOCASE",cn,tx)){
+    cmd.Parameters.AddWithValue("@name",name.Trim());
+    object value=cmd.ExecuteScalar();
+    return value!=null&&value!=DBNull.Value&&Convert.ToInt32(value)==1;
+   }
+  }
   void DepositCustomerCredit(){
    if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente cadastrado.");return;}
    decimal value=creditDepositAmount.Value;
@@ -1427,6 +1441,16 @@ namespace ArmazemGratidao {
    string payMethod=Convert.ToString(method.SelectedItem);
    if(payMethod=="CREDITO DEPOSITADO"){MessageBox.Show("Escolha a forma realmente recebida (DINHEIRO, PIX etc.), nao CREDITO DEPOSITADO.");return;}
    if(MessageBox.Show("Cliente: "+customer+"\\nCredito recebido: R$ "+value.ToString("N2")+"\\nForma: "+payMethod+"\\n\\nEste valor sera guardado para abater compras fiadas futuras. Confirmar?","Credito do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+   // Cada novo credito exige decisao explicita sobre uso automatico em vendas futuras.
+   var decision=MessageBox.Show("Cliente: "+customer+
+    "\\n\\nAutorizar o uso AUTOMATICO do credito guardado nas proximas vendas fiadas?"+
+    "\\nSIM: abater automaticamente enquanto houver saldo de credito."+
+    "\\nNAO: guardar o credito sem abater automaticamente."+
+    "\\n\\nEsta autorizacao nao altera baixas de vendas antigas.",
+    "Autorizar abatimento automatico",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question,
+    MessageBoxDefaultButton.Button2);
+   if(decision==DialogResult.Cancel)return;
+   bool authorize=decision==DialogResult.Yes;
    try{
     EnsureCustomerCredit(db);
     using(var cn=Open(false)){
@@ -1437,6 +1461,13 @@ namespace ArmazemGratidao {
      }
      if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio. Credito nao gravado.");
      using(var tx=cn.BeginTransaction()){
+      EnsureCreditAutoAuthorization(cn,tx);
+      using(var setting=new SQLiteCommand(@"INSERT OR REPLACE INTO customer_credit_auto_authorization
+       (customer_name,authorized,updated_at) VALUES(@client,@authorized,datetime('now','localtime'))",cn,tx)){
+       setting.Parameters.AddWithValue("@client",customer.Trim());
+       setting.Parameters.AddWithValue("@authorized",authorize?1:0);
+       setting.ExecuteNonQuery();
+      }
       using(var cmd=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,details) VALUES(@client,@amount,'DEPOSITO',@method,'Credito antecipado recebido no Fiado')",cn,tx)){
        cmd.Parameters.AddWithValue("@client",customer.Trim());cmd.Parameters.AddWithValue("@amount",value);cmd.Parameters.AddWithValue("@method",payMethod);
        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar credito.");
@@ -1445,7 +1476,7 @@ namespace ArmazemGratidao {
      }
     }
     creditDepositAmount.Value=0;LoadClients();SelectClient(customer);
-    MessageBox.Show("Credito registrado para "+customer+". O valor sera abatido automaticamente das proximas compras fiadas.","Fiado");
+    MessageBox.Show("Credito registrado para "+customer+". Abatimento automatico: "+(authorize?"AUTORIZADO":"DESATIVADO")+".","Fiado");
    }catch(Exception ex){MessageBox.Show("Credito nao registrado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   // Corrigir o saldo da carteira com lancamento auditavel; nunca reescrever historico.
