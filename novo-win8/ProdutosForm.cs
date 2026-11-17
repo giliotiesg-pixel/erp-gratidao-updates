@@ -1124,6 +1124,62 @@ namespace ArmazemGratidao {
    fields.Dock=DockStyle.Fill;
    form.Controls.Add(fields);
   }
+  // Precificacao automatica: margem e calculada sobre a receita, nao sobre o custo.
+  void AttachRealPricing(Form form,NumericUpDown cost,NumericUpDown price){
+   var container=new Panel{Dock=DockStyle.Bottom,Height=150,Padding=new Padding(12,7,12,7),
+    BackColor=Color.FromArgb(226,239,251),AutoScroll=true};
+   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=8,RowCount=3};
+   for(int col=0;col<8;col++)layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,12.5f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,25));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var extra=new NumericUpDown{DecimalPlaces=2,Maximum=1000000,Width=95};
+   var fee=new NumericUpDown{DecimalPlaces=2,Maximum=99,Width=85,Value=3};
+   var tax=new NumericUpDown{DecimalPlaces=2,Maximum=99,Width=85};
+   var margin=new NumericUpDown{DecimalPlaces=2,Maximum=95,Width=85,Value=25};
+   var names=new[]{"Despesas R$","Taxas %","Impostos %","Margem desejada %"};
+   var controls=new NumericUpDown[]{extra,fee,tax,margin};
+   for(int k=0;k<4;k++){
+    layout.Controls.Add(new Label{Text=names[k],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+     Font=new Font("Segoe UI",9,FontStyle.Bold)},k*2,0);
+    controls[k].Dock=DockStyle.Fill;
+    layout.Controls.Add(controls[k],k*2,1);
+   }
+   var result=new Label{Dock=DockStyle.Fill,Font=new Font("Segoe UI",10,FontStyle.Bold),
+    ForeColor=Color.FromArgb(20,73,158),AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft};
+   layout.SetColumnSpan(result,6);layout.Controls.Add(result,0,2);
+   var apply=new Button{Text="Aplicar preco sugerido",Dock=DockStyle.Fill,
+    BackColor=Color.FromArgb(21,85,157),ForeColor=Color.White};
+   layout.SetColumnSpan(apply,2);layout.Controls.Add(apply,6,2);
+   decimal suggested=0m;
+   Action update=()=>{
+    decimal baseCost=cost.Value+extra.Value;
+    decimal rate=(fee.Value+tax.Value+margin.Value)/100m;
+    if(baseCost<=0||rate>=1m){
+     suggested=0;apply.Enabled=false;
+     result.Text=baseCost<=0?"Informe o custo do produto.":"Margem + taxas + impostos devem ser menores que 100%.";
+     return;
+    }
+    suggested=Math.Round(baseCost/(1m-rate),2,MidpointRounding.AwayFromZero);
+    decimal currentProfit=price.Value*(1m-(fee.Value+tax.Value)/100m)-baseCost;
+    decimal currentMargin=price.Value>0?currentProfit/price.Value*100m:0m;
+    decimal markup=baseCost>0?(price.Value/baseCost-1m)*100m:0m;
+    result.Text="Sugestao: R$ "+suggested.ToString("N2")+
+     "  |  Lucro atual: R$ "+currentProfit.ToString("N2")+
+     "  |  Margem: "+currentMargin.ToString("N1")+"%  |  Markup: "+markup.ToString("N1")+"%";
+    apply.Enabled=suggested<=price.Maximum;
+   };
+   foreach(var field in controls)field.ValueChanged+=(sender,args)=>update();
+   cost.ValueChanged+=(sender,args)=>update();
+   price.ValueChanged+=(sender,args)=>update();
+   apply.Click+=(sender,args)=>{
+    if(suggested<=0||suggested>price.Maximum)return;
+    price.Value=suggested;
+   };
+   container.Controls.Add(layout);form.Controls.Add(container);
+   container.BringToFront();
+   update();
+  }
   void EditProduct(){
    if(grid.CurrentRow==null){MessageBox.Show("Selecione um produto.");return;}
    long id;
@@ -1205,7 +1261,7 @@ namespace ArmazemGratidao {
        panel.Controls.Add(save,1,12);
        foreach(Control field in fields){field.Margin=new Padding(3,4,3,4);field.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top;}
        name.MinimumSize=new Size(250,25);
-       StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);
+       StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);AttachRealPricing(form,cost,price);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
       }
      }
@@ -1840,6 +1896,7 @@ namespace ArmazemGratidao {
     fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     panel.Controls.Add(fiscalAtRegistration,1,12);
 
+    AttachRealPricing(form,cost,price);
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
      barcode.Text=barcode.Text.Trim();
