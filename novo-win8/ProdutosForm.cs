@@ -771,6 +771,10 @@ namespace ArmazemGratidao {
    try{
     using(var c=Open()){
     var cols=ProductColumns(c);
+    if(!cols.Contains("deleted")){
+     using(var schema=Open(false))
+     using(var alter=new SQLiteCommand("ALTER TABLE products ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",schema))alter.ExecuteNonQuery();
+    }
     string activeColumn=cols.Contains("active")?"active":cols.Contains("is_active")?"is_active":cols.Contains("ativo")?"ativo":null;
     if(showInactive && activeColumn==null){showInactive=false;MessageBox.Show("Este banco não possui campo de situação ativo/inativo. Nenhum produto foi alterado.");}
     string filter=" AND COALESCE(deleted,0)=0";
