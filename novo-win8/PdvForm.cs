@@ -1315,33 +1315,70 @@ namespace ArmazemGratidao {
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
    var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
-   using(var dialog=new StyledDialogForm {Text="Pagamento dividido (até 3 formas)",Width=485,Height=340,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
-    var combos=new ComboBox[3];var values=new NumericUpDown[3];
-    var info=new Label {Left=18,Top=15,Width=440,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
-    dialog.Controls.Add(info);
+   using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=545,Height=390,
+    StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+    var countLabel=new Label{Left=18,Top=17,Width=180,Height=28,Text="Quantidade de formas:"};
+    var count=new ComboBox{Left=202,Top=13,Width=95,DropDownStyle=ComboBoxStyle.DropDownList};
+    count.Items.AddRange(new object[]{"2 formas","3 formas"});count.SelectedIndex=0;
+    var info=new Label{Left=18,Top=52,Width=490,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    dialog.Controls.AddRange(new Control[]{countLabel,count,info});
+    var combos=new ComboBox[3];var values=new NumericUpDown[3];var labels=new Label[3];
     for(int i=0;i<3;i++){
-     var label=new Label {Left=18,Top=58+i*53,Width=55,Text=(i+1)+"ª forma"};
-     combos[i]=new ComboBox {Left=85,Top=53+i*53,Width=165,DropDownStyle=ComboBoxStyle.DropDownList};
-     combos[i].Items.AddRange(methods);combos[i].SelectedIndex=i==0?0:-1;
-     values[i]=new NumericUpDown {Left=265,Top=53+i*53,Width=175,DecimalPlaces=2,Maximum=99999999};
-     // Começa em zero para inserir cada pagamento sem precisar apagar o total.
-     dialog.Controls.AddRange(new Control[]{label,combos[i],values[i]});
+     labels[i]=new Label{Left=18,Top=100+i*57,Width=75,Height=26,Text=(i+1)+"ª forma"};
+     combos[i]=new ComboBox{Left=104,Top=96+i*57,Width=170,DropDownStyle=ComboBoxStyle.DropDownList};
+     combos[i].Items.AddRange(methods);
+     combos[i].SelectedIndex=i==0?0:-1;
+     values[i]=new NumericUpDown{Left=290,Top=96+i*57,Width=195,DecimalPlaces=2,
+      Minimum=0,Maximum=99999999,ThousandsSeparator=true};
+     dialog.Controls.AddRange(new Control[]{labels[i],combos[i],values[i]});
     }
-    var status=new Label {Left=18,Top=218,Width=430,Height=25};
-    Action update=()=>{decimal paid=values.Sum(v=>v.Value);status.Text="Somado: R$ "+paid.ToString("N2")+"  |  Restante: R$ "+(amount-paid).ToString("N2");status.ForeColor=paid>amount?Color.DarkRed:Color.FromArgb(22,75,160);};
-    foreach(var v in values)v.ValueChanged+=(s,e)=>update();foreach(var combo in combos)combo.SelectedIndexChanged+=(s,e)=>update();update();
-    var confirm=new Button {Text="Confirmar pagamentos",Left=240,Top=250,Width=200,Height=35};
+    var status=new Label{Left=18,Top=275,Width=490,Height=27};
+    var confirm=new Button{Text="Confirmar pagamentos",Left=268,Top=308,Width=218,Height=36};
+    bool updating=false;
+    Action recalculate=()=>{
+     if(updating)return;
+     updating=true;
+     try{
+      int n=count.SelectedIndex==1?3:2;
+      for(int i=0;i<3;i++){
+       bool enabled=i<n;
+       labels[i].Visible=enabled;combos[i].Visible=enabled;values[i].Visible=enabled;
+       values[i].Enabled=enabled&&i<n-1;
+       if(!enabled){values[i].Value=0;continue;}
+       if(i==n-1){
+        decimal previous=0;
+        for(int j=0;j<i;j++)previous+=values[j].Value;
+        decimal remaining=amount-previous;
+        values[i].Value=Math.Max(values[i].Minimum,Math.Min(values[i].Maximum,remaining));
+       }
+      }
+      decimal paid=0;
+      for(int i=0;i<n;i++)paid+=values[i].Value;
+      decimal difference=amount-paid;
+      bool exceeded=false;
+      for(int i=0;i<n-1;i++)if(values[i].Value>amount)exceeded=true;
+      decimal manual=0;
+      for(int i=0;i<n-1;i++)manual+=values[i].Value;
+      exceeded=exceeded||manual>amount;
+      status.Text=exceeded?"Valores informados ultrapassam o total da venda.":"Somado: R$ "+paid.ToString("N2")+"  |  Restante: R$ "+difference.ToString("N2");
+      status.ForeColor=exceeded?Color.DarkRed:Color.FromArgb(22,75,160);
+      confirm.Enabled=!exceeded&&difference==0;
+     }finally{updating=false;}
+    };
+    count.SelectedIndexChanged+=(s,e)=>recalculate();
+    foreach(var v in values)v.ValueChanged+=(s,e)=>recalculate();
+    recalculate();
     List<KeyValuePair<string,decimal>> selected=null;
     confirm.Click+=(s,e)=>{
+     int n=count.SelectedIndex==1?3:2;
      var parts=new List<KeyValuePair<string,decimal>>();
-     for(int i=0;i<3;i++){
-      if(values[i].Value==0)continue;
-      if(combos[i].SelectedIndex<0){MessageBox.Show("Escolha a forma para cada valor informado.");return;}
+     for(int i=0;i<n;i++){
+      if(combos[i].SelectedIndex<0){MessageBox.Show("Escolha a "+(i+1)+"ª forma de pagamento.");return;}
+      if(values[i].Value<=0){MessageBox.Show("Informe um valor maior que zero na "+(i+1)+"ª forma.");return;}
       string method=Convert.ToString(combos[i].SelectedItem);
       if(parts.Any(p=>p.Key==method)){MessageBox.Show("Utilize cada forma de pagamento apenas uma vez.");return;}
       parts.Add(new KeyValuePair<string,decimal>(method,values[i].Value));
      }
-     if(parts.Count<2){MessageBox.Show("Para pagamento dividido, informe pelo menos duas formas.");return;}
      if(parts.Sum(p=>p.Value)!=amount){MessageBox.Show("A soma dos pagamentos deve ser exatamente R$ "+amount.ToString("N2"));return;}
      selected=parts;dialog.DialogResult=DialogResult.OK;
     };
