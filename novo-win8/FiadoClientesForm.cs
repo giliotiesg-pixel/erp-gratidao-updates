@@ -1599,6 +1599,16 @@ namespace ArmazemGratidao {
        long entryId=Convert.ToInt64(row.Cells["Registro"].Value);
        if(ReturnCreditSaleToFiado(entryId)){dlg.Close();ShowCustomerCreditHistory();}
       };
+      var reopen=new Button{Text="Reabrir baixas da venda",Width=205,Height=32,BackColor=Color.FromArgb(160,55,35),ForeColor=Color.White};
+      reopen.Click+=(sender,args)=>{
+       if(grid.CurrentRow==null)return;
+       long saleId;
+       if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["Venda"].Value),out saleId)){
+        MessageBox.Show("Selecione uma utilizacao vinculada a venda.");return;
+       }
+       if(ReopenSalePayments(saleId)){dlg.Close();ShowCustomerCreditHistory();}
+      };
+      bar.Controls.Add(reopen);
       bar.Controls.Add(show);
       var correct=new Button{Text="Corrigir / retirar lancamento",Width=230,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       correct.Click+=(sender,args)=>{
@@ -1625,6 +1635,112 @@ namespace ArmazemGratidao {
      }
     }
    }catch(Exception ex){MessageBox.Show("Historico indisponivel: "+ex.Message);}
+  }
+  // Permite reabrir baixas selecionadas de uma venda, mantendo comprovante de auditoria.
+  bool ReopenSalePayments(long saleId){
+   if(string.IsNullOrWhiteSpace(customer))return false;
+   try{
+    string name=customer.Trim();
+    using(var cn=Open(false)){
+     decimal gross;
+     using(var cmd=new SQLiteCommand(@"SELECT gross_total FROM sales WHERE id=@sale
+      AND TRIM(customer_name)=@name COLLATE NOCASE
+      AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);cmd.Parameters.AddWithValue("@name",name);
+      object val=cmd.ExecuteScalar();
+      if(val==null||val==DBNull.Value)throw new Exception("Venda nao encontrada para este cliente.");
+      gross=Convert.ToDecimal(val);
+     }
+     var payments=new DataTable();
+     using(var cmd=new SQLiteCommand(@"SELECT id AS Registro,paid_at AS Data,amount AS Valor,
+      payment_method AS Forma,note AS Observacao FROM credit_payments WHERE sale_id=@sale ORDER BY id",cn)){
+      cmd.Parameters.AddWithValue("@sale",saleId);
+      using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(payments);
+     }
+     if(payments.Rows.Count==0){MessageBox.Show("Nao existem baixas nesta venda.");return false;}
+     payments.Columns.Add("Reabrir",typeof(bool));
+     foreach(DataRow row in payments.Rows)row["Reabrir"]=false;
+     using(var dialog=new StyledDialogForm{Text="Reabrir venda #"+saleId+" - "+name,Width=940,Height=520,
+      MinimumSize=new Size(680,420),StartPosition=FormStartPosition.CenterParent}){
+      var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=payments,AllowUserToAddRows=false,
+       AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowHeadersVisible=false,BackgroundColor=Color.White};
+      foreach(DataGridViewColumn column in grid.Columns)column.ReadOnly=column.Name!="Reabrir";
+      grid.Columns["Registro"].Visible=false;
+      grid.Columns["Observacao"].FillWeight=180;
+      var info=new Label{Dock=DockStyle.Top,Height=85,Padding=new Padding(12),
+       Text="Venda #"+saleId+" | Total: R$ "+gross.ToString("N2")+
+       "\nMarque as baixas incorretas. Dinheiro realmente recebido deve ficar desmarcado."+
+       "\nAs baixas selecionadas retornam ao Fiado; a operacao fica auditada."};
+      var confirm=new Button{Text="Confirmar reabertura",Dock=DockStyle.Bottom,Height=42};
+      bool completed=false;
+      confirm.Click+=(sender,args)=>{
+       grid.EndEdit();
+       var selected=payments.Rows.Cast<DataRow>().Where(row=>row["Reabrir"]!=DBNull.Value&&Convert.ToBoolean(row["Reabrir"])).ToList();
+       if(selected.Count==0){MessageBox.Show("Marque as baixas que deseja reabrir.");return;}
+       decimal sum=selected.Sum(row=>Convert.ToDecimal(row["Valor"]));
+       if(MessageBox.Show("Reabrir R$ "+sum.ToString("N2")+" da venda #"+saleId+
+        "?\nOs pagamentos selecionados serao estornados. Pagamentos reais nao selecionados permanecerao.",
+        "Confirmar correcao",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+       try{
+        string backup=CreditBackupPath(db,"antes-reabrir-venda-");
+        using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+         dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+         using(var check=new SQLiteCommand("PRAGMA integrity_check",dest))
+          if(Convert.ToString(check.ExecuteScalar())!="ok")throw new Exception("Backup invalido.");
+        }
+        if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio.");
+        using(var tx=cn.BeginTransaction()){
+         using(var create=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS fiado_payment_reversal_audit(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,sale_id INTEGER NOT NULL,
+          payment_id INTEGER NOT NULL,amount NUMERIC NOT NULL,payment_method TEXT NOT NULL,
+          original_paid_at TEXT,original_note TEXT,reason TEXT NOT NULL,
+          reversed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))create.ExecuteNonQuery();
+         foreach(DataRow row in selected){
+          long paymentId=Convert.ToInt64(row["Registro"]);
+          decimal amount=Convert.ToDecimal(row["Valor"]);
+          string methodName=Convert.ToString(row["Forma"]);
+          string note=Convert.ToString(row["Observacao"]);
+          using(var verify=new SQLiteCommand(@"SELECT COUNT(*) FROM credit_payments
+           WHERE id=@id AND sale_id=@sale AND amount=@amount AND payment_method=@method",cn,tx)){
+           verify.Parameters.AddWithValue("@id",paymentId);verify.Parameters.AddWithValue("@sale",saleId);
+           verify.Parameters.AddWithValue("@amount",amount);verify.Parameters.AddWithValue("@method",methodName);
+           if(Convert.ToInt32(verify.ExecuteScalar())!=1)throw new Exception("Baixa alterada; atualize a janela.");
+          }
+          if(string.Equals(methodName,"CREDITO_CLIENTE",StringComparison.OrdinalIgnoreCase)){
+           // Devolver o valor a carteira sem apagar o lancamento historico original.
+           using(var credit=new SQLiteCommand(@"INSERT INTO customer_credit_entries
+            (customer_name,amount,entry_type,method,details)
+            VALUES(@name,@amount,'ESTORNO_UTILIZACAO','CORRECAO',@details)",cn,tx)){
+            credit.Parameters.AddWithValue("@name",name);credit.Parameters.AddWithValue("@amount",amount);
+            credit.Parameters.AddWithValue("@details","Reabertura da venda #"+saleId+"; baixa #"+paymentId);
+            credit.ExecuteNonQuery();
+           }
+          }
+          using(var audit=new SQLiteCommand(@"INSERT INTO fiado_payment_reversal_audit
+           (customer_name,sale_id,payment_id,amount,payment_method,original_paid_at,original_note,reason)
+           VALUES(@name,@sale,@id,@amount,@method,@date,@note,'Baixa incorreta reaberta manualmente')",cn,tx)){
+           audit.Parameters.AddWithValue("@name",name);audit.Parameters.AddWithValue("@sale",saleId);
+           audit.Parameters.AddWithValue("@id",paymentId);audit.Parameters.AddWithValue("@amount",amount);
+           audit.Parameters.AddWithValue("@method",methodName);audit.Parameters.AddWithValue("@date",Convert.ToString(row["Data"]));
+           audit.Parameters.AddWithValue("@note",note);audit.ExecuteNonQuery();
+          }
+          using(var del=new SQLiteCommand("DELETE FROM credit_payments WHERE id=@id AND sale_id=@sale",cn,tx)){
+           del.Parameters.AddWithValue("@id",paymentId);del.Parameters.AddWithValue("@sale",saleId);
+           if(del.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel estornar a baixa.");
+          }
+         }
+         tx.Commit();
+        }
+        completed=true;dialog.Close();
+       }catch(Exception ex){MessageBox.Show("Reabertura cancelada: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+      };
+      dialog.Controls.Add(grid);dialog.Controls.Add(confirm);dialog.Controls.Add(info);
+      dialog.ShowDialog(this);
+      if(completed){LoadClients();SelectClient(customer);MessageBox.Show("Venda reaberta no Fiado. Consulte os valores atualizados.");return true;}
+     }
+    }
+   }catch(Exception ex){MessageBox.Show("Erro: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   return false;
   }
   // Reabre apenas o abatimento automatico escolhido; pagamentos reais permanecem intactos.
   bool ReturnCreditSaleToFiado(long entryId){
