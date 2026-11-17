@@ -1449,6 +1449,78 @@ namespace ArmazemGratidao {
     if(cmd.ExecuteNonQuery()!=1)throw new Exception("Nao foi possivel atualizar o saldo de credito autorizado.");
    }
   }
+  static void EnsureDepositAuthorization(SQLiteConnection cn,SQLiteTransaction tx){
+   using(var cmd=new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS customer_credit_deposit_authorizations(
+    entry_id INTEGER PRIMARY KEY,customer_name TEXT NOT NULL COLLATE NOCASE,
+    original_amount NUMERIC NOT NULL,authorized INTEGER NOT NULL DEFAULT 0,
+    authorized_at TEXT,created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))cmd.ExecuteNonQuery();
+  }
+  bool AuthorizeSavedDeposit(long entryId){
+   if(string.IsNullOrWhiteSpace(customer))return false;
+   try{
+    EnsureCustomerCredit(db);
+    using(var cn=Open(false)){
+     string name=customer.Trim();
+     decimal amount;
+     using(var cmd=new SQLiteCommand(@"SELECT amount FROM customer_credit_entries
+      WHERE id=@id AND customer_name=@name COLLATE NOCASE AND entry_type='DEPOSITO'",cn)){
+      cmd.Parameters.AddWithValue("@id",entryId);cmd.Parameters.AddWithValue("@name",name);
+      object value=cmd.ExecuteScalar();
+      if(value==null||value==DBNull.Value){MessageBox.Show("Selecione uma linha DEPOSITO / GUARDAR CREDITO.");return false;}
+      amount=Convert.ToDecimal(value);
+     }
+     if(amount<=0)throw new Exception("Deposito sem saldo positivo.");
+     using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_deposit_authorizations'",cn)){
+      if(Convert.ToInt32(check.ExecuteScalar())>0)
+       using(var state=new SQLiteCommand("SELECT authorized FROM customer_credit_deposit_authorizations WHERE entry_id=@id",cn)){
+        state.Parameters.AddWithValue("@id",entryId);
+        object value=state.ExecuteScalar();
+        if(value!=null&&value!=DBNull.Value&&Convert.ToInt32(value)==1){MessageBox.Show("Este credito ja foi autorizado.");return false;}
+       }
+     }
+     decimal wallet=CustomerCreditBalance(cn,null,name);
+     decimal pool=AuthorizedCreditBalance(cn,null,name);
+     decimal amountToAuthorize=Math.Min(amount,Math.Max(0m,wallet-pool));
+     if(amountToAuthorize<=0){MessageBox.Show("Nao ha saldo de credito reservado disponivel para liberar. Confira o extrato antes de continuar.");return false;}
+     if(MessageBox.Show("Cliente: "+name+"\\nDeposito #"+entryId+
+      "\\nValor original: R$ "+amount.ToString("N2")+
+      "\\nValor disponivel para liberar: R$ "+amountToAuthorize.ToString("N2")+
+      "\\n\\nLiberar este credito para abatimento automatico nas PROXIMAS vendas?"+
+      "\\nNao altera pagamentos anteriores.","Liberar credito guardado",
+      MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return false;
+     string backup=CreditBackupPath(db,"antes-liberar-credito-");
+     using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
+      dest.Open();cn.BackupDatabase(dest,"main","main",-1,null,0);
+      using(var integrity=new SQLiteCommand("PRAGMA integrity_check",dest))
+       if(Convert.ToString(integrity.ExecuteScalar())!="ok")throw new Exception("Backup invalido.");
+     }
+     if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio.");
+     using(var tx=cn.BeginTransaction()){
+      EnsureDepositAuthorization(cn,tx);
+      using(var state=new SQLiteCommand(@"INSERT OR IGNORE INTO customer_credit_deposit_authorizations
+       (entry_id,customer_name,original_amount,authorized) VALUES(@id,@name,@amount,0)",cn,tx)){
+       state.Parameters.AddWithValue("@id",entryId);state.Parameters.AddWithValue("@name",name);
+       state.Parameters.AddWithValue("@amount",amount);state.ExecuteNonQuery();
+      }
+      using(var update=new SQLiteCommand(@"UPDATE customer_credit_deposit_authorizations
+       SET authorized=1,authorized_at=datetime('now','localtime')
+       WHERE entry_id=@id AND authorized=0",cn,tx)){
+       update.Parameters.AddWithValue("@id",entryId);
+       if(update.ExecuteNonQuery()!=1)throw new Exception("Credito ja liberado ou alterado.");
+      }
+      decimal nowWallet=CustomerCreditBalance(cn,tx,name);
+      decimal nowPool=AuthorizedCreditBalance(cn,tx,name);
+      decimal release=Math.Min(amount,Math.Max(0m,nowWallet-nowPool));
+      if(release<=0)throw new Exception("Saldo mudou; operacao cancelada.");
+      ChangeAuthorizedCreditBalance(cn,tx,name,release);
+      tx.Commit();
+     }
+     MessageBox.Show("Credito liberado para abatimento automatico futuro. Historico preservado.");
+     return true;
+    }
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel liberar credito: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+   return false;
+  }
   void DepositCustomerCredit(){
    if(string.IsNullOrWhiteSpace(customer)||customer=="SEM CLIENTE"){MessageBox.Show("Selecione um cliente cadastrado.");return;}
    decimal value=creditDepositAmount.Value;
@@ -1482,6 +1554,17 @@ namespace ArmazemGratidao {
       using(var cmd=new SQLiteCommand("INSERT INTO customer_credit_entries(customer_name,amount,entry_type,method,details) VALUES(@client,@amount,'DEPOSITO',@method,'Credito antecipado recebido no Fiado')",cn,tx)){
        cmd.Parameters.AddWithValue("@client",customer.Trim());cmd.Parameters.AddWithValue("@amount",value);cmd.Parameters.AddWithValue("@method",payMethod);
        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao registrar credito.");
+      }
+      EnsureDepositAuthorization(cn,tx);
+      using(var last=new SQLiteCommand("SELECT last_insert_rowid()",cn,tx)){
+       long entryId=Convert.ToInt64(last.ExecuteScalar());
+       using(var state=new SQLiteCommand(@"INSERT INTO customer_credit_deposit_authorizations
+        (entry_id,customer_name,original_amount,authorized,authorized_at)
+        VALUES(@id,@name,@amount,@authorized,CASE WHEN @authorized=1 THEN datetime('now','localtime') ELSE NULL END)",cn,tx)){
+        state.Parameters.AddWithValue("@id",entryId);state.Parameters.AddWithValue("@name",customer.Trim());
+        state.Parameters.AddWithValue("@amount",value);state.Parameters.AddWithValue("@authorized",authorize?1:0);
+        state.ExecuteNonQuery();
+       }
       }
       tx.Commit();
      }
@@ -1650,6 +1733,14 @@ namespace ArmazemGratidao {
        }
        if(ReopenSalePayments(saleId)){dlg.Close();ShowCustomerCreditHistory();}
       };
+      var authorizeDeposit=new Button{Text="Liberar credito selecionado",Width=220,Height=32,BackColor=Color.FromArgb(21,90,145),ForeColor=Color.White};
+      authorizeDeposit.Click+=(sender,args)=>{
+       if(grid.CurrentRow==null)return;
+       long entryId;
+       if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["Registro"].Value),out entryId))return;
+       if(AuthorizeSavedDeposit(entryId)){dlg.Close();ShowCustomerCreditHistory();}
+      };
+      bar.Controls.Add(authorizeDeposit);
       bar.Controls.Add(reopen);
       bar.Controls.Add(show);
       var correct=new Button{Text="Corrigir / retirar lancamento",Width=230,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
