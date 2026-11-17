@@ -1754,7 +1754,12 @@ namespace ArmazemGratidao {
       correct.Click+=(sender,args)=>{
        if(grid.CurrentRow==null)return;
        long entryId=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
-       if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
+       string kind=Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value);
+       long saleId;
+       if((kind=="UTILIZACAO"||kind=="UTILIZACAO_FIADO")&&
+          long.TryParse(Convert.ToString(grid.CurrentRow.Cells["Venda"].Value),out saleId)){
+        if(ReopenSalePayments(saleId)){dlg.Close();ShowCustomerCreditHistory();}
+       }else if(CorrectCreditHistoryEntry(entryId)){dlg.Close();ShowCustomerCreditHistory();}
       };
       bar.Controls.Add(correct);
       var reverse=new Button{Text="Estornar credito guardado",Width=250,Height=32,BackColor=Color.FromArgb(150,55,35),ForeColor=Color.White};
