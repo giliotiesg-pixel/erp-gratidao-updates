@@ -1701,10 +1701,10 @@ namespace ArmazemGratidao {
        grid.AutoResizeColumnHeadersHeight();
       };
       var hint=new Label{Dock=DockStyle.Top,Height=40,Padding=new Padding(10,10,10,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
-      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=100,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
+      var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=112,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
-       if(grid.CurrentRow==null)return;
+       if(grid.CurrentRow==null || !grid.CurrentRow.Selected){MessageBox.Show("Selecione uma linha do historico.");return;}
        object sale=grid.CurrentRow.Cells["Venda"].Value;
        if(sale==null||sale==DBNull.Value||string.IsNullOrWhiteSpace(Convert.ToString(sale))){MessageBox.Show("Este lancamento nao possui venda vinculada. O historico original foi preservado.");return;}
        long saleId;
@@ -1712,7 +1712,7 @@ namespace ArmazemGratidao {
        ShowCreditSaleItems(saleId,Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value),Convert.ToDecimal(grid.CurrentRow.Cells["Valor"].Value));
       };
       show.Click+=(sender,args)=>inspect();
-      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0 && args.ColumnIndex>=0 && grid.Columns[args.ColumnIndex].Name!="VoltarFiado")inspect();};
+      grid.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0 && args.ColumnIndex>=0 && grid.Columns[args.ColumnIndex].Name!="VoltarFiado" && grid.Columns[args.ColumnIndex].Name!="Produtos" && grid.Columns[args.ColumnIndex].Name!="Detalhes")inspect();};
       grid.CellClick+=(sender,args)=>{
        if(args.RowIndex<0||args.ColumnIndex<0)return;
        string col=grid.Columns[args.ColumnIndex].Name;
@@ -1773,7 +1773,11 @@ namespace ArmazemGratidao {
       var adjust=new Button{Text="Ajustar saldo manualmente",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
       bar.Controls.Add(adjust);
+      var close=new Button{Text="Fechar",Width=110,Height=32};
+      close.Click+=(sender,args)=>dlg.Close();
+      bar.Controls.Add(close);
       dlg.Controls.Add(grid);dlg.Controls.Add(bar);dlg.Controls.Add(hint);dlg.Controls.Add(totals);
+      dlg.Shown+=(sender,args)=>{if(grid.Rows.Count>0)grid.ClearSelection();};
       // Ordem de encaixe: tabela ocupa somente a area livre, sem cobrir cabecalho e botoes.
       grid.BringToFront();
       dlg.ShowDialog(this);
