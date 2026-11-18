@@ -299,10 +299,9 @@ namespace ArmazemGratidao {
    var flows=Descendants(form).OfType<FlowLayoutPanel>().ToArray();
    foreach(var flow in flows){
     if(flow.Dock!=DockStyle.Top && flow.Dock!=DockStyle.Bottom)continue;
-    // Barras que exibem titulos/informacoes nao podem ser reduzidas a 39px.
-    // Os botoes ficam compactos apenas nas barras de acao.
-    if(flow.Controls.OfType<Label>().Any(label=>label.Font!=null &&
-       (label.Font.SizeInPoints>=10f||label.Height>=28)))continue;
+    // Os titulos conservam a altura, mas seus botoes ainda sao compactados.
+    bool preserveHeaderHeight=flow.Controls.OfType<Label>().Any(label=>label.Font!=null &&
+       (label.Font.SizeInPoints>=10f||label.Height>=28));
     var buttons=flow.Controls.OfType<Button>().Where(btn=>btn.Dock==DockStyle.None).ToArray();
     if(buttons.Length==0)continue;
     bool hasEditor=flow.Controls.Cast<Control>().Any(c=>
@@ -331,18 +330,18 @@ namespace ArmazemGratidao {
      button.Margin=new Padding(3,2,3,2);
      if(label.Length>0)toolTip.SetToolTip(button,label);
     }
-    if(flow.Dock==DockStyle.Top && flow.Height>49 && !hasEditor){
+    if(!preserveHeaderHeight && flow.Dock==DockStyle.Top && flow.Height>49 && !hasEditor){
      flow.WrapContents=false;
      flow.AutoScroll=true;
      flow.Height=39;
      flow.Padding=new Padding(5,3,5,2);
-    }else if(flow.Dock==DockStyle.Top && flow.Height>49 && hasEditor){
+    }else if(!preserveHeaderHeight && flow.Dock==DockStyle.Top && flow.Height>49 && hasEditor){
      // Acesso direto aos filtros: reduzir a faixa mas preservar o campo.
      flow.AutoScroll=true;
      flow.WrapContents=false;
      flow.Height=48;
      flow.Padding=new Padding(5,3,5,3);
-    }else if(flow.Dock==DockStyle.Bottom && flow.Height>50 && !hasEditor){
+    }else if(!preserveHeaderHeight && flow.Dock==DockStyle.Bottom && flow.Height>50 && !hasEditor){
      flow.AutoScroll=true;
      flow.WrapContents=false;
      flow.Height=40;
