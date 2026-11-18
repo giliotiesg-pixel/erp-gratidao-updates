@@ -89,9 +89,29 @@ namespace ArmazemGratidao {
  }
  // Modulos e dialogos recebem o tema na primeira Load, antes do Paint.
  public class StyledDialogForm : Form {
+  bool adjustInstalled;
   protected override void OnLoad(EventArgs e){
    VisualStartup.Prepare(this);
    base.OnLoad(e);
+   if(adjustInstalled)return;
+   adjustInstalled=true;
+   var strip=new Panel{Name="amzgWindowAdjustment",Dock=DockStyle.Top,Height=32,
+    BackColor=Color.FromArgb(226,237,251)};
+   var adjust=new Button{Name="amzgAdjustWindow",Text="Ajustar janela",
+    Dock=DockStyle.Right,Width=132,Height=28,FlatStyle=FlatStyle.Flat,
+    BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   adjust.FlatAppearance.BorderSize=0;
+   adjust.Click+=(sender,args)=>{
+    var work=Screen.FromControl(this).WorkingArea;
+    WindowState=FormWindowState.Normal;
+    int width=Math.Min(1120,Math.Max(480,work.Width-24));
+    int height=Math.Min(820,Math.Max(360,work.Height-36));
+    MinimumSize=new Size(Math.Min(MinimumSize.Width,width),Math.Min(MinimumSize.Height,height));
+    Bounds=new Rectangle(work.Left+(work.Width-width)/2,work.Top+(work.Height-height)/2,width,height);
+   };
+   strip.Controls.Add(adjust);
+   Controls.Add(strip);
+   strip.BringToFront();
   }
  }
  // Dimensoes iniciais compactas; evita desperdiçar metade do monitor.
@@ -104,8 +124,8 @@ namespace ArmazemGratidao {
    if(form is MainForm||form is PdvForm||form is StartMenuPopup||
       form is ModernCalculatorForm||form is FiadoClientesForm)return;
    var bounds=Screen.FromControl(form).WorkingArea;
-   int width=Math.Min(form.Width,Math.Max(500,Math.Min(940,bounds.Width-28)));
-   int height=Math.Min(form.Height,Math.Max(370,Math.Min(635,bounds.Height-38)));
+   int width=Math.Min(form.Width,Math.Max(480,bounds.Width-24));
+   int height=Math.Min(form.Height,Math.Max(360,bounds.Height-36));
    if(form.MinimumSize.Width>width||form.MinimumSize.Height>height)
     form.MinimumSize=new Size(Math.Min(form.MinimumSize.Width,width),
      Math.Min(form.MinimumSize.Height,height));
