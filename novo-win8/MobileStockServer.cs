@@ -420,6 +420,17 @@ p{line-height:1.5}.hint{font-size:13px;color:#455a76}
 </style></head><body><main class='box'>
 <h1>Armazém Gratidão</h1><p>Coletor de produtos pelo celular • mesma rede Wi-Fi</p>
 <nav><button id='tabRegister'>Cadastrar produto</button><button id='tabEntry' class='secondary'>Entrada de estoque</button></nav>
+<section class='card' id='pdvTestPanel'>
+<h2>Teste PDV - leitura QR dos produtos</h2>
+<p class='hint'>Teste de identificacao e carrinho. Ainda nao finaliza nem registra vendas.</p>
+<input id='pdvQrPhoto' class='hidden' type='file' accept='image/*' capture='environment'>
+<button id='pdvQrScan'>Ler QR Code e adicionar ao carrinho</button>
+<label>Codigo QR (AMZG-PRODUTO:numero) ou codigo interno</label>
+<input id='pdvQrText' placeholder='Ex.: AMZG-PRODUTO:12'>
+<button id='pdvQrAdd' class='secondary'>Adicionar produto</button>
+<div id='pdvCart' class='info'>Carrinho vazio.</div>
+<p id='pdvQrStatus' class='hint'>O produto sera consultado no estoque do computador.</p>
+</section>
 <section class='card' id='registerPanel'>
 <h2>Cadastrar com código de barras</h2>
 <label>Código de barras</label><input id='barcode' inputmode='numeric' autocomplete='off' placeholder='Leia com câmera ou digite'>
@@ -537,6 +548,41 @@ $('photo').addEventListener('change',async function(){
   $('barcodeStatus').textContent='Leitura não concluída: '+e.message;
   notice('registerMsg','Fotografe o código nítido, sem reflexo, ou digite os números.',false);
  }
+});
+const pdvCartItems=new Map();
+function showPdvTestCart(){
+ const area=$('pdvCart');area.textContent='';
+ if(!pdvCartItems.size){area.textContent='Carrinho vazio.';return}
+ for(const item of pdvCartItems.values()){
+  const row=document.createElement('div');row.className='item';
+  row.textContent=item.nome+' | Quantidade: '+item.qty+' | Estoque: '+item.quantidade;
+  const remove=document.createElement('button');remove.className='secondary';remove.textContent='Retirar';
+  remove.onclick=()=>{pdvCartItems.delete(item.id);showPdvTestCart()};
+  row.appendChild(remove);area.appendChild(row);
+ }
+}
+async function addPdvQrProduct(raw){
+ const value=String(raw||'').trim();
+ const match=/^(?:AMZG-PRODUTO:)?([1-9][0-9]*)$/i.exec(value);
+ if(!match)throw Error('Informe um QR AMZG-PRODUTO:numero ou codigo interno valido.');
+ const response=await fetch('/api/produto?chave='+encodeURIComponent(token)+'&id='+encodeURIComponent(match[1]),{cache:'no-store'});
+ const data=await response.json();
+ if(!data.ok||!data.produto)throw Error(data.erro||'Produto nao encontrado.');
+ const product=data.produto,existing=pdvCartItems.get(product.id);
+ if(Number(product.quantidade)<(existing?existing.qty+1:1))throw Error('Estoque insuficiente para adicionar outra unidade.');
+ pdvCartItems.set(product.id,{...product,qty:(existing?existing.qty:0)+1});
+ showPdvTestCart();$('pdvQrStatus').textContent='Produto adicionado ao carrinho de teste: '+product.nome;
+}
+$('pdvQrAdd').onclick=async()=>{try{await addPdvQrProduct($('pdvQrText').value)}catch(e){$('pdvQrStatus').textContent=e.message}};
+$('pdvQrScan').onclick=()=>{$('pdvQrPhoto').value='';$('pdvQrPhoto').click()};
+$('pdvQrPhoto').addEventListener('change',async function(){
+ const file=this.files&&this.files[0];if(!file)return;
+ $('pdvQrStatus').textContent='Lendo QR Code...';
+ try{
+  const data=await decodePhoto(file);
+  if(data.tipo==='produto')await addPdvQrProduct(String(data.id));
+  else throw Error('Leia o QR Code individual AMZG do produto, nao o codigo de barras.');
+ }catch(e){$('pdvQrStatus').textContent='Leitura nao concluida: '+e.message}
 });
 $('entryScan').onclick=()=>{$('entryPhoto').value='';$('entryPhoto').click()};
 $('entryPhoto').addEventListener('change',async function(){
