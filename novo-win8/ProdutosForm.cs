@@ -1790,12 +1790,10 @@ namespace ArmazemGratidao {
     byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
     var price=new NumericUpDown {Name="amzgInsertPrice",DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {Name="amzgInsertCost",DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {Name="amzgInsertStock",DecimalPlaces=3,Maximum=10000000,Width=170};
     
-    Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};string[] labels={"Código de barras","Descrição do produto","Quantidade inicial","Custo do produto","Preço de venda","Marca","Categoria","Validade","Tipo de venda"};
-    for(int i=0;i<fields.Length;i++){
-     panel.Controls.Add(new Label{Text=labels[i],AutoSize=true,Margin=new Padding(2,8,3,1)},0,i);
-     fields[i].Margin=new Padding(3,3,5,3);
-     panel.Controls.Add(fields[i],1,i);
-    }
+    // A disposicao final e montada em secoes, preservando os mesmos controles e eventos.
+    // Nao adicionar os campos a linhas antigas: seriam sobrepostos aos botoes.
+    Control[] fields={barcode,name,stock,cost,price,brand,category,expiry,byWeight};
+    foreach(Control field in fields)field.Margin=new Padding(3,4,6,4);
        // Descrição: comprimento horizontal até o limite da coluna; altura normal de um campo.
        
        barcode.Width=230;barcode.Anchor=AnchorStyles.Left|AnchorStyles.Top;barcode.MaxLength=64;brand.Width=220;brand.Anchor=AnchorStyles.Left|AnchorStyles.Top;category.Width=220;category.Anchor=AnchorStyles.Left|AnchorStyles.Top;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.None;name.Width=520;name.Anchor=AnchorStyles.Left|AnchorStyles.Top;
@@ -1816,8 +1814,7 @@ namespace ArmazemGratidao {
     pricingRow.Controls.Add(new Label{Text="Ganho %",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter},1,0);
     pricingRow.Controls.Add(gainPercent,2,0);
     pricingRow.Controls.Add(gainValue,3,0);
-    panel.Controls.Remove(price);
-    panel.Controls.Add(pricingRow,1,4);
+    // O bloco de preco sera colocado na secao de dados abaixo.
     // Campo Preco fica em painel aninhado: TabIndex explicito evita pulo para Marca.
     barcode.TabIndex=0;name.TabIndex=1;stock.TabIndex=2;cost.TabIndex=3;
     pricingRow.TabIndex=4;price.TabIndex=0;gainPercent.TabIndex=1;
@@ -1846,7 +1843,7 @@ namespace ArmazemGratidao {
      }finally{changingPricing=false;}
     };
     updateGain();
-    panel.Controls.Add(ownCode,1,13);
+    // Codigo proprio fica na secao de pesquisa, sem ocupar linha de formulario.
     var lookup=new Button {Text="Buscar dados do código",Width=190,Height=32};
     var lookupStatus=new Label {Text="Aceita código original ou próprio. A pesquisa online é opcional para códigos comerciais.",AutoSize=false,Dock=DockStyle.Fill,Margin=new Padding(3,3,3,3),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
@@ -1919,15 +1916,56 @@ namespace ArmazemGratidao {
     var refresh=new Button{Text="Atualizar dados",Width=135,Height=32};
     refresh.Click+=async (sender,args)=>{lastLookupCode="";await fetchProduct();};
     actions.Controls.Add(lookup);actions.Controls.Add(verify);actions.Controls.Add(refresh);
-    panel.Controls.Add(lookupStatus,1,9);
-    panel.Controls.Add(actions,1,10);
-    var researchAtRegistration=new Button{Text="CENTRAL DE PESQUISA (3 BASES)",Width=265,Height=34};
+    var researchAtRegistration=new Button{Text="Central de pesquisa (3 bases)",Width=270,Height=36};
     researchAtRegistration.Click+=(sender,args)=>OpenBarcodeResearchCenter(barcode.Text.Trim(),name.Text.Trim());
-    panel.Controls.Add(researchAtRegistration,1,11);
-    var fiscalAtRegistration=new Button{Text="PESQUISA FISCAL / NCM",Width=240,Height=33};
+    var fiscalAtRegistration=new Button{Text="Pesquisa fiscal / NCM",Width=245,Height=36};
     fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
-    panel.Controls.Add(fiscalAtRegistration,1,12);
-    for(int row=0;row<14;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?54:row==10?48:row==11||row==12?44:row==13?39:38));
+    // Linhas com largura definida para os campos curtos; descricao ocupa o espaco restante.
+    var data=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=6,Padding=new Padding(12,8,12,8),BackColor=Color.FromArgb(241,247,254)};
+    data.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));
+    data.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+    data.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));
+    data.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+    for(int i=0;i<6;i++)data.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+    Action<string,Control,int,int> put=(caption,field,row,col)=>{
+     var lbl=new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     data.Controls.Add(lbl,col,row);data.Controls.Add(field,col+1,row);
+    };
+    put("Código de barras",barcode,0,0);
+    put("Descrição do produto",name,1,0);data.SetColumnSpan(name,3);
+    put("Quantidade inicial",stock,2,0);put("Custo do produto",cost,2,2);
+    put("Preço de venda",pricingRow,3,0);data.SetColumnSpan(pricingRow,3);
+    put("Marca",brand,4,0);put("Categoria",category,4,2);
+    put("Validade",expiry,5,0);put("Tipo de venda",byWeight,5,2);
+    barcode.Width=230;barcode.Dock=DockStyle.None;name.Dock=DockStyle.Fill;name.Width=520;
+    stock.Width=145;cost.Width=145;brand.Width=220;category.Width=220;expiry.Width=180;
+    var research=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(12,5,12,5),BackColor=Color.FromArgb(241,247,254)};
+    research.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    research.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+    research.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+    research.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    actions.Dock=DockStyle.Fill;actions.WrapContents=false;
+    lookup.Width=130;verify.Width=130;refresh.Width=160;
+    research.Controls.Add(actions,0,0);
+    var secondary=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
+    secondary.Controls.Add(researchAtRegistration);secondary.Controls.Add(fiscalAtRegistration);
+    research.Controls.Add(secondary,0,1);
+    var researchBottom=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};
+    ownCode.AutoSize=true;researchBottom.Controls.Add(ownCode);
+    lookupStatus.AutoSize=false;lookupStatus.Width=550;lookupStatus.Height=44;
+    researchBottom.Controls.Add(lookupStatus);research.Controls.Add(researchBottom,0,2);
+    // Os grupos ficam em linhas proprias; a rolagem vertical e interna.
+    panel.ColumnCount=1;panel.ColumnStyles.Clear();panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    panel.RowCount=5;panel.RowStyles.Clear();
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,275));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,145));
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,8));
+    panel.Controls.Add(new Label{Text="DADOS DO PRODUTO",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,30,48),Font=new Font("Segoe UI",12,FontStyle.Bold)},0,0);
+    panel.Controls.Add(data,0,1);
+    panel.Controls.Add(new Label{Text="PESQUISA E CONFERÊNCIA",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,30,48),Font=new Font("Segoe UI",12,FontStyle.Bold)},0,2);
+    panel.Controls.Add(research,0,3);
 
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
@@ -1970,11 +2008,16 @@ namespace ArmazemGratidao {
     StyleDialog(form,panel);
     AttachProductCalculator(form,panel,cost,price);
     AttachRealPricing(form,cost,price);
-    // Botao de cadastro preservado em linha exclusiva, abaixo das pesquisas e do calculo.
+    // Rodape de cadastro sempre apos precificacao, sem cobrir descricoes.
     int saveRow=panel.RowCount;
     panel.RowCount=saveRow+1;
-    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
-    panel.Controls.Add(save,1,saveRow);
+    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
+    save.Width=270;save.Height=42;save.BackColor=Color.FromArgb(190,30,48);
+    var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
+    var cancel=new Button{Text="Cancelar",Width=125,Height=42};
+    cancel.Click+=(sender,args)=>form.Close();
+    footer.Controls.Add(cancel);footer.Controls.Add(save);
+    panel.Controls.Add(footer,0,saveRow);
     form.Shown+=(s,e)=>{\n     // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.\n     panel.AutoScrollPosition=new Point(0,0);\n     barcode.Focus();\n     panel.AutoScrollPosition=new Point(0,0);\n    };
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
