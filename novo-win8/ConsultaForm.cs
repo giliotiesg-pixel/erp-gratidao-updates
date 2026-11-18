@@ -832,26 +832,119 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   void ShowSaleItems(){
    try{
     long id=SelectedSale();
-    var sale=Query("SELECT created_at,customer_name,gross_total,payment_method FROM sales WHERE id=@id","@id",id);
-    if(sale.Rows.Count==0)throw new Exception("Venda não encontrada.");
-    var items=Query("SELECT barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',unit_price AS 'Preço (R$)',total AS 'Valor (R$)' FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
-    using(var dialog=new StyledDialogForm{Text="Produtos da venda #"+id,Width=850,Height=560,MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
-     var header=new Label{Dock=DockStyle.Top,Height=92,Padding=new Padding(14,9,8,4),Font=new Font("Segoe UI",12,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),BackColor=Color.FromArgb(221,238,255)};
-     var row=sale.Rows[0];
-     header.Text="VENDA #"+id+"  |  "+Convert.ToString(row["created_at"])+Environment.NewLine+
-      "Cliente: "+Convert.ToString(row["customer_name"])+"  |  Pagamento: "+Convert.ToString(row["payment_method"])+
-      Environment.NewLine+"Total da venda: R$ "+Convert.ToDecimal(row["gross_total"]).ToString("N2")+"  |  "+items.Rows.Count+" produto(s)";
-     var list=new DataGridView{Dock=DockStyle.Fill,DataSource=items,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,
-      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowTemplate={Height=38},BackgroundColor=Color.White,
-      ColumnHeadersHeight=46,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-      EnableHeadersVisualStyles=false};
-     list.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
-     list.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
-     list.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);
-     list.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
-     dialog.Controls.Add(list);dialog.Controls.Add(header);dialog.ShowDialog(this);
+    using(var dialog=BuildSaleItemsWindow(id))dialog.ShowDialog(this);
+   }catch(Exception ex){
+    MessageBox.Show("Não foi possível abrir os produtos: "+ex.Message,
+     "Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);
+   }
+  }
+  // Janela de detalhes isolada para validar em Windows com tamanhos diferentes.
+  // O cabecalho nao compartilha Dock.Top com a tabela nem com a calculadora.
+  internal Form BuildSaleItemsWindow(long id){
+   var sale=Query(
+    "SELECT created_at,customer_name,gross_total,payment_method FROM sales WHERE id=@id",
+    "@id",id);
+   if(sale.Rows.Count==0)throw new InvalidOperationException("Venda não encontrada.");
+   var items=Query(
+    "SELECT barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',"+
+    "unit_price AS 'Preço (R$)',total AS 'Valor (R$)' "+
+    "FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
+   var area=Screen.FromControl(this).WorkingArea;
+   int width=Math.Min(950,Math.Max(640,area.Width-56));
+   int height=Math.Min(620,Math.Max(430,area.Height-80));
+   var dialog=new StyledDialogForm{
+    Name="amzgSalesItemsDialog",
+    Text="Produtos da venda #"+id,
+    Width=width,Height=height,
+    MinimumSize=new Size(Math.Min(630,width),Math.Min(420,height)),
+    AutoScaleMode=AutoScaleMode.Font,
+    Font=new Font("Segoe UI",10f),
+    StartPosition=FormStartPosition.CenterParent,
+    FormBorderStyle=FormBorderStyle.Sizable,
+    BackColor=Color.FromArgb(229,242,255)
+   };
+   var body=new TableLayoutPanel{
+    Name="amzgSalesItemsBody",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=2,
+    BackColor=Color.FromArgb(229,242,255),
+    Margin=Padding.Empty,Padding=new Padding(10,8,10,10)
+   };
+   body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   body.RowStyles.Add(new RowStyle(SizeType.Absolute,128));
+   body.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var header=new Label{
+    Name="amzgSalesItemsHeader",Dock=DockStyle.Fill,
+    Margin=new Padding(0,0,0,8),Padding=new Padding(14,8,10,8),
+    TextAlign=ContentAlignment.MiddleLeft,AutoSize=false,
+    Font=new Font("Segoe UI",11f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(20,73,158),
+    BackColor=Color.FromArgb(221,238,255)
+   };
+   var row=sale.Rows[0];
+   header.Text="VENDA #"+id+"  |  "+Convert.ToString(row["created_at"])+
+    Environment.NewLine+"Cliente: "+Convert.ToString(row["customer_name"])+
+    "  |  Pagamento: "+Convert.ToString(row["payment_method"])+
+    Environment.NewLine+"Total da venda: R$ "+
+    Convert.ToDecimal(row["gross_total"]).ToString("N2")+
+    "  |  "+items.Rows.Count+" produto(s)";
+
+   var list=new DataGridView{
+    Name="amzgSalesItemsGrid",Dock=DockStyle.Fill,
+    Margin=Padding.Empty,
+    ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
+    RowHeadersVisible=false,MultiSelect=false,
+    SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,
+    ColumnHeadersVisible=true,ColumnHeadersHeight=48,
+    ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+    RowTemplate={Height=36},ScrollBars=ScrollBars.Both,
+    BackgroundColor=Color.White,BorderStyle=BorderStyle.None,
+    EnableHeadersVisualStyles=false,Font=new Font("Segoe UI",10f)
+   };
+   list.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(22,75,160);
+   list.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
+   list.ColumnHeadersDefaultCellStyle.SelectionBackColor=Color.FromArgb(22,75,160);
+   list.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10f,FontStyle.Bold);
+   list.ColumnHeadersDefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;
+   list.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
+   list.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(238,244,252);
+   Action fitColumns=()=>{
+    if(list.IsDisposed||list.ClientSize.Width<100)return;
+    string[] names={"Código","Produto","Quantidade","Preço (R$)","Valor (R$)"};
+    if(names.Any(n=>!list.Columns.Contains(n)))return;
+    int inner=Math.Max(0,list.ClientSize.Width-SystemInformation.VerticalScrollBarWidth-6);
+    bool compact=inner<750;
+    int barcode=compact?116:145;
+    int qty=compact?90:104;
+    int price=compact?105:124;
+    int value=compact?105:120;
+    int product=Math.Max(compact?155:190,inner-barcode-qty-price-value);
+    int[] widths={barcode,product,qty,price,value};
+    for(int i=0;i<names.Length;i++){
+     var col=list.Columns[names[i]];
+     col.Visible=true;col.AutoSizeMode=DataGridViewAutoSizeColumnMode.None;
+     col.MinimumWidth=widths[i];
+     if(col.Width!=widths[i])col.Width=widths[i];
+     col.HeaderText=names[i];
+     col.DisplayIndex=i;
+     col.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
     }
-   }catch(Exception ex){MessageBox.Show("Não foi possível abrir os produtos: "+ex.Message,"Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    list.Columns["Quantidade"].DefaultCellStyle.Format="0.###";
+    list.Columns["Preço (R$)"].DefaultCellStyle.Format="N2";
+    list.Columns["Valor (R$)"].DefaultCellStyle.Format="N2";
+    foreach(string name in new[]{"Quantidade","Preço (R$)","Valor (R$)"})
+     list.Columns[name].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+    list.ColumnHeadersVisible=true;
+    if(list.ColumnHeadersHeight<48)list.ColumnHeadersHeight=48;
+   };
+   list.DataBindingComplete+=(sender,args)=>fitColumns();
+   list.SizeChanged+=(sender,args)=>fitColumns();
+   body.Controls.Add(header,0,0);
+   body.Controls.Add(list,0,1);
+   dialog.Controls.Add(body);
+   list.DataSource=items;
+   dialog.Shown+=(sender,args)=>fitColumns();
+   return dialog;
   }
   long SelectedSale(){
    if(master.CurrentRow==null||master.CurrentRow.IsNewRow||!master.Columns.Contains("venda"))throw new Exception("Selecione uma venda.");
