@@ -1126,7 +1126,7 @@ namespace ArmazemGratidao {
   }
   // Precificacao automatica: margem e calculada sobre a receita, nao sobre o custo.
   void AttachRealPricing(Form form,NumericUpDown cost,NumericUpDown price){
-   var container=new Panel{Dock=DockStyle.Bottom,Height=150,Padding=new Padding(12,7,12,7),
+   var container=new Panel{Dock=DockStyle.Fill,MinimumSize=new Size(0,170),Padding=new Padding(12,7,12,7),
     BackColor=Color.FromArgb(226,239,251),AutoScroll=true};
    var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=8,RowCount=3};
    for(int col=0;col<8;col++)layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,12.5f));
@@ -1176,8 +1176,19 @@ namespace ArmazemGratidao {
     if(suggested<=0||suggested>price.Maximum)return;
     price.Value=suggested;
    };
-   container.Controls.Add(layout);form.Controls.Add(container);
-   container.BringToFront();
+   container.Controls.Add(layout);
+   // Calculadora integrada ao formulario rolavel, sem cobrir os campos.
+   var productPanel=form.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
+   if(productPanel!=null){
+    int row=productPanel.RowCount;
+    productPanel.RowCount=row+1;
+    productPanel.RowStyles.Add(new RowStyle(SizeType.Absolute,185));
+    productPanel.Controls.Add(container,0,row);
+    productPanel.SetColumnSpan(container,2);
+   }else{
+    container.Dock=DockStyle.Bottom;container.Height=180;
+    form.Controls.Add(container);
+   }
    update();
   }
   void EditProduct(){
