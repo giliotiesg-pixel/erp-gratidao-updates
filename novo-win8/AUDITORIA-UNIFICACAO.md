@@ -66,3 +66,57 @@ O Windows 8 original vem com .NET Framework 4.5; nao admite .NET Framework 4.8.
 A build 583 gerada para .NET Framework 4.8 causou erro de Metodo nao encontrado: System.Array.Empty() no Windows 8.
 A build 584 passa a mirar .NET Framework 4.5, incluindo atualizador e dependencias SQLite selecionadas para esse runtime.
 Necessario testar no Windows 8 64 bits real (o runner Windows Server nao reproduz a versao antiga do .NET).
+
+## Revisao geral solicitada - 18/11/2026 (nao certificada)
+O usuario solicitou revalidar **todos** os pedidos anteriores e republicar somente apos
+compilacao, testes funcionais e instalador aprovados. O status de uma alteracao
+no GitHub nao prova que ela esteja instalada ou funcional.
+
+### Ultimo estado confirmado no GitHub Actions
+- Compilacao do commit 1333cf4b: **success** (run 44223513646).
+- Instalador/reparo do mesmo commit: **failure** (run 44223513736).
+- Etapa que falhou: teste visual do PDV (run 44223513736, job 134530958949).
+- Mensagem: "O cadastro de produtos nao esta com titulo e tamanho compactos."
+- Publicacao de release: nao executada por causa da falha.
+- Nao instalar ou anunciar atualizacao como pronta antes de liberar todos os gates.
+
+### Matriz de revisao obrigatoria (pendente ate teste real)
+1. Todas as janelas: maximizar/restaurar, dimensoes adaptadas ao monitor,
+   campos sem alongamento, cabeçalhos visiveis, barras de rolagem e botoes acessiveis.
+2. Produtos: cadastro e edicao com TODOS os campos e pesquisas existentes,
+   custo real, preco sugerido, lucro/margem, salvar, pesquisa por codigo e descricao,
+   QR individual e consulta online opcional.
+3. PDV Windows: pesquisa/bipagem, carrinho, estoque, pagamentos divididos,
+   Pix, dinheiro/troco, cartao, fiado, cliente, taxas, cupom e historico.
+4. Vendas: dia/anteriores, edicao, exclusao, auditoria, importacao direta das
+   anotacoes retroativas sem re-finalizar e recalculo de totais.
+5. Estoque: baixa atomica, entradas autorizadas, historico, peso, QR e
+   sincronizacao com produtos e celular.
+6. Clientes e Fiado: saldo aberto por cliente, credito autorizado,
+   pagamentos parciais, reabertura de baixa, estornos auditados e nenhuma
+   criacao de credito ficticio.
+7. Caixa: abertura, troco, sangria, fechamento, edicao autorizada e
+   consulta de caixas anteriores.
+8. Cascos retornaveis: registro por cliente/venda, devolucao e saldo.
+9. Lucro/dizimo: custo, margem, 10% do lucro, reserva e devolucoes.
+10. Metas de vendas: indicadores, projecao mensal e tabela sem sobreposicao.
+11. Valores monetarios: exatamente duas casas na apresentacao, sem
+    modificar precos cadastrados; quantidades/pesos mantem precisao propria.
+12. PDV celular: QR no carrinho, autenticacao, venda finalizada diretamente
+    no banco do computador, idempotencia, estoque e historico sincronizados.
+    **Nao declarar finalizacao movel pronta antes do teste ponta a ponta.**
+13. Atualizacao: backup SQLite completo com integridade verificada antes de
+    substituir, rollback, hash SHA-256, release valido, instalador unico,
+    reparo e logs, preservando banco real e versoes anteriores.
+14. Compatibilidade: Windows 8/8.1/10/11, resolucoes diferentes,
+    controles DPI e operacao com teclado/mouse.
+15. Regressao: usar banco de teste descartavel; testar telas, SQL, instalacao,
+    backup/restauracao e atualizacao antes de liberar release.
+
+### Regras de aceite
+- Cada item exige evidencias de teste; codigo salvo = implementado,
+  compilacao = apenas compilado, teste = validado, release = publicavel.
+- Falhas devem ser corrigidas na causa, sem desativar testes para esconder
+  defeitos. Atualizar verificacoes antigas somente se contradizem requisito
+  atual, mantendo testes de nao sobreposicao e legibilidade.
+- Nunca sobrescrever dados de producao para testar.
