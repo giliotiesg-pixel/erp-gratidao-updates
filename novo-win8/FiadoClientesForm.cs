@@ -271,7 +271,7 @@ namespace ArmazemGratidao {
       !long.TryParse(Convert.ToString(table.Rows[args.RowIndex].Cells["venda"].Value),out saleId)){
       MessageBox.Show("Nao foi possivel identificar esta venda.");return;
      }
-     if(ReopenSalePayments(saleId))SelectClient(customer);
+     if(ReopenSalePayments(saleId)){SelectClient(customer);saleTabs.SelectedIndex=0;}
     };
    }
    openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
@@ -330,6 +330,26 @@ namespace ArmazemGratidao {
    var total=new Label{Text="Selecionado: R$ 0,00",AutoSize=true,
     Font=new Font("Segoe UI",9,FontStyle.Bold),Margin=new Padding(3,8,0,0)};
    bar.Controls.Add(all);bar.Controls.Add(total);
+   if(paid){
+    var reopenPaid=new Button{Name="amzgFiadoReopenPaid",Text="Reabrir venda / Voltar ao Fiado aberto",
+     Width=290,Height=31,BackColor=Color.FromArgb(160,55,35),ForeColor=Color.White};
+    reopenPaid.Click+=(sender,args)=>{
+     grid.EndEdit();
+     DataGridViewRow chosen=grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(row=>
+      !row.IsNewRow&&Convert.ToBoolean(row.Cells["marcar"].Value??false));
+     if(chosen==null)chosen=grid.CurrentRow;
+     if(chosen==null||chosen.IsNewRow){MessageBox.Show("Selecione uma venda paga para reabrir.");return;}
+     long saleId;
+     if(!long.TryParse(Convert.ToString(chosen.Cells["venda"].Value),out saleId)){
+      MessageBox.Show("Venda paga invalida.");return;
+     }
+     if(ReopenSalePayments(saleId)){
+      SelectClient(customer);
+      saleTabs.SelectedIndex=0;
+     }
+    };
+    bar.Controls.Add(reopenPaid);
+   }
    var cards=new FlowLayoutPanel {
     Name=paid?"amzgFiadoCardsPaid":"amzgFiadoCardsOpen",
     Dock=DockStyle.Fill,AutoScroll=true,WrapContents=false,
