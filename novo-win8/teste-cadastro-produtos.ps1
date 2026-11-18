@@ -65,15 +65,18 @@ try{
     throw 'Cadastro deve manter o titulo e caber no monitor, sem limite compacto antigo.'
    }
    $layout=$price.Parent.Parent
-   $search=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -like 'Buscar dados*'})
+   $actions=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.FlowLayoutPanel] -and $layout.GetRow($_) -eq 10})
    $register=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Cadastrar Produto'})
-   if($search.Count -ne 1 -or $register.Count -ne 1 -or
-      $layout.GetRow($search[0]) -ne 10 -or
-      $layout.GetRow($register[0]) -le $layout.GetRow($search[0])){
-    throw ("Layout incorreto: consulta={0}, cadastro={1}, linhaConsulta={2}, linhaCadastro={3}" -f
-      $search.Count,$register.Count,
-      $(if($search.Count -gt 0){$layout.GetRow($search[0])}else{-1}),
-      $(if($register.Count -gt 0){$layout.GetRow($register[0])}else{-1}))
+   if($actions.Count -ne 1 -or $register.Count -ne 1){throw 'Botoes de acoes ou cadastro ausentes.'}
+   foreach($caption in @('Procurar','Verificar','Atualizar dados')){
+    if(@($actions[0].Controls | Where-Object {$_.Text -eq $caption}).Count -ne 1){
+     throw "Botao antigo nao restaurado: $caption"
+    }
+   }
+   if($layout.GetRow($register[0]) -le 13){throw 'Salvar cobre as pesquisas ou o campo de codigo proprio.'}
+   $own=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.CheckBox] -and $_.Text -like 'Não pesquisar*'})
+   if($own.Count -ne 1 -or $layout.GetRow($own[0]) -ne 13){
+    throw 'Opcao de codigo proprio coberta por outra acao.'
    }
    $script:done=$true
   }catch{$script:errorMessage=$_.Exception.Message}
