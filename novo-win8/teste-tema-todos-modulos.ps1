@@ -385,8 +385,17 @@ foreach($sample in $items){
     }
     $g=$grid[0]
     if(!$g.Visible -or $g.Rows.Count -ne 2 -or $g.Columns['id'].Visible -or
-       $g.AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill){
-     throw 'Fiado: produtos nao aparecem em tabela proporcional.'
+       $g.AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::None){
+     throw 'Fiado: produtos nao aparecem em tabela com largura controlada.'
+    }
+    $named=@('produto','quantidade','preco','total')
+    foreach($name in $named){
+     if(!$g.Columns[$name].Visible -or $g.Columns[$name].Width -lt 94){
+      throw 'Fiado: coluna '+$name+' escondida ou estreita demais.'
+     }
+    }
+    if($g.Columns['produto'].Width -gt ($g.ClientSize.Width-200)){
+     throw 'Fiado: a descricao ocupou a largura das colunas de preco.'
     }
     $visibleWidth=0
     foreach($column in $g.Columns){if($column.Visible){$visibleWidth+=$column.Width}}
@@ -411,8 +420,30 @@ foreach($sample in $items){
     [Windows.Forms.Application]::DoEvents()
     $payments=@($detail.Controls.Find('amzgFiadoSaleDetailPayments',$true))
     if($payments.Count -ne 1 -or $payments[0].Rows.Count -ne 1 -or
-       $payments[0].AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill){
-     throw 'Fiado: pagamentos nao ocupam a largura disponivel.'
+       $payments[0].AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::None){
+     throw 'Fiado: pagamentos nao foram dimensionados.'
+    }
+    foreach($column in @('data','forma','valor')){
+     if(!$payments[0].Columns[$column].Visible){
+      throw 'Fiado: coluna de pagamento invisivel: '+$column
+     }
+    }
+    $tabs[0].SelectedIndex=0
+    $detail.Size=[Drawing.Size]::new(760,520)
+    [Windows.Forms.Application]::DoEvents()
+    $titleLabel=@($detail.Controls.Find('amzgFiadoSaleDetailTitle',$true))
+    $calc=@($detail.Controls.Find('amzgCalculatorShortcutBar',$false))
+    if($titleLabel.Count -ne 1 -or !$titleLabel[0].Visible -or $calc.Count -ne 1){
+     throw 'Fiado: titulo ou barra superior nao encontrados.'
+    }
+    $labelTop=$detail.PointToClient($titleLabel[0].PointToScreen([Drawing.Point]::Empty)).Y
+    $calcBottom=$detail.PointToClient($calc[0].PointToScreen([Drawing.Point]::Empty)).Y+$calc[0].Height
+    if($labelTop -lt $calcBottom -or $labelTop -lt 34){
+     throw 'Fiado: o titulo ficou escondido sob a barra superior.'
+    }
+    $last=$g.Columns['total']
+    if(!$last.Visible -or $last.Width -lt 100 -or $g.Columns['produto'].Width -gt $g.ClientSize.Width-250){
+     throw 'Fiado: colunas de quantidade, preco ou total ficaram fora da tela.'
     }
     Write-Host 'FIADO VENDA OK: cabecalho, grade, pagamentos e rodape.'
    }finally{
@@ -466,4 +497,49 @@ try{
  }
 }finally{$dlg.Close();$dlg.Dispose()}
 Write-Host ('MODULOS COM LAYOUT PRONTO ANTES DO SHOW: '+($success -join ', '))
+# Teste adicional do PADRAO aplicado a dialogos secundarios genericos
+# (nao apenas o Fiado): titulo, calculadora e tabela nao podem se sobrepor.
+foreach($width in @(670,840,1080)){
+ $sub=[Activator]::CreateInstance($dialogType)
+ try{
+  $sub.Text='Verificacao de janela secundaria'
+  $sub.Size=[Drawing.Size]::new($width,580)
+  $host=[Windows.Forms.TableLayoutPanel]::new()
+  $host.Name='amzgTestSecondaryHost'
+  $host.Dock=[Windows.Forms.DockStyle]::Fill
+  $host.ColumnCount=1;$host.RowCount=2
+  $host.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new([Windows.Forms.SizeType]::Percent,100))
+  $host.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Absolute,66))
+  $host.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Percent,100))
+  $headline=[Windows.Forms.Label]::new()
+  $headline.Text='CABECALHO DE CONSULTA - JANELA SECUNDARIA'
+  $headline.Font=[Drawing.Font]::new('Segoe UI',12,[Drawing.FontStyle]::Bold)
+  $headline.Dock=[Windows.Forms.DockStyle]::Fill
+  $headline.TextAlign=[Drawing.ContentAlignment]::MiddleLeft
+  $results=[Windows.Forms.DataGridView]::new()
+  $results.Dock=[Windows.Forms.DockStyle]::Fill
+  $results.AutoSizeColumnsMode=[Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill
+  $results.ColumnCount=3
+  @('PRODUTO','QUANTIDADE','TOTAL') | ForEach-Object -Begin {$idx=0} -Process {
+   $results.Columns[$idx].HeaderText=$_;$idx++
+  }
+  $host.Controls.Add($headline,0,0);$host.Controls.Add($results,0,1)
+  $sub.Controls.Add($host)
+  $sub.Show();[Windows.Forms.Application]::DoEvents()
+  $topBar=@($sub.Controls.Find('amzgCalculatorShortcutBar',$false))
+  if($topBar.Count -ne 1 -or !$headline.Visible -or !$results.Visible){
+   throw 'Janela secundaria: controles principais ocultos.'
+  }
+  $labelY=$sub.PointToClient($headline.PointToScreen([Drawing.Point]::Empty)).Y
+  $gridY=$sub.PointToClient($results.PointToScreen([Drawing.Point]::Empty)).Y
+  $barBottom=$sub.PointToClient($topBar[0].PointToScreen([Drawing.Point]::Empty)).Y+$topBar[0].Height
+  if($labelY -lt $barBottom -or $gridY -lt ($labelY+$headline.Height) -or
+     !$results.ColumnHeadersVisible -or $results.ColumnHeadersHeight -lt 34){
+   throw "Janela secundaria $width px: cabecalho cortado ou grid sobreposto."
+  }
+  Write-Host "JANELA SECUNDARIA OK: $width pixels."
+ }finally{
+  if($null -ne $sub){try{$sub.Close()}catch{};$sub.Dispose()}
+ }
+}
 Write-Host 'DIALOGO SEM FLASH DE TEMA: OK'
