@@ -535,7 +535,7 @@ foreach($width in @(670,840,1080)){
   $barBottom=$sub.PointToClient($topBar[0].PointToScreen([Drawing.Point]::Empty)).Y+$topBar[0].Height
   if($labelY -lt $barBottom -or $gridY -lt ($labelY+$headline.Height) -or
      !$results.ColumnHeadersVisible -or $results.ColumnHeadersHeight -lt 34){
-   throw "Janela secundaria $width px: cabecalho cortado ou grid sobreposto."
+   throw "Janela secundaria $width px: cabecalho/grid incorreto. TituloY=$labelY GridY=$gridY BarraBottom=$barBottom TituloAltura=$($headline.Height) GridHeader=$($results.ColumnHeadersHeight)"
   }
   Write-Host "JANELA SECUNDARIA OK: $width pixels."
  }finally{
