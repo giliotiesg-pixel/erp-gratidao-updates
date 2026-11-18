@@ -29,8 +29,11 @@ if($source.Contains('/main/atualizacao-novo-win8.json')){
 $workflow=(Get-Content (Join-Path $repo '.github/workflows/amzg-novo-unificado.yml') -Raw)
 $jobCount=([regex]::Matches($workflow,'(?m)^  publicar_release:\r?$')).Count
 if($jobCount -ne 1){throw "Pipeline tem $jobCount jobs duplicados de publicacao"}
-$manualOnly="if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publicar_release == true"
-if(-not $workflow.Contains($manualOnly)){throw 'Publicacao exige disparo manual e testes aprovados'}
+$manual="github.event_name == 'workflow_dispatch' && inputs.publicar_release == true"
+$approvedPush="github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')"
+if(-not $workflow.Contains($manual) -or -not $workflow.Contains($approvedPush)){
+ throw 'Publicacao deve exigir despacho manual ou commit marcado [release], sempre apos testes'
+}
 if($workflow.Contains("github.event_name == 'push' ||")){
  throw 'Publicar release ao enviar codigo nao e permitido'
 }

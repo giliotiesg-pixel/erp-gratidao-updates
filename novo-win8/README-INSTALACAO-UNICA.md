@@ -51,8 +51,10 @@ A automacao `.github/workflows/amzg-novo-unificado.yml` gera:
 2. ZIP incremental para o atualizador independente;
 3. manifesto proposto e SHA-256 dos pacotes.
 
-Releases sao **manuais**: primeiro compilar e testar em Windows,
-depois executar workflow na branch `main` com `publicar_release=true`.
+Releases sao **controladas**: depois de compilar e testar em Windows,
+publicar pelo workflow na branch `main` com `publicar_release=true`,
+ou por um commit de integracao marcado com `[release]`.
+Commits comuns apenas compilam e testam, sem publicar atualizacao.
 O workflow so publica o manifesto **depois** de confirmar os arquivos no Release.
 Nunca adicionar `.db`, historico de vendas, dados de clientes ou backups ao GitHub.
 
