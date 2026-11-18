@@ -121,32 +121,10 @@ namespace ArmazemGratidao {
  }
  // Modulos e dialogos recebem o tema na primeira Load, antes do Paint.
  public class StyledDialogForm : Form {
-  bool adjustInstalled;
   protected override void OnLoad(EventArgs e){
+   // Nao inserir barras artificiais sobre campos, descricoes ou tabelas.
    VisualStartup.Prepare(this);
    base.OnLoad(e);
-   if(adjustInstalled)return;
-   adjustInstalled=true;
-   // A janela principal ja possui seu proprio cabecalho. Nunca inserir
-   // outra barra sobre os indicadores e o menu do PDV.
-   if(this is MainForm||this is PdvForm||this is StartMenuPopup)return;
-   var strip=new Panel{Name="amzgWindowAdjustment",Dock=DockStyle.Top,Height=32,
-    BackColor=Color.FromArgb(226,237,251)};
-   var adjust=new Button{Name="amzgAdjustWindow",Text="Ajustar janela",
-    Dock=DockStyle.Right,Width=132,Height=28,FlatStyle=FlatStyle.Flat,
-    BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
-   adjust.FlatAppearance.BorderSize=0;
-   adjust.Click+=(sender,args)=>{
-    var work=Screen.FromControl(this).WorkingArea;
-    WindowState=FormWindowState.Normal;
-    int width=Math.Min(1120,Math.Max(480,work.Width-24));
-    int height=Math.Min(820,Math.Max(360,work.Height-36));
-    MinimumSize=new Size(Math.Min(MinimumSize.Width,width),Math.Min(MinimumSize.Height,height));
-    Bounds=new Rectangle(work.Left+(work.Width-width)/2,work.Top+(work.Height-height)/2,width,height);
-   };
-   strip.Controls.Add(adjust);
-   Controls.Add(strip);
-   strip.BringToFront();
   }
  }
  // Dimensoes iniciais compactas; evita desperdiçar metade do monitor.
