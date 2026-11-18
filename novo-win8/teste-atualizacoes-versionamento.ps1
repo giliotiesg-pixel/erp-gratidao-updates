@@ -27,7 +27,7 @@ if($source.Contains('/main/atualizacao-novo-win8.json')){
  throw 'Fonte antiga de atualizacao voltou a ser utilizada'
 }
 $workflow=(Get-Content (Join-Path $repo '.github/workflows/amzg-novo-unificado.yml') -Raw)
-$jobCount=([regex]::Matches($workflow,'(?m)^  publicar_release:$')).Count
+$jobCount=([regex]::Matches($workflow,'(?m)^  publicar_release:\r?$')).Count
 if($jobCount -ne 1){throw "Pipeline tem $jobCount jobs duplicados de publicacao"}
 $manualOnly="if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publicar_release == true"
 if(-not $workflow.Contains($manualOnly)){throw 'Publicacao exige disparo manual e testes aprovados'}
