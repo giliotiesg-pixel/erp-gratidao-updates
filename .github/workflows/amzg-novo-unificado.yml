@@ -17,6 +17,13 @@ on:
         type: boolean
         default: false
 
+
+# Uma execucao por ramificacao: novas alteracoes substituem testes antigos
+# em PRs, mas nao interrompem uma publicacao em main.
+concurrency:
+  group: amzg-oficial-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   compilar:
     runs-on: windows-latest
