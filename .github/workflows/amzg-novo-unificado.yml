@@ -24,6 +24,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Verificar contratos preventivos de regressao visual
+        shell: powershell
+        run: .\\novo-win8\\teste-contratos-regressao.ps1
       - name: Ler versao unica do projeto
         shell: pwsh
         run: |
