@@ -1774,7 +1774,7 @@ namespace ArmazemGratidao {
   }
   void InsertProduct(string initialInput=""){
    using(var form=new StyledDialogForm {Text="Cadastrar Produto",Width=1120,Height=820,MinimumSize=new Size(780,580),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=true,AutoScroll=true}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=17,Padding=new Padding(12,9,12,9),Margin=Padding.Empty,AutoScroll=true};
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=14,Padding=new Padding(12,9,12,9),Margin=Padding.Empty,AutoScroll=true};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox{Name="amzgInsertBarcode"};var ownCode=new CheckBox {Text="Não pesquisar este código na internet (opcional)",AutoSize=true};var name=new TextBox {Name="amzgInsertName",Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
@@ -1927,7 +1927,7 @@ namespace ArmazemGratidao {
     var fiscalAtRegistration=new Button{Text="PESQUISA FISCAL / NCM",Width=240,Height=33};
     fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     panel.Controls.Add(fiscalAtRegistration,1,12);
-    for(int row=0;row<17;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?54:row==10?48:row==11||row==12?44:row==13?39:37));
+    for(int row=0;row<14;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?54:row==10?48:row==11||row==12?44:row==13?39:37));
 
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
@@ -1975,7 +1975,7 @@ namespace ArmazemGratidao {
     panel.RowCount=saveRow+1;
     panel.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
     panel.Controls.Add(save,1,saveRow);
-    form.Shown+=(s,e)=>{if(barcode.Text.Length>0)name.Focus();else barcode.Focus();};
+    form.Shown+=(s,e)=>{\n     // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.\n     panel.AutoScrollPosition=new Point(0,0);\n     barcode.Focus();\n     panel.AutoScrollPosition=new Point(0,0);\n    };
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
   }
