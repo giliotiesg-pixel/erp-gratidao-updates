@@ -122,16 +122,9 @@ namespace ArmazemGratidao {
  // Modulos e dialogos recebem o tema na primeira Load, antes do Paint.
  public class StyledDialogForm : Form {
   protected override void OnLoad(EventArgs e){
-   // Padrao unico para dialogos redimensionaveis: respeita a area util do
-   // monitor, sem criar cabecalhos adicionais ou encobrir o conteudo.
-   if(FormBorderStyle==FormBorderStyle.Sizable){
-    Rectangle area=Screen.FromControl(this).WorkingArea;
-    int width=Math.Min(940,Math.Max(480,area.Width-24));
-    int height=Math.Min(720,Math.Max(360,area.Height-36));
-    MinimumSize=new Size(Math.Min(MinimumSize.Width,width),Math.Min(MinimumSize.Height,height));
-    Size=new Size(width,height);
-    StartPosition=FormStartPosition.CenterParent;
-   }
+   // Nao forcar dimensoes: janelas de Fiado, produtos e consultas
+   // conservam o tamanho necessario aos seus controles.
+   // O limite fisico do monitor e aplicado pelo WindowBoundsGuard.
    VisualStartup.Prepare(this);
    base.OnLoad(e);
   }
