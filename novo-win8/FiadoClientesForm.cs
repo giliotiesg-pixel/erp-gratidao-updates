@@ -1737,10 +1737,23 @@ namespace ArmazemGratidao {
        string col=grid.Columns[args.ColumnIndex].Name;
        if(col!="Produtos"&&col!="Detalhes")return;
        string full=Convert.ToString(grid.Rows[args.RowIndex].Cells[args.ColumnIndex].Value);
-       if(string.IsNullOrWhiteSpace(full))return;
+       long linkedSale;
+       if(col=="Produtos"&&long.TryParse(Convert.ToString(grid.Rows[args.RowIndex].Cells["Venda"].Value),out linkedSale)){
+        // Consulta estruturada diretamente na venda; nao depende de texto truncado na grade.
+        ShowCreditSaleItems(linkedSale,
+         Convert.ToString(grid.Rows[args.RowIndex].Cells["Operacao"].Value),
+         Convert.ToDecimal(grid.Rows[args.RowIndex].Cells["Valor"].Value));
+        return;
+       }
+       if(string.IsNullOrWhiteSpace(full)){
+        MessageBox.Show("Nao ha detalhes cadastrados para este lancamento.","Historico de credito");
+        return;
+       }
        using(var detail=new StyledDialogForm{Text=col+" - texto completo",Width=760,Height=420,MinimumSize=new Size(450,300),StartPosition=FormStartPosition.CenterParent}){
-        var description=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,Font=new Font("Segoe UI",12),Text=full};
-        detail.Controls.Add(description);detail.ShowDialog(dlg);
+        var description=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,
+         ScrollBars=ScrollBars.Vertical,WordWrap=true,Font=new Font("Segoe UI",12),Text=full};
+        detail.Controls.Add(description);
+        detail.ShowDialog(dlg);
        }
       };
       grid.CellContentClick+=(sender,args)=>{
