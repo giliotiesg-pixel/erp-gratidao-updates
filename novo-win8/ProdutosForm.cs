@@ -1921,20 +1921,20 @@ namespace ArmazemGratidao {
     var fiscalAtRegistration=new Button{Text="Pesquisa fiscal / NCM",Width=245,Height=36};
     fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     // Linhas com largura definida para os campos curtos; descricao ocupa o espaco restante.
-    var data=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=6,Padding=new Padding(12,8,12,8),BackColor=Color.FromArgb(241,247,254)};
-    data.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));
-    data.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-    data.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));
-    data.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-    for(int i=0;i<6;i++)data.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+    var productFieldsGrid=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=6,Padding=new Padding(12,8,12,8),BackColor=Color.FromArgb(241,247,254)};
+    productFieldsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));
+    productFieldsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+    productFieldsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,170));
+    productFieldsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+    for(int i=0;i<6;i++)productFieldsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
     Action<string,Control,int,int> put=(caption,field,row,col)=>{
      var lbl=new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-     data.Controls.Add(lbl,col,row);data.Controls.Add(field,col+1,row);
+     productFieldsGrid.Controls.Add(lbl,col,row);productFieldsGrid.Controls.Add(field,col+1,row);
     };
     put("Código de barras",barcode,0,0);
-    put("Descrição do produto",name,1,0);data.SetColumnSpan(name,3);
+    put("Descrição do produto",name,1,0);productFieldsGrid.SetColumnSpan(name,3);
     put("Quantidade inicial",stock,2,0);put("Custo do produto",cost,2,2);
-    put("Preço de venda",pricingRow,3,0);data.SetColumnSpan(pricingRow,3);
+    put("Preço de venda",pricingRow,3,0);productFieldsGrid.SetColumnSpan(pricingRow,3);
     put("Marca",brand,4,0);put("Categoria",category,4,2);
     put("Validade",expiry,5,0);put("Tipo de venda",byWeight,5,2);
     barcode.Width=230;barcode.Dock=DockStyle.None;name.Dock=DockStyle.Fill;name.Width=520;
@@ -1963,7 +1963,7 @@ namespace ArmazemGratidao {
     panel.RowStyles.Add(new RowStyle(SizeType.Absolute,145));
     panel.RowStyles.Add(new RowStyle(SizeType.Absolute,8));
     panel.Controls.Add(new Label{Text="DADOS DO PRODUTO",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,30,48),Font=new Font("Segoe UI",12,FontStyle.Bold)},0,0);
-    panel.Controls.Add(data,0,1);
+    panel.Controls.Add(productFieldsGrid,0,1);
     panel.Controls.Add(new Label{Text="PESQUISA E CONFERÊNCIA",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,30,48),Font=new Font("Segoe UI",12,FontStyle.Bold)},0,2);
     panel.Controls.Add(research,0,3);
 
