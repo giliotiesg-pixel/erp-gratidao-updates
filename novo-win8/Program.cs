@@ -417,10 +417,13 @@ namespace ArmazemGratidao {
    // Cabecalho de planilha padronizado: texto completo em ate duas linhas,
    // nunca sobrepor os dados ou esconder colunas por falta de largura.
    table.ColumnHeadersVisible=true;
-   table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+   // Respeitar a altura escolhida por cada janela. Nunca diminuir o cabecalho.
+   if(table.ColumnHeadersHeightSizeMode==DataGridViewColumnHeadersHeightSizeMode.EnableResizing)
+    table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize;
    table.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
    table.ColumnHeadersDefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;
-   table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   // IMPORTANTE: nao trocar Fill/DisplayedCells por None. Isso espremia os
+   // produtos no canto esquerdo e deixava metade da tela vazia.
    table.ScrollBars=ScrollBars.Both;
    table.BorderStyle=BorderStyle.None;
    table.BackgroundColor=Color.White;
