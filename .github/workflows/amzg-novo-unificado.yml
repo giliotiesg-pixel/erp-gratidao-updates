@@ -34,7 +34,7 @@ jobs:
       - name: Verificar contratos preventivos de regressao visual
         shell: powershell
         run: .\\novo-win8\\teste-contratos-regressao.ps1
-      - name: Reservar proxima build automaticamente para esta execucao
+      - name: Reservar proxima build automaticamente
         if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
@@ -42,14 +42,24 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
-          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})
-          if($v -notmatch '^([1-9][0-9]?)\.([0-9]{1,2})\.([1-9][0-9]{0,4})$'){
-            throw "VERSAO.txt invalido: $v"
-          }
+          if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'VERSAO.txt invalido'}
+          $major=$Matches[1]; $minor=$Matches[2]; $build=[int]$Matches[3]
+          $tags=gh release list --limit 100 --json tagName | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases'}
+          $highest=0
+          foreach($item in $tags){if($item.tagName -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
+          $next=[Math]::Max($build,$highest+1)
+          if($next -gt 65000){throw 'Build acima do limite'}
+          "$major.$minor.$next" | Set-Content novo-win8/VERSAO.txt -Encoding ASCII
+          Write-Host "Proxima build: $next"
+      - name: Ler versao unica do projeto
+        shell: pwsh
+        run: |
+          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'VERSAO.txt invalido'}
           "AMZG_VERSION=$($Matches[1]).$($Matches[2])" >> $env:GITHUB_ENV
           "AMZG_BUILD=$($Matches[3])" >> $env:GITHUB_ENV
           "AMZG_FILEVERSION=$($Matches[1]).$($Matches[2]).0.$($Matches[3])" >> $env:GITHUB_ENV
-          Write-Host "Uma versao para todos os arquivos: $v"
       - uses: microsoft/setup-msbuild@v2
       - uses: NuGet/setup-nuget@v2
       - uses: actions/setup-python@v5
@@ -343,7 +353,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Armazem-Gratidao-Unico-build-${{ env.AMZG_BUILD }}
+          name: Armazem-Gratidao-Unico-verificado
           path: dist
       - name: Obter numero e versao exclusivamente do pacote testado
         shell: pwsh
