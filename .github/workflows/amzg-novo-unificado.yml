@@ -328,7 +328,7 @@ jobs:
 
   publicar_release:
     needs: compilar
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publicar_release == true))
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publicar_release == true
     runs-on: windows-latest
     permissions:
       contents: write
