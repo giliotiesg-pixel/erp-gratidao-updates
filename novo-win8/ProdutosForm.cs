@@ -2008,16 +2008,18 @@ namespace ArmazemGratidao {
     StyleDialog(form,panel);
     AttachProductCalculator(form,panel,cost,price);
     AttachRealPricing(form,cost,price);
-    // Rodape de cadastro sempre apos precificacao, sem cobrir descricoes.
-    int saveRow=panel.RowCount;
-    panel.RowCount=saveRow+1;
-    panel.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
+    // O rodape e FIXO na janela. Antes ficava depois da calculadora
+    // dentro da area rolavel e o botao Salvar desaparecia abaixo da tela.
     save.Width=270;save.Height=42;save.BackColor=Color.FromArgb(190,30,48);
-    var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
-    var cancel=new Button{Text="Cancelar",Width=125,Height=42};
+    save.Name="amzgInsertSave";
+    var footer=new FlowLayoutPanel{Name="amzgInsertFixedFooter",Dock=DockStyle.Bottom,
+     Height=64,Padding=new Padding(12,8,16,8),FlowDirection=FlowDirection.RightToLeft,
+     WrapContents=false,BackColor=Color.FromArgb(229,242,255)};
+    var cancel=new Button{Text="Cancelar",Name="amzgInsertCancel",Width=125,Height=42};
     cancel.Click+=(sender,args)=>form.Close();
     footer.Controls.Add(cancel);footer.Controls.Add(save);
-    panel.Controls.Add(footer,0,saveRow);
+    form.Controls.Add(footer);
+    footer.BringToFront();
     form.Shown+=(s,e)=>{
      // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.
      panel.AutoScrollPosition=new Point(0,0);
