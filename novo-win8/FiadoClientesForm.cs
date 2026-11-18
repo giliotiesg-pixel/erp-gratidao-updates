@@ -1069,6 +1069,46 @@ namespace ArmazemGratidao {
   }
   // Janela testavel isoladamente: permite medir cabecalho, tabela e rodape
   // antes de abrir um dialogo modal, inclusive em monitores menores.
+  // Distribui quatro colunas por larguras mensuraveis, sem FillWeight.
+  // Em WinForms, mudar FillWeight individualmente apos DataBindingComplete
+  // pode deixar a primeira coluna com quase toda a largura e esconder as outras.
+  internal static void FitSaleDetailColumns(DataGridView grid,bool paymentGrid){
+   if(grid==null||grid.IsDisposed||grid.Columns.Count==0)return;
+   grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   grid.RowHeadersVisible=false;
+   if(!paymentGrid){
+    if(grid.Columns.Contains("id"))grid.Columns["id"].Visible=false;
+    var product=grid.Columns.Contains("produto")?grid.Columns["produto"]:null;
+    var quantity=grid.Columns.Contains("quantidade")?grid.Columns["quantidade"]:null;
+    var price=grid.Columns.Contains("preco")?grid.Columns["preco"]:null;
+    var total=grid.Columns.Contains("total")?grid.Columns["total"]:null;
+    if(product==null||quantity==null||price==null||total==null)return;
+    product.HeaderText="PRODUTO";quantity.HeaderText="QUANTIDADE";
+    price.HeaderText="PREÇO UNITÁRIO";total.HeaderText="TOTAL R$";
+    product.Visible=true;quantity.Visible=true;price.Visible=true;total.Visible=true;
+    product.DisplayIndex=0;quantity.DisplayIndex=1;price.DisplayIndex=2;total.DisplayIndex=3;
+    product.MinimumWidth=185;quantity.MinimumWidth=94;
+    price.MinimumWidth=125;total.MinimumWidth=100;
+    quantity.Width=105;price.Width=145;total.Width=116;
+    int usable=Math.Max(0,grid.ClientSize.Width-SystemInformation.VerticalScrollBarWidth-6);
+    product.Width=Math.Max(185,usable-quantity.Width-price.Width-total.Width);
+    quantity.DefaultCellStyle.Format="0.###";
+    price.DefaultCellStyle.Format="N2";total.DefaultCellStyle.Format="N2";
+    product.Frozen=false;quantity.Frozen=false;price.Frozen=false;total.Frozen=false;
+   }else{
+    var date=grid.Columns.Contains("data")?grid.Columns["data"]:null;
+    var method=grid.Columns.Contains("forma")?grid.Columns["forma"]:null;
+    var amount=grid.Columns.Contains("valor")?grid.Columns["valor"]:null;
+    if(date==null||method==null||amount==null)return;
+    date.HeaderText="DATA DO PAGAMENTO";method.HeaderText="FORMA";
+    amount.HeaderText="VALOR R$";
+    date.MinimumWidth=180;method.MinimumWidth=125;amount.MinimumWidth=108;
+    method.Width=160;amount.Width=128;
+    int usable=Math.Max(0,grid.ClientSize.Width-SystemInformation.VerticalScrollBarWidth-6);
+    date.Width=Math.Max(180,usable-method.Width-amount.Width);
+    amount.DefaultCellStyle.Format="N2";
+   }
+  }
   internal Form BuildSaleDetailsWindow(long id){
    var saleRows=Query(
     "SELECT s.id,s.created_at,s.customer_name,s.payment_method,s.gross_total,"+
@@ -1103,7 +1143,7 @@ namespace ArmazemGratidao {
     Margin=Padding.Empty,BackColor=Color.FromArgb(245,249,254)
    };
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,112f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,146f));
    layout.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
    layout.RowStyles.Add(new RowStyle(SizeType.Absolute,56f));
 
@@ -1114,8 +1154,8 @@ namespace ArmazemGratidao {
     Margin=new Padding(0,0,0,8)
    };
    heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
-   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,34f));
-   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,30f));
+   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,48f));
+   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,36f));
    heading.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
    var title=new Label{
     Name="amzgFiadoSaleDetailTitle",
@@ -1154,59 +1194,27 @@ namespace ArmazemGratidao {
     AllowUserToAddRows=false,AllowUserToDeleteRows=false,
     RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
     MultiSelect=false,ScrollBars=ScrollBars.Both,
-    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,
     ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
     ColumnHeadersHeight=37,RowTemplate={Height=31},
     BackgroundColor=Color.White,BorderStyle=BorderStyle.None,
     Font=new Font("Segoe UI",10f)
    };
-   items.DataBindingComplete+=(sender,args)=>{
-    // O tema compartilhado nao pode anular o preenchimento da largura.
-    items.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
-    if(items.Columns.Contains("id"))items.Columns["id"].Visible=false;
-    if(items.Columns.Contains("produto")){
-     var col=items.Columns["produto"];col.HeaderText="PRODUTO";
-     col.MinimumWidth=200;col.FillWeight=53;
-    }
-    if(items.Columns.Contains("quantidade")){
-     var col=items.Columns["quantidade"];col.HeaderText="QUANTIDADE";
-     col.MinimumWidth=96;col.FillWeight=15;col.DefaultCellStyle.Format="0.###";
-    }
-    if(items.Columns.Contains("preco")){
-     var col=items.Columns["preco"];col.HeaderText="PREÇO UNITÁRIO";
-     col.MinimumWidth=112;col.FillWeight=16;col.DefaultCellStyle.Format="N2";
-    }
-    if(items.Columns.Contains("total")){
-     var col=items.Columns["total"];col.HeaderText="TOTAL R$";
-     col.MinimumWidth=105;col.FillWeight=16;col.DefaultCellStyle.Format="N2";
-    }
-   };
+   items.DataBindingComplete+=(sender,args)=>FitSaleDetailColumns(items,false);
+   items.SizeChanged+=(sender,args)=>FitSaleDetailColumns(items,false);
    var payments=new DataGridView {
     Name="amzgFiadoSaleDetailPayments",
     Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
     RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
     MultiSelect=false,ScrollBars=ScrollBars.Both,
-    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None,
     ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
     ColumnHeadersHeight=37,RowTemplate={Height=31},
     BackgroundColor=Color.White,BorderStyle=BorderStyle.None,
     Font=new Font("Segoe UI",10f)
    };
-   payments.DataBindingComplete+=(sender,args)=>{
-    payments.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
-    if(payments.Columns.Contains("data")){
-     var col=payments.Columns["data"];col.HeaderText="DATA DO PAGAMENTO";
-     col.MinimumWidth=180;col.FillWeight=42;
-    }
-    if(payments.Columns.Contains("forma")){
-     var col=payments.Columns["forma"];col.HeaderText="FORMA";
-     col.MinimumWidth=150;col.FillWeight=36;
-    }
-    if(payments.Columns.Contains("valor")){
-     var col=payments.Columns["valor"];col.HeaderText="VALOR R$";
-     col.MinimumWidth=120;col.FillWeight=22;col.DefaultCellStyle.Format="N2";
-    }
-   };
+   payments.DataBindingComplete+=(sender,args)=>FitSaleDetailColumns(payments,true);
+   payments.SizeChanged+=(sender,args)=>FitSaleDetailColumns(payments,true);
    var itemPage=new TabPage("Produtos da venda"){Padding=new Padding(5)};
    var paymentPage=new TabPage("Pagamentos recebidos"){Padding=new Padding(5)};
    itemPage.Controls.Add(items);paymentPage.Controls.Add(payments);
@@ -1252,6 +1260,30 @@ namespace ArmazemGratidao {
    footer.Controls.Add(close);footer.Controls.Add(reopen);footer.Controls.Add(edit);
    layout.Controls.Add(heading,0,0);layout.Controls.Add(tabs,0,1);
    layout.Controls.Add(footer,0,2);form.Controls.Add(layout);
+   // Area fixa para a barra da calculadora e area independente para titulo,
+   // tabelas e rodape. O Dock.Fill nao pode sobrepor o cabecalho.
+   layout.Dock=DockStyle.None;
+   Action placeContents=()=>{
+    if(form.IsDisposed)return;
+    var calc=form.Controls.Find("amzgCalculatorShortcutBar",false)
+     .OfType<Panel>().FirstOrDefault();
+    int top=0;
+    if(calc!=null){
+     calc.Dock=DockStyle.None;
+     calc.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+     var toolbar=new Rectangle(0,0,form.ClientSize.Width,33);
+     if(calc.Bounds!=toolbar)calc.Bounds=toolbar;
+     calc.BringToFront();
+     top=33;
+    }
+    var bounds=new Rectangle(0,top,Math.Max(1,form.ClientSize.Width),
+     Math.Max(1,form.ClientSize.Height-top));
+    if(layout.Bounds!=bounds)layout.Bounds=bounds;
+    FitSaleDetailColumns(items,false);
+    FitSaleDetailColumns(payments,true);
+   };
+   form.Load+=(sender,args)=>placeContents();
+   form.ClientSizeChanged+=(sender,args)=>placeContents();
    return form;
   }
   void EditSaleItem(long saleId,long selectedItemId){
