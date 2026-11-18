@@ -1832,9 +1832,24 @@ namespace ArmazemGratidao {
       MinimumSize=new Size(680,420),StartPosition=FormStartPosition.CenterParent}){
       var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=payments,AllowUserToAddRows=false,
        AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowHeadersVisible=false,BackgroundColor=Color.White};
-      foreach(DataGridViewColumn column in grid.Columns)column.ReadOnly=column.Name!="Reabrir";
-      grid.Columns["Registro"].Visible=false;
-      grid.Columns["Observacao"].FillWeight=180;
+      // Colunas podem ser geradas somente apos o binding. Nunca acessar colunas nulas.
+      grid.AutoGenerateColumns=true;
+      Action configurePayments=()=>{
+       if(grid.IsDisposed)return;
+       foreach(DataGridViewColumn column in grid.Columns)
+        column.ReadOnly=column.Name!="Reabrir";
+       var idColumn=grid.Columns["Registro"];
+       if(idColumn!=null)idColumn.Visible=false;
+       var noteColumn=grid.Columns["Observacao"];
+       if(noteColumn!=null)noteColumn.FillWeight=180;
+       var selectColumn=grid.Columns["Reabrir"];
+       if(selectColumn!=null){selectColumn.DisplayIndex=0;selectColumn.Width=85;selectColumn.FillWeight=65;}
+      };
+      grid.DataBindingComplete+=(sender,args)=>configurePayments();
+      configurePayments();
+      grid.CurrentCellDirtyStateChanged+=(sender,args)=>{
+       if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+      };
       var info=new Label{Dock=DockStyle.Top,Height=85,Padding=new Padding(12),
        Text="Venda #"+saleId+" | Total: R$ "+gross.ToString("N2")+
        "\nMarque as baixas incorretas. Dinheiro realmente recebido deve ficar desmarcado."+
