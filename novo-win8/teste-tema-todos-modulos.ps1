@@ -144,8 +144,13 @@ foreach($sample in $items){
    if($form.Size -ne $originalFiadoSize){
     throw "Janela normal do Fiado foi diminuida: $originalFiadoSize para $($form.Size)"
    }
-  }elseif($form.Width -gt 950 -or $form.Height -gt 640){
-   throw "Janela ainda grande em $($sample.Name): $($form.Width)x$($form.Height)"
+  }else{
+   # Janelas redimensionaveis podem ser grandes como leitores de PDF.
+   # O limite correto e a area util do monitor, nao 950x640 fixos.
+   $work=[Windows.Forms.Screen]::FromControl($form).WorkingArea
+   if($form.Width -gt $work.Width -or $form.Height -gt $work.Height){
+    throw "Janela excede area util em $($sample.Name): $($form.Width)x$($form.Height), monitor $($work.Width)x$($work.Height)"
+   }
   }
   if($sample.Name -ne 'Estoque' -and $sample.Name -ne 'Fiado'){
    $bar=@($form.Controls.Find('amzgBackBar',$true))
