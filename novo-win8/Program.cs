@@ -299,10 +299,12 @@ namespace ArmazemGratidao {
    var flows=Descendants(form).OfType<FlowLayoutPanel>().ToArray();
    foreach(var flow in flows){
     if(flow.Dock!=DockStyle.Top && flow.Dock!=DockStyle.Bottom)continue;
-    // Os titulos conservam a altura, mas seus botoes ainda sao compactados.
-    bool preserveHeaderHeight=flow.Controls.OfType<Label>().Any(label=>label.Font!=null &&
-       (label.Font.SizeInPoints>=10f||label.Height>=28));
     var buttons=flow.Controls.OfType<Button>().Where(btn=>btn.Dock==DockStyle.None).ToArray();
+    // Somente faixas sem botoes preservam altura livre para textos grandes.
+    // Barras mistas (como Clientes) continuam compactas sem ocultar botoes.
+    bool preserveHeaderHeight=buttons.Length==0 &&
+     flow.Controls.OfType<Label>().Any(label=>label.Font!=null &&
+       (label.Font.SizeInPoints>=10f||label.Height>=28));
     if(buttons.Length==0)continue;
     bool hasEditor=flow.Controls.Cast<Control>().Any(c=>
      c is TextBox||c is ComboBox||c is NumericUpDown||
