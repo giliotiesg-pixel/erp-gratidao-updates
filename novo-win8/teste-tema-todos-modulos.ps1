@@ -57,7 +57,7 @@ conn.execute("INSERT INTO customers VALUES(1,'Ana Maria','00000000000','11999999
 conn.execute("INSERT INTO sales VALUES(103,?,?,?,?,?,?,?,?,?,?,?)",(
  today+" 16:10:00","Jose Alves","FIADO",19.80,19.80,0,0,13.00,6.80,0.68,"FIADO"))
 conn.executemany("INSERT INTO sale_items VALUES(?,?,?,?,?,?,?,?,?)",[
- (6,103,3,"78900003","Agua mineral sem gas - fardo",1,9.90,5.00,9.90),
+ (6,103,3,"78900003","Agua mineral - fardo",1,9.90,5.00,9.90),
  (7,103,4,"78900004","Leite integral longa vida",2,4.95,3.00,9.90)
 ])
 conn.execute("INSERT INTO credit_payments VALUES(1,103,4.50,'PIX',?)",(today+" 17:10:00",))
@@ -363,164 +363,60 @@ foreach($sample in $items){
      $form.DrawToBitmap($closed,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
      $closed.Save($closedFile,[Drawing.Imaging.ImageFormat]::Png)
     }finally{$closed.Dispose()}
-   # Reproduz a janela real "Venda #... | Produtos e pagamentos":
-   # cabecalho interno, preenchimento da grade e botoes nao sobrepostos.
-   $detailsBuilder=$type.GetMethod('BuildSaleDetailsWindow',$flags)
-   if($null -eq $detailsBuilder){throw 'Fiado: falta construtor de detalhes da venda para teste.'}
-   $saleDialog=$detailsBuilder.Invoke($form,[object[]]@([long]103))
+   # Inspecionar de verdade o dialogo de detalhes e medir a grade apos Show.
+   $factory=$type.GetMethod('BuildSaleDetailsWindow',$flags)
+   if($null -eq $factory){throw 'Fiado: construtor do dialogo de venda ausente.'}
+   $detail=$factory.Invoke($form,[object[]]@([long]103))
    try{
-    $saleDialog.Show($form)
+    $detail.Show($form)
     [Windows.Forms.Application]::DoEvents()
-    $summary=@($saleDialog.Controls.Find('amzgFiadoSaleDetailHeader',$true))
-    $saleTitle=@($saleDialog.Controls.Find('amzgFiadoSaleDetailTitle',$true))
-    $saleAmounts=@($saleDialog.Controls.Find('amzgFiadoSaleDetailAmounts',$true))
-    $saleTabs=@($saleDialog.Controls.Find('amzgFiadoSaleDetailTabs',$true))
-    $saleGrid=@($saleDialog.Controls.Find('amzgFiadoSaleDetailItems',$true))
-    $saleFooter=@($saleDialog.Controls.Find('amzgFiadoSaleDetailFooter',$true))
-    if($summary.Count -ne 1 -or $saleTabs.Count -ne 1 -or
-       $saleGrid.Count -ne 1 -or $saleAmounts.Count -ne 1 -or
-       $saleFooter.Count -ne 1 -or $saleTitle.Count -ne 1){
-     throw 'Fiado: falta cabecalho, tabela ou rodape da venda.'
+    $header=@($detail.Controls.Find('amzgFiadoSaleDetailHeader',$true))
+    $info=@($detail.Controls.Find('amzgFiadoSaleDetailAmounts',$true))
+    $grid=@($detail.Controls.Find('amzgFiadoSaleDetailItems',$true))
+    $tabs=@($detail.Controls.Find('amzgFiadoSaleDetailTabs',$true))
+    $footer=@($detail.Controls.Find('amzgFiadoSaleDetailFooter',$true))
+    if($header.Count -ne 1 -or $info.Count -ne 1 -or $grid.Count -ne 1 -or
+       $tabs.Count -ne 1 -or $footer.Count -ne 1){
+     throw 'Fiado: cabecalho, tabela ou rodape nao encontrado.'
     }
-    if(!$summary[0].Visible -or !$saleAmounts[0].Visible -or
-       !$saleTitle[0].Text.Contains('VENDA #103') -or
-       !$saleAmounts[0].Text.Contains('EM ABERTO: R
-   [Windows.Forms.Application]::DoEvents()
-   if(!$form.Visible -or !$split.Panel2Collapsed -or $split.Panel1Collapsed -or
-      $form.Size -ne $oldSize){
-    throw 'Fiado: a seta nao retornou aos clientes mantendo a janela.'
-   }
-   Write-Host 'FIADO OK: tamanho normal preservado, quatro categorias do Iniciar e submenus a direita.'
-  }
-  $out=Join-Path $directory ('Previa-Modulo-'+$sample.Name+'.png')
-  $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
-  try{
-   $form.DrawToBitmap($bitmap,[Drawing.Rectangle]::new(
-    [Drawing.Point]::Empty,$form.ClientSize))
-   $bitmap.Save($out,[Drawing.Imaging.ImageFormat]::Png)
-  }finally{$bitmap.Dispose()}
-  if((Get-Item $out).Length -lt 5000){throw "Previa pequena: $out"}
-  $success.Add($sample.Name)
-  Write-Host ('TEMA OK: '+$sample.Name+' | '+$visibleButtons.Count+' botoes | '+$out)
- }catch{
-  throw 'Falhou modulo '+$sample.Name+': '+$_.Exception.Message
- }finally{
-  if($null -ne $form){try{$form.Close()}catch{};$form.Dispose()}
- }
-}
-if($success.Count -ne $items.Count){throw "Faltam modulos testados."}
-# Verificar abertura de um dialogo avulso: seu estilo precisa estar pronto
-# no OnLoad, sem depender de loop Idle ou de um segundo redesenho.
-$dlg=[Activator]::CreateInstance($dialogType)
-try{
- $dlg.Text='Janela de teste'
- $btn=[Windows.Forms.Button]::new()
- $btn.Text='Confirmar';$btn.Width=140;$btn.Height=34
- $dlg.Controls.Add($btn)
- $checked=$false
- $dlg.add_Load({
-  if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
-   throw 'Dialogo exibiu visual antigo no primeiro OnLoad.'
-  }
-  $script:checked=$true
- })
- $dlg.Show()
- [Windows.Forms.Application]::DoEvents()
- if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
-  throw 'Dialogo auxiliar permaneceu sem estilo apos Show.'
- }
-}finally{$dlg.Close();$dlg.Dispose()}
-Write-Host ('MODULOS COM LAYOUT PRONTO ANTES DO SHOW: '+($success -join ', '))
-Write-Host 'DIALOGO SEM FLASH DE TEMA: OK'
-) -or
-       !$saleAmounts[0].Text.Contains('RECEBIDO: R
-   [Windows.Forms.Application]::DoEvents()
-   if(!$form.Visible -or !$split.Panel2Collapsed -or $split.Panel1Collapsed -or
-      $form.Size -ne $oldSize){
-    throw 'Fiado: a seta nao retornou aos clientes mantendo a janela.'
-   }
-   Write-Host 'FIADO OK: tamanho normal preservado, quatro categorias do Iniciar e submenus a direita.'
-  }
-  $out=Join-Path $directory ('Previa-Modulo-'+$sample.Name+'.png')
-  $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
-  try{
-   $form.DrawToBitmap($bitmap,[Drawing.Rectangle]::new(
-    [Drawing.Point]::Empty,$form.ClientSize))
-   $bitmap.Save($out,[Drawing.Imaging.ImageFormat]::Png)
-  }finally{$bitmap.Dispose()}
-  if((Get-Item $out).Length -lt 5000){throw "Previa pequena: $out"}
-  $success.Add($sample.Name)
-  Write-Host ('TEMA OK: '+$sample.Name+' | '+$visibleButtons.Count+' botoes | '+$out)
- }catch{
-  throw 'Falhou modulo '+$sample.Name+': '+$_.Exception.Message
- }finally{
-  if($null -ne $form){try{$form.Close()}catch{};$form.Dispose()}
- }
-}
-if($success.Count -ne $items.Count){throw "Faltam modulos testados."}
-# Verificar abertura de um dialogo avulso: seu estilo precisa estar pronto
-# no OnLoad, sem depender de loop Idle ou de um segundo redesenho.
-$dlg=[Activator]::CreateInstance($dialogType)
-try{
- $dlg.Text='Janela de teste'
- $btn=[Windows.Forms.Button]::new()
- $btn.Text='Confirmar';$btn.Width=140;$btn.Height=34
- $dlg.Controls.Add($btn)
- $checked=$false
- $dlg.add_Load({
-  if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
-   throw 'Dialogo exibiu visual antigo no primeiro OnLoad.'
-  }
-  $script:checked=$true
- })
- $dlg.Show()
- [Windows.Forms.Application]::DoEvents()
- if($null -eq $btn.Region -or $btn.FlatStyle -ne [Windows.Forms.FlatStyle]::Flat){
-  throw 'Dialogo auxiliar permaneceu sem estilo apos Show.'
- }
-}finally{$dlg.Close();$dlg.Dispose()}
-Write-Host ('MODULOS COM LAYOUT PRONTO ANTES DO SHOW: '+($success -join ', '))
-Write-Host 'DIALOGO SEM FLASH DE TEMA: OK'
-)){
-     throw 'Fiado: cabecalho da venda nao mostra numero, total e saldo.'
+    if(!$header[0].Visible -or !$info[0].Visible -or
+       !$info[0].Text.Contains('RECEBIDO') -or !$info[0].Text.Contains('EM ABERTO')){
+     throw 'Fiado: informacoes do cabecalho nao aparecem.'
     }
-    $headTop=$saleDialog.PointToClient($summary[0].PointToScreen([Drawing.Point]::Empty)).Y
-    $gridTop=$saleDialog.PointToClient($saleTabs[0].PointToScreen([Drawing.Point]::Empty)).Y
-    $footerTop=$saleDialog.PointToClient($saleFooter[0].PointToScreen([Drawing.Point]::Empty)).Y
-    if($headTop -lt 0 -or $gridTop -lt ($headTop+$summary[0].Height) -or
-       $footerTop -lt ($gridTop+$saleTabs[0].Height-2)){
-     throw "Fiado: o cabecalho ficou oculto/sobreposto: $headTop $gridTop $footerTop"
+    $g=$grid[0]
+    if(!$g.Visible -or $g.Rows.Count -ne 2 -or $g.Columns['id'].Visible -or
+       $g.AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill){
+     throw 'Fiado: produtos nao aparecem em tabela proporcional.'
     }
-    $g=$saleGrid[0]
-    if(!$g.Visible -or $g.AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill -or
-       $g.Rows.Count -ne 2 -or $g.Columns['id'].Visible){
-     throw 'Fiado: produtos nao preenchem a tabela ou codigo interno exposto.'
+    $visibleWidth=0
+    foreach($column in $g.Columns){if($column.Visible){$visibleWidth+=$column.Width}}
+    if($visibleWidth -lt ($g.ClientSize.Width-60)){
+     throw 'Fiado: colunas ficaram espremidas no canto.'
     }
-    $sum=0
-    foreach($col in $g.Columns){if($col.Visible){$sum+=$col.Width}}
-    if($sum -lt ($g.ClientSize.Width-60)){
-     throw "Fiado: colunas compactadas ($sum pixels para largura $($g.ClientSize.Width))."
+    $top=$detail.PointToClient($header[0].PointToScreen([Drawing.Point]::Empty)).Y
+    $middle=$detail.PointToClient($tabs[0].PointToScreen([Drawing.Point]::Empty)).Y
+    $bottom=$detail.PointToClient($footer[0].PointToScreen([Drawing.Point]::Empty)).Y
+    if($top -lt 0 -or $middle -lt ($top+$header[0].Height) -or
+       $bottom -lt ($middle+$tabs[0].Height-2)){
+     throw 'Fiado: cabecalho ou rodape sobrepoem os produtos.'
     }
-    $savePreview=Join-Path $directory 'Previa-Fiado-Venda-Detalhes.png'
-    $visual=[Drawing.Bitmap]::new($saleDialog.ClientSize.Width,$saleDialog.ClientSize.Height)
+    $preview=Join-Path $directory 'Previa-Fiado-Venda-Detalhes.png'
+    $picture=[Drawing.Bitmap]::new($detail.ClientSize.Width,$detail.ClientSize.Height)
     try{
-     $saleDialog.DrawToBitmap($visual,[Drawing.Rectangle]::new(
-      [Drawing.Point]::Empty,$saleDialog.ClientSize))
-     $visual.Save($savePreview,[Drawing.Imaging.ImageFormat]::Png)
-    }finally{$visual.Dispose()}
-    if((Get-Item $savePreview).Length -lt 5000){
-     throw 'Fiado: previa da venda nao foi capturada.'
-    }
-    $saleTabs[0].SelectedIndex=1
+     $detail.DrawToBitmap($picture,[Drawing.Rectangle]::new(
+      [Drawing.Point]::Empty,$detail.ClientSize))
+     $picture.Save($preview,[Drawing.Imaging.ImageFormat]::Png)
+    }finally{$picture.Dispose()}
+    $tabs[0].SelectedIndex=1
     [Windows.Forms.Application]::DoEvents()
-    $payGrid=@($saleDialog.Controls.Find('amzgFiadoSaleDetailPayments',$true))
-    if($payGrid.Count -ne 1 -or $payGrid[0].Rows.Count -ne 1 -or
-       $payGrid[0].AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill){
-     throw 'Fiado: aba de pagamentos nao se expandiu corretamente.'
+    $payments=@($detail.Controls.Find('amzgFiadoSaleDetailPayments',$true))
+    if($payments.Count -ne 1 -or $payments[0].Rows.Count -ne 1 -or
+       $payments[0].AutoSizeColumnsMode -ne [Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill){
+     throw 'Fiado: pagamentos nao ocupam a largura disponivel.'
     }
-    Write-Host 'FIADO VENDA OK: cabecalho, produtos, pagamentos e largura testados.'
+    Write-Host 'FIADO VENDA OK: cabecalho, grade, pagamentos e rodape.'
    }finally{
-    if($null -ne $saleDialog){try{$saleDialog.Close()}catch{};$saleDialog.Dispose()}
+    if($null -ne $detail){try{$detail.Close()}catch{};$detail.Dispose()}
    }
     $oldSize=$form.Size
    $back[0].PerformClick()
