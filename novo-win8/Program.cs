@@ -192,18 +192,27 @@ namespace ArmazemGratidao {
  // Impede que Dock.Fill esconda Menu Inicial/Calculadora nos demais modulos.
  // O conteudo original conserva seus docks relativos dentro de uma area reservada.
  static class SharedModuleHeaderLayout {
+  static bool ContainsDataGrid(Control parent){
+   if(parent is DataGridView)return true;
+   foreach(Control child in parent.Controls)if(ContainsDataGrid(child))return true;
+   return false;
+  }
   public static void Prepare(Form form){
    if(form==null||form.IsDisposed||form is MainForm||form is PdvForm||
      form is ConsultaForm||form is FiadoClientesForm||
      form is ModernCalculatorForm||form is StartMenuPopup||
-     form.Name=="amzgFiadoSaleDetailDialog")return;
-   // A janela de detalhes ja tem cabecalho e rodape proprios:
-   // nao envolve-la num painel com AutoScroll, que corta o titulo ao focar a grade.
+     form is StyledDialogForm && form.Controls.Find("amzgBackBar",true).Length==0)return;
+   // Dialogos com cabecalho proprio nao sao reparentados nem rolados
+   // por este guardiao global; evita corte do titulo em janelas secundarias.
    var bar=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
     .FirstOrDefault(p=>p.Parent==form&&p.Dock==DockStyle.Top);
    if(bar==null||form.Controls.Find("amzgModuleContentHost",false).Length>0)return;
+   // Em tabelas o proprio DataGridView fornece barras de rolagem.
+   // AutoScroll no pai deslocava o cabecalho das janelas secundarias.
+   bool hasGrid=ContainsDataGrid(form);
+   
    var content=new Panel{Name="amzgModuleContentHost",
-    Dock=DockStyle.None,BackColor=form.BackColor,AutoScroll=true};
+    Dock=DockStyle.None,BackColor=form.BackColor,AutoScroll=!hasGrid};
    var controls=form.Controls.Cast<Control>().Where(p=>p!=bar).Reverse().ToArray();
    foreach(Control child in controls){form.Controls.Remove(child);content.Controls.Add(child);}
    form.Controls.Add(content);
@@ -290,6 +299,10 @@ namespace ArmazemGratidao {
    var flows=Descendants(form).OfType<FlowLayoutPanel>().ToArray();
    foreach(var flow in flows){
     if(flow.Dock!=DockStyle.Top && flow.Dock!=DockStyle.Bottom)continue;
+    // Barras que exibem titulos/informacoes nao podem ser reduzidas a 39px.
+    // Os botoes ficam compactos apenas nas barras de acao.
+    if(flow.Controls.OfType<Label>().Any(label=>label.Font!=null &&
+       (label.Font.SizeInPoints>=10f||label.Height>=28)))continue;
     var buttons=flow.Controls.OfType<Button>().Where(btn=>btn.Dock==DockStyle.None).ToArray();
     if(buttons.Length==0)continue;
     bool hasEditor=flow.Controls.Cast<Control>().Any(c=>
@@ -420,6 +433,9 @@ namespace ArmazemGratidao {
    // Cabecalho de planilha padronizado: texto completo em ate duas linhas,
    // nunca sobrepor os dados ou esconder colunas por falta de largura.
    table.ColumnHeadersVisible=true;
+   // Nenhum dialogo secundario exibe titulos de colunas em faixa menor que 34px.
+   if(table.ColumnHeadersHeightSizeMode==DataGridViewColumnHeadersHeightSizeMode.DisableResizing &&
+      table.ColumnHeadersHeight<34)table.ColumnHeadersHeight=34;
    // Respeitar a altura escolhida por cada janela. Nunca diminuir o cabecalho.
    if(table.ColumnHeadersHeightSizeMode==DataGridViewColumnHeadersHeightSizeMode.EnableResizing)
     table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize;
