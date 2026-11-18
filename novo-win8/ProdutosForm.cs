@@ -1774,7 +1774,7 @@ namespace ArmazemGratidao {
   }
   void InsertProduct(string initialInput=""){
    using(var form=new StyledDialogForm {Text="Cadastrar Produto",Width=1120,Height=820,MinimumSize=new Size(780,580),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=true,AutoScroll=true}){
-    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=13,Padding=new Padding(12,9,12,9),Margin=Padding.Empty,AutoScroll=true};
+    var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=17,Padding=new Padding(12,9,12,9),Margin=Padding.Empty,AutoScroll=true};
     panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     var barcode=new TextBox{Name="amzgInsertBarcode"};var ownCode=new CheckBox {Text="Não pesquisar este código na internet (opcional)",AutoSize=true};var name=new TextBox {Name="amzgInsertName",Multiline=false,Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top};var brand=new TextBox();var category=new TextBox();
     string initial=(initialInput??"").Trim();
@@ -1846,7 +1846,7 @@ namespace ArmazemGratidao {
      }finally{changingPricing=false;}
     };
     updateGain();
-    panel.Controls.Add(ownCode,1,12);
+    panel.Controls.Add(ownCode,1,13);
     var lookup=new Button {Text="Buscar dados do código",Width=190,Height=32};
     var lookupStatus=new Label {Text="Aceita código original ou próprio. A pesquisa online é opcional para códigos comerciais.",AutoSize=false,Dock=DockStyle.Fill,Margin=new Padding(3,3,3,3),ForeColor=Color.FromArgb(20,73,158)};
     bool lookingUp=false;
@@ -1902,15 +1902,32 @@ namespace ArmazemGratidao {
     barcode.CharacterCasing=CharacterCasing.Normal;
     lookup.Click+=async (s,e)=>{lastLookupCode="";await fetchProduct();};
     ownCode.CheckedChanged+=(s,e)=>{lookup.Enabled=!ownCode.Checked;lookupStatus.Text=ownCode.Checked?"Código salvo sem consulta online.":"Consulta online opcional para códigos comerciais.";};
-    for(int row=0;row<13;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?46:row==10?39:row==11?40:row==12?36:37));
+    // Acoes antigas restauradas, com funcoes reais e sem cobrir os campos.
+    var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoSize=false,WrapContents=true,Margin=new Padding(3,2,3,2)};
+    lookup.Text="Procurar";lookup.Width=110;
+    var verify=new Button{Text="Verificar",Width=110,Height=32};
+    verify.Click+=(sender,args)=>{
+     string code=barcode.Text.Trim();
+     if(code.Length==0){lookupStatus.Text="Informe um codigo para verificar.";barcode.Focus();return;}
+     string existing=LookupLocalProductName(code);
+     if(!string.IsNullOrWhiteSpace(existing)){lookupStatus.Text="Codigo ja cadastrado: "+existing;return;}
+     if(System.Text.RegularExpressions.Regex.IsMatch(code,@"^\d{12,14}$")&&!ValidBarcodeCheckDigit(code)){
+      lookupStatus.Text="Atencao: digito verificador do codigo nao confere.";return;
+     }
+     lookupStatus.Text="Codigo sem duplicidade local. Confira descricao, custo e preco antes de cadastrar.";
+    };
+    var refresh=new Button{Text="Atualizar dados",Width=135,Height=32};
+    refresh.Click+=async (sender,args)=>{lastLookupCode="";await fetchProduct();};
+    actions.Controls.Add(lookup);actions.Controls.Add(verify);actions.Controls.Add(refresh);
     panel.Controls.Add(lookupStatus,1,9);
-    panel.Controls.Add(lookup,1,10);
+    panel.Controls.Add(actions,1,10);
     var researchAtRegistration=new Button{Text="CENTRAL DE PESQUISA (3 BASES)",Width=265,Height=34};
     researchAtRegistration.Click+=(sender,args)=>OpenBarcodeResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     panel.Controls.Add(researchAtRegistration,1,11);
     var fiscalAtRegistration=new Button{Text="PESQUISA FISCAL / NCM",Width=240,Height=33};
     fiscalAtRegistration.Click+=(sender,args)=>OpenFiscalResearchCenter(barcode.Text.Trim(),name.Text.Trim());
     panel.Controls.Add(fiscalAtRegistration,1,12);
+    for(int row=0;row<17;row++)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,row==9?54:row==10?48:row==11||row==12?44:row==13?39:37));
 
     var save=new Button {Text="Cadastrar Produto",Width=166,Height=34,BackColor=Color.FromArgb(24,84,170),ForeColor=Color.White};
     save.Click+=(s,e)=>{
