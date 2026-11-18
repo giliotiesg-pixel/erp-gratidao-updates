@@ -548,9 +548,9 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(credit)return;
    try{
     using(var dialog=new StyledDialogForm{Text="Metas de vendas | acompanhamento diario e mensal",
-     Width=990,Height=690,MinimumSize=new Size(760,520),StartPosition=FormStartPosition.CenterParent,
+     Width=1120,Height=740,MinimumSize=new Size(780,540),StartPosition=FormStartPosition.CenterParent,
      BackColor=Color.FromArgb(238,245,253)}){
-     var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=58,Padding=new Padding(10,9,8,4),WrapContents=false};
+     var top=new FlowLayoutPanel{Dock=DockStyle.Top,Height=92,Padding=new Padding(12,10,8,6),WrapContents=true,AutoScroll=true,BackColor=Color.White};
      var month=new DateTimePicker{Format=DateTimePickerFormat.Custom,CustomFormat="MMMM yyyy",ShowUpDown=true,Width=185};
      var target=new NumericUpDown{DecimalPlaces=2,Maximum=100000000,ThousandsSeparator=true,Width=170};
      var save=new Button{Text="Salvar meta mensal",Width=160,Height=34};
@@ -559,11 +559,27 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      top.Controls.Add(month);
      top.Controls.Add(new Label{Text="Meta de vendas R$:",AutoSize=true,Padding=new Padding(8,8,0,0)});
      top.Controls.Add(target);top.Controls.Add(save);top.Controls.Add(refresh);
-     var totals=new Label{Dock=DockStyle.Top,Height=158,Padding=new Padding(15,10,8,6),
-      Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(24,66,128)};
+     var dashboard=new TableLayoutPanel{Dock=DockStyle.Top,Height=230,ColumnCount=4,RowCount=2,
+      Padding=new Padding(12,10,12,8),BackColor=Color.FromArgb(238,245,253)};
+     for(int i=0;i<4;i++)dashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25f));
+     for(int i=0;i<2;i++)dashboard.RowStyles.Add(new RowStyle(SizeType.Percent,50f));
+     var cards=new Label[8];
+     string[] captions={"META MENSAL","VENDIDO NO MES","ATINGIDO","FALTA PARA META",
+      "META DIARIA","ESPERADO ATE HOJE","MEDIA NECESSARIA / DIA","PROJECAO DO MES"};
+     for(int i=0;i<cards.Length;i++){
+      var card=new Label{Dock=DockStyle.Fill,Margin=new Padding(5),Padding=new Padding(12,10,6,6),
+       BackColor=Color.White,ForeColor=Color.FromArgb(22,75,160),
+       Font=new Font("Segoe UI",11,FontStyle.Bold),AutoEllipsis=false,
+       Text=captions[i]+Environment.NewLine+"R$ 0,00"};
+      cards[i]=card;dashboard.Controls.Add(card,i%4,i/4);
+     }
+     var detail=new Label{Dock=DockStyle.Top,Height=50,Padding=new Padding(14,6,10,4),
+      BackColor=Color.FromArgb(226,237,251),Font=new Font("Segoe UI",9.5f,FontStyle.Regular),
+      ForeColor=Color.FromArgb(35,66,105),AutoEllipsis=false};
      var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
       RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
-      BackgroundColor=Color.White,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
+      BackgroundColor=Color.White,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+      ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize};
      Action load=()=>{
       var first=new DateTime(month.Value.Year,month.Value.Month,1);
       int days=DateTime.DaysInMonth(first.Year,first.Month);
@@ -620,13 +636,14 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       decimal projection=elapsed>0?Math.Round(soldMonth/elapsed*days,2):0m;
       decimal remaining=Math.Max(0m,goal-soldMonth);
       decimal required=days>elapsed?Math.Round(remaining/(days-elapsed),2):remaining;
-      totals.Text="Meta mensal: R$ "+goal.ToString("N2")+"  |  Meta diaria media: R$ "+dailyGoal.ToString("N2")+
-       "\nVendido no mes: R$ "+soldMonth.ToString("N2")+"  |  Atingido: "+(goal>0?Math.Round(soldMonth/goal*100m,1):0m).ToString("N1")+"%"+
-       "  |  Falta: R$ "+remaining.ToString("N2")+
-       "\nEsperado ate hoje: R$ "+expected.ToString("N2")+"  |  Diferenca: R$ "+(soldMonth-expected).ToString("N2")+
-       "\nMedia necessaria por dia restante: R$ "+required.ToString("N2")+
-       "  |  Projecao do mes: R$ "+projection.ToString("N2")+
-       "\nBase: vendas registradas, sem vendas excluidas. A projecao usa os dias corridos decorridos.";
+      string[] values={goal.ToString("N2"),soldMonth.ToString("N2"),
+       (goal>0?Math.Round(soldMonth/goal*100m,1):0m).ToString("N1")+"%",
+       remaining.ToString("N2"),dailyGoal.ToString("N2"),expected.ToString("N2"),
+       required.ToString("N2"),projection.ToString("N2")};
+      for(int i=0;i<cards.Length;i++)
+       cards[i].Text=captions[i]+Environment.NewLine+(i==2?"":"R$ ")+values[i];
+      detail.Text="Diferenca para o esperado: R$ "+(soldMonth-expected).ToString("N2")+
+       "  |  Base: vendas registradas, excluindo vendas removidas. Projecao pelos dias corridos.";
      };
      save.Click+=(sender,args)=>{
       try{
@@ -643,7 +660,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      };
      refresh.Click+=(sender,args)=>load();
      month.ValueChanged+=(sender,args)=>load();
-     dialog.Controls.Add(grid);dialog.Controls.Add(totals);dialog.Controls.Add(top);
+     dialog.Controls.Add(grid);dialog.Controls.Add(detail);dialog.Controls.Add(dashboard);dialog.Controls.Add(top);
      load();dialog.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show("Nao foi possivel abrir as metas: "+ex.Message,"Metas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
