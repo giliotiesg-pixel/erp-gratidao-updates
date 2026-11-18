@@ -112,6 +112,69 @@ try{
  $form.Controls.Find('amzgSalesToday',$true)[0].PerformClick()
  [Windows.Forms.Application]::DoEvents()
  if($headerDay.Text -notmatch 'R\$\s*87[,.]72'){throw "Retorno ao dia atual incorreto: $($headerDay.Text)"}
+ # Abrir exatamente a janela Produtos da venda e verificar cabecalhos com
+ # resolucoes diferentes; o teste anterior so abria o modulo principal.
+ $factory=$salesType.GetMethod('BuildSaleItemsWindow',$flags)
+ if($null -eq $factory){throw 'Janela de produtos por venda nao permite teste real.'}
+ $detail=$factory.Invoke($form,[object[]]@([long]1924))
+ try{
+  $detail.Show($form)
+  [Windows.Forms.Application]::DoEvents()
+  $title=@($detail.Controls.Find('amzgSalesItemsHeader',$true))
+  $body=@($detail.Controls.Find('amzgSalesItemsBody',$true))
+  $rows=@($detail.Controls.Find('amzgSalesItemsGrid',$true))
+  $calc=@($detail.Controls.Find('amzgCalculatorShortcutBar',$false))
+  if($title.Count -ne 1 -or $body.Count -ne 1 -or
+     $rows.Count -ne 1 -or $calc.Count -ne 1){
+   throw 'Faltam cabecalho, tabela, corpo ou barra da calculadora da venda.'
+  }
+  $saleGrid=$rows[0]
+  foreach($w in @(670,850,1020)){
+   $detail.Size=[Drawing.Size]::new($w,560)
+   [Windows.Forms.Application]::DoEvents()
+   if(!$title[0].Visible -or !$saleGrid.Visible -or
+      !$saleGrid.ColumnHeadersVisible -or $saleGrid.ColumnHeadersHeight -lt 45){
+    throw "Venda secundaria $w pixels: titulos de colunas ocultos."
+   }
+   $headerY=$detail.PointToClient($title[0].PointToScreen([Drawing.Point]::Empty)).Y
+   $tableY=$detail.PointToClient($saleGrid.PointToScreen([Drawing.Point]::Empty)).Y
+   $calcY=$detail.PointToClient($calc[0].PointToScreen([Drawing.Point]::Empty)).Y
+   $calcBottom=$calcY+$calc[0].Height
+   if($headerY -lt $calcBottom -or
+      $tableY -lt $headerY+$title[0].Height){
+    throw "Venda secundaria $w pixels: calculadora, cabecalho e tabela sobrepostos."
+   }
+   $names=@('Código','Produto','Quantidade','Preço (R$)','Valor (R$)')
+   if($saleGrid.Rows.Count -ne 2 -or $saleGrid.Columns.Count -ne 5){
+    throw 'Venda secundaria: produtos ou colunas ausentes.'
+   }
+   foreach($n in $names){
+    $column=$saleGrid.Columns[$n]
+    if($null -eq $column -or !$column.Visible -or $column.Width -lt 80 -or
+       [string]::IsNullOrWhiteSpace($column.HeaderText)){
+     throw "Venda secundaria $w pixels: coluna $n escondida/sem titulo."
+    }
+   }
+   $last=$saleGrid.Columns['Valor (R$)']
+   $rect=$saleGrid.GetColumnDisplayRectangle($last.Index,$true)
+   if($rect.Width -lt 80 -or $rect.Right -gt $saleGrid.ClientSize.Width+2){
+    throw "Venda secundaria $w pixels: coluna Valor cortada."
+   }
+   Write-Host "ITENS DA VENDA OK: cabecalho, cinco colunas e botoes em $w pixels."
+  }
+  $detail.Size=[Drawing.Size]::new(850,560)
+  [Windows.Forms.Application]::DoEvents()
+  $pic=[Drawing.Bitmap]::new($detail.ClientSize.Width,$detail.ClientSize.Height)
+  try{
+   $detail.DrawToBitmap($pic,[Drawing.Rectangle]::new(
+    [Drawing.Point]::Empty,$detail.ClientSize))
+   $imagePath=Join-Path $folder 'Previa-Vendas-Produtos-Da-Venda.png'
+   $pic.Save($imagePath,[Drawing.Imaging.ImageFormat]::Png)
+   if((Get-Item $imagePath).Length -lt 5000){throw 'Previa do dialogo de venda vazia.'}
+  }finally{$pic.Dispose()}
+ }finally{
+  if($null -ne $detail){try{$detail.Close()}catch{};$detail.Dispose()}
+ }
  $snapshot=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
  try{
   $form.DrawToBitmap($snapshot,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
