@@ -1821,6 +1821,22 @@ namespace ArmazemGratidao {
        if(ReverseInvalidDeposit(id)){dlg.Close();ShowCustomerCreditHistory();}
       };
       bar.Controls.Add(reverse);
+      // Atalho unico para o fluxo comum: retirar credito selecionado.
+      // Credito nao utilizado: correcao para zero. Credito ja aplicado:
+      // estorno com conferencia das vendas afetadas e backup obrigatorio.
+      var removeCredit=new Button{Name="amzgFiadoRemoveCredit",Text="Retirar credito selecionado",Width=235,Height=32,
+       BackColor=Color.FromArgb(170,42,42),ForeColor=Color.White};
+      removeCredit.Click+=(sender,args)=>{
+       if(grid.CurrentRow==null){MessageBox.Show("Selecione o credito que deseja retirar.");return;}
+       long id=Convert.ToInt64(grid.CurrentRow.Cells["Registro"].Value);
+       string kind=Convert.ToString(grid.CurrentRow.Cells["Operacao"].Value);
+       if(kind!="DEPOSITO"&&kind!="AJUSTE_AUDITADO"){
+        MessageBox.Show("Selecione um deposito ou ajuste de credito. Para vendas pagas, use Reabrir venda.");return;
+       }
+       bool changed=kind=="DEPOSITO"?ReverseInvalidDeposit(id):CorrectCreditHistoryEntry(id);
+       if(changed){dlg.Close();ShowCustomerCreditHistory();}
+      };
+      bar.Controls.Add(removeCredit);
       var totals=new Label{Dock=DockStyle.Top,Height=66,Padding=new Padding(12,9,8,5),BackColor=Color.FromArgb(218,233,250),ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",11,FontStyle.Bold),Text="Credito inserido: R$ "+deposited.ToString("N2")+"    |    Credito abatido: R$ "+debited.ToString("N2")+"\nSaldo atual: R$ "+available.ToString("N2")+"    |    Limite de Fiado atual: "+limitDisplay};
       var adjust=new Button{Text="Ajustar saldo manualmente",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       adjust.Click+=(sender,args)=>{dlg.Close();AdjustCustomerCredit();};
