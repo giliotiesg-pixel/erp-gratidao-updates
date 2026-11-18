@@ -255,6 +255,25 @@ namespace ArmazemGratidao {
    split.Panel2.Controls.Add(selected);
    split.Panel2.Controls.Add(localNav);
    foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
+   // Acao por venda, disponivel tanto nas vendas pagas quanto nas vendas em aberto.
+   foreach(var table in new[]{openSales,paidSales}){
+    if(!table.Columns.Contains("ReabrirVenda")){
+     table.Columns.Add(new DataGridViewButtonColumn{
+      Name="ReabrirVenda",HeaderText="Correcao",Text="Reabrir venda",
+      UseColumnTextForButtonValue=true,Width=145,MinimumWidth=130,
+      AutoSizeMode=DataGridViewAutoSizeColumnMode.None});
+    }
+    table.CellContentClick+=(sender,args)=>{
+     if(args.RowIndex<0||args.ColumnIndex<0||
+      table.Columns[args.ColumnIndex].Name!="ReabrirVenda")return;
+     long saleId;
+     if(!table.Columns.Contains("venda")||
+      !long.TryParse(Convert.ToString(table.Rows[args.RowIndex].Cells["venda"].Value),out saleId)){
+      MessageBox.Show("Nao foi possivel identificar esta venda.");return;
+     }
+     if(ReopenSalePayments(saleId))SelectClient(customer);
+    };
+   }
    openSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=0;ShowSaleDetails();}};
    paidSales.CellDoubleClick+=(s,e)=>{if(e.RowIndex>=0){saleTabs.SelectedIndex=1;ShowSaleDetails();}};
    Controls.Add(split);
