@@ -344,10 +344,13 @@ jobs:
             dist/VALIDACAO-SHA256.txt
           retention-days: 30
 
-  # Publicacao so manual, depois de todos os testes.
+  # Publicar apenas com despacho manual ou commit explicito [release], sempre apos todos os testes.
   publicar_release:
     needs: compilar
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publicar_release == true
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.publicar_release == true) ||
+       (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')))
     runs-on: windows-latest
     permissions:
       contents: write
