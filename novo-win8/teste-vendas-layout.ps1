@@ -144,18 +144,19 @@ try{
       $tableY -lt $headerY+$title[0].Height){
     throw "Venda secundaria $w pixels: calculadora, cabecalho e tabela sobrepostos."
    }
-   $names=@('Código','Produto','Quantidade','Preço (R$)','Valor (R$)')
    if($saleGrid.Rows.Count -ne 2 -or $saleGrid.Columns.Count -ne 5){
     throw 'Venda secundaria: produtos ou colunas ausentes.'
    }
-   foreach($n in $names){
-    $column=$saleGrid.Columns[$n]
+   # Windows PowerShell 5.1 le scripts UTF-8 sem BOM usando codificacao ANSI.
+   # Validar indices e titulos efetivamente renderizados, sem literais acentuados.
+   for($i=0;$i -lt 5;$i++){
+    $column=$saleGrid.Columns[$i]
     if($null -eq $column -or !$column.Visible -or $column.Width -lt 80 -or
        [string]::IsNullOrWhiteSpace($column.HeaderText)){
-     throw "Venda secundaria $w pixels: coluna $n escondida/sem titulo."
+     throw "Venda secundaria $w pixels: coluna indice $i escondida/sem titulo."
     }
    }
-   $last=$saleGrid.Columns['Valor (R$)']
+   $last=$saleGrid.Columns[4]
    $rect=$saleGrid.GetColumnDisplayRectangle($last.Index,$true)
    if($rect.Width -lt 80 -or $rect.Right -gt $saleGrid.ClientSize.Width+2){
     throw "Venda secundaria $w pixels: coluna Valor cortada."
