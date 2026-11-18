@@ -78,6 +78,15 @@ try{
      throw "Botao ausente no novo formulario: $caption"
     }
    }
+   $fixed=@($dlg.Controls.Find('amzgInsertFixedFooter',$true))
+   if($fixed.Count -ne 1 -or $fixed[0].Parent -ne $dlg -or $fixed[0].Dock -ne [Windows.Forms.DockStyle]::Bottom){
+    throw 'Rodape Salvar/Cancelar deve ficar fixo na janela, fora da area rolavel.'
+   }
+   foreach($buttonName in @('amzgInsertSave','amzgInsertCancel')){
+    if(@($fixed[0].Controls.Find($buttonName,$true)).Count -ne 1){
+     throw "Botao obrigatorio ausente do rodape fixo: $buttonName"
+    }
+   }
    $barcode=@($dlg.Controls.Find('amzgInsertBarcode',$true))
    $name=@($dlg.Controls.Find('amzgInsertName',$true))
    if($barcode.Count -ne 1 -or $name.Count -ne 1){throw 'Campos de codigo ou descricao ausentes.'}
