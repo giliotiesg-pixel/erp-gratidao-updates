@@ -379,6 +379,14 @@ namespace ArmazemGratidao {
   static readonly System.Collections.Generic.HashSet<DataGridView> styled=new System.Collections.Generic.HashSet<DataGridView>();
   static void Apply(DataGridView table){
    if(table.IsDisposed||!styled.Add(table))return;
+   // Cabecalho de planilha padronizado: texto completo em ate duas linhas,
+   // nunca sobrepor os dados ou esconder colunas por falta de largura.
+   table.ColumnHeadersVisible=true;
+   table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+   table.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
+   table.ColumnHeadersDefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;
+   table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
+   table.ScrollBars=ScrollBars.Both;
    table.BorderStyle=BorderStyle.None;
    table.BackgroundColor=Color.White;
    table.EnableHeadersVisualStyles=false;
