@@ -127,6 +127,9 @@ namespace ArmazemGratidao {
    base.OnLoad(e);
    if(adjustInstalled)return;
    adjustInstalled=true;
+   // A janela principal ja possui seu proprio cabecalho. Nunca inserir
+   // outra barra sobre os indicadores e o menu do PDV.
+   if(this is MainForm||this is PdvForm||this is StartMenuPopup)return;
    var strip=new Panel{Name="amzgWindowAdjustment",Dock=DockStyle.Top,Height=32,
     BackColor=Color.FromArgb(226,237,251)};
    var adjust=new Button{Name="amzgAdjustWindow",Text="Ajustar janela",
