@@ -42,6 +42,7 @@ namespace ArmazemGratidao {
     CalculatorShortcut.Prepare(form);
     FiadoGlobalHeader.Prepare(form);
     SharedModuleHeaderLayout.Prepare(form);
+    SecondaryDialogContentGuard.Prepare(form);
     RoundedGridTheme.Prepare(form);
     MoneyDisplayPrecision.Prepare(form);
     ModuleVisualTheme.Prepare(form);
@@ -232,6 +233,42 @@ namespace ArmazemGratidao {
    form.ClientSizeChanged+=(sender,args)=>place();
    form.Shown+=(sender,args)=>place();
    place();
+  }
+ }
+ // Evita sobreposicao do cabecalho/calc e do conteudo nos dialogos
+ // secundarios que possuem exatamente uma area Dock.Fill principal.
+ // A regra vale para qualquer tela secundaria, sem nomes individuais.
+ static class SecondaryDialogContentGuard {
+  public static void Prepare(Form form){
+   if(!(form is StyledDialogForm)||form is MainForm||
+      form is FiadoClientesForm||form.Name=="amzgFiadoSaleDetailDialog")
+    return;
+   var toolbar=form.Controls.Find("amzgCalculatorShortcutBar",false)
+    .OfType<Panel>().FirstOrDefault(x=>x.Parent==form&&x.Dock==DockStyle.Top);
+   if(toolbar==null)return;
+   var contents=form.Controls.Cast<Control>()
+    .Where(c=>c!=toolbar&&c.Dock==DockStyle.Fill).ToArray();
+   if(contents.Length!=1)return;
+   // Janelas que tem outros paineis Dock.Top/Bottom usam seu layout proprio.
+   if(form.Controls.Cast<Control>().Any(c=>c!=toolbar&&c!=contents[0]&&
+       (c.Dock==DockStyle.Top||c.Dock==DockStyle.Bottom)))return;
+   var root=contents[0];
+   root.Dock=DockStyle.None;
+   root.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;
+   toolbar.Dock=DockStyle.None;
+   toolbar.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+   Action fit=()=>{
+    if(form.IsDisposed||root.IsDisposed||toolbar.IsDisposed)return;
+    var top=new Rectangle(0,0,Math.Max(1,form.ClientSize.Width),33);
+    var body=new Rectangle(0,33,Math.Max(1,form.ClientSize.Width),
+     Math.Max(1,form.ClientSize.Height-33));
+    if(toolbar.Bounds!=top)toolbar.Bounds=top;
+    if(root.Bounds!=body)root.Bounds=body;
+    toolbar.BringToFront();
+   };
+   form.ClientSizeChanged+=(sender,args)=>fit();
+   form.Load+=(sender,args)=>fit();
+   fit();
   }
  }
  // Botao comum em todas as janelas, sem cobrir campos ou menus.
