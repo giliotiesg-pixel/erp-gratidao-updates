@@ -1,9 +1,7 @@
 name: Compilar Armazem Gratidao Novo Windows 8
+# Diagnostico adicional sob demanda. O fluxo unificado e o unico
+# acionado automaticamente para novo-win8, evitando compilacoes duplicadas.
 on:
-  push:
-    paths:
-      - 'novo-win8/**'
-      - '.github/workflows/compilar-amzg-novo-win8.yml'
   workflow_dispatch:
 permissions:
   contents: read
