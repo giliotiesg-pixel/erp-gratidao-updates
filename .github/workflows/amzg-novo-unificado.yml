@@ -34,6 +34,9 @@ jobs:
       - name: Verificar contratos preventivos de regressao visual
         shell: powershell
         run: .\\novo-win8\\teste-contratos-regressao.ps1
+      - name: Validar versionamento e manifesto antes da compilacao
+        shell: powershell
+        run: .\\novo-win8\\teste-atualizacoes-versionamento.ps1
       - name: Reservar proxima build automaticamente
         if: github.ref == 'refs/heads/main'
         shell: pwsh
