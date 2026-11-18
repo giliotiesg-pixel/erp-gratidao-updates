@@ -37,6 +37,7 @@ namespace ArmazemGratidao {
    try{
     CompactFormDimensions.Prepare(form);
     WindowBoundsGuard.Prepare(form);
+    StandardDesktopWindows.Prepare(form);
     PdvShortcutButtons.Prepare(form);
     CalculatorShortcut.Prepare(form);
     FiadoGlobalHeader.Prepare(form);
@@ -48,6 +49,37 @@ namespace ArmazemGratidao {
     // Medir DEPOIS do tema final: negrito altera a largura renderizada.
     CompactModuleToolbars.Apply(form);
    }finally{form.ResumeLayout(true);}
+  }
+ }
+ // Padrao unico de janelas de escritorio, como visualizadores de documentos.
+ // Nao altera larguras dos campos ou a estrutura de cada formulario.
+ static class StandardDesktopWindows {
+  public static void Prepare(Form form){
+   if(form==null||form.IsDisposed||form is StartMenuPopup||
+      form is ModernCalculatorForm)return;
+   if(form.FormBorderStyle==FormBorderStyle.FixedDialog||
+      form.FormBorderStyle==FormBorderStyle.FixedSingle||
+      form.FormBorderStyle==FormBorderStyle.Fixed3D)
+    return; // Janelas intencionalmente fixas mantem seu comportamento.
+   if(form.FormBorderStyle!=FormBorderStyle.Sizable&&
+      form.FormBorderStyle!=FormBorderStyle.SizableToolWindow)return;
+   form.MaximizeBox=true;
+   form.MinimizeBox=true;
+   form.AutoScaleMode=AutoScaleMode.Font;
+   // A rolagem fica nos paineis de conteudo, nao na janela inteira,
+   // evitando barras duplicadas e botoes deslocados.
+   form.Shown+=(sender,args)=>{
+    if(form.IsDisposed)return;
+    var work=Screen.FromControl(form).WorkingArea;
+    if(form.WindowState!=FormWindowState.Normal)return;
+    int w=Math.Min(form.Width,Math.Max(320,work.Width-16));
+    int h=Math.Min(form.Height,Math.Max(240,work.Height-16));
+    if(form.Width!=w||form.Height!=h)form.Size=new Size(w,h);
+    if(form.Left<work.Left||form.Top<work.Top||
+       form.Right>work.Right||form.Bottom>work.Bottom)
+     form.Location=new Point(work.Left+(work.Width-form.Width)/2,
+      work.Top+(work.Height-form.Height)/2);
+   };
   }
  }
  // Exibicao monetaria: sempre duas casas, sem arredondar pesos ou quantidades.
