@@ -1879,23 +1879,26 @@ namespace ArmazemGratidao {
      foreach(DataRow row in payments.Rows)row["Reabrir"]=false;
      using(var dialog=new StyledDialogForm{Text="Reabrir venda #"+saleId+" - "+name,Width=940,Height=520,
       MinimumSize=new Size(680,420),StartPosition=FormStartPosition.CenterParent}){
-      var grid=new DataGridView{Dock=DockStyle.Fill,DataSource=payments,AllowUserToAddRows=false,
-       AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowHeadersVisible=false,BackgroundColor=Color.White};
-      // Colunas podem ser geradas somente apos o binding. Nunca acessar colunas nulas.
-      grid.AutoGenerateColumns=true;
-      Action configurePayments=()=>{
-       if(grid.IsDisposed)return;
-       foreach(DataGridViewColumn column in grid.Columns)
-        column.ReadOnly=column.Name!="Reabrir";
-       var idColumn=grid.Columns["Registro"];
-       if(idColumn!=null)idColumn.Visible=false;
-       var noteColumn=grid.Columns["Observacao"];
-       if(noteColumn!=null)noteColumn.FillWeight=180;
-       var selectColumn=grid.Columns["Reabrir"];
-       if(selectColumn!=null){selectColumn.DisplayIndex=0;selectColumn.Width=85;selectColumn.FillWeight=65;}
-      };
-      grid.DataBindingComplete+=(sender,args)=>configurePayments();
-      configurePayments();
+      // Colunas explicitas: nao depender da geracao automatica, que podia
+      // deixar a tabela sem caixas visiveis apos a aplicacao do tema.
+      var grid=new DataGridView{Name="amzgFiadoReopenPayments",Dock=DockStyle.Fill,
+       AutoGenerateColumns=false,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
+       ReadOnly=false,RowHeadersVisible=false,BackgroundColor=Color.White,
+       AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+       SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,
+       ColumnHeadersVisible=true,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+       RowTemplate={Height=32}};
+      grid.Columns.Add(new DataGridViewCheckBoxColumn{Name="Reabrir",HeaderText="Reabrir",
+       DataPropertyName="Reabrir",ReadOnly=false,FillWeight=60,MinimumWidth=85});
+      grid.Columns.Add(new DataGridViewTextBoxColumn{Name="Data",HeaderText="Data",
+       DataPropertyName="Data",ReadOnly=true,FillWeight=110});
+      grid.Columns.Add(new DataGridViewTextBoxColumn{Name="Valor",HeaderText="Valor (R$)",
+       DataPropertyName="Valor",ReadOnly=true,FillWeight=85,DefaultCellStyle={Format="N2"}});
+      grid.Columns.Add(new DataGridViewTextBoxColumn{Name="Forma",HeaderText="Forma de pagamento",
+       DataPropertyName="Forma",ReadOnly=true,FillWeight=135});
+      grid.Columns.Add(new DataGridViewTextBoxColumn{Name="Observacao",HeaderText="Observacao",
+       DataPropertyName="Observacao",ReadOnly=true,FillWeight=190});
+      grid.DataSource=payments;
       grid.CurrentCellDirtyStateChanged+=(sender,args)=>{
        if(grid.IsCurrentCellDirty)grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
       };
