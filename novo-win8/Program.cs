@@ -195,7 +195,10 @@ namespace ArmazemGratidao {
   public static void Prepare(Form form){
    if(form==null||form.IsDisposed||form is MainForm||form is PdvForm||
      form is ConsultaForm||form is FiadoClientesForm||
-     form is ModernCalculatorForm||form is StartMenuPopup)return;
+     form is ModernCalculatorForm||form is StartMenuPopup||
+     form.Name=="amzgFiadoSaleDetailDialog")return;
+   // A janela de detalhes ja tem cabecalho e rodape proprios:
+   // nao envolve-la num painel com AutoScroll, que corta o titulo ao focar a grade.
    var bar=form.Controls.Find("amzgBackBar",true).OfType<Panel>()
     .FirstOrDefault(p=>p.Parent==form&&p.Dock==DockStyle.Top);
    if(bar==null||form.Controls.Find("amzgModuleContentHost",false).Length>0)return;
