@@ -42,12 +42,50 @@ namespace ArmazemGratidao {
     FiadoGlobalHeader.Prepare(form);
     SharedModuleHeaderLayout.Prepare(form);
     RoundedGridTheme.Prepare(form);
+    MoneyDisplayPrecision.Prepare(form);
     ModuleVisualTheme.Prepare(form);
     ButtonTextVisibility.Prepare(form);
     // Medir DEPOIS do tema final: negrito altera a largura renderizada.
     CompactModuleToolbars.Apply(form);
    }finally{form.ResumeLayout(true);}
   }
+ }
+ // Exibicao monetaria: sempre duas casas, sem arredondar pesos ou quantidades.
+ static class MoneyDisplayPrecision {
+  static readonly string[] moneyNames={"preco","price","custo","cost","valor","total","saldo","lucro","troco","desconto","taxa","amount","recebido","pago","meta","markup_valor"};
+  static readonly string[] nonMoney={"quantidade","quantity","qtd","peso","weight","percent","porcent","markup","margem","estoque","stock","codigo","code","id","numero"};
+  static bool IsMoney(string name){
+   string value=(name??"").ToLowerInvariant();
+   if(nonMoney.Any(x=>value.Contains(x)))return false;
+   return moneyNames.Any(x=>value.Contains(x));
+  }
+  static void FormatGrid(DataGridView grid){
+   if(grid==null||grid.IsDisposed)return;
+   foreach(DataGridViewColumn column in grid.Columns){
+    if(column is DataGridViewButtonColumn||column is DataGridViewCheckBoxColumn)continue;
+    string key=(column.DataPropertyName??"")+" "+(column.Name??"")+" "+(column.HeaderText??"");
+    if(IsMoney(key))column.DefaultCellStyle.Format="N2";
+   }
+  }
+  static void Watch(Control parent){
+   foreach(Control child in parent.Controls){
+    var grid=child as DataGridView;
+    if(grid!=null){
+     grid.DataBindingComplete+=(sender,args)=>FormatGrid(grid);
+     grid.ColumnAdded+=(sender,args)=>FormatGrid(grid);
+     FormatGrid(grid);
+    }else Watch(child);
+   }
+   parent.ControlAdded+=(sender,args)=>{
+    var grid=args.Control as DataGridView;
+    if(grid!=null){
+     grid.DataBindingComplete+=(s,e)=>FormatGrid(grid);
+     grid.ColumnAdded+=(s,e)=>FormatGrid(grid);
+     FormatGrid(grid);
+    }else Watch(args.Control);
+   };
+  }
+  public static void Prepare(Form form){Watch(form);}
  }
  // Modulos e dialogos recebem o tema na primeira Load, antes do Paint.
  public class StyledDialogForm : Form {
