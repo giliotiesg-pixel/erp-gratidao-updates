@@ -504,13 +504,13 @@ foreach($width in @(670,840,1080)){
  try{
   $sub.Text='Verificacao de janela secundaria'
   $sub.Size=[Drawing.Size]::new($width,580)
-  $host=[Windows.Forms.TableLayoutPanel]::new()
-  $host.Name='amzgTestSecondaryHost'
-  $host.Dock=[Windows.Forms.DockStyle]::Fill
-  $host.ColumnCount=1;$host.RowCount=2
-  $host.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new([Windows.Forms.SizeType]::Percent,100))
-  $host.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Absolute,66))
-  $host.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Percent,100))
+  $secondaryLayout=[Windows.Forms.TableLayoutPanel]::new()
+  $secondaryLayout.Name='amzgTestSecondaryHost'
+  $secondaryLayout.Dock=[Windows.Forms.DockStyle]::Fill
+  $secondaryLayout.ColumnCount=1;$secondaryLayout.RowCount=2
+  $secondaryLayout.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new([Windows.Forms.SizeType]::Percent,100))
+  $secondaryLayout.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Absolute,66))
+  $secondaryLayout.RowStyles.Add([Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::Percent,100))
   $headline=[Windows.Forms.Label]::new()
   $headline.Text='CABECALHO DE CONSULTA - JANELA SECUNDARIA'
   $headline.Font=[Drawing.Font]::new('Segoe UI',12,[Drawing.FontStyle]::Bold)
@@ -523,8 +523,8 @@ foreach($width in @(670,840,1080)){
   @('PRODUTO','QUANTIDADE','TOTAL') | ForEach-Object -Begin {$idx=0} -Process {
    $results.Columns[$idx].HeaderText=$_;$idx++
   }
-  $host.Controls.Add($headline,0,0);$host.Controls.Add($results,0,1)
-  $sub.Controls.Add($host)
+  $secondaryLayout.Controls.Add($headline,0,0);$secondaryLayout.Controls.Add($results,0,1)
+  $sub.Controls.Add($secondaryLayout)
   $sub.Show();[Windows.Forms.Application]::DoEvents()
   $topBar=@($sub.Controls.Find('amzgCalculatorShortcutBar',$false))
   if($topBar.Count -ne 1 -or !$headline.Visible -or !$results.Visible){
