@@ -1152,11 +1152,7 @@ namespace ArmazemGratidao {
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
       // O manifesto novo entrega ZIP e usa o atualizador independente.
        // O manifesto antigo permanece fixo no instalador UNICO para versões legadas.
-       try{
-        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json"));
-       }catch(WebException){
-        manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8.json"));
-       }
+       manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json"));
      }
      var manifest=new JavaScriptSerializer().DeserializeObject(manifestJson) as System.Collections.Generic.Dictionary<string,object>;
      if(manifest==null||!manifest.ContainsKey("build")||!manifest.ContainsKey("tag")||!manifest.ContainsKey("asset")||!manifest.ContainsKey("url")||!manifest.ContainsKey("sha256"))
@@ -1180,12 +1176,16 @@ namespace ArmazemGratidao {
      remoteDisplayVersion=manifest.ContainsKey("version")?Convert.ToString(manifest["version"]):"1.0";
      if(!System.Text.RegularExpressions.Regex.IsMatch(remoteDisplayVersion??"", @"^\d{1,2}\.\d{1,2}$"))
       throw new Exception("Número da versão publicado é inválido.");
-    }catch(WebException ex){
+    }catch(Exception ex){
+     // Manifesto legado, incompleto ou temporariamente inacessivel:
+     // verificar releases validos sem bloquear o usuario com numero antigo.
      alternativeError=ex.Message;
     }
-    // Compatibilidade: se o manifesto nao estiver acessivel, usar API de Releases.
-    if(release==null){
-     status.Text="Consultando versoes no GitHub...";
+    // Na verificacao manual, comparar o manifesto com os releases publicados.
+    // Um manifesto em cache nao pode esconder uma build mais recente.
+    // Se a API falhar mas o manifesto estiver valido, continuar com ele.
+    if(manual||release==null){
+     status.Text="Conferindo builds publicadas no GitHub...";
      string json=null;
      for(int attempt=1;attempt<=3;attempt++){
       try{
@@ -1198,22 +1198,45 @@ namespace ArmazemGratidao {
       }catch(WebException ex){
        var response=ex.Response as HttpWebResponse;
        int code=response==null?0:(int)response.StatusCode;
-       if(attempt==3||(code!=502&&code!=503&&code!=504&&code!=429))
-        throw new Exception("Falharam a consulta alternativa e a API do GitHub ("+(code==0?ex.Message:code.ToString())+"). Consulte as versoes pelo navegador; o programa e seus dados permanecem intactos.",ex);
-       status.Text="Servidor temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
+       if(attempt==3||(code!=502&&code!=503&&code!=504&&code!=429)){
+        if(release==null)
+         throw new Exception("Nao foi possivel consultar o manifesto nem os releases do GitHub. Nenhum dado foi alterado. "+ex.Message,ex);
+        alternativeError=ex.Message;
+        break;
+       }
+       status.Text="GitHub temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
        await Task.Delay(1500*attempt);
       }
      }
-     var releases=new JavaScriptSerializer().DeserializeObject(json) as object[];
-     if(releases==null)throw new Exception("Lista de versoes invalida.");
-     foreach(object obj in releases){
-      var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
-      if(candidate==null||!candidate.ContainsKey("tag_name"))continue;
-      if(candidate.ContainsKey("draft")&&Convert.ToBoolean(candidate["draft"]))continue;
-      if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
-      string tag=Convert.ToString(candidate["tag_name"]);
-      int build;
-      if(tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&int.TryParse(tag.Substring(prefix.Length),out build)&&build>remoteBuild){
+     if(!string.IsNullOrEmpty(json)){
+      object[] releases=null;
+      try{releases=new JavaScriptSerializer().DeserializeObject(json) as object[];}
+      catch(Exception ex){if(release==null)throw new Exception("Lista de releases invalida.",ex);alternativeError=ex.Message;}
+      if(releases==null&&release==null)throw new Exception("Nenhuma lista valida de atualizacoes foi recebida.");
+      if(releases!=null)foreach(object obj in releases){
+       var candidate=obj as System.Collections.Generic.Dictionary<string,object>;
+       if(candidate==null||!candidate.ContainsKey("tag_name")||!candidate.ContainsKey("assets"))continue;
+       if(candidate.ContainsKey("draft")&&Convert.ToBoolean(candidate["draft"]))continue;
+       if(candidate.ContainsKey("prerelease")&&Convert.ToBoolean(candidate["prerelease"]))continue;
+       string tag=Convert.ToString(candidate["tag_name"]);
+       if(string.IsNullOrEmpty(tag)||!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase))continue;
+       int build;
+       if(!int.TryParse(tag.Substring(prefix.Length),out build)||build<=remoteBuild)continue;
+       var candidateAssets=candidate["assets"] as object[];
+       if(candidateAssets==null)continue;
+       bool validPackage=false;
+       foreach(object entry in candidateAssets){
+        var item=entry as System.Collections.Generic.Dictionary<string,object>;
+        if(item==null||!item.ContainsKey("name")||!item.ContainsKey("digest")||!item.ContainsKey("browser_download_url"))continue;
+        string name=Convert.ToString(item["name"]);
+        string hash=Convert.ToString(item["digest"]);
+        string download=Convert.ToString(item["browser_download_url"]);
+        if((name==patchZip||name==officialSetup||name==legacySetup)&&
+           hash!=null&&hash.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)&&
+           hash.Length==71&&hash.Substring(7).All(Uri.IsHexDigit)&&
+           download==updateRepo+tag+"/"+name){validPackage=true;break;}
+       }
+       if(!validPackage)continue;
        remoteBuild=build;release=candidate;remoteDisplayVersion="";
       }
      }
