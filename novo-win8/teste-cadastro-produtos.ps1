@@ -64,20 +64,25 @@ try{
    if($dlg.Text -ne 'Cadastrar Produto' -or $dlg.Width -gt $work.Width -or $dlg.Height -gt $work.Height){
     throw 'Cadastro deve manter o titulo e caber no monitor, sem limite compacto antigo.'
    }
-   $layout=$price.Parent.Parent
-   $actions=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.FlowLayoutPanel] -and $layout.GetRow($_) -eq 10})
-   $register=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.Button] -and $_.Text -eq 'Cadastrar Produto'})
-   if($actions.Count -ne 1 -or $register.Count -ne 1){throw 'Botoes de acoes ou cadastro ausentes.'}
-   foreach($caption in @('Procurar','Verificar','Atualizar dados')){
-    if(@($actions[0].Controls | Where-Object {$_.Text -eq $caption}).Count -ne 1){
-     throw "Botao antigo nao restaurado: $caption"
+   $layout=$price.Parent.Parent.Parent
+   $buttons=New-Object 'System.Collections.Generic.List[System.Windows.Forms.Button]'
+   $walk=$null
+   $walk={
+    param($node)
+    if($node -is [Windows.Forms.Button]){$buttons.Add($node)}
+    foreach($child in $node.Controls){& $walk $child}
+   }
+   & $walk $dlg
+   foreach($caption in @('Procurar','Verificar','Atualizar dados','Cadastrar Produto','Cancelar')){
+    if(@($buttons | Where-Object {$_.Text -eq $caption}).Count -ne 1){
+     throw "Botao ausente no novo formulario: $caption"
     }
    }
-   if($layout.GetRow($register[0]) -le 13){throw 'Salvar cobre as pesquisas ou o campo de codigo proprio.'}
-   $own=@($layout.Controls | Where-Object {$_ -is [Windows.Forms.CheckBox] -and $_.Text -like 'Não pesquisar*'})
-   if($own.Count -ne 1 -or $layout.GetRow($own[0]) -ne 13){
-    throw 'Opcao de codigo proprio coberta por outra acao.'
-   }
+   $barcode=@($dlg.Controls.Find('amzgInsertBarcode',$true))
+   $name=@($dlg.Controls.Find('amzgInsertName',$true))
+   if($barcode.Count -ne 1 -or $name.Count -ne 1){throw 'Campos de codigo ou descricao ausentes.'}
+   if($barcode[0].Width -gt 260){throw 'Campo codigo de barras longo demais.'}
+   if($name[0].Width -lt $barcode[0].Width){throw 'Descricao deve ser mais larga que codigo.'}
    $script:done=$true
   }catch{$script:errorMessage=$_.Exception.Message}
   finally{
