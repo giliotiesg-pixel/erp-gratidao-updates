@@ -1057,34 +1057,202 @@ namespace ArmazemGratidao {
    }catch(Exception ex){items.DataSource=null;payments.DataSource=null;MessageBox.Show(ex.Message,"Erro ao consultar venda");}
   }
   void ShowSaleDetails(){
-   if(saleTabs!=null && saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
+   if(saleTabs!=null && saleTabs.SelectedIndex==2){
+    MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;
+   }
    DataGridView view=SelectedSaleGrid();
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda para consultar.");return;}
    try{
-    var id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
-    var work=Screen.FromControl(this).WorkingArea;
-    var form=new StyledDialogForm {Text="Venda #"+id+" | Produtos e pagamentos",
-     Width=Math.Min(620,Math.Max(370,work.Width-28)),Height=Math.Min(450,Math.Max(305,work.Height-32)),
-     MinimumSize=new Size(360,300),StartPosition=FormStartPosition.CenterParent,
-     FormBorderStyle=FormBorderStyle.Sizable};
-    var tabs=new TabControl {Dock=DockStyle.Fill};
-    var items=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-    items.DataSource=Query("SELECT id,name AS produto,quantity AS quantidade,unit_price AS preco,total AS total FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
-    var payments=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
-    payments.DataSource=Query("SELECT paid_at AS data,payment_method AS forma,amount AS valor FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
-    var a=new TabPage("Itens da venda");a.Controls.Add(items);var b=new TabPage("Pagamentos anteriores");b.Controls.Add(payments);
-    tabs.TabPages.Add(a);tabs.TabPages.Add(b);form.Controls.Add(tabs);
-    var edit=new Button {Text="Editar item selecionado (com auditoria)",Dock=DockStyle.Bottom,Height=42,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};
-    edit.Click+=(s,e)=>{if(items.CurrentRow==null){MessageBox.Show("Selecione um item da venda.");return;}long itemId=Convert.ToInt64(items.CurrentRow.Cells["id"].Value);form.Close();EditSaleItem(id,itemId);};form.Controls.Add(edit);
-    var reopen=new Button {Text="Corrigir baixa / Voltar ao Fiado",Dock=DockStyle.Bottom,Height=42,
-     BackColor=Color.FromArgb(155,55,35),ForeColor=Color.White};
-    reopen.Click+=(s,e)=>{
-     form.Close();
-     ReopenSalePayments(id);
-    };
-    form.Controls.Add(reopen);
-    using(form)form.ShowDialog(this);
-   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta");}
+    long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
+    using(var form=BuildSaleDetailsWindow(id))form.ShowDialog(this);
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Erro na consulta",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  // Janela testavel isoladamente: permite medir cabecalho, tabela e rodape
+  // antes de abrir um dialogo modal, inclusive em monitores menores.
+  internal Form BuildSaleDetailsWindow(long id){
+   var saleRows=Query(
+    "SELECT s.id,s.created_at,s.customer_name,s.payment_method,s.gross_total,"+
+    "COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido "+
+    "FROM sales s WHERE s.id=@sale","@sale",id);
+   if(saleRows.Rows.Count!=1)throw new InvalidOperationException("Venda nao encontrada.");
+   DataRow sale=saleRows.Rows[0];
+   string name=Convert.ToString(sale["customer_name"]);
+   if(string.IsNullOrWhiteSpace(name))name="SEM CLIENTE";
+   string date=Convert.ToString(sale["created_at"]);
+   string paymentMethod=Convert.ToString(sale["payment_method"]);
+   decimal total=Convert.ToDecimal(sale["gross_total"]);
+   decimal received=Convert.ToDecimal(sale["recebido"]);
+   decimal pending=Math.Max(0m,total-received);
+   var screen=Screen.FromControl(this).WorkingArea;
+   int windowWidth=Math.Min(1100,Math.Max(640,screen.Width-52));
+   int windowHeight=Math.Min(675,Math.Max(460,screen.Height-70));
+   var form=new StyledDialogForm {
+    Name="amzgFiadoSaleDetailDialog",
+    Text="Venda #"+id+" | Produtos e pagamentos",
+    Width=windowWidth,Height=windowHeight,
+    MinimumSize=new Size(Math.Min(640,windowWidth),Math.Min(460,windowHeight)),
+    StartPosition=FormStartPosition.CenterParent,
+    AutoScaleMode=AutoScaleMode.Font,
+    Font=new Font("Segoe UI",10f),
+    FormBorderStyle=FormBorderStyle.Sizable,
+    BackColor=Color.FromArgb(245,249,254)
+   };
+   var layout=new TableLayoutPanel {
+    Name="amzgFiadoSaleDetailLayout",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=3,Padding=new Padding(10,8,10,8),
+    Margin=Padding.Empty,BackColor=Color.FromArgb(245,249,254)
+   };
+   layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,112f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,56f));
+
+   var heading=new TableLayoutPanel {
+    Name="amzgFiadoSaleDetailHeader",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=3,Padding=new Padding(12,5,12,4),
+    BackColor=Color.FromArgb(229,239,253),
+    Margin=new Padding(0,0,0,8)
+   };
+   heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
+   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,34f));
+   heading.RowStyles.Add(new RowStyle(SizeType.Absolute,30f));
+   heading.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
+   var title=new Label{
+    Name="amzgFiadoSaleDetailTitle",
+    Text="VENDA #"+id+"  |  PRODUTOS E PAGAMENTOS",
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+    Font=new Font("Segoe UI",13,FontStyle.Bold),
+    ForeColor=Color.FromArgb(20,69,147),AutoEllipsis=true
+   };
+   var details=new Label{
+    Name="amzgFiadoSaleDetailCustomer",
+    Text="CLIENTE: "+name+"     DATA: "+date+"     FORMA: "+paymentMethod,
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+    Font=new Font("Segoe UI",9.5f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(42,69,105),AutoEllipsis=true
+   };
+   var amounts=new Label{
+    Name="amzgFiadoSaleDetailAmounts",
+    Text="TOTAL: R$ "+total.ToString("N2")+"     RECEBIDO: R$ "+
+     received.ToString("N2")+"     EM ABERTO: R$ "+pending.ToString("N2"),
+    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+    Font=new Font("Segoe UI",11f,FontStyle.Bold),
+    ForeColor=Color.FromArgb(171,44,58),AutoEllipsis=true
+   };
+   heading.Controls.Add(title,0,0);
+   heading.Controls.Add(details,0,1);
+   heading.Controls.Add(amounts,0,2);
+
+   var tabs=new TabControl{
+    Name="amzgFiadoSaleDetailTabs",Dock=DockStyle.Fill,
+    Font=new Font("Segoe UI",10f,FontStyle.Bold),
+    Margin=Padding.Empty
+   };
+   var items=new DataGridView{
+    Name="amzgFiadoSaleDetailItems",
+    Dock=DockStyle.Fill,ReadOnly=true,
+    AllowUserToAddRows=false,AllowUserToDeleteRows=false,
+    RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+    MultiSelect=false,ScrollBars=ScrollBars.Both,
+    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+    ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+    ColumnHeadersHeight=37,RowTemplate={Height=31},
+    BackgroundColor=Color.White,BorderStyle=BorderStyle.None,
+    Font=new Font("Segoe UI",10f)
+   };
+   items.DataBindingComplete+=(sender,args)=>{
+    // O tema compartilhado nao pode anular o preenchimento da largura.
+    items.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+    if(items.Columns.Contains("id"))items.Columns["id"].Visible=false;
+    if(items.Columns.Contains("produto")){
+     var col=items.Columns["produto"];col.HeaderText="PRODUTO";
+     col.MinimumWidth=200;col.FillWeight=53;
+    }
+    if(items.Columns.Contains("quantidade")){
+     var col=items.Columns["quantidade"];col.HeaderText="QUANTIDADE";
+     col.MinimumWidth=96;col.FillWeight=15;col.DefaultCellStyle.Format="0.###";
+    }
+    if(items.Columns.Contains("preco")){
+     var col=items.Columns["preco"];col.HeaderText="PREÇO UNITÁRIO";
+     col.MinimumWidth=112;col.FillWeight=16;col.DefaultCellStyle.Format="N2";
+    }
+    if(items.Columns.Contains("total")){
+     var col=items.Columns["total"];col.HeaderText="TOTAL R$";
+     col.MinimumWidth=105;col.FillWeight=16;col.DefaultCellStyle.Format="N2";
+    }
+   };
+   var payments=new DataGridView {
+    Name="amzgFiadoSaleDetailPayments",
+    Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
+    RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+    MultiSelect=false,ScrollBars=ScrollBars.Both,
+    AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+    ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+    ColumnHeadersHeight=37,RowTemplate={Height=31},
+    BackgroundColor=Color.White,BorderStyle=BorderStyle.None,
+    Font=new Font("Segoe UI",10f)
+   };
+   payments.DataBindingComplete+=(sender,args)=>{
+    payments.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+    if(payments.Columns.Contains("data")){
+     var col=payments.Columns["data"];col.HeaderText="DATA DO PAGAMENTO";
+     col.MinimumWidth=180;col.FillWeight=42;
+    }
+    if(payments.Columns.Contains("forma")){
+     var col=payments.Columns["forma"];col.HeaderText="FORMA";
+     col.MinimumWidth=150;col.FillWeight=36;
+    }
+    if(payments.Columns.Contains("valor")){
+     var col=payments.Columns["valor"];col.HeaderText="VALOR R$";
+     col.MinimumWidth=120;col.FillWeight=22;col.DefaultCellStyle.Format="N2";
+    }
+   };
+   var itemPage=new TabPage("Produtos da venda"){Padding=new Padding(5)};
+   var paymentPage=new TabPage("Pagamentos recebidos"){Padding=new Padding(5)};
+   itemPage.Controls.Add(items);paymentPage.Controls.Add(payments);
+   tabs.TabPages.Add(itemPage);tabs.TabPages.Add(paymentPage);
+   items.DataSource=Query(
+    "SELECT id,name AS produto,quantity AS quantidade,unit_price AS preco,total AS total "+
+    "FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
+   payments.DataSource=Query(
+    "SELECT paid_at AS data,payment_method AS forma,amount AS valor "+
+    "FROM credit_payments WHERE sale_id=@sale ORDER BY paid_at,id","@sale",id);
+
+   var footer=new FlowLayoutPanel{
+    Name="amzgFiadoSaleDetailFooter",Dock=DockStyle.Fill,
+    FlowDirection=FlowDirection.RightToLeft,WrapContents=false,AutoScroll=true,
+    Padding=new Padding(7,7,7,3),Margin=Padding.Empty
+   };
+   var close=new Button{
+    Name="amzgFiadoSaleDetailClose",Text="Fechar",
+    Width=104,Height=36,BackColor=Color.FromArgb(80,98,128),
+    ForeColor=Color.White,Font=new Font("Segoe UI",9f,FontStyle.Bold)
+   };
+   close.Click+=(s,e)=>form.Close();
+   var reopen=new Button{
+    Name="amzgFiadoSaleDetailReopen",
+    Text="Corrigir baixa / Voltar ao Fiado",Width=220,Height=36,
+    BackColor=Color.FromArgb(185,53,69),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold)
+   };
+   reopen.Click+=(s,e)=>{form.Close();ReopenSalePayments(id);};
+   var edit=new Button{
+    Name="amzgFiadoSaleDetailEdit",
+    Text="Editar produto selecionado",Width=225,Height=36,
+    BackColor=Color.FromArgb(24,82,157),ForeColor=Color.White,
+    Font=new Font("Segoe UI",9f,FontStyle.Bold)
+   };
+   edit.Click+=(s,e)=>{
+    if(tabs.SelectedIndex!=0||items.CurrentRow==null){
+     MessageBox.Show("Selecione um produto na aba Produtos da venda.");return;
+    }
+    long itemId=Convert.ToInt64(items.CurrentRow.Cells["id"].Value);
+    form.Close();EditSaleItem(id,itemId);
+   };
+   footer.Controls.Add(close);footer.Controls.Add(reopen);footer.Controls.Add(edit);
+   layout.Controls.Add(heading,0,0);layout.Controls.Add(tabs,0,1);
+   layout.Controls.Add(footer,0,2);form.Controls.Add(layout);
+   return form;
   }
   void EditSaleItem(long saleId,long selectedItemId){
    try{
