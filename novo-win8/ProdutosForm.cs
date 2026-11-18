@@ -2018,7 +2018,12 @@ namespace ArmazemGratidao {
     cancel.Click+=(sender,args)=>form.Close();
     footer.Controls.Add(cancel);footer.Controls.Add(save);
     panel.Controls.Add(footer,0,saveRow);
-    form.Shown+=(s,e)=>{\n     // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.\n     panel.AutoScrollPosition=new Point(0,0);\n     barcode.Focus();\n     panel.AutoScrollPosition=new Point(0,0);\n    };
+    form.Shown+=(s,e)=>{
+     // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.
+     panel.AutoScrollPosition=new Point(0,0);
+     barcode.Focus();
+     panel.AutoScrollPosition=new Point(0,0);
+    };
     if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
    }
   }
