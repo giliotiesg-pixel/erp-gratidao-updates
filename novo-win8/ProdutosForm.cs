@@ -1270,7 +1270,12 @@ namespace ArmazemGratidao {
        panel.Controls.Add(new Label{Text="Simular lucro",AutoSize=true},0,11);
        panel.Controls.Add(ProfitCalculator(cost,price,stock),1,11);
        panel.Controls.Add(save,1,12);
-       foreach(Control field in fields){field.Margin=new Padding(3,4,3,4);field.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top;}
+       foreach(Control field in fields){
+        field.Margin=new Padding(3,4,3,4);
+        field.Anchor=field==name?AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top:AnchorStyles.Left|AnchorStyles.Top;
+       }
+       code.Width=260;stock.Width=160;addQty.Width=160;cost.Width=160;price.Width=160;
+       brand.Width=270;category.Width=270;expiry.Width=190;
        name.MinimumSize=new Size(250,25);
        StyleDialog(form,panel);AttachProductCalculator(form,panel,cost,price);AttachRealPricing(form,cost,price);
        if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(addQty.Value>0)AddQuantityForProduct(id,name.Text,addQty.Value);}
