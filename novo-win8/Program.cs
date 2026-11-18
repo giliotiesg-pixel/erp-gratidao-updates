@@ -489,6 +489,12 @@ namespace ArmazemGratidao {
    table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    table.ColumnHeadersDefaultCellStyle.SelectionBackColor=Color.FromArgb(22,75,160);
    table.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.5f,FontStyle.Bold);
+   // Garantir altura legivel em TODOS os grids secundarios, inclusive
+   // cabecalhos com apenas uma linha (AutoSize vinha produzindo 22 pixels).
+   var headerPadding=table.ColumnHeadersDefaultCellStyle.Padding;
+   if(headerPadding.Top+headerPadding.Bottom<16)
+    table.ColumnHeadersDefaultCellStyle.Padding=new Padding(
+     headerPadding.Left,8,headerPadding.Right,8);
    table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(215,232,252);
    table.DefaultCellStyle.SelectionForeColor=Color.FromArgb(18,54,109);
    table.GridColor=Color.FromArgb(227,235,248);
