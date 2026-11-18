@@ -2236,12 +2236,24 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@sale",saleId);
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(items);
      }
-     using(var dlg=new StyledDialogForm{Text="Produtos da venda "+saleId+" - "+customer,Width=780,Height=470,MinimumSize=new Size(600,350),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
-      var summary=new Label{Dock=DockStyle.Top,Height=78,Padding=new Padding(12),Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156),Text="Venda "+saleId+"  |  Total: R$ "+total.ToString("N2")+"\nOperacao: "+operation+"  |  Valor do movimento: R$ "+entryAmount.ToString("N2")};
-      var table=new DataGridView{Dock=DockStyle.Fill,DataSource=items,ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+     using(var dlg=new StyledDialogForm{Text="Produtos da venda "+saleId+" - "+customer,Width=900,Height=570,MinimumSize=new Size(650,420),StartPosition=FormStartPosition.CenterParent,BackColor=Color.FromArgb(229,242,255)}){
+      // Layout em linhas explicitas: o tema global nao pode colocar cabecalho
+      // ou rodape sobre a tabela de produtos.
+      var host=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(10),Margin=Padding.Empty};
+      host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+      host.RowStyles.Add(new RowStyle(SizeType.Absolute,86));
+      host.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+      host.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+      var summary=new Label{Dock=DockStyle.Fill,AutoSize=false,Padding=new Padding(12,8,8,4),Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(21,75,156),Text="Venda "+saleId+"  |  Total: R$ "+total.ToString("N2")+"\\nOperacao: "+operation+"  |  Valor do movimento: R$ "+entryAmount.ToString("N2")};
+      var table=new DataGridView{Dock=DockStyle.Fill,Name="amzgFiadoSaleItems",ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoGenerateColumns=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White,BorderStyle=BorderStyle.FixedSingle,ColumnHeadersVisible=true,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.AutoSize,RowTemplate={Height=32}};
       table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(21,75,156);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
-      var note=new Label{Dock=DockStyle.Bottom,Height=42,Padding=new Padding(12,8,8,0),Text=items.Rows.Count==0?"Nenhum item encontrado para esta venda.":"Produtos da venda vinculada ao movimento de credito. Consulta sem alterar valores.",ForeColor=Color.FromArgb(21,75,156)};
-      dlg.Controls.Add(table);dlg.Controls.Add(summary);dlg.Controls.Add(note);dlg.ShowDialog(this);
+      table.DefaultCellStyle.ForeColor=Color.Black;table.DefaultCellStyle.BackColor=Color.White;
+      table.DataSource=items;
+      var note=new Label{Dock=DockStyle.Fill,AutoSize=false,Padding=new Padding(12,7,8,0),Text=items.Rows.Count==0?"A venda existe, mas nao ha itens em sale_items. Verifique o registro original; nenhum valor foi alterado.":"Produtos da venda vinculada ao movimento de credito. Consulta sem alterar valores.",ForeColor=Color.FromArgb(21,75,156)};
+      host.Controls.Add(summary,0,0);host.Controls.Add(table,0,1);host.Controls.Add(note,0,2);
+      dlg.Controls.Add(host);
+      dlg.Shown+=(sender,args)=>{table.Refresh();};
+      dlg.ShowDialog(this);
      }
     }
    }catch(Exception ex){MessageBox.Show("Nao foi possivel consultar os produtos: "+ex.Message);}
