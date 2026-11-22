@@ -743,7 +743,9 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   string SalesFilterTitle(){
    return selectedRange?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy")+" a "+rangeEnd.Value.ToString("dd/MM/yyyy"):selectedMonth?"Vendas de "+monthFilter.Value.ToString("MMMM yyyy"):selectedDate?"Vendas de "+dateFilter.Value.ToString("dd/MM/yyyy"):previous?"Vendas anteriores":"Vendas de hoje";
   }
-  // A numeracao e cronologica; IDs de vendas nunca mudam (itens, pagamentos e Fiado).
+  // Numero exibido recalculado pela data e hora real a cada abertura da lista.
+  // Ex.: uma venda lançada hoje com data 18/11 entra ANTES de 20/11.
+  // IDs imutáveis preservam Fiado, itens, pagamentos, cupons e auditorias.
   void PrepareSalesList(DataTable rows){
    var positions=new System.Collections.Generic.Dictionary<long,long>();
    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
@@ -793,7 +795,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
      QueryFiltered(SalesWithDailyTotalsSql()+" WHERE "+
       SalesFilterSql().Replace("created_at","s.created_at")+
-      " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000");
+      // Nas vendas anteriores, ordem natural: 18/11 antes de 20/11,
+      // inclusive para lançamentos importados ou feitos retroativamente.
+      // No dia atual, manter a venda mais recente no topo para o PDV.
+      (previous?" ORDER BY datetime(s.created_at) ASC,s.id ASC LIMIT 3000":
+       " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000"));
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
@@ -1835,7 +1841,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     string title;
     if(credit){
      string name=Convert.ToString(selected);
-     result=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS valor,COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido,s.gross_total-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS saldo FROM sales s WHERE UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY s.id DESC","@name",name);
+     result=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS valor,COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS recebido,s.gross_total-COALESCE((SELECT SUM(cp.amount) FROM credit_payments cp WHERE cp.sale_id=s.id),0) AS saldo FROM sales s WHERE UPPER(COALESCE(s.payment_method,'')) LIKE '%FIADO%' AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
      decimal balance=0;
      foreach(DataRow r in result.Rows){
       if(r["saldo"]!=null&&r["saldo"]!=DBNull.Value)balance+=Convert.ToDecimal(r["saldo"]);
