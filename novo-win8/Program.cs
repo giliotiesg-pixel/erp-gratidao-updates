@@ -1764,10 +1764,17 @@ namespace ArmazemGratidao {
    Action reload=async ()=>{
     if(loading||page.IsDisposed)return;
     loading=true;refresh.Enabled=false;
+    for(int i=0;i<4;i++)values[i].Text="Carregando...";
     try{
      DashboardSnapshot snapshot=await Task.Run(()=>ReadHomeDashboardSummary());
      if(page.IsDisposed)return;
      for(int i=0;i<4;i++)values[i].Text=snapshot.Indicators[i];
+     // Mostrar indicadores antes de consultar o ranking.
+     await Task.Yield();
+     if(page.IsDisposed)return;
+     try{snapshot.Ranking=await Task.Run(()=>ReadHomeDashboardRanking());}
+     catch(Exception rankEx){if(!page.IsDisposed)status.Text="Ranking indisponível: "+rankEx.Message;return;}
+     if(page.IsDisposed)return;
      leftGrid.Rows.Clear();rightGrid.Rows.Clear();
      var culture=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
      for(int i=0;i<snapshot.Ranking.Count&&i<20;i++){
@@ -1864,16 +1871,6 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@month",month);
      monthTotal=Convert.ToDecimal(cmd.ExecuteScalar());
     }
-    using(var cmd=new SQLiteCommand(
-     "SELECT si.name,COALESCE(SUM(si.quantity),0) AS qtd FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY qtd DESC,SUM(si.total) DESC LIMIT 20",conn)){
-     cmd.Parameters.AddWithValue("@month",month);
-     using(var reader=cmd.ExecuteReader()){
-      while(reader.Read()){
-       result.Ranking.Add(Tuple.Create(
-        Convert.ToString(reader.GetValue(0)),Convert.ToDecimal(reader.GetValue(1))));
-      }
-     }
-    }
     var br=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
     result.Indicators=new[]{count.ToString("N0",br),
      "R$ "+today.ToString("N2",br),products.ToString("N0",br),
@@ -1882,6 +1879,28 @@ namespace ArmazemGratidao {
    return result;
   }
 
+
+  // Ranking isolado: nunca atrasar os indicadores de vendas do inicio.
+  System.Collections.Generic.List<Tuple<string,decimal>> ReadHomeDashboardRanking(){
+   var results=new System.Collections.Generic.List<Tuple<string,decimal>>();
+   if(!File.Exists(dbPath))return results;
+   using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
+    conn.Open();
+    string month=DateTime.Today.ToString("yyyy-MM");
+    using(var cmd=new SQLiteCommand(
+     "SELECT si.name,COALESCE(SUM(si.quantity),0) AS qtd FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY qtd DESC,SUM(si.total) DESC LIMIT 20",conn)){
+     cmd.Parameters.AddWithValue("@month",month);
+     using(var reader=cmd.ExecuteReader()){
+      while(reader.Read()){
+       results.Add(Tuple.Create(
+        Convert.ToString(reader.GetValue(0)),Convert.ToDecimal(reader.GetValue(1))));
+      }
+     }
+    }
+
+   }
+   return results;
+  }
   // Icones brancos sobre o azul, sem carregar arquivos nem rede.
   static Image HomeWhiteTileIcon(string name){
    using(var original=HomeShortcutImage(name)){
