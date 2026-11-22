@@ -1515,7 +1515,12 @@ namespace ArmazemGratidao {
     }
    }
    if(count==0)lines.Add("Nenhuma venda fiado em aberto encontrada.");
-   lines.Add(new string('-',65));lines.Add("TOTAL EM ABERTO: R$ "+sum.ToString("N2"));
+   decimal receiptsOnTotal;
+   using(var account=Open())receiptsOnTotal=FiadoAccountLedger.Received(account,null,clientName);
+   lines.Add(new string('-',65));
+   lines.Add("SUBTOTAL DAS VENDAS: R$ "+sum.ToString("N2"));
+   lines.Add("RECEBIMENTOS NO SALDO TOTAL: R$ "+receiptsOnTotal.ToString("N2"));
+   lines.Add("TOTAL EM ABERTO: R$ "+Math.Max(0m,sum-receiptsOnTotal).ToString("N2"));
    lines.Add("Extrato informativo. Nao substitui nota fiscal.");
    return WriteComprovantePdf(lines,"Fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".pdf");
   }
