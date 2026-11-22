@@ -34,59 +34,59 @@ try{
  $sqliteDll=Join-Path ([IO.Path]::GetDirectoryName($exe)) 'System.Data.SQLite.dll'
  if(!(Test-Path $sqliteDll)){throw "Dependencia SQLite nao encontrada: $sqliteDll"}
  [void][Reflection.Assembly]::LoadFrom($sqliteDll)
- $asm=[Reflection.Assembly]::LoadFrom($exe)
- $ledger=$asm.GetType('ArmazemGratidao.FiadoAccountLedger',$true)
- $fiado=$asm.GetType('ArmazemGratidao.FiadoClientesForm',$true)
- $flags=[Reflection.BindingFlags]::Static -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Public
- $conn=New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db;Read Only=False")
- $conn.Open()
- $sqliteConnection=$conn.PSObject.BaseObject
- try{
-  function Calc([string]$name){
-   $m=$ledger.GetMethod($name,$flags)
-   if($null -eq $m){throw "Metodo do ledger ausente: $name"}
-   return [decimal]$m.Invoke($null,[object[]]@($sqliteConnection,$null,'Priscila Vera'))
+ $testClass=@'
+using System;
+using System.Data.SQLite;
+using System.IO;
+using System.Reflection;
+public static class AMZGFiadoTest {
+ static BindingFlags Flags=BindingFlags.Static|BindingFlags.NonPublic|BindingFlags.Public;
+ static object Invoke(Type type,string name,params object[] args) {
+  MethodInfo method=type.GetMethod(name,Flags);
+  if(method==null)throw new InvalidOperationException("Metodo nao encontrado: "+name);
+  try{return method.Invoke(null,args);}
+  catch(TargetInvocationException e){throw e.InnerException;}
+ }
+ static void Verify(Type ledger,SQLiteConnection cn,string scenario,
+  decimal sales,decimal general,decimal due) {
+  decimal a=Convert.ToDecimal(Invoke(ledger,"SalesDue",cn,null,"Priscila Vera"));
+  decimal b=Convert.ToDecimal(Invoke(ledger,"Received",cn,null,"Priscila Vera"));
+  decimal c=Convert.ToDecimal(Invoke(ledger,"Due",cn,null,"Priscila Vera"));
+  if(Math.Abs(a-sales)>0.005m||Math.Abs(b-general)>0.005m||Math.Abs(c-due)>0.005m)
+   throw new Exception(scenario+" divergente: sales="+a+" paid="+b+" due="+c);
+ }
+ public static void Run(string exe,string database){
+  var asm=Assembly.LoadFrom(exe);
+  var ledger=asm.GetType("ArmazemGratidao.FiadoAccountLedger",true);
+  var fiado=asm.GetType("ArmazemGratidao.FiadoClientesForm",true);
+  using(var cn=new SQLiteConnection("Data Source="+database+";Read Only=False")){
+   cn.Open();
+   Invoke(ledger,"CreateTables",cn,null);
+   Verify(ledger,cn,"Saldo antigo com R$ 50 pago",400,0,400);
+   // Deposito antecipado nao e ainda pagamento de venda.
+   Verify(ledger,cn,"Credito de R$ 200 no deposito",400,0,400);
+   var automatic=Convert.ToDecimal(Invoke(fiado,"ApplyCustomerCredit",cn,null,2L,"Priscila Vera",100m));
+   if(automatic!=0)throw new Exception("Abatimento automatico indevido.");
+   Verify(ledger,cn,"Credito permanece sem abatimento automatico",400,0,400);
+   using(var q=new SQLiteCommand(@"INSERT INTO fiado_account_receipts
+    (receipt_key,customer_name,amount,received_at,method,description,balance_before,balance_after)
+    VALUES('teste-1','Priscila Vera',100,'2026-11-21 09:00:00','PIX','Pagamento parcial no total',400,300)",cn))q.ExecuteNonQuery();
+   Verify(ledger,cn,"Pagamento R$ 100 no saldo total",400,100,300);
+   using(var q=new SQLiteCommand("INSERT INTO credit_payments VALUES(2,1,120,'CREDITO DEPOSITADO','2026-11-22 11:00:00')",cn))q.ExecuteNonQuery();
+   using(var q=new SQLiteCommand("INSERT INTO customer_credit_entries VALUES(2,'Priscila Vera',-120,'UTILIZACAO_FIADO','CREDITO_CLIENTE')",cn))q.ExecuteNonQuery();
+   Verify(ledger,cn,"Credito usado manualmente R$ 120 sem novo pagamento",280,100,180);
+   decimal available=Convert.ToDecimal(Invoke(fiado,"CustomerCreditBalance",cn,null,"Priscila Vera"));
+   if(available!=80)throw new Exception("Carteira residual esperada R$80, encontrada R$"+available);
+   using(var q=new SQLiteCommand("UPDATE fiado_account_receipts SET amount=80 WHERE receipt_key='teste-1'",cn))q.ExecuteNonQuery();
+   Verify(ledger,cn,"Corrigido pagamento R$100 para R$80",280,80,200);
+   var backup=Convert.ToString(Invoke(ledger,"BackupVerified",cn,database,"antes-teste-fiado-"));
+   if(!File.Exists(backup)||new FileInfo(backup).Length<=0)
+    throw new Exception("Backup verificado nao existe.");
   }
-  function Verify([string]$scenario,[decimal]$sales,[decimal]$payments,[decimal]$due){
-   $a=Calc 'SalesDue';$b=Calc 'Received';$c=Calc 'Due'
-   if([Math]::Abs($a-$sales) -gt 0.005 -or [Math]::Abs($b-$payments) -gt 0.005 -or
-      [Math]::Abs($c-$due) -gt 0.005){
-    throw "$scenario : calculo diferente do esperado sales=$a paid=$b due=$c"
-   }
-  }
-  $create=$ledger.GetMethod('CreateTables',$flags)
-  if($null -eq $create){throw 'A tabela auditavel de recebimentos nao existe.'}
-  [void]$create.Invoke($null,[object[]]@($sqliteConnection,$null))
-  Verify 'Divida original com R$50 pago numa venda' 400 0 400
-  # O deposito antecipado de R$200 nao deve abater novamente a divida.
-  Verify 'Deposito em carteira separado do Fiado' 400 0 400
-  $auto=$fiado.GetMethod('ApplyCustomerCredit',$flags)
-  if($null -eq $auto){throw 'Metodo de compatibilidade de credito ausente.'}
-  $applied=[decimal]$auto.Invoke($null,[object[]]@($sqliteConnection,$null,[long]2,'Priscila Vera',[decimal]100))
-  if($applied -ne 0){throw 'Creditos nao podem ser usados automaticamente em novas vendas.'}
-  Verify 'Credito automatico bloqueado' 400 0 400
-  $cmd=$conn.CreateCommand()
-  $cmd.CommandText="INSERT INTO fiado_account_receipts(receipt_key,customer_name,amount,received_at,method,description,balance_before,balance_after) VALUES('teste-1','Priscila Vera',100,'2026-11-21 09:00:00','PIX','Pagamento parcial do total',400,300)"
-  [void]$cmd.ExecuteNonQuery()
-  Verify 'Pagamento de R$100 diretamente no saldo total' 400 100 300
-  # Abater carteira manualmente no valor de R$120 em uma das vendas.
-  $cmd.CommandText="INSERT INTO credit_payments VALUES(2,1,120,'CREDITO DEPOSITADO','2026-11-22 11:00:00')"
-  [void]$cmd.ExecuteNonQuery()
-  $cmd.CommandText="INSERT INTO customer_credit_entries VALUES(2,'Priscila Vera',-120,'UTILIZACAO_FIADO','CREDITO_CLIENTE')"
-  [void]$cmd.ExecuteNonQuery()
-  Verify 'Uso manual do credito R$120 sem dinheiro novo' 280 100 180
-  $wallet=$fiado.GetMethod('CustomerCreditBalance',$flags)
-  $available=[decimal]$wallet.Invoke($null,[object[]]@($sqliteConnection,$null,'Priscila Vera'))
-  if($available -ne 80){throw "Carteira residual incorreta: $available"}
-  # Correcao do pagamento geral R$100 -> R$80.
-  $cmd.CommandText="UPDATE fiado_account_receipts SET amount=80 WHERE receipt_key='teste-1'"
-  [void]$cmd.ExecuteNonQuery()
-  Verify 'Correcao de pagamento parcial R$100 para R$80' 280 80 200
-  $backup=$ledger.GetMethod('BackupVerified',$flags)
-  $copy=[string]$backup.Invoke($null,[object[]]@($sqliteConnection,$db,'antes-teste-fiado-'))
-  if(!(Test-Path $copy) -or (Get-Item $copy).Length -le 0){
-   throw 'Backup do saldo total do Fiado ausente ou vazio.'
-  }
-  Write-Host 'FIADO OK: saldo real, credito antecipado separado, aplicacao somente manual, correcao e backup.'
- }finally{$conn.Dispose()}
+ }
+}
+'@
+ Add-Type -TypeDefinition $testClass -ReferencedAssemblies @('System.dll','System.Data.dll',$sqliteDll) -ErrorAction Stop
+ [AMZGFiadoTest]::Run($exe,$db)
+ Write-Host 'FIADO OK: credito antecipado separado, saldo total, abatimento manual, correcao e backup.'
 }finally{[Environment]::CurrentDirectory=$oldCurrent}
