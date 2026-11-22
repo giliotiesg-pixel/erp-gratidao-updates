@@ -273,6 +273,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var edit=SalesButton("amzgSalesEdit","✎  Editar Venda",salesBlue);
    var editMenu=new ContextMenuStrip();
    editMenu.Items.Add("Editar produto, quantidade e preço",null,(sender,args)=>ChangeProduct());
+   editMenu.Items.Add("Corrigir cliente do Fiado",null,(sender,args)=>EditSaleCustomer());
    editMenu.Items.Add("Atualizar data / hora",null,(sender,args)=>EditSaleDate());
    editMenu.Items.Add("Visualizar itens em janela",null,(sender,args)=>ShowSaleItems());
    editMenu.Items.Add("Exportar itens CSV",null,(sender,args)=>ExportSale());
@@ -956,6 +957,203 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     cmd.Parameters.AddWithValue("@id",sale);cmd.Parameters.AddWithValue("@action",action);cmd.Parameters.AddWithValue("@before",before);cmd.Parameters.AddWithValue("@after",after);cmd.Parameters.AddWithValue("@at",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.ExecuteNonQuery();
    }
   }
+
+  // Corrigir somente o titular de UMA venda fiada. Nao unifica cadastros:
+  // pagamentos reais permanecem ligados ao sale_id e o credito antecipado
+  // exige procedimento de estorno proprio para nao trocar a carteira do cliente.
+  static bool CustomerEditTableExists(SQLiteConnection conn,SQLiteTransaction tx,string name){
+   using(var cmd=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name",conn,tx)){
+    cmd.Parameters.AddWithValue("@name",name);
+    return Convert.ToInt64(cmd.ExecuteScalar())>0;
+   }
+  }
+  static bool IsFiadoForCustomerEdit(SQLiteConnection conn,SQLiteTransaction tx,long sale,string method,string status){
+   if((method??"").IndexOf("FIADO",StringComparison.OrdinalIgnoreCase)>=0||
+      (status??"").IndexOf("FIADO",StringComparison.OrdinalIgnoreCase)>=0)return true;
+   if(!CustomerEditTableExists(conn,tx,"sale_payments"))return false;
+   using(var cmd=new SQLiteCommand(
+    "SELECT COUNT(*) FROM sale_payments WHERE sale_id=@sale AND UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%'",conn,tx)){
+    cmd.Parameters.AddWithValue("@sale",sale);
+    return Convert.ToInt64(cmd.ExecuteScalar())>0;
+   }
+  }
+  static bool HasCustomerCreditForSale(SQLiteConnection conn,SQLiteTransaction tx,long sale){
+   if(CustomerEditTableExists(conn,tx,"credit_payments")){
+    using(var cmd=new SQLiteCommand(
+     "SELECT COUNT(*) FROM credit_payments WHERE sale_id=@sale AND UPPER(TRIM(COALESCE(payment_method,'')))='CREDITO_CLIENTE'",conn,tx)){
+     cmd.Parameters.AddWithValue("@sale",sale);
+     if(Convert.ToInt64(cmd.ExecuteScalar())>0)return true;
+    }
+   }
+   if(CustomerEditTableExists(conn,tx,"customer_credit_entries")){
+    bool hasSaleId=false;
+    using(var cmd=new SQLiteCommand("PRAGMA table_info(customer_credit_entries)",conn,tx))
+    using(var reader=cmd.ExecuteReader()){
+     while(reader.Read())if(string.Equals(Convert.ToString(reader["name"]),"sale_id",StringComparison.OrdinalIgnoreCase))
+      hasSaleId=true;
+    }
+    if(hasSaleId)using(var cmd=new SQLiteCommand(
+     "SELECT COUNT(*) FROM customer_credit_entries WHERE sale_id=@sale",conn,tx)){
+     cmd.Parameters.AddWithValue("@sale",sale);
+     if(Convert.ToInt64(cmd.ExecuteScalar())>0)return true;
+    }
+   }
+   return false;
+  }
+  void EditSaleCustomer(){
+   if(credit)return;
+   try{
+    long sale=SelectedSale();
+    string oldName,method,status,date;
+    decimal total,paid;
+    var customers=new System.Collections.Generic.List<string>();
+    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
+     conn.Open();
+     using(var cmd=new SQLiteCommand(
+      "SELECT COALESCE(customer_name,'') AS name,COALESCE(payment_method,'') AS method,"+
+      "COALESCE(status,'') AS status,COALESCE(created_at,'') AS date,COALESCE(gross_total,0) AS total "+
+      "FROM sales WHERE id=@sale",conn)){
+      cmd.Parameters.AddWithValue("@sale",sale);
+      using(var rd=cmd.ExecuteReader()){
+       if(!rd.Read())throw new Exception("Venda não encontrada.");
+       oldName=Convert.ToString(rd["name"]).Trim();
+       method=Convert.ToString(rd["method"]);
+       status=Convert.ToString(rd["status"]);
+       date=Convert.ToString(rd["date"]);
+       total=Convert.ToDecimal(rd["total"]);
+      }
+     }
+     if(!IsFiadoForCustomerEdit(conn,null,sale,method,status))
+      throw new Exception("Esta ferramenta é exclusiva para vendas com pagamento Fiado.");
+     if(HasCustomerCreditForSale(conn,null,sale))
+      throw new Exception("Esta venda usou crédito antecipado do cliente. A troca direta foi bloqueada para proteger os créditos e abatimentos. Faça primeiro a correção auditada desse crédito no módulo Fiado.");
+     paid=0m;
+     if(CustomerEditTableExists(conn,null,"credit_payments"))
+      using(var cmd=new SQLiteCommand("SELECT COALESCE(SUM(amount),0) FROM credit_payments WHERE sale_id=@sale",conn)){
+       cmd.Parameters.AddWithValue("@sale",sale);
+       paid=Convert.ToDecimal(cmd.ExecuteScalar());
+      }
+     // Preferir o cadastro existente. Em bancos antigos sem tabela customers,
+     // permitir os nomes que ja aparecem no historico de vendas.
+     string sql=CustomerEditTableExists(conn,null,"customers")?
+      "SELECT DISTINCT TRIM(name) AS name FROM customers WHERE TRIM(COALESCE(name,''))<>'' ORDER BY name COLLATE NOCASE":
+      "SELECT DISTINCT TRIM(customer_name) AS name FROM sales WHERE TRIM(COALESCE(customer_name,''))<>'' ORDER BY name COLLATE NOCASE";
+     using(var cmd=new SQLiteCommand(sql,conn))
+     using(var rd=cmd.ExecuteReader()){
+      while(rd.Read()){
+       string value=Convert.ToString(rd[0]).Trim();
+       if(value.Length>0&&!string.Equals(value,"Consumidor",StringComparison.OrdinalIgnoreCase)&&
+          !string.Equals(value,"SEM CLIENTE",StringComparison.OrdinalIgnoreCase))customers.Add(value);
+      }
+     }
+    }
+    if(customers.Count==0)throw new Exception("Não há clientes cadastrados. Cadastre o cliente antes de alterar a venda.");
+    using(var dlg=new StyledDialogForm{
+     Text="Corrigir cliente de venda Fiado #"+sale,Width=660,Height=365,
+     StartPosition=FormStartPosition.CenterParent,
+     FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
+     Font=new Font("Segoe UI",10f),BackColor=Color.FromArgb(245,249,254)
+    }){
+     var title=new Label{Text="CORRIGIR CLIENTE DA VENDA FIADA",Left=18,Top=12,Width=610,Height=30,
+      Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=Color.FromArgb(19,68,151)};
+     var origin=new Label{Text="Venda #"+sale+"  |  "+date+"\nCliente atual: "+(oldName.Length==0?"SEM CLIENTE":oldName),
+      Left=18,Top=53,Width=610,Height=50};
+     var values=new Label{Text="Total da venda: R$ "+total.ToString("N2")+
+      "   |   Pago: R$ "+paid.ToString("N2")+"   |   Em aberto: R$ "+(total-paid).ToString("N2"),
+      Left=18,Top=107,Width=610,Height=27,Font=new Font("Segoe UI",9.2f,FontStyle.Bold)};
+     var selectLabel=new Label{Text="Selecione ou pesquise o cliente correto:",Left=18,Top=144,Width=610,Height=23};
+     var choice=new ComboBox{Left=18,Top=171,Width=610,Height=31,
+      DropDownStyle=ComboBoxStyle.DropDown,AutoCompleteMode=AutoCompleteMode.SuggestAppend,
+      AutoCompleteSource=AutoCompleteSource.ListItems};
+     choice.Items.AddRange(customers.Cast<object>().ToArray());
+     var notice=new Label{Text="Somente esta venda será transferida. Produtos, valores, pagamentos, estoque e o cadastro anterior permanecem intactos.",
+      Left=18,Top=214,Width=610,Height=44,ForeColor=Color.FromArgb(123,56,39)};
+     var save=new Button{Text="Salvar cliente correto",Left=18,Top=267,Width=230,Height=35,
+      BackColor=Color.FromArgb(20,81,170),ForeColor=Color.White,DialogResult=DialogResult.OK};
+     var cancel=new Button{Text="Cancelar",Left=267,Top=267,Width=130,Height=35,DialogResult=DialogResult.Cancel};
+     dlg.Controls.AddRange(new Control[]{title,origin,values,selectLabel,choice,notice,save,cancel});
+     dlg.AcceptButton=save;dlg.CancelButton=cancel;
+     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     string entered=choice.Text.Trim();
+     string newName=customers.FirstOrDefault(name=>string.Equals(name,entered,StringComparison.OrdinalIgnoreCase));
+     if(string.IsNullOrEmpty(newName))throw new Exception("Selecione um cliente existente na lista. Nenhuma venda foi alterada.");
+     if(string.Equals(oldName,newName,StringComparison.OrdinalIgnoreCase)){
+      MessageBox.Show("Esta venda já está vinculada ao cliente selecionado.");return;
+     }
+     string confirm="Alterar SOMENTE a venda fiada #"+sale+"?\n\nDe: "+
+      (oldName.Length==0?"SEM CLIENTE":oldName)+"\nPara: "+newName+
+      "\n\nTotal: R$ "+total.ToString("N2")+" | Pago: R$ "+paid.ToString("N2")+
+      " | Saldo: R$ "+(total-paid).ToString("N2")+
+      "\n\nO saldo desta venda passará ao novo cliente. Pagamentos recebidos, itens, estoque e limites do Fiado não serão alterados. Um backup e registro de auditoria serão criados.";
+     if(MessageBox.Show(this,confirm,"Confirmar correção do cliente",MessageBoxButtons.YesNo,
+      MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+
+     using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,FailIfMissing=true}.ToString())){
+      conn.Open();
+      string directory=Path.GetDirectoryName(db);
+      string config=Path.Combine(directory,"backup-location.txt");
+      string backupFolder=File.Exists(config)?File.ReadAllText(config).Trim():Path.Combine(directory,"Backups");
+      if(string.IsNullOrWhiteSpace(backupFolder)||!Path.IsPathRooted(backupFolder))
+       throw new Exception("Pasta de backup inválida. Correção cancelada.");
+      Directory.CreateDirectory(backupFolder);
+      string backup=Path.Combine(backupFolder,"antes-corrigir-cliente-fiado-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,6)+".db");
+      // O backup deve ser concluido e validado antes de modificar uma venda.
+      using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup,FailIfMissing=false}.ToString())){
+       copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);
+       using(var check=new SQLiteCommand("PRAGMA integrity_check",copy))
+        if(!string.Equals(Convert.ToString(check.ExecuteScalar()),"ok",StringComparison.OrdinalIgnoreCase))
+         throw new Exception("Backup de segurança inválido. Nenhum dado foi modificado.");
+      }
+      if(new FileInfo(backup).Length==0)throw new Exception("Backup vazio. Nenhum dado foi modificado.");
+      using(var tx=conn.BeginTransaction()){
+       string currentName,currentMethod,currentStatus;
+       using(var cmd=new SQLiteCommand(
+        "SELECT COALESCE(customer_name,''),COALESCE(payment_method,''),COALESCE(status,'') FROM sales WHERE id=@sale",conn,tx)){
+        cmd.Parameters.AddWithValue("@sale",sale);
+        using(var rd=cmd.ExecuteReader()){
+         if(!rd.Read())throw new Exception("Venda não encontrada. Nenhum dado foi modificado.");
+         currentName=Convert.ToString(rd[0]).Trim();
+         currentMethod=Convert.ToString(rd[1]);
+         currentStatus=Convert.ToString(rd[2]);
+        }
+       }
+       if(!string.Equals(currentName,oldName,StringComparison.OrdinalIgnoreCase))
+        throw new Exception("O cliente da venda foi alterado durante a operação. Atualize a lista.");
+       if(!IsFiadoForCustomerEdit(conn,tx,sale,currentMethod,currentStatus))
+        throw new Exception("A venda deixou de ser Fiado. Correção cancelada.");
+       if(HasCustomerCreditForSale(conn,tx,sale))
+        throw new Exception("A venda possui crédito antecipado. Correção bloqueada para não perder saldo.");
+       if(CustomerEditTableExists(conn,tx,"customers")){
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE TRIM(name)=@name COLLATE NOCASE",conn,tx)){
+         check.Parameters.AddWithValue("@name",newName);
+         if(Convert.ToInt64(check.ExecuteScalar())!=1)
+          throw new Exception("O cadastro do novo cliente mudou. Atualize a lista e tente novamente.");
+        }
+       }
+       using(var cmd=new SQLiteCommand(
+        "UPDATE sales SET customer_name=@newName WHERE id=@sale AND TRIM(COALESCE(customer_name,''))=@oldName COLLATE NOCASE",conn,tx)){
+        cmd.Parameters.AddWithValue("@newName",newName);
+        cmd.Parameters.AddWithValue("@sale",sale);
+        cmd.Parameters.AddWithValue("@oldName",oldName);
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("A venda mudou durante a operação. Nenhum dado foi alterado.");
+       }
+       WriteAudit(conn,tx,sale,"CORRIGIR_CLIENTE_FIADO",oldName,newName);
+       tx.Commit();
+      }
+      LoadCustomerOptions();LoadMaster();
+      foreach(DataGridViewRow row in master.Rows)
+       if(Convert.ToInt64(row.Cells["venda"].Value)==sale){
+        master.CurrentCell=row.Cells["cliente"];break;
+       }
+      LoadDetails();
+      MessageBox.Show(this,"Cliente da venda #"+sale+" atualizado para "+newName+
+       ".\nOs pagamentos e itens foram preservados.\nBackup: "+backup,
+       "Correção concluída",MessageBoxButtons.OK,MessageBoxIcon.Information);
+     }
+    }
+   }catch(Exception ex){MessageBox.Show(this,ex.Message,"Correção do cliente não concluída",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+  }
+
   void EditSaleDate(){
    try{
     long id=SelectedSale();var dt=Query("SELECT created_at FROM sales WHERE id=@id","@id",id);
