@@ -31,6 +31,9 @@ if($LASTEXITCODE -ne 0){throw 'Falha ao criar fixture de Fiado.'}
 $oldCurrent=[Environment]::CurrentDirectory
 try{
  [Environment]::CurrentDirectory=[IO.Path]::GetDirectoryName($exe)
+ $sqliteDll=Join-Path ([IO.Path]::GetDirectoryName($exe)) 'System.Data.SQLite.dll'
+ if(!(Test-Path $sqliteDll)){throw "Dependencia SQLite nao encontrada: $sqliteDll"}
+ [void][Reflection.Assembly]::LoadFrom($sqliteDll)
  $asm=[Reflection.Assembly]::LoadFrom($exe)
  $ledger=$asm.GetType('ArmazemGratidao.FiadoAccountLedger',$true)
  $fiado=$asm.GetType('ArmazemGratidao.FiadoClientesForm',$true)
