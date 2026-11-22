@@ -2049,6 +2049,10 @@ namespace ArmazemGratidao {
     authorized_at TEXT,created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')))",cn,tx))cmd.ExecuteNonQuery();
   }
   bool AuthorizeSavedDeposit(long entryId){
+   // Funcao anterior desativada: nenhum deposito habilita abatimento automatico.
+   return false;
+  }
+  bool LegacyAuthorizeSavedDepositNoLongerUsed(long entryId){
    if(string.IsNullOrWhiteSpace(customer))return false;
    try{
     EnsureCustomerCredit(db);
@@ -2278,7 +2282,7 @@ namespace ArmazemGratidao {
        grid.RowTemplate.MinimumHeight=38;
        grid.AutoResizeColumnHeadersHeight();
       };
-      var hint=new Label{Dock=DockStyle.Top,Height=40,Padding=new Padding(10,10,10,0),Text="Guardar credito = deposito. Selecione um lancamento para corrigir ou estornar; o sistema confere as vendas afetadas.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
+      var hint=new Label{Dock=DockStyle.Top,Height=40,Padding=new Padding(10,10,10,0),Text="Credito depositado permanece na carteira. Pague Fiado com credito apenas pelo botao manual. Correcoes e estornos sao auditados.",ForeColor=Color.FromArgb(21,75,156),Font=new Font("Segoe UI",10)};
       var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=112,Padding=new Padding(8),AutoScroll=true,WrapContents=true,BackColor=Color.FromArgb(218,233,250)};
       var show=new Button{Text="Ver produtos da venda",Width=205,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
       Action inspect=()=>{
@@ -2331,14 +2335,7 @@ namespace ArmazemGratidao {
        }
        if(ReopenSalePayments(saleId)){dlg.Close();ShowCustomerCreditHistory();}
       };
-      var authorizeDeposit=new Button{Text="Liberar credito selecionado",Width=220,Height=32,BackColor=Color.FromArgb(21,90,145),ForeColor=Color.White};
-      authorizeDeposit.Click+=(sender,args)=>{
-       if(grid.CurrentRow==null)return;
-       long entryId;
-       if(!long.TryParse(Convert.ToString(grid.CurrentRow.Cells["Registro"].Value),out entryId))return;
-       if(AuthorizeSavedDeposit(entryId)){dlg.Close();ShowCustomerCreditHistory();}
-      };
-      bar.Controls.Add(authorizeDeposit);
+      // Abatimento somente pelo botao manual Pagar Fiado com credito.
       bar.Controls.Add(reopen);
       bar.Controls.Add(show);
       var correct=new Button{Text="Corrigir / retirar lancamento",Width=230,Height=32,BackColor=Color.FromArgb(21,75,156),ForeColor=Color.White};
