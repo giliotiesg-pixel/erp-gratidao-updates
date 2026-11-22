@@ -73,7 +73,7 @@ namespace ArmazemGratidao {
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
    var byDayTab=new TabPage("Pagamentos por data");
    var byDayHelp=new Label {Dock=DockStyle.Top,Height=48,
-    Text="RECEBIMENTOS E ABATIMENTOS POR DATA | Uma entrada distribuída entre várias vendas é somada no total do dia.\nO histórico detalhado por venda continua na aba Histórico.",
+    Text="EXTRATO POR DATA | Pagamento recebido, depósito antecipado e crédito utilizado são lançamentos distintos.\nO valor depositado na carteira não é contado novamente como dinheiro recebido ao usar o crédito.",
     Font=new Font("Segoe UI",9f),ForeColor=Color.FromArgb(22,75,160),
     BackColor=Color.White,Padding=new Padding(10,5,6,2)};
    byDayTab.Controls.Add(paymentsByDay);byDayTab.Controls.Add(paymentsByDaySummary);
@@ -694,61 +694,100 @@ namespace ArmazemGratidao {
   // Consulta somente leitura: agrega todos os credit_payments por data.
   // Se o cliente pagou R$ 100 e o sistema distribuiu em tres vendas,
   // os valores sao somados no mesmo dia, sem duplicar recebimentos.
+  // Unica tela de movimentos por data: separa dinheiro recebido, depositos
+  // antecipados e uso do credito, sem somar duas vezes a mesma movimentacao.
   void LoadPaymentsByDay(){
-   if(string.IsNullOrWhiteSpace(customer)){
-    paymentsByDay.DataSource=null;
-    paymentsByDaySummary.Text="Selecione um cliente para consultar os pagamentos.";
-    return;
-   }
+   if(string.IsNullOrWhiteSpace(customer)){paymentsByDay.DataSource=null;return;}
    try{
-    const string creditKind="UPPER(TRIM(COALESCE(p.payment_method,''))) IN ('CREDITO_CLIENTE','CREDITO DEPOSITADO')";
-    string day="COALESCE(NULLIF(SUBSTR(TRIM(COALESCE(p.paid_at,'')),1,10),''),'SEM DATA')";
-    string sql="SELECT "+day+" AS dia, "+
-     "COALESCE(SUM(CASE WHEN "+creditKind+" THEN 0 ELSE p.amount END),0) AS recebido, "+
-     "COALESCE(SUM(CASE WHEN "+creditKind+" THEN p.amount ELSE 0 END),0) AS credito, "+
-     "COALESCE(SUM(p.amount),0) AS abatido, "+
-     "COUNT(DISTINCT p.sale_id) AS vendas "+
-     "FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+
-     CreditFilter+" AND TRIM(COALESCE(s.customer_name,''))=@customer COLLATE NOCASE "+
-     "GROUP BY "+day+" ORDER BY dia DESC";
-    var records=Query(sql,"@customer",customer.Trim());
     var table=new DataTable();
+    table.Columns.Add("Ordem",typeof(string));
     table.Columns.Add("Data",typeof(string));
+    table.Columns.Add("Tipo",typeof(string));
+    table.Columns.Add("Descrição",typeof(string));
     table.Columns.Add("Valor pago (R$)",typeof(decimal));
-    table.Columns.Add("Crédito abatido (R$)",typeof(decimal));
+    table.Columns.Add("Crédito depositado (R$)",typeof(decimal));
+    table.Columns.Add("Crédito utilizado (R$)",typeof(decimal));
     table.Columns.Add("Total abatido (R$)",typeof(decimal));
-    table.Columns.Add("Vendas atendidas",typeof(int));
-    decimal received=0m,creditUsed=0m,deducted=0m;
-    foreach(DataRow row in records.Rows){
-     string iso=Convert.ToString(row["dia"]);
-     DateTime parsed;
-     string display=DateTime.TryParseExact(iso,"yyyy-MM-dd",
-      System.Globalization.CultureInfo.InvariantCulture,
-      System.Globalization.DateTimeStyles.None,out parsed)?
-      parsed.ToString("dd/MM/yyyy"):iso;
-     decimal valueReceived=Convert.ToDecimal(row["recebido"]);
-     decimal credit=Convert.ToDecimal(row["credito"]);
-     decimal total=Convert.ToDecimal(row["abatido"]);
-     table.Rows.Add(display,valueReceived,credit,total,Convert.ToInt32(row["vendas"]));
-     received+=valueReceived;creditUsed+=credit;deducted+=total;
+    table.Columns.Add("Vendas",typeof(int));
+    table.Columns.Add("Saldo após registro (R$)",typeof(string));
+    decimal paid=0m,deposited=0m,used=0m,deducted=0m;
+    Func<string,string> formatDate=(stamp)=>{
+     DateTime date;
+     return DateTime.TryParse(stamp,out date)?date.ToString("dd/MM/yyyy HH:mm"):stamp;
+    };
+    // Pagamentos históricos por venda, juntos por dia de recebimento.
+    string day="COALESCE(NULLIF(SUBSTR(TRIM(COALESCE(p.paid_at,'')),1,10),''),'SEM DATA')";
+    const string wallet="UPPER(TRIM(COALESCE(p.payment_method,''))) IN ('CREDITO_CLIENTE','CREDITO DEPOSITADO')";
+    var bySale=Query("SELECT "+day+" AS dia,"+
+     "COALESCE(SUM(CASE WHEN "+wallet+" THEN 0 ELSE p.amount END),0) AS recebido,"+
+     "COALESCE(SUM(CASE WHEN "+wallet+" THEN p.amount ELSE 0 END),0) AS credito,"+
+     "COUNT(DISTINCT p.sale_id) AS vendas FROM credit_payments p "+
+     "INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+
+     " AND TRIM(COALESCE(s.customer_name,''))=@name COLLATE NOCASE"+
+     " GROUP BY "+day+" ORDER BY dia DESC","@name",customer.Trim());
+    foreach(DataRow r in bySale.Rows){
+     string dayText=Convert.ToString(r["dia"]);
+     decimal actual=Convert.ToDecimal(r["recebido"]),credit=Convert.ToDecimal(r["credito"]);
+     string descr=credit>0m&&actual>0m?"Pagamentos por venda e uso de crédito antecipado":
+      credit>0m?"Crédito antecipado utilizado nas vendas":"Pagamentos lançados nas vendas";
+     table.Rows.Add(dayText+" 23:00:00",formatDate(dayText),credit>0?"ABATIMENTOS EM VENDAS":"PAGAMENTO EM VENDAS",
+      descr,actual,0m,credit,actual+credit,Convert.ToInt32(r["vendas"]),"—");
+     paid+=actual;used+=credit;deducted+=actual+credit;
     }
-    paymentsByDay.DataSource=table;
-    foreach(string col in new[]{"Valor pago (R$)","Crédito abatido (R$)","Total abatido (R$)"}){
+    using(var cn=Open(true)){
+     if(FiadoAccountLedger.Exists(cn)){
+      using(var cmd=new SQLiteCommand(
+       "SELECT id,received_at,amount,method,description,balance_after FROM fiado_account_receipts "+
+       "WHERE TRIM(customer_name)=@name COLLATE NOCASE ORDER BY received_at DESC,id DESC",cn)){
+       cmd.Parameters.AddWithValue("@name",customer.Trim());
+       using(var rd=cmd.ExecuteReader())while(rd.Read()){
+        string at=Convert.ToString(rd["received_at"]),desc=Convert.ToString(rd["description"]);
+        decimal amount=Convert.ToDecimal(rd["amount"]);
+        table.Rows.Add(at,formatDate(at),"PAGAMENTO NO SALDO TOTAL",
+         desc+" | "+Convert.ToString(rd["method"]),amount,0m,0m,amount,0,
+         "R$ "+Convert.ToDecimal(rd["balance_after"]).ToString("N2"));
+        paid+=amount;deducted+=amount;
+       }
+      }
+     }
+     using(var exists=new SQLiteCommand(
+      "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn)){
+      if(Convert.ToInt64(exists.ExecuteScalar())>0){
+       using(var deposits=new SQLiteCommand(
+        "SELECT created_at,amount,method,details FROM customer_credit_entries "+
+        "WHERE TRIM(customer_name)=@name COLLATE NOCASE AND entry_type='DEPOSITO' AND amount>0 "+
+        "ORDER BY created_at DESC,id DESC",cn)){
+        deposits.Parameters.AddWithValue("@name",customer.Trim());
+        using(var rd=deposits.ExecuteReader())while(rd.Read()){
+         string at=Convert.ToString(rd["created_at"]);
+         decimal amount=Convert.ToDecimal(rd["amount"]);
+         table.Rows.Add(at,formatDate(at),"CRÉDITO ANTECIPADO (DEPÓSITO)",
+          "Não é pagamento do Fiado: "+Convert.ToString(rd["method"])+" | "+Convert.ToString(rd["details"]),
+          0m,amount,0m,0m,0,"—");
+         deposited+=amount;
+        }
+       }
+      }
+     }
+    }
+    var view=new DataView(table){Sort="Ordem DESC,Data DESC"};
+    paymentsByDay.DataSource=view;
+    if(paymentsByDay.Columns.Contains("Ordem"))paymentsByDay.Columns["Ordem"].Visible=false;
+    foreach(string col in new[]{"Valor pago (R$)","Crédito depositado (R$)",
+      "Crédito utilizado (R$)","Total abatido (R$)"}){
      if(paymentsByDay.Columns.Contains(col)){
       paymentsByDay.Columns[col].DefaultCellStyle.Format="N2";
       paymentsByDay.Columns[col].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
      }
     }
     if(paymentsByDay.Rows.Count>0)paymentsByDay.ClearSelection();
-    paymentsByDaySummary.Text=table.Rows.Count==0?
-     customer+" | Nenhum pagamento ou abatimento registrado.":
-     customer+" | Dias com pagamentos: "+table.Rows.Count+
-     " | Pago R$ "+received.ToString("N2")+
-     " | Crédito abatido R$ "+creditUsed.ToString("N2")+
+    paymentsByDaySummary.Text=customer+" | Pago R$ "+paid.ToString("N2")+
+     " | Crédito depositado R$ "+deposited.ToString("N2")+
+     " | Crédito utilizado R$ "+used.ToString("N2")+
      " | Total abatido R$ "+deducted.ToString("N2");
    }catch(Exception ex){
     paymentsByDay.DataSource=null;
-    paymentsByDaySummary.Text="Não foi possível consultar os pagamentos: "+ex.Message;
+    paymentsByDaySummary.Text="Não foi possível consultar o extrato: "+ex.Message;
    }
   }
   void CorrectPaymentDate(){
