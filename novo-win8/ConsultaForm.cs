@@ -804,6 +804,15 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     master.DataSource=rows;
     if(!credit){
      ConfigureSalesColumns();
+     if(previous&&master.Rows.Count>0){
+      // A lista de Vendas Anteriores permanece em ordem crescente,
+      // mas inicia selecionando a venda mais recente para preservar
+      // o resumo da data exibido nos indicadores e na tela de detalhes.
+      var recent=master.Rows[master.Rows.Count-1];
+      master.ClearSelection();
+      recent.Selected=true;
+      master.CurrentCell=recent.Cells["data"];
+     }
      var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
      if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
       (rows.Rows.Count>=3000?" (primeiras 3.000)":"");
