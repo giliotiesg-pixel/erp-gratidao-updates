@@ -28,7 +28,7 @@ conn.execute("INSERT INTO sales VALUES (1922,?,?,?,?)",(yesterday+" 10:00:00","C
 conn.execute("INSERT INTO sales VALUES (1921,?,?,?,?)",(yesterday+" 15:00:00","Cliente B","Fiado",20.00))
 conn.execute("INSERT INTO sales VALUES (1920,?,?,?,?)",(older+" 10:00:00","Cliente C","Pix",500.00))
 retro=(datetime.datetime.now()-datetime.timedelta(days=3)).strftime("%Y-%m-%d")
-# Inserida por ultimo, mas de data anterior às demais.
+# Inserida por ultimo, mas de data anterior as demais.
 conn.execute("INSERT INTO sales VALUES (1925,?,?,?,?)",(retro+" 09:10:00","Cliente retroativo","Dinheiro",5.00))
 conn.execute("INSERT INTO sale_items VALUES (1,1924,?,?,?,?,?)",("78901","Refrigerante de teste 2 L",2,6.50,13.00))
 conn.execute("INSERT INTO sale_items VALUES (2,1924,?,?,?,?,?)",("78902","Biscoito de teste",3,14.413333,43.24))
@@ -96,10 +96,12 @@ try{
  $form.Controls.Find('amzgSalesPrevious',$true)[0].PerformClick()
  [Windows.Forms.Application]::DoEvents()
  # A data e hora mandam na ordenacao, nao o numero de insercao.
- if($grid.Rows.Count -ne 4 -or
+ # Descobrir o campo de ordem pelo DisplayIndex; PowerShell 5.1 usa ANSI.
+ $seqCol=@($grid.Columns | Where-Object {$_.Visible -and $_.DisplayIndex -eq 0})[0]
+ if($null -eq $seqCol -or $grid.Rows.Count -ne 4 -or
     [long]$grid.Rows[0].Cells['venda'].Value -ne 1925 -or
     [long]$grid.Rows[3].Cells['venda'].Value -ne 1921 -or
-    [long]$grid.Rows[0].Cells['Ordem cronológica'].Value -ne 1){
+    [long]$grid.Rows[0].Cells[$seqCol.Index].Value -ne 1){
   throw 'Venda retroativa nao foi posicionada antes das vendas mais recentes.'
  }
  $headerDay=$salesType.GetField('headerToday',$flags).GetValue($form)
