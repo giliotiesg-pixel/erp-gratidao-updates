@@ -1854,12 +1854,15 @@ namespace ArmazemGratidao {
     DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
     conn.Open();
     string day=DateTime.Today.ToString("yyyy-MM-dd");
-    string month=DateTime.Today.ToString("yyyy-MM");
+    string nextDay=DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
+    string month=DateTime.Today.ToString("yyyy-MM")+"-01";
+    string nextMonth=DateTime.Today.AddMonths(1).ToString("yyyy-MM")+"-01";
     long count=0,products=0;
     decimal today=0m,monthTotal=0m;
     using(var cmd=new SQLiteCommand(
-     "SELECT COUNT(*),COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,10)=@day AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
+     "SELECT COUNT(*),COALESCE(SUM(gross_total),0) FROM sales WHERE created_at>=@day AND created_at<@nextDay AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
      cmd.Parameters.AddWithValue("@day",day);
+     cmd.Parameters.AddWithValue("@nextDay",nextDay);
      using(var reader=cmd.ExecuteReader()){
       if(reader.Read()){count=Convert.ToInt64(reader.GetValue(0));today=Convert.ToDecimal(reader.GetValue(1));}
      }
@@ -1867,8 +1870,9 @@ namespace ArmazemGratidao {
     using(var cmd=new SQLiteCommand(
      "SELECT COUNT(*) FROM products",conn))products=Convert.ToInt64(cmd.ExecuteScalar());
     using(var cmd=new SQLiteCommand(
-     "SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE substr(created_at,1,7)=@month AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
+     "SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE created_at>=@month AND created_at<@nextMonth AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
      cmd.Parameters.AddWithValue("@month",month);
+     cmd.Parameters.AddWithValue("@nextMonth",nextMonth);
      monthTotal=Convert.ToDecimal(cmd.ExecuteScalar());
     }
     var br=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
@@ -1886,10 +1890,12 @@ namespace ArmazemGratidao {
    if(!File.Exists(dbPath))return results;
    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
     conn.Open();
-    string month=DateTime.Today.ToString("yyyy-MM");
+    string month=DateTime.Today.ToString("yyyy-MM")+"-01";
+    string nextMonth=DateTime.Today.AddMonths(1).ToString("yyyy-MM")+"-01";
     using(var cmd=new SQLiteCommand(
-     "SELECT si.name,COALESCE(SUM(si.quantity),0) AS qtd FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE substr(s.created_at,1,7)=@month AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY qtd DESC,SUM(si.total) DESC LIMIT 20",conn)){
+     "SELECT si.name,COALESCE(SUM(si.quantity),0) AS qtd FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.created_at>=@month AND s.created_at<@nextMonth AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%' GROUP BY si.product_id,si.name ORDER BY qtd DESC,SUM(si.total) DESC LIMIT 20",conn)){
      cmd.Parameters.AddWithValue("@month",month);
+     cmd.Parameters.AddWithValue("@nextMonth",nextMonth);
      using(var reader=cmd.ExecuteReader()){
       while(reader.Read()){
        results.Add(Tuple.Create(
