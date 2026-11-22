@@ -856,23 +856,62 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao corrigir data",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
+  // Conferencia contábil somente leitura, inclusive recebimentos diretos no total.
   void AuditBalances(){
    try{
-    var data=Query("SELECT s.id AS venda,COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS recebido,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" ORDER BY s.id DESC");
-    int overpaid=0,negative=0,unassigned=0;decimal outstanding=0;decimal received=0;
+    var data=Query("SELECT s.id AS venda,COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE') AS cliente,"+
+     "s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS recebido,"+
+     Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" ORDER BY s.id DESC");
+    int overpaid=0,negative=0,unassigned=0;
+    decimal receivedOnSales=0m,receivedGeneral=0m,openReal=0m;
+    var perClient=new Dictionary<string,decimal>(StringComparer.OrdinalIgnoreCase);
     foreach(DataRow row in data.Rows){
-     decimal gross=Convert.ToDecimal(row["valor"]),paid=Convert.ToDecimal(row["recebido"]),balance=Convert.ToDecimal(row["saldo"]);
-     if(paid>gross+0.005M)overpaid++;
-     if(balance< -0.005M)negative++;
-     if(Convert.ToString(row["cliente"])=="SEM CLIENTE")unassigned++;
-     if(balance>0)outstanding+=balance;
-     received+=paid;
+     string client=Convert.ToString(row["cliente"]).Trim();
+     decimal gross=Convert.ToDecimal(row["valor"]),paid=Convert.ToDecimal(row["recebido"]),
+      balance=Convert.ToDecimal(row["saldo"]);
+     if(paid>gross+0.005m)overpaid++;
+     if(balance< -0.005m)negative++;
+     if(client=="SEM CLIENTE")unassigned++;
+     decimal current; if(!perClient.TryGetValue(client,out current))current=0m;
+     perClient[client]=current+Math.Max(0m,balance);
+     receivedOnSales+=paid;
     }
-    using(var form=new StyledDialogForm {Text="Conferência do Fiado - somente leitura",Width=1080,Height=650,StartPosition=FormStartPosition.CenterParent}){
-     var summary=new Label {Dock=DockStyle.Top,Height=76,Font=new Font("Segoe UI",11,FontStyle.Bold),ForeColor=Color.FromArgb(20,45,83),BackColor=Color.FromArgb(232,242,251),Text="  Vendas: "+data.Rows.Count+"    |    Saldo em aberto: R$ "+outstanding.ToString("N2")+"    |    Recebido: R$ "+received.ToString("N2")+"\\n  Pagamentos acima do valor: "+overpaid+"    |    Saldos negativos: "+negative+"    |    Vendas sem cliente: "+unassigned+"\\n  Consulta sem alteração dos registros."};
-     var table=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=data,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
+    var general=new Dictionary<string,decimal>(StringComparer.OrdinalIgnoreCase);
+    using(var account=Open(true)){
+     if(FiadoAccountLedger.Exists(account)){
+      using(var cmd=new SQLiteCommand("SELECT TRIM(customer_name),COALESCE(SUM(amount),0) "+
+       "FROM fiado_account_receipts GROUP BY TRIM(customer_name) COLLATE NOCASE",account))
+      using(var rd=cmd.ExecuteReader())while(rd.Read()){
+       general[Convert.ToString(rd[0])]=Convert.ToDecimal(rd[1]);
+       receivedGeneral+=Convert.ToDecimal(rd[1]);
+      }
+     }
+    }
+    int excessiveGeneral=0;
+    foreach(var item in perClient){
+     decimal direct;general.TryGetValue(item.Key,out direct);
+     if(direct>item.Value+0.005m)excessiveGeneral++;
+     openReal+=Math.Max(0m,item.Value-direct);
+    }
+    using(var form=new StyledDialogForm{Text="Conferência do Fiado | somente leitura",Width=1140,Height=690,
+     StartPosition=FormStartPosition.CenterParent}){
+     var summary=new Label{Dock=DockStyle.Top,Height=103,
+      Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=Color.FromArgb(20,45,83),
+      BackColor=Color.FromArgb(232,242,251),Padding=new Padding(9,7,4,4),
+      Text="Vendas fiadas: "+data.Rows.Count+"   |   Saldo total real: R$ "+openReal.ToString("N2")+
+      "\nPagamentos por venda: R$ "+receivedOnSales.ToString("N2")+
+      "   |   Pagamentos no saldo total: R$ "+receivedGeneral.ToString("N2")+
+      "\nPagamentos por venda acima do total: "+overpaid+
+      "   |   Recebimentos gerais excessivos: "+excessiveGeneral+
+      "   |   Saldos negativos: "+negative+"   |   Vendas sem cliente: "+unassigned};
+     var table=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,
+      AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,DataSource=data,
+      RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect};
      table.RowTemplate.Height=32;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(240,246,253);
-     form.Controls.Add(table);form.Controls.Add(summary);form.ShowDialog(this);
+     var hint=new Label{Dock=DockStyle.Bottom,Height=34,
+      Text="Os saldos por venda ainda não incluem recebimentos gerais. O SALDO TOTAL REAL acima inclui esses abatimentos.",
+      TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(20,73,158)};
+     form.Controls.Add(table);form.Controls.Add(hint);form.Controls.Add(summary);form.ShowDialog(this);
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível conferir o Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
