@@ -1434,6 +1434,30 @@ namespace ArmazemGratidao {
    lines.Add("Documento de controle interno - nao fiscal.");
    return WriteComprovantePdf(lines,"Venda-"+saleId+".pdf");
   }
+  // Pasta Documentos pode estar sem permissao no Windows 8. Em caso de
+  // acesso negado, salvar na pasta de dados do ERP, que ja e usada pelo SQLite.
+  // Preserva o local antigo quando ele funciona; nao altera ACLs do Windows.
+  static string SaveComprovanteFile(string filename,byte[] content){
+   string documents=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+    "Armazem Gratidao","Comprovantes");
+   string fallback=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "ArmazemGratidaoNovo","Comprovantes");
+   try{
+    Directory.CreateDirectory(documents);
+    string file=Path.Combine(documents,filename);
+    File.WriteAllBytes(file,content);
+    return file;
+   }catch(UnauthorizedAccessException){
+    // Pasta Documentos bloqueada: usar a pasta privada do programa.
+   }catch(IOException){
+    // Pasta indisponivel: tentar salvar no local alternativo.
+   }
+   Directory.CreateDirectory(fallback);
+   string recovered=Path.Combine(fallback,filename);
+   File.WriteAllBytes(recovered,content);
+   return recovered;
+  }
+
   string WriteComprovantePdf(List<string> lines,string filename){
    // PDF escrito em objetos padrao; cada pagina suporta 55 linhas.
    var objects=new List<string>();
@@ -1476,11 +1500,7 @@ namespace ArmazemGratidao {
    pdf.Append("xref\n0 ").Append(objects.Count+1).Append("\n0000000000 65535 f \n");
    for(int i=1;i<positions.Count;i++)pdf.Append(positions[i].ToString("D10")).Append(" 00000 n \n");
    pdf.Append("trailer\n<< /Size ").Append(objects.Count+1).Append(" /Root 1 0 R >>\nstartxref\n").Append(xref).Append("\n%%EOF");
-   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Armazem Gratidao","Comprovantes");
-   Directory.CreateDirectory(folder);
-   string destination=Path.Combine(folder,filename);
-   File.WriteAllBytes(destination,Encoding.ASCII.GetBytes(pdf.ToString()));
-   return destination;
+   return SaveComprovanteFile(filename,Encoding.ASCII.GetBytes(pdf.ToString()));
   }
   string CreateOpenBalancePdf(string clientName){
    var lines=new List<string>{"ARMAZEM GRATIDAO","EXTRATO DE VALORES EM ABERTO - NAO FISCAL","Cliente: "+clientName,"Emitido em: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm"),new string('-',65)};
@@ -1520,10 +1540,7 @@ namespace ArmazemGratidao {
     }
    }
    lines.Add(new string('-',38));lines.Add("Comprovante nao fiscal.");
-   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Armazem Gratidao","Comprovantes");
-   Directory.CreateDirectory(folder);
-   string file=Path.Combine(folder,"Cupom-Venda-"+saleId+".txt");
-   File.WriteAllLines(file,lines.ToArray(),Encoding.UTF8);return file;
+   return SaveComprovanteFile("Cupom-Venda-"+saleId+".txt",Encoding.UTF8.GetBytes(string.Join(Environment.NewLine,lines.ToArray())+Environment.NewLine));
   }
   void OfferSaleReceipt(long saleId,string clientName,decimal saleTotal){
    try{
@@ -1535,7 +1552,7 @@ namespace ArmazemGratidao {
      var send=new Button{Text="Preparar envio WhatsApp",Left=16,Top=120,Width=230,Height=43};
      var save=new Button{Text="Gerar e abrir arquivo",Left=258,Top=120,Width=210,Height=43};
      var close=new Button{Text="Fechar",Left=480,Top=120,Width=135,Height=43};
-     var note=new Label{Text="O arquivo fica salvo em Documentos / Armazem Gratidao / Comprovantes.\nNo WhatsApp comum, o anexo deve ser selecionado manualmente.\nCupom não fiscal não substitui NFC-e autorizada.",Left=16,Top=182,Width=610,Height=80};
+     var note=new Label{Text="O arquivo fica em Documentos / Armazem Gratidao / Comprovantes.\nSe o acesso for negado, será salvo em AppData / Local / ArmazemGratidaoNovo / Comprovantes.\nNo WhatsApp, selecione o anexo manualmente.\nCupom não fiscal não substitui NFC-e autorizada.",Left=16,Top=182,Width=610,Height=104};
      Func<string> generate=()=>{
       if(option.SelectedIndex==0)return CreateReceiptText(saleId);
       if(option.SelectedIndex==1)return CreateSaleReceiptPdf(saleId);
