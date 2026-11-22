@@ -1157,6 +1157,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
         }
        if(!stillVisible)
         throw new Exception("O cliente deixou de estar visível em Cadastro de Clientes. Atualize a lista e tente novamente.");
+       if(FiadoAccountLedger.Received(conn,tx,oldName)>0m)
+        throw new Exception("O cliente possui pagamentos gerais no Fiado. Transfira a conta completa com o historico para evitar saldo incorreto.");
        using(var cmd=new SQLiteCommand(
         "UPDATE sales SET customer_name=@newName WHERE id=@sale AND TRIM(COALESCE(customer_name,''))=@oldName COLLATE NOCASE",conn,tx)){
         cmd.Parameters.AddWithValue("@newName",newName);
