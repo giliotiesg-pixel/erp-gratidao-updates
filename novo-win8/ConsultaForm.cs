@@ -791,15 +791,19 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(loadingMaster||IsDisposed||Disposing)return;
    loadingMaster=true;
    try{
+    string filteredSalesSql=credit?"":SalesWithDailyTotalsSql()+" WHERE "+
+     SalesFilterSql().Replace("created_at","s.created_at");
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     QueryFiltered(SalesWithDailyTotalsSql()+" WHERE "+
-      SalesFilterSql().Replace("created_at","s.created_at")+
-      // Nas vendas anteriores, ordem natural: 18/11 antes de 20/11,
-      // inclusive para lançamentos importados ou feitos retroativamente.
-      // No dia atual, manter a venda mais recente no topo para o PDV.
-      (previous?" ORDER BY datetime(s.created_at) ASC,s.id ASC LIMIT 3000":
-       " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000"));
+     QueryFiltered(previous?
+      // Selecionar as 3.000 vendas mais recentes e APRESENTAR em ordem crescente.
+      // Assim vendas retroativas entram antes de datas posteriores sem fazer
+      // sumir as vendas recentes quando o banco tiver mais de 3.000 registros.
+      "SELECT * FROM ("+filteredSalesSql+
+       " ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000) historico "+
+       "ORDER BY datetime(historico.data) ASC,historico.venda ASC":
+      // Vendas do dia ainda mostram as mais recentes primeiro.
+      filteredSalesSql+" ORDER BY datetime(s.created_at) DESC,s.id DESC LIMIT 3000");
     if(!credit)PrepareSalesList(rows);
     master.DataSource=rows;
     if(!credit){
@@ -815,7 +819,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      }
      var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
      if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
-      (rows.Rows.Count>=3000?" (primeiras 3.000)":"");
+      (rows.Rows.Count>=3000?(previous?" (3.000 mais recentes em ordem por data)":" (primeiras 3.000)"):"");
      var totals=QueryFiltered("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
       "FROM sales WHERE "+SalesFilterSql());
      var daily=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
