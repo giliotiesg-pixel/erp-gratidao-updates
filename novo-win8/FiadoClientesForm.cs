@@ -644,9 +644,11 @@ namespace ArmazemGratidao {
    if(services!=null)services.Visible=true;
    refreshingClientSales=true;
    try {
+    // Respeitar data real mesmo em vendas lançadas retroativamente;
+    // manter sale_id estável para itens, pagamentos e histórico.
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
-    openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY s.id DESC","@name",name);
-    paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY s.id DESC","@name",name);
+    openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
+    paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
     paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE ORDER BY p.paid_at DESC,p.id DESC","@name",name);
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     decimal credit=0m;
