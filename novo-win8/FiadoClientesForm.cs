@@ -995,6 +995,11 @@ namespace ArmazemGratidao {
          movedFiado=Convert.ToInt32(count);
          updateTable("bottle_loans");
          updateTable("customer_credit_entries");
+         updateTable("fiado_account_receipts");
+         updateTable("fiado_account_receipt_audit");
+         updateTable("customer_credit_deposit_authorizations");
+         updateTable("customer_credit_reversals");
+         updateTable("customer_credit_reversal_archive");
          updateTable("customer_fiado_limit_audit");
          string limitNote="Sem limite anterior";
          if(hasTable("customer_fiado_limits")){
@@ -1079,7 +1084,9 @@ namespace ArmazemGratidao {
       using(var cn=Open(true)){
        // Nome ja existente pode pertencer a outro cliente; nao mesclar contas sem auditoria.
        foreach(var target in new[]{new[]{"customers","name"},new[]{"sales","customer_name"},new[]{"bottle_loans","customer_name"},
-          new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"}}){
+          new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"},
+           new[]{"fiado_account_receipts","customer_name"},new[]{"fiado_account_receipt_audit","customer_name"},
+           new[]{"customer_credit_deposit_authorizations","customer_name"}}){
         string table=target[0],col=target[1];
         using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@table",cn)){
          exists.Parameters.AddWithValue("@table",table);
@@ -1106,7 +1113,11 @@ namespace ArmazemGratidao {
         using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS customer_name_corrections(id INTEGER PRIMARY KEY AUTOINCREMENT,old_name TEXT NOT NULL,new_name TEXT NOT NULL,changed_at TEXT NOT NULL,details TEXT NOT NULL)",cn,tx))create.ExecuteNonQuery();
         int changed=0;
         foreach(var target in new[]{new[]{"customers","name"},new[]{"sales","customer_name"},new[]{"bottle_loans","customer_name"},
-           new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"},new[]{"customer_fiado_limit_audit","customer_name"}}){
+           new[]{"customer_credit_entries","customer_name"},new[]{"customer_fiado_limits","customer_name"},
+            new[]{"fiado_account_receipts","customer_name"},new[]{"fiado_account_receipt_audit","customer_name"},
+            new[]{"customer_credit_deposit_authorizations","customer_name"},
+            new[]{"customer_credit_reversals","customer_name"},new[]{"customer_credit_reversal_archive","customer_name"},
+            new[]{"customer_fiado_limit_audit","customer_name"}}){
          string table=target[0],col=target[1];
          using(var exists=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@table",cn,tx)){
           exists.Parameters.AddWithValue("@table",table);
