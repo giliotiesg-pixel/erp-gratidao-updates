@@ -1033,21 +1033,15 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
        cmd.Parameters.AddWithValue("@sale",sale);
        paid=Convert.ToDecimal(cmd.ExecuteScalar());
       }
-     // Preferir o cadastro existente. Em bancos antigos sem tabela customers,
-     // permitir os nomes que ja aparecem no historico de vendas.
-     string sql=CustomerEditTableExists(conn,null,"customers")?
-      "SELECT DISTINCT TRIM(name) AS name FROM customers WHERE TRIM(COALESCE(name,''))<>'' ORDER BY name COLLATE NOCASE":
-      "SELECT DISTINCT TRIM(customer_name) AS name FROM sales WHERE TRIM(COALESCE(customer_name,''))<>'' ORDER BY name COLLATE NOCASE";
-     using(var cmd=new SQLiteCommand(sql,conn))
-     using(var rd=cmd.ExecuteReader()){
-      while(rd.Read()){
-       string value=Convert.ToString(rd[0]).Trim();
-       if(value.Length>0&&!string.Equals(value,"Consumidor",StringComparison.OrdinalIgnoreCase)&&
-          !string.Equals(value,"SEM CLIENTE",StringComparison.OrdinalIgnoreCase))customers.Add(value);
-      }
+     // Fonte unica: exatamente os nomes visiveis em Cadastro de Clientes
+     // (cadastro formal e nomes preservados de Vendas/Fiado), sem excluidos.
+     foreach(var entry in ModuloConsultaForm.ReadVisibleClients(conn)){
+      string value=entry.Item1.Trim();
+      if(value.Length>0&&!string.Equals(value,"Consumidor",StringComparison.OrdinalIgnoreCase)&&
+         !string.Equals(value,"SEM CLIENTE",StringComparison.OrdinalIgnoreCase))customers.Add(value);
      }
     }
-    if(customers.Count==0)throw new Exception("Não há clientes cadastrados. Cadastre o cliente antes de alterar a venda.");
+    if(customers.Count==0)throw new Exception("Não foram encontrados clientes visíveis no Cadastro de Clientes.");
     using(var dlg=new StyledDialogForm{
      Text="Corrigir cliente de venda Fiado #"+sale,Width=660,Height=365,
      StartPosition=FormStartPosition.CenterParent,
@@ -1061,10 +1055,10 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      var values=new Label{Text="Total da venda: R$ "+total.ToString("N2")+
       "   |   Pago: R$ "+paid.ToString("N2")+"   |   Em aberto: R$ "+(total-paid).ToString("N2"),
       Left=18,Top=107,Width=610,Height=27,Font=new Font("Segoe UI",9.2f,FontStyle.Bold)};
-     var selectLabel=new Label{Text="Selecione ou pesquise o cliente correto:",Left=18,Top=144,Width=610,Height=23};
+     var selectLabel=new Label{Text="Pesquisar cliente correto no Cadastro de Clientes ("+customers.Count+" nomes):",Left=18,Top=144,Width=610,Height=23};
      var choice=new ComboBox{Left=18,Top=171,Width=610,Height=31,
       DropDownStyle=ComboBoxStyle.DropDown,AutoCompleteMode=AutoCompleteMode.SuggestAppend,
-      AutoCompleteSource=AutoCompleteSource.ListItems};
+      AutoCompleteSource=AutoCompleteSource.ListItems,MaxDropDownItems=24,IntegralHeight=false,DropDownHeight=360};
      choice.Items.AddRange(customers.Cast<object>().ToArray());
      var notice=new Label{Text="Somente esta venda será transferida. Produtos, valores, pagamentos, estoque e o cadastro anterior permanecem intactos.",
       Left=18,Top=214,Width=610,Height=44,ForeColor=Color.FromArgb(123,56,39)};
@@ -1123,13 +1117,26 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
         throw new Exception("A venda deixou de ser Fiado. Correção cancelada.");
        if(HasCustomerCreditForSale(conn,tx,sale))
         throw new Exception("A venda possui crédito antecipado. Correção bloqueada para não perder saldo.");
-       if(CustomerEditTableExists(conn,tx,"customers")){
+       // Revalidar a mesma origem que aparece em Cadastro de Clientes:
+       // nomes da tabela customers OU nomes existentes nas vendas.
+       bool stillVisible=false;
+       if(CustomerEditTableExists(conn,tx,"customers"))
         using(var check=new SQLiteCommand("SELECT COUNT(*) FROM customers WHERE TRIM(name)=@name COLLATE NOCASE",conn,tx)){
          check.Parameters.AddWithValue("@name",newName);
-         if(Convert.ToInt64(check.ExecuteScalar())!=1)
-          throw new Exception("O cadastro do novo cliente mudou. Atualize a lista e tente novamente.");
+         stillVisible=Convert.ToInt64(check.ExecuteScalar())>0;
         }
-       }
+       if(!stillVisible)
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sales WHERE TRIM(customer_name)=@name COLLATE NOCASE",conn,tx)){
+         check.Parameters.AddWithValue("@name",newName);
+         stillVisible=Convert.ToInt64(check.ExecuteScalar())>0;
+        }
+       if(CustomerEditTableExists(conn,tx,"deleted_customer_names"))
+        using(var check=new SQLiteCommand("SELECT COUNT(*) FROM deleted_customer_names WHERE TRIM(customer_name)=@name COLLATE NOCASE",conn,tx)){
+         check.Parameters.AddWithValue("@name",newName);
+         if(Convert.ToInt64(check.ExecuteScalar())>0)stillVisible=false;
+        }
+       if(!stillVisible)
+        throw new Exception("O cliente deixou de estar visível em Cadastro de Clientes. Atualize a lista e tente novamente.");
        using(var cmd=new SQLiteCommand(
         "UPDATE sales SET customer_name=@newName WHERE id=@sale AND TRIM(COALESCE(customer_name,''))=@oldName COLLATE NOCASE",conn,tx)){
         cmd.Parameters.AddWithValue("@newName",newName);
