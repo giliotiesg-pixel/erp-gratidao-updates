@@ -791,11 +791,12 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    if(loadingMaster||IsDisposed||Disposing)return;
    loadingMaster=true;
    try{
+    bool chronologicalHistory=!credit&&(previous||selectedRange||selectedMonth||selectedDate);
     string filteredSalesSql=credit?"":SalesWithDailyTotalsSql()+" WHERE "+
      SalesFilterSql().Replace("created_at","s.created_at");
     var rows=credit?
      Query("SELECT COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') AS cliente,COUNT(*) AS vendas,SUM(COALESCE(gross_total,0)) AS total_fiado FROM sales WHERE UPPER(COALESCE(payment_method,'')) LIKE '%FIADO%' GROUP BY COALESCE(NULLIF(TRIM(customer_name),''),'SEM CLIENTE') ORDER BY cliente"):
-     QueryFiltered(previous?
+     QueryFiltered(chronologicalHistory?
       // Selecionar as 3.000 vendas mais recentes e APRESENTAR em ordem crescente.
       // Assim vendas retroativas entram antes de datas posteriores sem fazer
       // sumir as vendas recentes quando o banco tiver mais de 3.000 registros.
@@ -808,7 +809,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     master.DataSource=rows;
     if(!credit){
      ConfigureSalesColumns();
-     if(previous&&master.Rows.Count>0){
+     if(chronologicalHistory&&master.Rows.Count>0){
       // A lista de Vendas Anteriores permanece em ordem crescente,
       // mas inicia selecionando a venda mais recente para preservar
       // o resumo da data exibido nos indicadores e na tela de detalhes.
@@ -819,7 +820,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      }
      var listTitle=Controls.Find("amzgSalesListTitle",true).FirstOrDefault() as Label;
      if(listTitle!=null)listTitle.Text="  "+SalesFilterTitle()+
-      (rows.Rows.Count>=3000?(previous?" (3.000 mais recentes em ordem por data)":" (primeiras 3.000)"):"");
+      (rows.Rows.Count>=3000?(chronologicalHistory?" (3.000 mais recentes em ordem por data)":" (primeiras 3.000)"):"");
      var totals=QueryFiltered("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
       "FROM sales WHERE "+SalesFilterSql());
      var daily=Query("SELECT COUNT(*) AS quantidade,COALESCE(SUM(gross_total),0) AS total "+
