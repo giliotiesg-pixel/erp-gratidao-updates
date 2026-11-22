@@ -616,8 +616,11 @@ namespace ArmazemGratidao {
     clients.SuspendLayout();clients.Controls.Clear();
     decimal allBalance=0,internalBalance=0;
     bool selectedClientStillHasFiado=false;
+    using(var account=Open(true))
     foreach(DataRow r in dt.Rows) {
-     var name=Convert.ToString(r["cliente"]);var balance=Convert.ToDecimal(r["saldo"]);
+     var name=Convert.ToString(r["cliente"]);
+     var grossBalance=Convert.ToDecimal(r["saldo"]);
+     var balance=Math.Max(0m,grossBalance-FiadoAccountLedger.Received(account,null,name));
      // Nunca ocultar clientes com saldo devedor: a lista inicial deve refletir o historico.
      // A exclusao visual so se aplica a contas sem saldo pendente.
      if(hiddenNames.Contains(name) && balance<=0.005m)continue;
@@ -675,8 +678,12 @@ namespace ArmazemGratidao {
       }
      }
     }
-    selected.Text="FIADO | "+name+"   •   Em aberto R$ "+total.ToString("N2")+
-      "   •   Crédito R$ "+credit.ToString("N2");
+    decimal generalPaid;
+    using(var account=Open(true))generalPaid=FiadoAccountLedger.Received(account,null,name);
+    decimal netDue=Math.Max(0m,total-generalPaid);
+    selected.Text="FIADO | "+name+"  |  Saldo atual R$ "+netDue.ToString("N2")+
+     "  |  Recebido no total R$ "+generalPaid.ToString("N2")+
+     "  |  Crédito antecipado R$ "+credit.ToString("N2");
      var hint=new ToolTip();hint.SetToolTip(selected,limitText);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
    finally{
@@ -1511,7 +1518,11 @@ namespace ArmazemGratidao {
      sb.AppendLine("  Total: R$ "+Convert.ToDecimal(sale["total"]).ToString("N2")+" | Pago: R$ "+Convert.ToDecimal(sale["pago"]).ToString("N2")+" | Saldo: R$ "+balance.ToString("N2"));
      sb.AppendLine("--------------------------------");
     }
-    sb.AppendLine("TOTAL EM ABERTO: R$ "+totalDue.ToString("N2"));
+    decimal receivedOnTotal;
+    using(var account=Open(true))receivedOnTotal=FiadoAccountLedger.Received(account,null,customer);
+    sb.AppendLine("PAGAMENTOS DIRETOS NO SALDO TOTAL: R$ "+receivedOnTotal.ToString("N2"));
+    sb.AppendLine("SALDO FINAL EM ABERTO: R$ "+Math.Max(0m,totalDue-receivedOnTotal).ToString("N2"));
+    sb.AppendLine("Credito depositado antecipadamente nao e um segundo pagamento do Fiado.");
     sb.AppendLine("Documento informativo, nao fiscal.");
     using(var form=new StyledDialogForm {Text="Extrato do cliente - "+customer,Width=720,Height=660,StartPosition=FormStartPosition.CenterParent}){
      var preview=new TextBox {Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,Dock=DockStyle.Fill,Font=new Font("Consolas",10),Text=sb.ToString()};
@@ -1831,7 +1842,14 @@ namespace ArmazemGratidao {
     if(balances.Count==0){MessageBox.Show("Nenhuma venda em aberto para dar baixa.");return;}
     decimal due=0;
     foreach(var row in balances)due+=row.Value;
-    if(requested>due+0.005M){MessageBox.Show("O recebido não pode ultrapassar o saldo em aberto de R$ "+due.ToString("N2")+".");return;}
+    // Um pagamento no saldo total já reduz o que pode ser recebido
+    // por venda. Aplicar somente o saldo consolidado remanescente.
+    decimal dueOverall;
+    using(var check=Open(true))dueOverall=FiadoAccountLedger.Due(check,null,customer);
+    decimal availableForThisPayment=Math.Min(due,dueOverall);
+    if(requested>availableForThisPayment+0.005M){
+     MessageBox.Show("O recebido não pode ultrapassar o saldo total ainda em aberto de R$ "+availableForThisPayment.ToString("N2")+".");return;
+    }
     decimal planned=0;int affected=0;
     foreach(var row in balances){
      decimal toPay=Math.Min(row.Value,Math.Max(0,requested-planned));
@@ -1856,6 +1874,8 @@ namespace ArmazemGratidao {
      }
      if(new FileInfo(backup).Length<=0)throw new Exception("Backup vazio. Pagamento cancelado.");
      using(var tx=conn.BeginTransaction()){
+      if(FiadoAccountLedger.Due(conn,tx,customer)+0.005m<requested)
+       throw new Exception("O saldo total mudou; atualize antes de registrar a baixa.");
       if(useDepositedCredit && CustomerCreditBalance(conn,tx,customer)+0.005m<requested)
        throw new Exception("Credito do cliente foi alterado. Atualize os saldos antes de receber.");
       decimal remaining=requested;
@@ -2812,7 +2832,8 @@ namespace ArmazemGratidao {
     AND UPPER(COALESCE(s.status,'')) NOT LIKE '%EXCLUID%'";
    using(var cmd=new SQLiteCommand(sql,cn,tx)){
     cmd.Parameters.AddWithValue("@client",name.Trim());
-    return Convert.ToDecimal(cmd.ExecuteScalar());
+    decimal saleDue=Convert.ToDecimal(cmd.ExecuteScalar());
+    return Math.Max(0m,saleDue-FiadoAccountLedger.Received(cn,tx,name));
    }
   }
   public static void EnforceCreditLimit(SQLiteConnection cn,SQLiteTransaction tx,string name,decimal newFiado){
@@ -2884,7 +2905,8 @@ namespace ArmazemGratidao {
     foreach(DataGridViewRow row in openSales.Rows)
      if(!row.IsNewRow && row.Cells["saldo"].Value!=null && row.Cells["saldo"].Value!=DBNull.Value)
       total+=Math.Max(0,Convert.ToDecimal(row.Cells["saldo"].Value));
-    decimal apply=Math.Round(Math.Min(total,available),2);
+    decimal accountDue;using(var cn=Open(true))accountDue=FiadoAccountLedger.Due(cn,null,customer);
+    decimal apply=Math.Round(Math.Min(Math.Min(total,available),accountDue),2);
     if(apply<=0){MessageBox.Show(available<=0?"Este cliente nao tem credito depositado disponivel.":"Este cliente nao tem divida fiada em aberto.","Fiado");return;}
     int creditIndex=method.Items.IndexOf("CREDITO DEPOSITADO");
     if(creditIndex<0)throw new Exception("Forma de credito depositado indisponivel.");
