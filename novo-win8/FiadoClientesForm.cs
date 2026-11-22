@@ -87,7 +87,7 @@ namespace ArmazemGratidao {
    switchBar.Controls.Add(showHistory);
    var showByDay=new Button {Text="Pagamentos por data",Width=175,Height=29,
     BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};
-   showByDay.Click+=(sender,args)=>{tabs.SelectedIndex=3;LoadPaymentsByDay();};
+   showByDay.Click+=(sender,args)=>{if(tabs.SelectedIndex==3)LoadPaymentsByDay();else tabs.SelectedIndex=3;};
    switchBar.Controls.Add(showByDay);
    var backSmall=new Button{Name="amzgFiadoBackClients",Text="← Voltar aos clientes",Width=174,Height=30,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    backSmall.FlatAppearance.BorderSize=0;
