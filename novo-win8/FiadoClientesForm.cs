@@ -1739,6 +1739,12 @@ namespace ArmazemGratidao {
   }
   // Chamar apenas dentro da transacao da venda, depois de gravar sales.
   public static decimal ApplyCustomerCredit(SQLiteConnection cn,SQLiteTransaction tx,long saleId,string name,decimal fiadoAmount){
+   // Desativado por regra: deposito fica na carteira ate a baixa manual.
+   // Metodo conservado para compatibilidade com modulos antigos.
+   return 0m;
+  }
+  // Rotina antiga mantida fora da chamada de venda.
+  static decimal LegacyAutomaticCreditNotUsed(SQLiteConnection cn,SQLiteTransaction tx,long saleId,string name,decimal fiadoAmount){
    if(fiadoAmount<=0 || string.IsNullOrWhiteSpace(name) || string.Equals(name.Trim(),"Consumidor",StringComparison.OrdinalIgnoreCase))return 0m;
    decimal available=Math.Min(Math.Max(0m,CustomerCreditBalance(cn,tx,name)),AuthorizedCreditBalance(cn,tx,name));
    decimal applied=Math.Min(Math.Max(0m,available),fiadoAmount);
@@ -1862,16 +1868,8 @@ namespace ArmazemGratidao {
    string payMethod=Convert.ToString(method.SelectedItem);
    if(payMethod=="CREDITO DEPOSITADO"){MessageBox.Show("Escolha a forma realmente recebida (DINHEIRO, PIX etc.), nao CREDITO DEPOSITADO.");return;}
    if(MessageBox.Show("Cliente: "+customer+"\\nCredito recebido: R$ "+value.ToString("N2")+"\\nForma: "+payMethod+"\\n\\nEste valor sera guardado para abater compras fiadas futuras. Confirmar?","Credito do cliente",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-   // Cada novo credito exige decisao explicita sobre uso automatico em vendas futuras.
-   var decision=MessageBox.Show("Cliente: "+customer+
-    "\\n\\nAutorizar o uso AUTOMATICO somente deste NOVO credito nas proximas vendas fiadas?"+
-    "\\nSIM: abater automaticamente enquanto houver saldo de credito."+
-    "\\nNAO: guardar este novo credito sem abater automaticamente; creditos anteriores mantem sua autorizacao."+
-    "\\n\\nEsta autorizacao nao altera baixas de vendas antigas.",
-    "Autorizar abatimento automatico",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question,
-    MessageBoxDefaultButton.Button2);
-   if(decision==DialogResult.Cancel)return;
-   bool authorize=decision==DialogResult.Yes;
+   // Deposito e sempre saldo na carteira, sem abatimento automatico.
+   bool authorize=false;
    try{
     EnsureCustomerCredit(db);
     using(var cn=Open(false)){
@@ -1904,7 +1902,7 @@ namespace ArmazemGratidao {
      }
     }
     creditDepositAmount.Value=0;LoadClients();SelectClient(customer);
-    MessageBox.Show("Credito registrado para "+customer+". Abatimento deste novo credito: "+(authorize?"AUTORIZADO":"NAO AUTORIZADO")+".","Fiado");
+    MessageBox.Show("Credito depositado para "+customer+". Nenhuma venda foi abatida automaticamente. Use Pagar Fiado com credito quando desejar.","Fiado");
    }catch(Exception ex){MessageBox.Show("Credito nao registrado: "+ex.Message,"Fiado",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   // Corrigir o saldo da carteira com lancamento auditavel; nunca reescrever historico.
