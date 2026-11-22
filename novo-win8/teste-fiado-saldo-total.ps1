@@ -40,11 +40,12 @@ try{
  $flags=[Reflection.BindingFlags]::Static -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Public
  $conn=New-Object System.Data.SQLite.SQLiteConnection("Data Source=$db;Read Only=False")
  $conn.Open()
+ $sqliteConnection=$conn.PSObject.BaseObject
  try{
   function Calc([string]$name){
    $m=$ledger.GetMethod($name,$flags)
    if($null -eq $m){throw "Metodo do ledger ausente: $name"}
-   return [decimal]$m.Invoke($null,[object[]]@($conn,$null,'Priscila Vera'))
+   return [decimal]$m.Invoke($null,[object[]]@($sqliteConnection,$null,'Priscila Vera'))
   }
   function Verify([string]$scenario,[decimal]$sales,[decimal]$payments,[decimal]$due){
    $a=Calc 'SalesDue';$b=Calc 'Received';$c=Calc 'Due'
@@ -55,13 +56,13 @@ try{
   }
   $create=$ledger.GetMethod('CreateTables',$flags)
   if($null -eq $create){throw 'A tabela auditavel de recebimentos nao existe.'}
-  [void]$create.Invoke($null,[object[]]@($conn,$null))
+  [void]$create.Invoke($null,[object[]]@($sqliteConnection,$null))
   Verify 'Divida original com R$50 pago numa venda' 400 0 400
   # O deposito antecipado de R$200 nao deve abater novamente a divida.
   Verify 'Deposito em carteira separado do Fiado' 400 0 400
   $auto=$fiado.GetMethod('ApplyCustomerCredit',$flags)
   if($null -eq $auto){throw 'Metodo de compatibilidade de credito ausente.'}
-  $applied=[decimal]$auto.Invoke($null,[object[]]@($conn,$null,[long]2,'Priscila Vera',[decimal]100))
+  $applied=[decimal]$auto.Invoke($null,[object[]]@($sqliteConnection,$null,[long]2,'Priscila Vera',[decimal]100))
   if($applied -ne 0){throw 'Creditos nao podem ser usados automaticamente em novas vendas.'}
   Verify 'Credito automatico bloqueado' 400 0 400
   $cmd=$conn.CreateCommand()
@@ -75,14 +76,14 @@ try{
   [void]$cmd.ExecuteNonQuery()
   Verify 'Uso manual do credito R$120 sem dinheiro novo' 280 100 180
   $wallet=$fiado.GetMethod('CustomerCreditBalance',$flags)
-  $available=[decimal]$wallet.Invoke($null,[object[]]@($conn,$null,'Priscila Vera'))
+  $available=[decimal]$wallet.Invoke($null,[object[]]@($sqliteConnection,$null,'Priscila Vera'))
   if($available -ne 80){throw "Carteira residual incorreta: $available"}
   # Correcao do pagamento geral R$100 -> R$80.
   $cmd.CommandText="UPDATE fiado_account_receipts SET amount=80 WHERE receipt_key='teste-1'"
   [void]$cmd.ExecuteNonQuery()
   Verify 'Correcao de pagamento parcial R$100 para R$80' 280 80 200
   $backup=$ledger.GetMethod('BackupVerified',$flags)
-  $copy=[string]$backup.Invoke($null,[object[]]@($conn,$db,'antes-teste-fiado-'))
+  $copy=[string]$backup.Invoke($null,[object[]]@($sqliteConnection,$db,'antes-teste-fiado-'))
   if(!(Test-Path $copy) -or (Get-Item $copy).Length -le 0){
    throw 'Backup do saldo total do Fiado ausente ou vazio.'
   }
