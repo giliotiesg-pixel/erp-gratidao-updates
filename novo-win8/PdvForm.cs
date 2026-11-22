@@ -846,7 +846,7 @@ namespace ArmazemGratidao {
           payment.Parameters.AddWithValue("@sale",id);payment.Parameters.AddWithValue("@method",sale.Item3);
           payment.Parameters.AddWithValue("@amount",total);payment.ExecuteNonQuery();
          }
-         if(sale.Item3=="FIADO")FiadoClientesForm.ApplyCustomerCredit(cn,tx,id,sale.Item5,total);
+         // Credito antecipado e aplicado somente pelo botao manual no Fiado.
          using(var mark=new SQLiteCommand("INSERT INTO notebook_imports(source_file,sale_number,sale_id) VALUES(@source,@number,@id)",cn,tx)){
           mark.Parameters.AddWithValue("@source",source);mark.Parameters.AddWithValue("@number",sale.Item1);mark.Parameters.AddWithValue("@id",id);mark.ExecuteNonQuery();
          }
@@ -1818,10 +1818,8 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@saleDate",manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));cmd.Parameters.AddWithValue("@customer",customerName);cmd.Parameters.AddWithValue("@method",recordedMethod);cmd.Parameters.AddWithValue("@total",sum);cmd.Parameters.AddWithValue("@cost",cost);cmd.Parameters.AddWithValue("@profit",profit);cmd.Parameters.AddWithValue("@reserve",Math.Round(profit*0.10M,2));cmd.Parameters.AddWithValue("@received",method=="DINHEIRO"?received.Value:sum);cmd.Parameters.AddWithValue("@change",method=="DINHEIRO"?received.Value-sum:0);cmd.Parameters.AddWithValue("@status",method=="FIADO"?"FIADO":"CONCLUIDA");saleId=Convert.ToInt64(cmd.ExecuteScalar());
      }
      if(bottleCount>0)CascosForm.RecordFromSale(c,tx,saleId,customerName,bottleCount,bottlePaid,manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-     if(method=="FIADO" || splitFiado){
-      decimal fiadoValue=method=="FIADO"?sum:split.Where(part=>part.Key=="FIADO").Sum(part=>part.Value);
-      FiadoClientesForm.ApplyCustomerCredit(c,tx,saleId,customerName,fiadoValue);
-     }
+     // Nao consumir carteira automaticamente ao finalizar nova venda fiada.
+     // O cliente decide quando usar o credito em Fiado > Pagar Fiado com credito.
      if(discount>0){
       using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discounts(sale_id INTEGER PRIMARY KEY,gross_before NUMERIC NOT NULL,discount_amount NUMERIC NOT NULL,discount_type TEXT NOT NULL,discount_value NUMERIC NOT NULL)",c,tx))create.ExecuteNonQuery();
       using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
