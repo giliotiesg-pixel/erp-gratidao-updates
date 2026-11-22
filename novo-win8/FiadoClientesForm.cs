@@ -12,6 +12,14 @@ namespace ArmazemGratidao {
   readonly FlowLayoutPanel clients=new FlowLayoutPanel {Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(8)};
   readonly DataGridView openSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly DataGridView paymentHistory=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
+  // Painel de totais diários: somente leitura e separado do histórico por venda.
+  readonly DataGridView paymentsByDay=new DataGridView {Name="amzgFiadoPaymentsByDay",Dock=DockStyle.Fill,
+   ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,
+   AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false};
+  readonly Label paymentsByDaySummary=new Label {Dock=DockStyle.Top,Height=56,
+   Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(20,68,145),
+   BackColor=Color.FromArgb(227,239,253),Padding=new Padding(12,7,6,4),
+   Text="Selecione um cliente para consultar os pagamentos por data."};
   readonly DataGridView paidSales=new DataGridView {Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};
   readonly Label selected=new Label {Dock=DockStyle.Top,Height=42,Padding=new Padding(7,4,5,2),Font=new Font("Segoe UI",10,FontStyle.Bold),AutoEllipsis=true};
   readonly NumericUpDown amount=new NumericUpDown {DecimalPlaces=2,Maximum=100000000,Width=130};
@@ -28,7 +36,7 @@ namespace ArmazemGratidao {
   readonly Label overview=new Label {Dock=DockStyle.Top,Height=88,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(18,51,99),BackColor=Color.FromArgb(229,242,255),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,4,4,4)};
   public FiadoClientesForm(string database) {
    db=database;Text="Armazem Gratidao | Fiado por Cliente";BackColor=Color.FromArgb(229,242,255);StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=false;ShowInTaskbar=false;SizeGripStyle=SizeGripStyle.Hide;AutoScaleMode=AutoScaleMode.Font;var area=Screen.PrimaryScreen.WorkingArea;Width=Math.Min(1250,Math.Max(680,area.Width-32));Height=Math.Min(790,Math.Max(520,area.Height-32));MinimumSize=new Size(640,480);
-   foreach(var table in new[]{openSales,paidSales,paymentHistory}){
+   foreach(var table in new[]{openSales,paidSales,paymentHistory,paymentsByDay}){
     table.ScrollBars=ScrollBars.Both;table.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
     table.DefaultCellStyle.Format="N2";
    }
@@ -63,6 +71,13 @@ namespace ArmazemGratidao {
    pending.Controls.Add(pendingTip);previous.Controls.Add(paidTip);
    tabs.TabPages.Add(pending);tabs.TabPages.Add(previous);
    var historyTab=new TabPage("Histórico de recebimentos");historyTab.Controls.Add(paymentHistory);tabs.TabPages.Add(historyTab);
+   var byDayTab=new TabPage("Pagamentos por data");
+   var byDayHelp=new Label {Dock=DockStyle.Top,Height=48,
+    Text="RECEBIMENTOS E ABATIMENTOS POR DATA | Uma entrada distribuída entre várias vendas é somada no total do dia.\nO histórico detalhado por venda continua na aba Histórico.",
+    Font=new Font("Segoe UI",9f),ForeColor=Color.FromArgb(22,75,160),
+    BackColor=Color.White,Padding=new Padding(10,5,6,2)};
+   byDayTab.Controls.Add(paymentsByDay);byDayTab.Controls.Add(paymentsByDaySummary);
+   byDayTab.Controls.Add(byDayHelp);tabs.TabPages.Add(byDayTab);
    var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Top,Height=38,WrapContents=false,AutoScroll=true,Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(229,242,255)};
    var showOpen=new Button {Text="Em aberto",Width=114,Height=29,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
    var showPrevious=new Button {Text="Pagas",Width=86,Height=29,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
@@ -70,6 +85,10 @@ namespace ArmazemGratidao {
     BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};
    showHistory.Click+=(sender,args)=>tabs.SelectedIndex=2;
    switchBar.Controls.Add(showHistory);
+   var showByDay=new Button {Text="Pagamentos por data",Width=175,Height=29,
+    BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};
+   showByDay.Click+=(sender,args)=>{if(tabs.SelectedIndex==3)LoadPaymentsByDay();else tabs.SelectedIndex=3;};
+   switchBar.Controls.Add(showByDay);
    var backSmall=new Button{Name="amzgFiadoBackClients",Text="← Voltar aos clientes",Width=174,Height=30,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    backSmall.FlatAppearance.BorderSize=0;
    backSmall.Click+=(sender,args)=>BackToFiadoClients();
@@ -99,6 +118,9 @@ namespace ArmazemGratidao {
     showPrevious.ForeColor=tabs.SelectedIndex==1?Color.White:Color.FromArgb(20,73,158);
     showHistory.BackColor=tabs.SelectedIndex==2?Color.FromArgb(20,73,158):Color.White;
     showHistory.ForeColor=tabs.SelectedIndex==2?Color.White:Color.FromArgb(20,73,158);
+    showByDay.BackColor=tabs.SelectedIndex==3?Color.FromArgb(20,73,158):Color.White;
+    showByDay.ForeColor=tabs.SelectedIndex==3?Color.White:Color.FromArgb(20,73,158);
+    if(tabs.SelectedIndex==3)LoadPaymentsByDay();
    };
    var bottom=new Panel {Dock=DockStyle.Bottom,Height=225,Padding=new Padding(6),BackColor=Color.FromArgb(235,241,250)};
    var paymentRow=new FlowLayoutPanel{Dock=DockStyle.Top,Height=82,WrapContents=true,AutoScroll=true};
@@ -254,7 +276,7 @@ namespace ArmazemGratidao {
    split.Panel2.Controls.Add(switchBar);
    split.Panel2.Controls.Add(selected);
    split.Panel2.Controls.Add(localNav);
-   foreach(var table in new[]{openSales,paidSales,paymentHistory}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
+   foreach(var table in new[]{openSales,paidSales,paymentHistory,paymentsByDay}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
    // Acao por venda, disponivel tanto nas vendas pagas quanto nas vendas em aberto.
    foreach(var table in new[]{openSales,paidSales}){
     if(!table.Columns.Contains("ReabrirVenda")){
@@ -622,8 +644,8 @@ namespace ArmazemGratidao {
    if(services!=null)services.Visible=true;
    refreshingClientSales=true;
    try {
-    // Sempre usar a data real da venda, mesmo se registrada depois.
-    // O ID permanece intacto para as baixas, historico e pagamentos.
+    // Respeitar data real mesmo em vendas lançadas retroativamente;
+    // manter sale_id estável para itens, pagamentos e histórico.
     var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
     openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
     paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
@@ -650,7 +672,70 @@ namespace ArmazemGratidao {
       "   •   Crédito R$ "+credit.ToString("N2");
      var hint=new ToolTip();hint.SetToolTip(selected,limitText);
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir fiado");}
-   finally{refreshingClientSales=false;UpdatePaymentSelection(true);}
+   finally{
+    refreshingClientSales=false;UpdatePaymentSelection(true);
+    if(saleTabs!=null&&saleTabs.SelectedIndex==3)LoadPaymentsByDay();
+   }
+  }
+  // Consulta somente leitura: agrega todos os credit_payments por data.
+  // Se o cliente pagou R$ 100 e o sistema distribuiu em tres vendas,
+  // os valores sao somados no mesmo dia, sem duplicar recebimentos.
+  void LoadPaymentsByDay(){
+   if(string.IsNullOrWhiteSpace(customer)){
+    paymentsByDay.DataSource=null;
+    paymentsByDaySummary.Text="Selecione um cliente para consultar os pagamentos.";
+    return;
+   }
+   try{
+    const string creditKind="UPPER(TRIM(COALESCE(p.payment_method,''))) IN ('CREDITO_CLIENTE','CREDITO DEPOSITADO')";
+    string day="COALESCE(NULLIF(SUBSTR(TRIM(COALESCE(p.paid_at,'')),1,10),''),'SEM DATA')";
+    string sql="SELECT "+day+" AS dia, "+
+     "COALESCE(SUM(CASE WHEN "+creditKind+" THEN 0 ELSE p.amount END),0) AS recebido, "+
+     "COALESCE(SUM(CASE WHEN "+creditKind+" THEN p.amount ELSE 0 END),0) AS credito, "+
+     "COALESCE(SUM(p.amount),0) AS abatido, "+
+     "COUNT(DISTINCT p.sale_id) AS vendas "+
+     "FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+
+     CreditFilter+" AND TRIM(COALESCE(s.customer_name,''))=@customer COLLATE NOCASE "+
+     "GROUP BY "+day+" ORDER BY dia DESC";
+    var records=Query(sql,"@customer",customer.Trim());
+    var table=new DataTable();
+    table.Columns.Add("Data",typeof(string));
+    table.Columns.Add("Valor pago (R$)",typeof(decimal));
+    table.Columns.Add("Crédito abatido (R$)",typeof(decimal));
+    table.Columns.Add("Total abatido (R$)",typeof(decimal));
+    table.Columns.Add("Vendas atendidas",typeof(int));
+    decimal received=0m,creditUsed=0m,deducted=0m;
+    foreach(DataRow row in records.Rows){
+     string iso=Convert.ToString(row["dia"]);
+     DateTime parsed;
+     string display=DateTime.TryParseExact(iso,"yyyy-MM-dd",
+      System.Globalization.CultureInfo.InvariantCulture,
+      System.Globalization.DateTimeStyles.None,out parsed)?
+      parsed.ToString("dd/MM/yyyy"):iso;
+     decimal valueReceived=Convert.ToDecimal(row["recebido"]);
+     decimal credit=Convert.ToDecimal(row["credito"]);
+     decimal total=Convert.ToDecimal(row["abatido"]);
+     table.Rows.Add(display,valueReceived,credit,total,Convert.ToInt32(row["vendas"]));
+     received+=valueReceived;creditUsed+=credit;deducted+=total;
+    }
+    paymentsByDay.DataSource=table;
+    foreach(string col in new[]{"Valor pago (R$)","Crédito abatido (R$)","Total abatido (R$)"}){
+     if(paymentsByDay.Columns.Contains(col)){
+      paymentsByDay.Columns[col].DefaultCellStyle.Format="N2";
+      paymentsByDay.Columns[col].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
+     }
+    }
+    if(paymentsByDay.Rows.Count>0)paymentsByDay.ClearSelection();
+    paymentsByDaySummary.Text=table.Rows.Count==0?
+     customer+" | Nenhum pagamento ou abatimento registrado.":
+     customer+" | Dias com pagamentos: "+table.Rows.Count+
+     " | Pago R$ "+received.ToString("N2")+
+     " | Crédito abatido R$ "+creditUsed.ToString("N2")+
+     " | Total abatido R$ "+deducted.ToString("N2");
+   }catch(Exception ex){
+    paymentsByDay.DataSource=null;
+    paymentsByDaySummary.Text="Não foi possível consultar os pagamentos: "+ex.Message;
+   }
   }
   void CorrectPaymentDate(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
@@ -1012,6 +1097,7 @@ namespace ArmazemGratidao {
    }
   }
   void CorrectCustomer(){
+   if(saleTabs!=null&&saleTabs.SelectedIndex>=2){MessageBox.Show("Selecione uma venda em aberto ou paga.");return;}
    var view=SelectedSaleGrid();
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;}
    long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
@@ -1059,7 +1145,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){items.DataSource=null;payments.DataSource=null;MessageBox.Show(ex.Message,"Erro ao consultar venda");}
   }
   void ShowSaleDetails(){
-   if(saleTabs!=null && saleTabs.SelectedIndex==2){
+   if(saleTabs!=null && saleTabs.SelectedIndex>=2){
     MessageBox.Show("Selecione uma venda na aba de vendas em aberto ou pagas.");return;
    }
    DataGridView view=SelectedSaleGrid();
@@ -1372,7 +1458,7 @@ namespace ArmazemGratidao {
   }
   void ShowItemAuditHistory(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
-   if(saleTabs.SelectedIndex==2){MessageBox.Show("Selecione uma venda em aberto ou paga.");return;}
+   if(saleTabs.SelectedIndex>=2){MessageBox.Show("Selecione uma venda em aberto ou paga.");return;}
    var view=SelectedSaleGrid();
    if(view.CurrentRow==null){MessageBox.Show("Selecione uma venda.");return;}
    long saleId=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
@@ -1434,7 +1520,7 @@ namespace ArmazemGratidao {
   void SendReceipt(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
    var view=SelectedSaleGrid();
-   if(saleTabs.SelectedIndex==2 || view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba em aberto ou pagas.");return;}
+   if(saleTabs.SelectedIndex>=2 || view.CurrentRow==null){MessageBox.Show("Selecione uma venda na aba em aberto ou pagas.");return;}
    try{
     long id=Convert.ToInt64(view.CurrentRow.Cells["venda"].Value);
     var rows=Query("SELECT name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@sale ORDER BY id","@sale",id);
