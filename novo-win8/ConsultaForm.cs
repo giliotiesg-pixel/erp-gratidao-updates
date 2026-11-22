@@ -1860,7 +1860,13 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      foreach(DataRow r in result.Rows){
       if(r["saldo"]!=null&&r["saldo"]!=DBNull.Value)balance+=Convert.ToDecimal(r["saldo"]);
      }
-     title="FIADO | "+name+" | Saldo: R$ "+balance.ToString("N2");
+     decimal totalReceipts;
+     using(var account=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=db,ReadOnly=true,FailIfMissing=true}.ToString())){
+      account.Open();
+      totalReceipts=FiadoAccountLedger.Received(account,null,name);
+     }
+     title="FIADO | "+name+" | Saldo: R$ "+Math.Max(0m,balance-totalReceipts).ToString("N2")+
+      " | Recebido no total: R$ "+totalReceipts.ToString("N2");
     }else{
      result=Query("SELECT id AS item_id,barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",selected);
      var info=Query("SELECT customer_name,created_at,payment_method,gross_total FROM sales WHERE id=@id","@id",selected);
