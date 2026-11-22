@@ -43,7 +43,7 @@ namespace ArmazemGratidao {
   internal static decimal Received(SQLiteConnection cn,SQLiteTransaction tx,string client){
    if(!Exists(cn,tx))return 0m;
    using(var cmd=new SQLiteCommand(
-    "SELECT COALESCE(SUM(amount),0) FROM fiado_account_receipts WHERE TRIM(customer_name)=@name COLLATE NOCASE",cn,tx)){
+    "SELECT COALESCE(SUM(amount),0) FROM fiado_account_receipts WHERE customer_name=@name COLLATE NOCASE",cn,tx)){
     cmd.Parameters.AddWithValue("@name",(client??"").Trim());
     return decimal.Round(Convert.ToDecimal(cmd.ExecuteScalar()),2);
    }
