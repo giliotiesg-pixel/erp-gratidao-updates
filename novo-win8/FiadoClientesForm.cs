@@ -62,7 +62,7 @@ namespace ArmazemGratidao {
    SetupSaleSelection(openSales,pending,false);
    SetupSaleSelection(paidSales,previous,true);
    openSales.SelectionChanged+=(sender,args)=>UpdatePaymentSelection(true);
-   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Clique em Detalhes para ver produtos e pagamentos",
+   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Vendas individuais | Os pagamentos no saldo total aparecem no extrato por data",
     TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
     Font=new Font("Segoe UI",8.5f)};
    var paidTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Clique em Detalhes para consultar a venda paga",
@@ -616,11 +616,24 @@ namespace ArmazemGratidao {
     clients.SuspendLayout();clients.Controls.Clear();
     decimal allBalance=0,internalBalance=0;
     bool selectedClientStillHasFiado=false;
-    using(var account=Open(true))
+    // Leitura unica dos pagamentos no total. Evita N consultas SQL ao montar
+    // a lista de clientes, preservando o desempenho de abertura do Fiado.
+    var generalTotals=new Dictionary<string,decimal>(StringComparer.OrdinalIgnoreCase);
+    using(var account=Open(true)){
+     if(FiadoAccountLedger.Exists(account)){
+      using(var total=new SQLiteCommand("SELECT TRIM(customer_name),COALESCE(SUM(amount),0) "+
+       "FROM fiado_account_receipts GROUP BY TRIM(customer_name) COLLATE NOCASE",account))
+      using(var reader=total.ExecuteReader()){
+       while(reader.Read())generalTotals[Convert.ToString(reader[0])]=Convert.ToDecimal(reader[1]);
+      }
+     }
+    }
     foreach(DataRow r in dt.Rows) {
      var name=Convert.ToString(r["cliente"]);
      var grossBalance=Convert.ToDecimal(r["saldo"]);
-     var balance=Math.Max(0m,grossBalance-FiadoAccountLedger.Received(account,null,name));
+     decimal paidOnTotal;
+     if(!generalTotals.TryGetValue(name,out paidOnTotal))paidOnTotal=0m;
+     var balance=Math.Max(0m,grossBalance-paidOnTotal);
      // Nunca ocultar clientes com saldo devedor: a lista inicial deve refletir o historico.
      // A exclusao visual so se aplica a contas sem saldo pendente.
      if(hiddenNames.Contains(name) && balance<=0.005m)continue;
@@ -1662,8 +1675,9 @@ namespace ArmazemGratidao {
   void FillAllBalances(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
    if(saleTabs!=null&&saleTabs.SelectedIndex!=0){MessageBox.Show("Abra Fiado atual - em aberto.");return;}
-   SetPaymentAmount(VisibleOpenBalance());
-   receivedBalance.Text="Todas as vendas R$ "+VisibleOpenBalance().ToString("N2")+
+   decimal net;using(var cn=Open(true))net=FiadoAccountLedger.Due(cn,null,customer);
+   SetPaymentAmount(net);
+   receivedBalance.Text="Saldo real do cliente R$ "+net.ToString("N2")+
      Environment.NewLine+"Aceita recebimento parcial";
    amount.Focus();
    amount.Select(0,amount.Text.Length);
