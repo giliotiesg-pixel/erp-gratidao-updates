@@ -411,6 +411,13 @@ namespace ArmazemGratidao {
      "WHERE UPPER(TRIM(COALESCE(payment_method,''))) LIKE '%DINHEIRO%' "+
      "AND paid_at BETWEEN @a AND @b"+filter,opened,at);
    }
+   // Somar dinheiro recebido diretamente no saldo total uma unica vez.
+   // Deposito na carteira nao sera contado novamente quando o credito e usado.
+   if(FiadoAccountLedger.Exists(c)){
+    credit+=ScalarMoney(c,"SELECT COALESCE(SUM(amount),0) FROM fiado_account_receipts "+
+     "WHERE UPPER(TRIM(COALESCE(method,''))) LIKE '%DINHEIRO%' "+
+     "AND received_at BETWEEN @a AND @b",opened,at);
+   }
    return Math.Round(initial+income-outflow+sales+credit,2);
   }
   static void RecalculateClosed(SQLiteConnection c,SQLiteTransaction tx,long sid){

@@ -78,6 +78,10 @@ jobs:
         shell: powershell
         run: |
           .\novo-win8\teste-caixa.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Teste-Caixa'
+      - name: Validar Fiado (saldo total, deposito antecipado e abatimento manual)
+        shell: powershell
+        run: |
+          .\novo-win8\teste-fiado-saldo-total.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -OutputDir 'dist/Teste-Fiado'
       - name: Validar integridade do instalador, manifesto e pacote
         shell: powershell
         run: |
