@@ -553,6 +553,20 @@ namespace ArmazemGratidao {
    return list;
   }
 
+  // Mesma lista de Cadastro de Clientes usada na correcao de vendas.
+  // Clientes ocultados por exclusao nao reaparecem na pesquisa.
+  internal static List<Tuple<string,string,string>> ReadVisibleClients(SQLiteConnection connection){
+   var clients=ReadClients(connection);
+   if(!HasTable(connection,"deleted_customer_names"))return clients;
+   var hidden=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+   using(var cmd=new SQLiteCommand("SELECT customer_name FROM deleted_customer_names",connection))
+   using(var rd=cmd.ExecuteReader())
+    while(rd.Read())hidden.Add(Convert.ToString(rd[0]).Trim());
+   var visible=new List<Tuple<string,string,string>>();
+   foreach(var client in clients)if(!hidden.Contains(client.Item1.Trim()))visible.Add(client);
+   return visible;
+  }
+
   static string OnlyDigits(string value){
    var sb=new System.Text.StringBuilder();foreach(char ch in value??"")if(ch>='0'&&ch<='9')sb.Append(ch);return sb.ToString();
   }
@@ -583,11 +597,7 @@ namespace ArmazemGratidao {
   void LoadClients(){
    try{
     using(var conn=StockOpen(true)){
-     var clients=ReadClients(conn);
-     var hidden=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-     if(HasTable(conn,"deleted_customer_names"))
-      using(var hide=new SQLiteCommand("SELECT customer_name FROM deleted_customer_names",conn))
-      using(var rd=hide.ExecuteReader())while(rd.Read())hidden.Add(Convert.ToString(rd[0]).Trim());
+     var clients=ReadVisibleClients(conn);
      var dt=new DataTable();dt.Columns.Add("Código",typeof(int));dt.Columns.Add("ID interno",typeof(long));dt.Columns.Add("Cliente / Razão social");dt.Columns.Add("CPF / CNPJ");dt.Columns.Add("Telefone");dt.Columns.Add("Origem");
      var ids=new Dictionary<string,long>(StringComparer.OrdinalIgnoreCase);
      if(HasTable(conn,"customers")&&Columns(conn,"customers").Contains("id")){
@@ -597,7 +607,6 @@ namespace ArmazemGratidao {
      string term=clientSearch.Text.Trim(),number=OnlyDigits(term);
      int alphabeticalNumber=0;
      foreach(var client in clients){
-      if(hidden.Contains(client.Item1.Trim()))continue;
       alphabeticalNumber++;
       if(term.Length>0&&client.Item1.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&client.Item2.IndexOf(term,StringComparison.OrdinalIgnoreCase)<0&&(number.Length==0||OnlyDigits(client.Item3).IndexOf(number,StringComparison.Ordinal)<0))continue;
       long id;bool registered=ids.TryGetValue(client.Item1,out id);
@@ -622,7 +631,7 @@ namespace ArmazemGratidao {
      var cancel=new Button{Text="Cancelar",Width=110,Height=35,DialogResult=DialogResult.Cancel};
      bar.Controls.Add(choose);bar.Controls.Add(chooseEdit);bar.Controls.Add(cancel);
      var data=new DataTable();data.Columns.Add("Cliente");data.Columns.Add("CPF / CNPJ");data.Columns.Add("Telefone");
-     using(var c=StockOpen(true))foreach(var entry in ReadClients(c))
+     using(var c=StockOpen(true))foreach(var entry in ReadVisibleClients(c))
       if(!string.Equals(entry.Item1,"Consumidor",StringComparison.OrdinalIgnoreCase))
        data.Rows.Add(entry.Item1,entry.Item3,entry.Item2);
      var view=new DataView(data);list.DataSource=view;
