@@ -52,7 +52,12 @@ namespace ArmazemGratidao {
    return Math.Max(0m,SalesDue(cn,tx,client)-Received(cn,tx,client));
   }
   internal static string BackupVerified(SQLiteConnection cn,string database,string prefix){
-   string backup=FiadoClientesForm.GetVerifiedBackupTarget(database,prefix);
+   string directory=Path.GetDirectoryName(database);
+   string config=Path.Combine(directory,"backup-location.txt");
+   string folder=File.Exists(config)?File.ReadAllText(config).Trim():Path.Combine(directory,"Backups");
+   if(string.IsNullOrWhiteSpace(folder)||!Path.IsPathRooted(folder))throw new InvalidOperationException("Pasta de backup de Fiado invalida.");
+   Directory.CreateDirectory(folder);
+   string backup=Path.Combine(folder,prefix+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+Guid.NewGuid().ToString("N").Substring(0,8)+".db");
    using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){
     copy.Open();
     cn.BackupDatabase(copy,"main","main",-1,null,0);
