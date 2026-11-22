@@ -769,6 +769,34 @@ namespace ArmazemGratidao {
   bool dailyBackupRunning=false;
   readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
   bool checkingUpdates=false;
+  // Reutilizar a tela inicial em vez de recriar centenas de controles.
+  Action homeDashboardRefresh;
+  readonly object performanceLogLock=new object();
+  string PerformanceLogPath(){return Path.Combine(dataDir,"Logs","desempenho-abertura.log");}
+  void RecordPerformance(string etapa,long milliseconds){
+   string line=DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")+" | "+etapa+" | "+milliseconds+" ms"+Environment.NewLine;
+   Task.Run(()=>{
+    try{
+     lock(performanceLogLock){
+      string file=PerformanceLogPath();
+      Directory.CreateDirectory(Path.GetDirectoryName(file));
+      if(File.Exists(file)&&new FileInfo(file).Length>400000){
+       string old=file+".anterior";
+       if(File.Exists(old))File.Delete(old);
+       File.Move(file,old);
+      }
+      File.AppendAllText(file,line);
+     }
+    }catch{/* Diagnostico nunca bloqueia o PDV. */}
+   });
+  }
+  void OpenPerformanceLog(){
+   try{
+    string file=PerformanceLogPath();
+    if(!File.Exists(file)){MessageBox.Show("Nao ha registros de abertura. Reabra o programa.","Desempenho");return;}
+    Process.Start("notepad.exe","\""+file+"\"");
+   }catch(Exception ex){MessageBox.Show("Nao foi possivel abrir o diagnostico: "+ex.Message,"Desempenho");}
+  }
   Form modulesWindow;
   StartMenuPopup startMenuPopup;
   int lastPromptedBuild=-1;
@@ -886,6 +914,7 @@ namespace ArmazemGratidao {
    AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
    AddButton(bar,"Central de manutencao", (sender,args)=>OpenProgramFilesFolder());
    AddButton(bar,"Verificar banco",CheckDatabase);
+   AddButton(bar,"Diagnóstico de abertura",(s,e)=>OpenPerformanceLog());
    AddButton(bar,"Localizar vendas",CompareSales);
    AddButton(bar,"Preparar recuperação",PrepareRecoveredSales);
    AddButton(bar,"Aplicar recuperação",ApplyRecovery);
@@ -912,11 +941,15 @@ namespace ArmazemGratidao {
    status.Text=File.Exists(dbPath)?"Banco encontrado. Selecione Vendas ou Fiado.":"Importe uma copia do banco SQLite.";
    ShowMainMenu();
    Shown+=async (sender,args)=>{
-    // Abertura do caixa recebe prioridade. Tarefas automáticas só começam
-    // depois que o menu já estiver desenhado e respondendo ao usuário.
-    await Task.Delay(12000);
-    if(!IsDisposed)await EnsureDailyBackupAsync();
-    // A verificação remota e a procura de vendas antigas são secundárias.
+    // Backup diario continua ativo, mas nao concorre com a primeira
+    // renderizacao nem com a leitura dos indicadores do caixa.
+    await Task.Delay(90000);
+    if(IsDisposed)return;
+    for(int attempt=0;attempt<20&&Application.OpenForms.OfType<PdvForm>().Any(f=>!f.IsDisposed);attempt++){
+     await Task.Delay(30000);
+     if(IsDisposed)return;
+    }
+    await EnsureDailyBackupAsync();
     await Task.Delay(90000);
     if(!IsDisposed)await CheckUpdates(false);
     if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
@@ -965,6 +998,7 @@ namespace ArmazemGratidao {
   async Task EnsureDailyBackupAsync(){
    if(dailyBackupRunning||!File.Exists(dbPath))return;
    dailyBackupRunning=true;
+   var backupWatch=Stopwatch.StartNew();
    try{
     await backupGate.WaitAsync();
     try{
@@ -990,7 +1024,7 @@ namespace ArmazemGratidao {
    }catch(Exception ex){
     if(!IsDisposed)status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
     // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
-   }finally{dailyBackupRunning=false;}
+   }finally{RecordPerformance("Backup diario",backupWatch.ElapsedMilliseconds);dailyBackupRunning=false;}
   }
   string CreateVerifiedPreUpdateBackup(string destination=null){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
@@ -1600,6 +1634,7 @@ namespace ArmazemGratidao {
    list.Add(Tuple.Create("Preparar recuperação",(EventHandler)PrepareRecoveredSales));
    list.Add(Tuple.Create("Aplicar recuperação",(EventHandler)ApplyRecovery));
    list.Add(Tuple.Create("Conferir valores",(EventHandler)CheckSaleDifferences));
+   list.Add(Tuple.Create("Diagnóstico de abertura",(EventHandler)((s,e)=>OpenPerformanceLog())));
    list.Add(Tuple.Create("Integrar vendas 01 a 19/10",(EventHandler)IntegrateHistoricalSales));
    list.Add(Tuple.Create("Itens",(EventHandler)((sender,args)=>
     ShowTable("sale_items","SELECT sale_id,name,quantity,unit_price,total FROM sale_items ORDER BY sale_id DESC LIMIT 5000"))));
@@ -1614,9 +1649,15 @@ namespace ArmazemGratidao {
   // Tela inicial consolidada: sem marca d'agua e sem duplicar ranking.
   // Os botoes continuam chamando os handlers existentes (nada e gravado aqui).
   void ShowMainMenu(){
+   var startupWatch=Stopwatch.StartNew();
    CloseStartMenu();
    grid.Visible=false;
    var old=Controls["homePanel"];
+   if(old!=null&&!old.IsDisposed&&homeDashboardRefresh!=null){
+    old.Visible=true;old.BringToFront();header.BringToFront();status.BringToFront();
+    homeDashboardRefresh();
+    return;
+   }
    if(old!=null){Controls.Remove(old);old.Dispose();}
    var page=new Panel{Name="homePanel",Dock=DockStyle.Fill,AutoScroll=true,
     BackColor=Color.FromArgb(245,249,254)};
@@ -1766,14 +1807,23 @@ namespace ArmazemGratidao {
     loading=true;refresh.Enabled=false;
     for(int i=0;i<4;i++)values[i].Text="Carregando...";
     try{
+     var totalsWatch=Stopwatch.StartNew();
      DashboardSnapshot snapshot=await Task.Run(()=>ReadHomeDashboardSummary());
+     RecordPerformance("Indicadores de vendas",totalsWatch.ElapsedMilliseconds);
      if(page.IsDisposed)return;
      for(int i=0;i<4;i++)values[i].Text=snapshot.Indicators[i];
      // Mostrar indicadores antes de consultar o ranking.
      await Task.Yield();
      if(page.IsDisposed)return;
-     try{snapshot.Ranking=await Task.Run(()=>ReadHomeDashboardRanking());}
-     catch(Exception rankEx){if(!page.IsDisposed)status.Text="Ranking indisponível: "+rankEx.Message;return;}
+     var rankWatch=Stopwatch.StartNew();
+     try{
+      snapshot.Ranking=await Task.Run(()=>ReadHomeDashboardRanking());
+      RecordPerformance("Ranking",rankWatch.ElapsedMilliseconds);
+     }catch(Exception rankEx){
+      RecordPerformance("Ranking com erro",rankWatch.ElapsedMilliseconds);
+      if(!page.IsDisposed)status.Text="Ranking indisponível: "+rankEx.Message;
+      return;
+     }
      if(page.IsDisposed)return;
      leftGrid.Rows.Clear();rightGrid.Rows.Clear();
      var culture=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
@@ -1797,6 +1847,8 @@ namespace ArmazemGratidao {
     }
    };
    refresh.Click+=(sender,args)=>reload();
+   homeDashboardRefresh=reload;
+   page.Disposed+=(sender,args)=>{if(ReferenceEquals(homeDashboardRefresh,reload))homeDashboardRefresh=null;};
    if(page.IsHandleCreated)reload();
    else{
     EventHandler onCreated=null;
@@ -1804,6 +1856,7 @@ namespace ArmazemGratidao {
     page.HandleCreated+=onCreated;
    }
    status.Text="Início • Ranking de 20 produtos, indicadores e atalhos. Calculadora somente pelo botão.";
+   RecordPerformance("Montagem da tela inicial",startupWatch.ElapsedMilliseconds);
   }
 
   // Duas tabelas lado a lado sem ocupar toda a altura da tela.
@@ -1909,13 +1962,18 @@ namespace ArmazemGratidao {
   }
   // Icones brancos sobre o azul, sem carregar arquivos nem rede.
   static Image HomeWhiteTileIcon(string name){
+   // Cor unica em GDI+, evitando GetPixel e SetPixel repetidos na interface.
    using(var original=HomeShortcutImage(name)){
-    var output=new Bitmap(original);
-    for(int y=0;y<output.Height;y++)
-     for(int x=0;x<output.Width;x++){
-      Color pixel=output.GetPixel(x,y);
-      if(pixel.A>0)output.SetPixel(x,y,Color.FromArgb(pixel.A,255,255,255));
-     }
+    var output=new Bitmap(original.Width,original.Height);
+    using(var g=Graphics.FromImage(output))
+    using(var attr=new System.Drawing.Imaging.ImageAttributes()){
+     var matrix=new System.Drawing.Imaging.ColorMatrix();
+     matrix.Matrix00=0f;matrix.Matrix11=0f;matrix.Matrix22=0f;
+     matrix.Matrix40=1f;matrix.Matrix41=1f;matrix.Matrix42=1f;
+     attr.SetColorMatrix(matrix);
+     g.DrawImage(original,new Rectangle(0,0,output.Width,output.Height),
+      0,0,original.Width,original.Height,GraphicsUnit.Pixel,attr);
+    }
     return output;
    }
   }
