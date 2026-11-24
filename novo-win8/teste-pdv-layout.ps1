@@ -129,7 +129,7 @@ try{
    $v1=$dlg.Controls.Find('amzgSplitValue1',$true)[0]
    $v2=$dlg.Controls.Find('amzgSplitValue2',$true)[0]
    $v3=$dlg.Controls.Find('amzgSplitValue3',$true)[0]
-   if(!$third.Visible -or $third.Enabled){throw 'Terceira linha precisa estar visivel e inativa em duas formas.'}
+   if($third.Visible -or $third.Enabled -or $v3.Visible){throw 'Terceira linha precisa ficar oculta em duas formas.'}
    $v1.Value=[decimal]30
    if($v2.Value -ne [decimal]70){throw 'Duas formas: restante incorreto.'}
    $count.SelectedIndex=1
@@ -138,7 +138,7 @@ try{
    $v2.Value=[decimal]20
    if($v3.Value -ne [decimal]50){throw 'Tres formas: restante incorreto.'}
    $count.SelectedIndex=0
-   if($third.Enabled -or $v2.Value -ne [decimal]70){throw 'Retorno a duas formas incorreto.'}
+   if($third.Visible -or $third.Enabled -or $v3.Visible -or $v2.Value -ne [decimal]70){throw 'Retorno a duas formas incorreto.'}
    $script:splitDone=$true
   }catch{$script:splitError=$_.Exception.Message}
   finally{$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}

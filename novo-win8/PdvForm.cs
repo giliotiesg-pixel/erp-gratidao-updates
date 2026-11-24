@@ -1342,7 +1342,7 @@ namespace ArmazemGratidao {
       int n=count.SelectedIndex==1?3:2;
       for(int i=0;i<3;i++){
        bool enabled=i<n;
-       labels[i].Visible=true;combos[i].Visible=true;values[i].Visible=true;
+       labels[i].Visible=enabled;combos[i].Visible=enabled;values[i].Visible=enabled;
        labels[i].Enabled=enabled;combos[i].Enabled=enabled;
        values[i].Enabled=enabled;values[i].ReadOnly=!enabled||i==n-1;
        if(enabled&&i==n-1)values[i].Enabled=false;
@@ -1372,7 +1372,7 @@ namespace ArmazemGratidao {
      recalculate();
     };
     foreach(var v in values)v.ValueChanged+=(s,e)=>recalculate();
-    dialog.Shown+=(s,e)=>recalculate();
+    dialog.Shown+=(s,e)=>{recalculate();dialog.PerformLayout();};
     recalculate();
     List<KeyValuePair<string,decimal>> selected=null;
     confirm.Click+=(s,e)=>{
