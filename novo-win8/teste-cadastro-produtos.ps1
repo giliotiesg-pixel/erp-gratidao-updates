@@ -13,6 +13,9 @@ import sqlite3
 import sys
 connection=sqlite3.connect(sys.argv[1])
 connection.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT)")
+connection.execute("CREATE TABLE runtime_operation_context(id INTEGER PRIMARY KEY, authorized INTEGER NOT NULL, operation TEXT NOT NULL)")
+connection.execute("INSERT INTO runtime_operation_context VALUES(1,0,'')")
+connection.execute("CREATE TABLE stock_audit_log(product_id INTEGER, product_name TEXT, barcode TEXT, event_type TEXT, quantity_before NUMERIC, quantity_after NUMERIC, quantity_delta NUMERIC, reference_type TEXT, reason TEXT)")
 connection.commit()
 connection.close()
 '@
@@ -92,19 +95,56 @@ try{
    if($barcode.Count -ne 1 -or $name.Count -ne 1){throw 'Campos de codigo ou descricao ausentes.'}
    if($barcode[0].Width -gt 260){throw 'Campo codigo de barras longo demais.'}
    if($name[0].Width -lt $barcode[0].Width){throw 'Descricao deve ser mais larga que codigo.'}
+   $generator=@($dlg.Controls.Find('amzgGenerateBarcode',$true))
+   if($generator.Count -ne 1){throw 'Gerador de codigo de barras ausente.'}
+   $generator[0].PerformClick()
+   $generated=$code.Text
+   if($generated -notmatch '^20[0-9]{11}$'){throw "Codigo proprio invalido: $generated"}
+   $sum=0
+   for($i=0;$i -lt 12;$i++){$sum += [int]::Parse($generated.Substring($i,1)) * $(if($i%2 -eq 0){1}else{3})}
+   if(((10-($sum%10))%10) -ne [int]::Parse($generated.Substring(12,1))){throw 'Digito verificador invalido.'}
+   $name[0].Text='Teste cadastro preco'
+   $stock.Value=[decimal]10
+   $cost.Value=[decimal]11.75
+   $price.Value=[decimal]16.99
+   $gain=@($dlg.Controls.Find('amzgInsertGainPercent',$true))[0]
+   $apply=@($dlg.Controls.Find('amzgApplyGain',$true))[0]
+   $gain.Value=[decimal]50
+   if($price.Value -ne [decimal]16.99){throw 'Preco manual foi alterado sem aplicar percentual.'}
+   $apply.PerformClick()
+   if($price.Value -ne [decimal]17.63){throw 'Percentual manual nao foi aplicado corretamente.'}
+   $price.Value=[decimal]16.99
+   $null=$cost.Focus()
+   [Windows.Forms.Application]::DoEvents()
+   if($price.Value -ne [decimal]16.99){throw 'Preco manual foi alterado pelo markup.'}
+   $timer.Stop()
+   $save=@($fixed[0].Controls.Find('amzgInsertSave',$true))[0]
+   $save.PerformClick()
+   if($dlg.DialogResult -ne [Windows.Forms.DialogResult]::OK){throw 'Cadastro nao foi salvo.'}
    $script:done=$true
   }catch{$script:errorMessage=$_.Exception.Message}
   finally{
    $timer.Stop()
-   $dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel
-   $dlg.Close()
+   if(!$dlg.IsDisposed -and $dlg.DialogResult -ne [Windows.Forms.DialogResult]::OK){$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
   }
  })
  $timer.Start()
  $products.OpenNewProduct('')
  if($script:errorMessage){throw $script:errorMessage}
  if(!$script:done){throw 'Janela Cadastrar Produto nao foi testada.'}
- Write-Host 'CADASTRO OK: foco do Custo passa ao Preco e a calculadora nao ocupa a lateral.'
+ $verify=@'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+p=c.execute("SELECT id,price,cost,stock FROM products WHERE name='Teste cadastro preco'").fetchone()
+assert p is not None and tuple(p[1:])==(16.99,11.75,10),p
+assert c.execute("SELECT quantity_before,quantity_added,quantity_after FROM product_quantity_movements WHERE product_id=?",(p[0],)).fetchone()==(0,10,10)
+assert c.execute("SELECT quantity_delta FROM stock_audit_log WHERE product_id=?",(p[0],)).fetchone()==(10,)
+assert c.execute("SELECT authorized FROM runtime_operation_context WHERE id=1").fetchone()==(0,)
+'@
+ [IO.File]::WriteAllText($seedPath,$verify,(New-Object System.Text.UTF8Encoding($false)))
+ python $seedPath $db
+ if($LASTEXITCODE -ne 0){throw 'Valores persistidos ou auditoria do cadastro incorretos.'}
+ Write-Host 'CADASTRO OK: codigo proprio, preco manual e estoque inicial persistidos.'
 }finally{
  if($null -ne $timer){$timer.Stop();$timer.Dispose()}
  if($null -ne $products){$products.Close();$products.Dispose()}

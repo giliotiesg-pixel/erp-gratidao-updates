@@ -1772,6 +1772,53 @@ namespace ArmazemGratidao {
   public void OpenNewProduct(string initialInput){
    InsertProduct(initialInput);
   }
+  // EAN-13 de circulação restrita (prefixo 20), exclusivo para uso interno.
+  string GenerateInternalBarcode(){
+   using(var c=Open())
+   using(var check=new SQLiteCommand("SELECT COUNT(*) FROM products WHERE TRIM(COALESCE(barcode,''))=@code",c)){
+    var p=check.Parameters.AddWithValue("@code","");
+    using(var rng=System.Security.Cryptography.RandomNumberGenerator.Create()){
+     byte[] bytes=new byte[8];
+     for(int attempt=0;attempt<1000;attempt++){
+      rng.GetBytes(bytes);
+      string body="20"+(BitConverter.ToUInt64(bytes,0)%10000000000UL).ToString("D10",System.Globalization.CultureInfo.InvariantCulture);
+      int sum=0;
+      for(int i=0;i<12;i++)sum+=(body[i]-'0')*(i%2==0?1:3);
+      string code=body+((10-sum%10)%10).ToString(System.Globalization.CultureInfo.InvariantCulture);
+      p.Value=code;
+      if(Convert.ToInt64(check.ExecuteScalar())==0)return code;
+     }
+    }
+   }
+   throw new Exception("Não foi possível gerar um código livre. Tente novamente.");
+  }
+  static void RegisterInitialQuantity(SQLiteConnection c,SQLiteTransaction tx,long id,decimal quantity){
+   using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_quantity_movements (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,movement_at TEXT NOT NULL,quantity_before NUMERIC NOT NULL,quantity_added NUMERIC NOT NULL,quantity_after NUMERIC NOT NULL,reason TEXT NOT NULL)",c,tx))q.ExecuteNonQuery();
+   int oldAuth;string oldOperation;
+   using(var q=new SQLiteCommand("SELECT authorized,operation FROM runtime_operation_context WHERE id=1",c,tx))
+   using(var rd=q.ExecuteReader()){
+    if(!rd.Read())throw new Exception("Proteção de estoque não encontrada.");
+    oldAuth=Convert.ToInt32(rd[0]);oldOperation=Convert.ToString(rd[1]);
+   }
+   using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=1,operation='ENTRADA_QTD_AUDITADA' WHERE id=1",c,tx))
+    if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao autorizar estoque inicial.");
+   using(var q=new SQLiteCommand("UPDATE products SET stock=@quantity WHERE id=@id",c,tx)){
+    q.Parameters.AddWithValue("@quantity",quantity);q.Parameters.AddWithValue("@id",id);
+    if(q.ExecuteNonQuery()!=1)throw new Exception("Estoque inicial não atualizado.");
+   }
+   using(var q=new SQLiteCommand("INSERT INTO product_quantity_movements(product_id,movement_at,quantity_before,quantity_added,quantity_after,reason) VALUES(@id,@time,0,@quantity,@quantity,'Estoque inicial pelo cadastro')",c,tx)){
+    q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@time",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));q.Parameters.AddWithValue("@quantity",quantity);
+    if(q.ExecuteNonQuery()!=1)throw new Exception("Movimentação inicial não registrada.");
+   }
+   using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reason) SELECT id,name,COALESCE(barcode,''),'ENTRADA_QTD',0,@quantity,@quantity,'ESTOQUE','Estoque inicial pelo cadastro' FROM products WHERE id=@id",c,tx)){
+    q.Parameters.AddWithValue("@id",id);q.Parameters.AddWithValue("@quantity",quantity);
+    if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na auditoria do estoque inicial.");
+   }
+   using(var q=new SQLiteCommand("UPDATE runtime_operation_context SET authorized=@auth,operation=@operation WHERE id=1",c,tx)){
+    q.Parameters.AddWithValue("@auth",oldAuth);q.Parameters.AddWithValue("@operation",oldOperation);
+    if(q.ExecuteNonQuery()!=1)throw new Exception("Falha ao restaurar proteção de estoque.");
+   }
+  }
   void InsertProduct(string initialInput=""){
    using(var form=new StyledDialogForm {Text="Cadastrar Produto",Width=940,Height=720,MinimumSize=new Size(760,570),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=true,AutoScroll=true}){
     var panel=new TableLayoutPanel {Dock=DockStyle.Fill,ColumnCount=2,RowCount=14,Padding=new Padding(16,12,16,12),Margin=Padding.Empty,AutoScroll=true};
@@ -1798,12 +1845,13 @@ namespace ArmazemGratidao {
        
        barcode.Width=230;barcode.Anchor=AnchorStyles.Left|AnchorStyles.Top;barcode.MaxLength=64;brand.Width=220;brand.Anchor=AnchorStyles.Left|AnchorStyles.Top;category.Width=220;category.Anchor=AnchorStyles.Left|AnchorStyles.Top;name.Multiline=false;name.AutoSize=true;name.Dock=DockStyle.None;name.Width=520;name.Anchor=AnchorStyles.Left|AnchorStyles.Top;
     // Porcentagem de ganho calculada sobre o custo, sem nova coluna no banco.
-    var gainPercent=new NumericUpDown{DecimalPlaces=2,Minimum=-100,Maximum=100000,Increment=1,Width=110};
+    var gainPercent=new NumericUpDown{Name="amzgInsertGainPercent",DecimalPlaces=2,Minimum=-100,Maximum=100000,Increment=1,Width=110};
     var gainValue=new Label{AutoSize=true,Font=new Font("Segoe UI",10,FontStyle.Bold),ForeColor=Color.FromArgb(20,73,158),Padding=new Padding(6,7,0,0)};
     // Campos proporcionais e sem barra de rolagem horizontal.
-    var pricingRow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty,AutoScroll=false};
+    var pricingRow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty,AutoScroll=false};
     pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));
     pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,88));
+    pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));
     pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));
     pricingRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     pricingRow.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
@@ -1813,34 +1861,29 @@ namespace ArmazemGratidao {
     pricingRow.Controls.Add(price,0,0);
     pricingRow.Controls.Add(new Label{Text="Ganho %",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter},1,0);
     pricingRow.Controls.Add(gainPercent,2,0);
-    pricingRow.Controls.Add(gainValue,3,0);
+    var applyGain=new Button{Name="amzgApplyGain",Text="Aplicar %",Dock=DockStyle.Fill,TabIndex=2};
+    pricingRow.Controls.Add(applyGain,3,0);
+    pricingRow.Controls.Add(gainValue,4,0);
     // O bloco de preco sera colocado na secao de dados abaixo.
     // Campo Preco fica em painel aninhado: TabIndex explicito evita pulo para Marca.
     barcode.TabIndex=0;name.TabIndex=1;stock.TabIndex=2;cost.TabIndex=3;
     pricingRow.TabIndex=4;price.TabIndex=0;gainPercent.TabIndex=1;
     brand.TabIndex=5;category.TabIndex=6;expiry.TabIndex=7;byWeight.TabIndex=8;
-    bool changingPricing=false;
+    // Percentual desejado é independente do preço manual. Somente Aplicar % altera o preço.
     Action updateGain=()=>{
-     if(changingPricing)return;
-     changingPricing=true;
-     try{
-      decimal gain=price.Value-cost.Value;
-      decimal percentage=cost.Value>0?gain*100m/cost.Value:0m;
-      gainPercent.Value=Math.Max(gainPercent.Minimum,Math.Min(gainPercent.Maximum,Math.Round(percentage,2)));
-      gainValue.Text="Ganho: "+gain.ToString("C2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))+
-       (cost.Value==0?" (informe o custo)":"");
-     }finally{changingPricing=false;}
+     decimal gain=price.Value-cost.Value;
+     decimal percentage=cost.Value>0?gain*100m/cost.Value:0m;
+     gainValue.Text="Ganho: "+gain.ToString("C2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))+" ("+percentage.ToString("N2")+"%)";
     };
     cost.ValueChanged+=(sender,args)=>updateGain();
     price.ValueChanged+=(sender,args)=>updateGain();
-    gainPercent.ValueChanged+=(sender,args)=>{
-     if(changingPricing)return;
-     changingPricing=true;
-     try{
-      decimal calculated=Math.Round(cost.Value*(1m+gainPercent.Value/100m),2,MidpointRounding.AwayFromZero);
-      price.Value=Math.Max(price.Minimum,Math.Min(price.Maximum,calculated));
-      gainValue.Text="Ganho: "+(price.Value-cost.Value).ToString("C2",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-     }finally{changingPricing=false;}
+    applyGain.Click+=(sender,args)=>{
+     if(!form.ValidateChildren())return;
+     if(cost.Value<=0){MessageBox.Show("Informe o custo antes de aplicar o percentual.");return;}
+     decimal calculated=Math.Round(cost.Value*(1m+gainPercent.Value/100m),2,MidpointRounding.AwayFromZero);
+     if(calculated<price.Minimum||calculated>price.Maximum){MessageBox.Show("Preço calculado fora do limite.");return;}
+     price.Value=calculated;
+     updateGain();
     };
     updateGain();
     // Codigo proprio fica na secao de pesquisa, sem ocupar linha de formulario.
@@ -1931,7 +1974,18 @@ namespace ArmazemGratidao {
      var lbl=new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10,FontStyle.Bold)};
      productFieldsGrid.Controls.Add(lbl,col,row);productFieldsGrid.Controls.Add(field,col+1,row);
     };
+    var generateCode=new Button{Name="amzgGenerateBarcode",Text="Gerar código de barras",Width=195,Height=32,Anchor=AnchorStyles.Left,TabStop=false};
+    generateCode.Click+=(sender,args)=>{
+     if(barcode.Text.Trim().Length>0&&MessageBox.Show("Substituir o código informado por um código próprio?","Gerar código",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+     try{
+      string generated=GenerateInternalBarcode();
+      ownCode.Checked=true;barcode.Text=generated;
+      lookupStatus.Text="Código próprio gerado; não é um GTIN comercial.";
+      name.Focus();
+     }catch(Exception ex){MessageBox.Show(ex.Message,"Código não gerado");}
+    };
     put("Código de barras",barcode,0,0);
+    productFieldsGrid.Controls.Add(generateCode,2,0);productFieldsGrid.SetColumnSpan(generateCode,2);
     put("Descrição do produto",name,1,0);productFieldsGrid.SetColumnSpan(name,3);
     put("Quantidade inicial",stock,2,0);put("Custo do produto",cost,2,2);
     put("Preço de venda",pricingRow,3,0);productFieldsGrid.SetColumnSpan(pricingRow,3);
@@ -1975,6 +2029,10 @@ namespace ArmazemGratidao {
      if(!ownCode.Checked&&!string.IsNullOrWhiteSpace(barcode.Text)&&barcode.Text.Length>=12&&!ValidBarcodeCheckDigit(barcode.Text)){if(MessageBox.Show("O dígito verificador do código de barras não confere. Deseja revisar o código antes de salvar?","Conferir código",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){barcode.Focus();return;}}
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
      try{
+      if(!form.ValidateChildren())return;
+      decimal salePrice=Math.Round(price.Value,2,MidpointRounding.AwayFromZero);
+      decimal unitCost=Math.Round(cost.Value,2,MidpointRounding.AwayFromZero);
+      decimal initialStock=Math.Round(stock.Value,3,MidpointRounding.AwayFromZero);
       using(var c=Open(false)){
        var cols=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
        using(var cmd=new SQLiteCommand("PRAGMA table_info(products)",c))using(var reader=cmd.ExecuteReader())while(reader.Read())cols.Add(Convert.ToString(reader["name"]));
@@ -1993,15 +2051,24 @@ namespace ArmazemGratidao {
        string extraCols=(cols.Contains("brand")?",brand":"")+(cols.Contains("category")?",category":"")+(expiryCol!=null?",\""+expiryCol+"\"":"")+(weightCol!=null?",\""+weightCol+"\"":"");
        string extraParams=(cols.Contains("brand")?",@brand":"")+(cols.Contains("category")?",@category":"")+(expiryCol!=null?",@expiry":"")+(weightCol!=null?",@weight":"");
        using(var tx=c.BeginTransaction())using(var cmd=new SQLiteCommand("INSERT INTO products(barcode,name,price,cost,stock"+extraCols+") VALUES(@barcode,@name,@price,@cost,@stock"+extraParams+")",c,tx)){
-        cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());cmd.Parameters.AddWithValue("@name",name.Text.Trim());cmd.Parameters.AddWithValue("@price",price.Value);cmd.Parameters.AddWithValue("@cost",cost.Value);cmd.Parameters.AddWithValue("@stock",0M);
+        cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());cmd.Parameters.AddWithValue("@name",name.Text.Trim());cmd.Parameters.AddWithValue("@price",salePrice);cmd.Parameters.AddWithValue("@cost",unitCost);cmd.Parameters.AddWithValue("@stock",0M);
         if(cols.Contains("brand"))cmd.Parameters.AddWithValue("@brand",brand.Text.Trim());
         if(cols.Contains("category"))cmd.Parameters.AddWithValue("@category",category.Text.Trim());
         if(expiryCol!=null)cmd.Parameters.AddWithValue("@expiry",expiry.Checked?(object)expiry.Value.ToString("yyyy-MM-dd"):DBNull.Value);
         if(weightCol!=null)cmd.Parameters.AddWithValue("@weight",byWeight.Checked?1:0);
-        cmd.ExecuteNonQuery();tx.Commit();
+        if(cmd.ExecuteNonQuery()!=1)throw new Exception("Produto não inserido.");
+        long newId=c.LastInsertRowId;
+        if(initialStock>0)RegisterInitialQuantity(c,tx,newId,initialStock);
+        using(var persisted=new SQLiteCommand("SELECT price,cost,stock FROM products WHERE id=@id",c,tx)){
+         persisted.Parameters.AddWithValue("@id",newId);
+         using(var rd=persisted.ExecuteReader()){
+          if(!rd.Read()||Convert.ToDecimal(rd[0])!=salePrice||Convert.ToDecimal(rd[1])!=unitCost||Convert.ToDecimal(rd[2])!=initialStock)
+           throw new Exception("Os valores gravados divergem do cadastro; nenhuma alteração foi confirmada.");
+         }
+        }
+        tx.Commit();
        }
       }
-      if(stock.Value>0)MessageBox.Show("Produto cadastrado com estoque zero. Para registrar as "+stock.Value.ToString("N3")+" unidades informadas, selecione o produto e use Adicionar QTD. Essa operação gera o registro de movimentação autorizado.","Estoque inicial protegido");
       form.DialogResult=DialogResult.OK;form.Close();
      }catch(Exception ex){MessageBox.Show(ex.Message,"Produto não salvo");}
     };
@@ -2026,7 +2093,7 @@ namespace ArmazemGratidao {
      barcode.Focus();
      panel.AutoScrollPosition=new Point(0,0);
     };
-    if(form.ShowDialog(this)==DialogResult.OK){LoadProducts();if(stock.Value>0){using(var conn=Open()){using(var cmd=new SQLiteCommand("SELECT id FROM products WHERE barcode=@barcode ORDER BY id DESC LIMIT 1",conn)){cmd.Parameters.AddWithValue("@barcode",barcode.Text.Trim());object newId=cmd.ExecuteScalar();if(newId!=null)AddQuantityForProduct(Convert.ToInt64(newId),name.Text,stock.Value);}}}}
+    if(form.ShowDialog(this)==DialogResult.OK)LoadProducts();
    }
   }
  }
