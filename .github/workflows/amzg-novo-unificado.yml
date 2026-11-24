@@ -47,10 +47,11 @@ jobs:
           $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
           if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'VERSAO.txt invalido'}
           $major=$Matches[1]; $minor=$Matches[2]; $build=[int]$Matches[3]
-          $tags=gh release list --limit 100 --json tagName | ConvertFrom-Json
+          $pages=gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
           if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases'}
+          $tags=@($pages | ForEach-Object {$_} | ForEach-Object {$_})
           $highest=0
-          foreach($item in $tags){if($item.tagName -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
+          foreach($item in $tags){if($item.tag_name -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
           $next=[Math]::Max($build,$highest+1)
           if($next -gt 65000){throw 'Build acima do limite'}
           "$major.$minor.$next" | Set-Content novo-win8/VERSAO.txt -Encoding ASCII
@@ -411,7 +412,7 @@ jobs:
           $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
           $updaterSha=(Get-FileHash $updater -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($publishedZip.Count -ne 1 -or $publishedZip[0].digest -ne "sha256:$sha" -or $publishedZip[0].browser_download_url -ne $manifest.url -or $publishedUpdater.Count -ne 1 -or $publishedUpdater[0].digest -ne "sha256:$updaterSha"){
+          if($publishedZip.Count -ne 1 -or $publishedZip[0].digest -ne "sha256:$sha" -or $publishedUpdater.Count -ne 1 -or $publishedUpdater[0].digest -ne "sha256:$updaterSha"){
             throw 'Arquivos publicados divergentes do pacote testado.'
           }
           # A versão só se torna pública depois da validação dos dois arquivos enviados.
@@ -421,6 +422,8 @@ jobs:
           }
           $public=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
           if($LASTEXITCODE -ne 0 -or $public.draft -or $public.prerelease){throw 'Release oficial nao confirmado.'}
+          $publicZip=@($public.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
+          if($publicZip.Count -ne 1 -or $publicZip[0].browser_download_url -ne $manifest.url -or $publicZip[0].digest -ne "sha256:$sha"){throw 'URL definitiva ou SHA-256 do release divergente.'}
           $manifestText=Get-Content dist/manifesto-proposto.json -Raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
