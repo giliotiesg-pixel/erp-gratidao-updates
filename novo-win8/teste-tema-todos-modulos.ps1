@@ -290,6 +290,17 @@ foreach($sample in $items){
       !$menu[0].Visible -or !$back[0].Visible){
     throw "Fiado: barra encoberta! Cabecalho=$($top[0].Bounds) conteudo=$($split.Bounds)"
    }
+   $quick=@($form.Controls.Find('amzgFiadoQuickActions',$true))
+   $columns=@($form.Controls.Find('amzgFiadoTwoColumns',$true))
+   $sales=$type.GetField('saleTabs',$flags).GetValue($form)
+   if($quick.Count -ne 1 -or !$quick[0].Visible -or $columns.Count -ne 1){throw 'Fiado: painel permanente de acoes ausente.'}
+   if($quick[0].Left -lt $sales.Right -or $sales.Width -gt ($columns[0].Width*0.55) -or $sales.Width -lt ($columns[0].Width*0.45)){throw 'Fiado: lista e acoes nao dividem a janela pela metade.'}
+   foreach($name in @('Receive','Details','ByDate','History','Reopen','Delete')){
+    $tile=@($form.Controls.Find(('amzgFiadoTile'+$name),$true))
+    if($tile.Count -ne 1 -or !$tile[0].Visible -or !$tile[0].Enabled){throw "Fiado: botao de acao ausente: $name"}
+   }
+   $cards=@($form.Controls.Find('amzgFiadoSaleCard',$true) | Where-Object {$_.Visible})
+   if($cards.Count -lt 1 -or @($cards | Where-Object {$_.Height -gt 64}).Count -gt 0){throw 'Fiado: cartoes nao ficaram compactos.'}
    if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
    $menu[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()

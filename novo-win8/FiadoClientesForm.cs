@@ -212,11 +212,11 @@ namespace ArmazemGratidao {
    var groups=new []{
     FiadoServiceGroup("RECEBIMENTOS",true,
      new Label{Text="Forma de pagamento"},method,
-     new Label{Text="Valor R$"},amount,receivedBalance,fillAll,pay,settle),
+     new Label{Text="Valor R$"},amount,receivedBalance,fillAll,pay,generalReceipt,settle),
     FiadoServiceGroup("CREDITO E LIMITE",true,
      new Label{Text="Credito R$"},creditDepositAmount,creditSaveTop,
      limitTop,adjustTop,creditPayTop,creditExtractTop),
-    FiadoServiceGroup("CORRECOES",true,fixClientName,transferClient,rename,fixDate),
+    FiadoServiceGroup("CORRECOES",true,fixClientName,transferClient,rename,fixDate,correctReceipt),
     FiadoServiceGroup("CONSULTAS E DOCUMENTOS",true,
      inspect,audit,auditHistory,statement,receipt,refresh)
    };
@@ -276,7 +276,55 @@ namespace ArmazemGratidao {
    };
    content.Resize+=(sender,args)=>fitServiceMenu();
    // Ao abrir, o menu flutua SOBRE a lista e nao fica atras do Dock.Fill.
-   content.Controls.Add(tabs);
+   // Painel permanente da prévia: metade para vendas, metade para ações.
+   // O menu Serviços continua disponível com todas as operações anteriores.
+   var workspaceLayout=new TableLayoutPanel{Name="amzgFiadoTwoColumns",Dock=DockStyle.Fill,
+    ColumnCount=2,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
+   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   workspaceLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var actionsPanel=new Panel{Name="amzgFiadoQuickActions",Dock=DockStyle.Fill,
+    Margin=new Padding(7,4,7,4),Padding=new Padding(9),BackColor=Color.FromArgb(239,245,252),BorderStyle=BorderStyle.FixedSingle};
+   var actionHeader=new Label{Text="▌  Ações do Cliente",Dock=DockStyle.Top,Height=43,
+    Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
+    TextAlign=ContentAlignment.MiddleLeft};
+   var tileGrid=new TableLayoutPanel{Name="amzgFiadoActionTiles",Dock=DockStyle.Top,Height=294,
+    ColumnCount=2,RowCount=3,Padding=new Padding(0),Margin=Padding.Empty};
+   tileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   tileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   for(int i=0;i<3;i++)tileGrid.RowStyles.Add(new RowStyle(SizeType.Percent,100f/3f));
+   var tileScroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true};
+   tileScroll.Controls.Add(tileGrid);
+   Action<string,string,int,Color,Color,Action> addTile=(name,text,index,back,fore,handler)=>{
+    var button=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(5),
+     BackColor=back,ForeColor=fore,Font=new Font("Segoe UI",11,FontStyle.Bold),
+     FlatStyle=FlatStyle.Flat,UseVisualStyleBackColor=false,Cursor=Cursors.Hand,AutoEllipsis=true};
+    button.FlatAppearance.BorderSize=back==Color.White?1:0;
+    button.FlatAppearance.BorderColor=Color.FromArgb(177,195,221);
+    button.Click+=(sender,args)=>{if(!string.IsNullOrWhiteSpace(customer))handler();};
+    tileGrid.Controls.Add(button,index%2,index/2);
+   };
+   var blue=Color.FromArgb(22,75,160);
+   addTile("amzgFiadoTileReceive","↓"+Environment.NewLine+"Receber",0,blue,Color.White,()=>ReceiveOnTotal());
+   addTile("amzgFiadoTileDetails","▤"+Environment.NewLine+"Detalhes da venda",1,Color.White,blue,()=>ShowSelectedCardDetails());
+   addTile("amzgFiadoTileByDate","▦"+Environment.NewLine+"Pagamentos por data",2,Color.White,blue,()=>{tabs.SelectedIndex=3;LoadPaymentsByDay();});
+   addTile("amzgFiadoTileHistory","◷"+Environment.NewLine+"Histórico",3,Color.White,blue,()=>tabs.SelectedIndex=2);
+   addTile("amzgFiadoTileReopen","↻"+Environment.NewLine+"Reabrir venda",4,Color.White,blue,()=>ReopenSelectedCard());
+   addTile("amzgFiadoTileDelete","×"+Environment.NewLine+"Excluir cliente",5,Color.FromArgb(180,43,57),Color.White,()=>RemoveClientFromFiadoList());
+   actionsPanel.Controls.Add(tileScroll);actionsPanel.Controls.Add(actionHeader);
+   workspaceLayout.Controls.Add(tabs,0,0);workspaceLayout.Controls.Add(actionsPanel,1,0);
+   Action fitTiles=()=>{
+    tileGrid.Height=Math.Max(210,Math.Min(330,tileScroll.ClientSize.Height));
+   };
+   tileScroll.Resize+=(sender,args)=>fitTiles();
+   // Histórico e extrato mantêm a largura integral para leitura de todas as colunas.
+   tabs.SelectedIndexChanged+=(sender,args)=>{
+    bool sales=tabs.SelectedIndex<2;
+    actionsPanel.Visible=sales;
+    workspaceLayout.ColumnStyles[0].Width=sales?50:100;
+    workspaceLayout.ColumnStyles[1].Width=sales?50:0;
+   };
+   content.Controls.Add(workspaceLayout);
    content.Controls.Add(side);
    side.BringToFront();fitServiceMenu();
    split.Panel2.Controls.Add(content);
@@ -413,29 +461,32 @@ namespace ArmazemGratidao {
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
-      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=78,
+      var card=new Panel{Name="amzgFiadoSaleCard",Width=width,Height=52,
        BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,
        Margin=new Padding(0,0,0,3)};
-      var check=new CheckBox{Name="amzgFiadoCardSelect",Left=9,Top=10,Width=24,Height=24,
+      var check=new CheckBox{Name="amzgFiadoCardSelect",Left=7,Top=12,Width=24,Height=24,
        Checked=Convert.ToBoolean(row.Cells["marcar"].Value??false)};
-      var title=new Label{Name="amzgFiadoCardTitle",Left=37,Top=4,
-       Width=Math.Max(100,width-170),Height=22,
+      var title=new Label{Name="amzgFiadoCardTitle",Left=33,Top=3,
+       Width=Math.Max(100,width-125),Height=19,
        Text="Venda #"+saleId+"  •  "+time,AutoEllipsis=true,
-       Font=new Font("Segoe UI",9.4f,FontStyle.Bold),
-       ForeColor=Color.FromArgb(22,70,142)};
-      var figures=new Label{Name="amzgFiadoCardAmounts",Left=37,Top=27,
-       Width=Math.Max(100,width-46),Height=43,AutoEllipsis=true,
-       Text="Total R$ "+gross.ToString("N2")+"   |   Pago R$ "+received.ToString("N2")+
-        Environment.NewLine+"Saldo R$ "+open.ToString("N2")+
-        (string.IsNullOrWhiteSpace(status)?"":"   • "+status),
-       Font=new Font("Segoe UI",8.8f,FontStyle.Regular),
-       ForeColor=Color.FromArgb(36,54,77)};
+       Font=new Font("Segoe UI",9f,FontStyle.Bold),ForeColor=Color.FromArgb(22,70,142)};
+      var figures=new Label{Name="amzgFiadoCardAmounts",Left=33,Top=23,
+       Width=Math.Max(100,width-39),Height=26,AutoEllipsis=false,
+       Text="Total R$ "+gross.ToString("N2")+" | Pago R$ "+received.ToString("N2")+" | Saldo R$ "+open.ToString("N2"),
+       Font=new Font("Segoe UI",8.4f),ForeColor=Color.FromArgb(36,54,77)};
       var details=new Button{Name="amzgFiadoCardDetails",
-       Text="Detalhes",Width=101,Height=27,
-       Left=Math.Max(105,width-111),Top=4,FlatStyle=FlatStyle.Flat,
-       BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
-       Font=new Font("Segoe UI",8.5f,FontStyle.Bold)};
-      details.FlatAppearance.BorderSize=0;
+       Text=status,Width=82,Height=22,Left=Math.Max(105,width-87),Top=3,
+       FlatStyle=FlatStyle.Flat,BackColor=Color.White,
+       ForeColor=paid?Color.FromArgb(12,110,80):Color.FromArgb(180,43,57),
+       Font=new Font("Segoe UI",7.3f,FontStyle.Bold),AutoEllipsis=true};
+      details.FlatAppearance.BorderColor=details.ForeColor;
+      details.FlatAppearance.BorderSize=1;
+      Action selectRow=()=>{
+       if(selectedRow.DataGridView==null)return;
+       if(grid.Columns.Contains("venda"))grid.CurrentCell=selectedRow.Cells["venda"];
+       foreach(Control otherCard in cards.Controls)if(otherCard is Panel)otherCard.BackColor=Color.White;
+       card.BackColor=Color.FromArgb(224,236,253);
+      };
       Action choose=()=>{
        if(selectedRow.DataGridView==null)return;
        if(grid.Columns.Contains("venda"))grid.CurrentCell=selectedRow.Cells["venda"];
@@ -443,16 +494,18 @@ namespace ArmazemGratidao {
        ShowSaleDetails();
       };
       details.Click+=(sender,e)=>choose();
+      title.Click+=(sender,e)=>selectRow();figures.Click+=(sender,e)=>selectRow();card.Click+=(sender,e)=>selectRow();
       title.DoubleClick+=(sender,e)=>choose();
       figures.DoubleClick+=(sender,e)=>choose();
       card.DoubleClick+=(sender,e)=>choose();
       check.CheckedChanged+=(sender,e)=>{
        if(selectedRow.DataGridView!=null){
-        selectedRow.Cells["marcar"].Value=check.Checked;sum();
+        selectedRow.Cells["marcar"].Value=check.Checked;if(check.Checked)selectRow();sum();
        }
       };
       card.Controls.Add(check);card.Controls.Add(title);card.Controls.Add(figures);
       card.Controls.Add(details);cards.Controls.Add(card);
+      FitFiadoCard(card,width);
      }
      if(cards.Controls.Count==0){
       cards.Controls.Add(new Label{Text=paid?"Nenhuma venda paga.":"Nenhuma venda em aberto.",
@@ -465,13 +518,7 @@ namespace ArmazemGratidao {
    cards.ClientSizeChanged+=(sender,e)=>{
     int width=Math.Max(210,cards.ClientSize.Width-cards.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-6);
     foreach(Control card in cards.Controls)if(card is Panel){
-     card.Width=width;
-     var details=card.Controls.Find("amzgFiadoCardDetails",false).FirstOrDefault();
-     var title=card.Controls.Find("amzgFiadoCardTitle",false).FirstOrDefault();
-     var figures=card.Controls.Find("amzgFiadoCardAmounts",false).FirstOrDefault();
-     if(details!=null)details.Left=Math.Max(105,width-details.Width-10);
-     if(title!=null)title.Width=Math.Max(100,width-170);
-     if(figures!=null)figures.Width=Math.Max(100,width-46);
+     FitFiadoCard(card,width);
     }
    };
    all.CheckedChanged+=(sender,e)=>{
@@ -501,6 +548,38 @@ namespace ArmazemGratidao {
    panel.Controls.Add(grid);
    grid.Visible=false;grid.Dock=DockStyle.None;grid.Bounds=new Rectangle(0,0,1,1);
    saleLayout.BringToFront();
+  }
+  static void FitFiadoCard(Control card,int width){
+   card.Width=width;
+   bool narrow=width<420;
+   card.Height=narrow?64:52;
+   var details=card.Controls.Find("amzgFiadoCardDetails",false).FirstOrDefault();
+   var title=card.Controls.Find("amzgFiadoCardTitle",false).FirstOrDefault();
+   var figures=card.Controls.Find("amzgFiadoCardAmounts",false).FirstOrDefault();
+   if(details!=null)details.Left=Math.Max(105,width-details.Width-5);
+   if(title!=null)title.Width=Math.Max(100,width-125);
+   if(figures!=null){figures.Width=Math.Max(100,width-39);figures.Height=narrow?38:26;}
+  }
+  DataGridViewRow SelectedCardRow(){
+   if(saleTabs==null||saleTabs.SelectedIndex>=2)return null;
+   var grid=SelectedSaleGrid();
+   var marked=grid.Rows.Cast<DataGridViewRow>().Where(row=>!row.IsNewRow&&Convert.ToBoolean(row.Cells["marcar"].Value??false)).ToList();
+   if(marked.Count>1){MessageBox.Show("Selecione apenas uma venda para esta ação.");return null;}
+   if(marked.Count==1)return marked[0];
+   return grid.CurrentRow;
+  }
+  void ShowSelectedCardDetails(){
+   var row=SelectedCardRow();
+   if(row==null||row.IsNewRow)return;
+   row.DataGridView.CurrentCell=row.Cells["venda"];
+   ShowSaleDetails();
+  }
+  void ReopenSelectedCard(){
+   var row=SelectedCardRow();
+   if(row==null||row.IsNewRow){MessageBox.Show("Selecione uma venda em aberto ou paga para reabrir.");return;}
+   long id;
+   if(!long.TryParse(Convert.ToString(row.Cells["venda"].Value),out id))return;
+   if(ReopenSalePayments(id)){SelectClient(customer);saleTabs.SelectedIndex=0;}
   }
   void BackToFiadoClients(){
    customer="";
