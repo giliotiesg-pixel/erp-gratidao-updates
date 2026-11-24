@@ -12,7 +12,7 @@ $seed=@'
 import sqlite3
 import sys
 connection=sqlite3.connect(sys.argv[1])
-connection.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT)")
+connection.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT,name TEXT,price REAL,cost REAL,stock REAL,brand TEXT,category TEXT,sold_by_weight INTEGER DEFAULT 0)")
 connection.execute("CREATE TABLE runtime_operation_context(id INTEGER PRIMARY KEY, authorized INTEGER NOT NULL, operation TEXT NOT NULL)")
 connection.execute("INSERT INTO runtime_operation_context VALUES(1,0,'')")
 connection.execute("CREATE TABLE stock_audit_log(product_id INTEGER, product_name TEXT, barcode TEXT, event_type TEXT, quantity_before NUMERIC, quantity_after NUMERIC, quantity_delta NUMERIC, reference_type TEXT, reason TEXT)")
@@ -58,6 +58,16 @@ try{
    if(@($dlg.Controls.Find('amzgOpenCalculatorModule',$true)).Count -ne 1){
     throw 'Botao Calculadora ausente no cadastro de produtos.'
    }
+   if($cost.Text -ne '' -or $price.Text -ne '' -or $stock.Text -ne '0'){throw 'Campos iniciais devem ser vazios em reais e zero para unidades.'}
+   $weighted=@($dlg.Controls.Find('amzgInsertByWeight',$true))[0]
+   $weighted.Checked=$true
+   $stock.Text='1,250'
+   if($stock.Value -ne [decimal]1.25){throw 'Quantidade por peso nao aceita tres casas.'}
+   $stock.Text='0'
+   $weighted.Checked=$false
+   $stock.Text='2,5'
+   if($stock.Value -ne [decimal]0){throw 'Quantidade unitaria aceitou fracao.'}
+   $stock.Text='0'
    $null=$cost.Focus()
    [Windows.Forms.Application]::DoEvents()
    $null=$dlg.SelectNextControl($cost,$true,$true,$true,$true)
@@ -104,9 +114,10 @@ try{
    for($i=0;$i -lt 12;$i++){$sum += [int]::Parse($generated.Substring($i,1)) * $(if($i%2 -eq 0){1}else{3})}
    if(((10-($sum%10))%10) -ne [int]::Parse($generated.Substring(12,1))){throw 'Digito verificador invalido.'}
    $name[0].Text='Teste cadastro preco'
-   $stock.Value=[decimal]10
-   $cost.Value=[decimal]11.75
-   $price.Value=[decimal]16.99
+   $stock.Text='10'
+   $cost.Text='11,75'
+   $price.Text='16,99'
+   if($cost.Value -ne [decimal]11.75 -or $price.Value -ne [decimal]16.99){throw 'Conversao de moeda brasileira incorreta.'}
    $gain=@($dlg.Controls.Find('amzgInsertGainPercent',$true))[0]
    $apply=@($dlg.Controls.Find('amzgApplyGain',$true))[0]
    $gain.Value=[decimal]50

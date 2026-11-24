@@ -1119,13 +1119,21 @@ namespace ArmazemGratidao {
    side.Controls.Add(content);
    return side;
   }
-  void AttachProductCalculator(Form form,TableLayoutPanel fields,NumericUpDown cost,NumericUpDown price){
+  void AttachProductCalculator(Form form,TableLayoutPanel fields,Control cost,Control price){
    // A calculadora antiga nao ocupa mais a lateral. Botao global abre a do Inicio.
    fields.Dock=DockStyle.Fill;
    form.Controls.Add(fields);
   }
   // Precificacao automatica: margem e calculada sobre a receita, nao sobre o custo.
   void AttachRealPricing(Form form,NumericUpDown cost,NumericUpDown price){
+   AttachRealPricingCore(form,()=>cost.Value,()=>price.Value,v=>price.Value=v,price.Maximum,
+    h=>cost.ValueChanged+=h,h=>price.ValueChanged+=h,()=>true);
+  }
+  void AttachRealPricing(Form form,ProductEntryNumber cost,ProductEntryNumber price){
+   AttachRealPricingCore(form,()=>cost.Value,()=>price.Value,v=>price.Value=v,price.Maximum,
+    h=>cost.ValueChanged+=h,h=>price.ValueChanged+=h,()=>cost.CommitInput(true)&&price.CommitInput(false));
+  }
+  void AttachRealPricingCore(Form form,Func<decimal> costValue,Func<decimal> priceValue,Action<decimal> setPrice,decimal maxPrice,Action<EventHandler> onCost,Action<EventHandler> onPrice,Func<bool> validate){
    var container=new Panel{Dock=DockStyle.Fill,MinimumSize=new Size(0,170),Padding=new Padding(12,7,12,7),
     BackColor=Color.FromArgb(226,239,251),AutoScroll=true};
    var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=8,RowCount=3};
@@ -1153,7 +1161,7 @@ namespace ArmazemGratidao {
    layout.SetColumnSpan(apply,2);layout.Controls.Add(apply,6,2);
    decimal suggested=0m;
    Action update=()=>{
-    decimal baseCost=cost.Value+extra.Value;
+    decimal baseCost=costValue()+extra.Value;
     decimal rate=(fee.Value+tax.Value+margin.Value)/100m;
     if(baseCost<=0||rate>=1m){
      suggested=0;apply.Enabled=false;
@@ -1161,20 +1169,22 @@ namespace ArmazemGratidao {
      return;
     }
     suggested=Math.Round(baseCost/(1m-rate),2,MidpointRounding.AwayFromZero);
-    decimal currentProfit=price.Value*(1m-(fee.Value+tax.Value)/100m)-baseCost;
-    decimal currentMargin=price.Value>0?currentProfit/price.Value*100m:0m;
-    decimal markup=baseCost>0?(price.Value/baseCost-1m)*100m:0m;
+    decimal currentProfit=priceValue()*(1m-(fee.Value+tax.Value)/100m)-baseCost;
+    decimal currentMargin=priceValue()>0?currentProfit/priceValue()*100m:0m;
+    decimal markup=baseCost>0?(priceValue()/baseCost-1m)*100m:0m;
     result.Text="Sugestao: R$ "+suggested.ToString("N2")+
      "  |  Lucro atual: R$ "+currentProfit.ToString("N2")+
      "  |  Margem: "+currentMargin.ToString("N1")+"%  |  Markup: "+markup.ToString("N1")+"%";
-    apply.Enabled=suggested<=price.Maximum;
+    apply.Enabled=suggested<=maxPrice;
    };
    foreach(var field in controls)field.ValueChanged+=(sender,args)=>update();
-   cost.ValueChanged+=(sender,args)=>update();
-   price.ValueChanged+=(sender,args)=>update();
+   onCost((sender,args)=>update());
+   onPrice((sender,args)=>update());
    apply.Click+=(sender,args)=>{
-    if(suggested<=0||suggested>price.Maximum)return;
-    price.Value=suggested;
+    if(suggested<=0||suggested>maxPrice)return;
+    if(!validate())return;
+    update();
+    if(suggested>0&&suggested<=maxPrice)setPrice(suggested);
    };
    container.Controls.Add(layout);
    // Calculadora integrada ao formulario rolavel, sem cobrir os campos.
@@ -1772,6 +1782,72 @@ namespace ArmazemGratidao {
   public void OpenNewProduct(string initialInput){
    InsertProduct(initialInput);
   }
+  // Campo simples, sem setas nem zeros monetários automáticos. Cultura explícita.
+  sealed class ProductEntryNumber:TextBox{
+   static readonly System.Globalization.CultureInfo Br=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+   readonly bool money;
+   readonly decimal maximum;
+   int digits;
+   decimal current;
+   bool formatting;
+   public event EventHandler ValueChanged;
+   public ProductEntryNumber(bool currency,int precision,decimal max,bool startBlank){
+    money=currency;digits=precision;maximum=max;TextAlign=HorizontalAlignment.Right;MaxLength=24;
+    if(!startBlank)Text=FormatValue(0m);
+   }
+   public decimal Maximum{get{return maximum;}}
+   public decimal Minimum{get{return 0m;}}
+   public decimal Value{
+    get{return current;}
+    set{
+     if(value<0||value>maximum||Math.Round(value,digits)!=value)throw new ArgumentOutOfRangeException("value");
+     SetValue(value);
+     SetText(FormatValue(value));
+    }
+   }
+   string FormatValue(decimal value){return value.ToString((money?"C":"N")+digits,Br);}
+   void SetText(string text){formatting=true;try{Text=text;}finally{formatting=false;}}
+   void SetValue(decimal value){
+    if(current==value)return;
+    current=value;
+    var handler=ValueChanged;if(handler!=null)handler(this,EventArgs.Empty);
+   }
+   bool TryRead(out decimal value){
+    value=0m;
+    string input=Text.Trim();
+    if(money&&input.StartsWith("R$",StringComparison.Ordinal))input=input.Substring(2).Trim();
+    if(input.Length==0)return false;
+    // Aceitar vírgula decimal e agrupamento brasileiro; ponto decimal simples também.
+    string pattern=digits==0?@"^\d+$":@"^\d+(,\d{1,"+digits+@"})?$";
+    string grouped=digits==0?@"^\d{1,3}(\.\d{3})+$":@"^\d{1,3}(\.\d{3})+(,\d{1,"+digits+@"})?$";
+    if(System.Text.RegularExpressions.Regex.IsMatch(input,pattern)||System.Text.RegularExpressions.Regex.IsMatch(input,grouped)){
+     if(!decimal.TryParse(input,System.Globalization.NumberStyles.AllowDecimalPoint|System.Globalization.NumberStyles.AllowThousands,Br,out value))return false;
+    }else if(digits>0&&System.Text.RegularExpressions.Regex.IsMatch(input,@"^\d+\.\d{1,"+digits+@"}$")){
+     if(!decimal.TryParse(input,System.Globalization.NumberStyles.AllowDecimalPoint,System.Globalization.CultureInfo.InvariantCulture,out value))return false;
+    }else return false;
+    return value>=0&&value<=maximum&&Math.Round(value,digits)==value;
+   }
+   public bool CommitInput(bool required){
+    if(string.IsNullOrWhiteSpace(Text)){
+     if(required)return false;
+     SetValue(0m);if(!money)SetText(FormatValue(0m));return true;
+    }
+    decimal parsed;if(!TryRead(out parsed))return false;
+    SetValue(parsed);SetText(FormatValue(parsed));return true;
+   }
+   public bool SetPrecision(int precision){
+    if(!CommitInput(false)||Math.Round(current,precision)!=current)return false;
+    digits=precision;SetText(FormatValue(current));return true;
+   }
+   protected override void OnTextChanged(EventArgs e){
+    base.OnTextChanged(e);
+    if(formatting)return;
+    decimal parsed;if(TryRead(out parsed))SetValue(parsed);
+    else if(string.IsNullOrWhiteSpace(Text))SetValue(0m);
+   }
+   protected override void OnEnter(EventArgs e){base.OnEnter(e);if(money&&Text.TrimStart().StartsWith("R$",StringComparison.Ordinal))SetText(current.ToString("F"+digits,Br));SelectAll();}
+   protected override void OnLeave(EventArgs e){CommitInput(false);base.OnLeave(e);}
+  }
   // EAN-13 de circulação restrita (prefixo 20), exclusivo para uso interno.
   string GenerateInternalBarcode(){
    using(var c=Open())
@@ -1835,7 +1911,16 @@ namespace ArmazemGratidao {
     var byWeight=new CheckBox {Text="Vendido por peso (kg)",AutoSize=true};
     expiry.Enabled=availableColumns.Contains("expiry_date")||availableColumns.Contains("expiration_date")||availableColumns.Contains("validade");
     byWeight.Enabled=availableColumns.Contains("sold_by_weight")||availableColumns.Contains("is_weighted")||availableColumns.Contains("por_peso");
-    var price=new NumericUpDown {Name="amzgInsertPrice",DecimalPlaces=2,Maximum=1000000,Width=170};var cost=new NumericUpDown {Name="amzgInsertCost",DecimalPlaces=2,Maximum=1000000,Width=170};var stock=new NumericUpDown {Name="amzgInsertStock",DecimalPlaces=3,Maximum=10000000,Width=170};
+    var price=new ProductEntryNumber(true,2,1000000m,true){Name="amzgInsertPrice",Width=170};
+    var cost=new ProductEntryNumber(true,2,1000000m,true){Name="amzgInsertCost",Width=170};
+    var stock=new ProductEntryNumber(false,0,10000000m,false){Name="amzgInsertStock",Width=170};
+    byWeight.Name="amzgInsertByWeight";
+    byWeight.CheckedChanged+=(sender,args)=>{
+     if(!stock.SetPrecision(byWeight.Checked?3:0)){
+      if(!byWeight.Checked){MessageBox.Show("A quantidade fracionada precisa permanecer no modo peso (kg).");byWeight.Checked=true;}
+      else{MessageBox.Show("Corrija a quantidade antes de mudar o tipo de venda.");}
+     }
+    };
     
     // A disposicao final e montada em secoes, preservando os mesmos controles e eventos.
     // Nao adicionar os campos a linhas antigas: seriam sobrepostos aos botoes.
@@ -1878,7 +1963,7 @@ namespace ArmazemGratidao {
     cost.ValueChanged+=(sender,args)=>updateGain();
     price.ValueChanged+=(sender,args)=>updateGain();
     applyGain.Click+=(sender,args)=>{
-     if(!form.ValidateChildren())return;
+     if(!cost.CommitInput(true)){MessageBox.Show("Informe um custo válido em reais.");cost.Focus();return;}
      if(cost.Value<=0){MessageBox.Show("Informe o custo antes de aplicar o percentual.");return;}
      decimal calculated=Math.Round(cost.Value*(1m+gainPercent.Value/100m),2,MidpointRounding.AwayFromZero);
      if(calculated<price.Minimum||calculated>price.Maximum){MessageBox.Show("Preço calculado fora do limite.");return;}
@@ -1987,8 +2072,8 @@ namespace ArmazemGratidao {
     put("Código de barras",barcode,0,0);
     productFieldsGrid.Controls.Add(generateCode,2,0);productFieldsGrid.SetColumnSpan(generateCode,2);
     put("Descrição do produto",name,1,0);productFieldsGrid.SetColumnSpan(name,3);
-    put("Quantidade inicial",stock,2,0);put("Custo do produto",cost,2,2);
-    put("Preço de venda",pricingRow,3,0);productFieldsGrid.SetColumnSpan(pricingRow,3);
+    put("Quantidade inicial",stock,2,0);put("Custo do produto (R$)",cost,2,2);
+    put("Preço de venda (R$)",pricingRow,3,0);productFieldsGrid.SetColumnSpan(pricingRow,3);
     put("Marca",brand,4,0);put("Categoria",category,4,2);
     put("Validade",expiry,5,0);put("Tipo de venda",byWeight,5,2);
     barcode.Width=230;barcode.Dock=DockStyle.None;name.Dock=DockStyle.Fill;name.Width=520;
@@ -2029,7 +2114,9 @@ namespace ArmazemGratidao {
      if(!ownCode.Checked&&!string.IsNullOrWhiteSpace(barcode.Text)&&barcode.Text.Length>=12&&!ValidBarcodeCheckDigit(barcode.Text)){if(MessageBox.Show("O dígito verificador do código de barras não confere. Deseja revisar o código antes de salvar?","Conferir código",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){barcode.Focus();return;}}
      if(string.IsNullOrWhiteSpace(name.Text)){MessageBox.Show("Informe a descrição.");return;}
      try{
-      if(!form.ValidateChildren())return;
+      if(!stock.CommitInput(true)){MessageBox.Show("Informe uma quantidade válida (unidades inteiras ou peso em kg).");stock.Focus();return;}
+      if(!cost.CommitInput(true)){MessageBox.Show("Informe o custo em reais, inclusive zero se for o caso.");cost.Focus();return;}
+      if(!price.CommitInput(true)){MessageBox.Show("Informe o preço de venda em reais.");price.Focus();return;}
       decimal salePrice=Math.Round(price.Value,2,MidpointRounding.AwayFromZero);
       decimal unitCost=Math.Round(cost.Value,2,MidpointRounding.AwayFromZero);
       decimal initialStock=Math.Round(stock.Value,3,MidpointRounding.AwayFromZero);
@@ -2082,7 +2169,7 @@ namespace ArmazemGratidao {
     var footer=new FlowLayoutPanel{Name="amzgInsertFixedFooter",Dock=DockStyle.Bottom,
      Height=64,Padding=new Padding(12,8,16,8),FlowDirection=FlowDirection.RightToLeft,
      WrapContents=false,BackColor=Color.FromArgb(229,242,255)};
-    var cancel=new Button{Text="Cancelar",Name="amzgInsertCancel",Width=125,Height=42};
+    var cancel=new Button{Text="Cancelar",Name="amzgInsertCancel",Width=125,Height=42,CausesValidation=false};
     cancel.Click+=(sender,args)=>form.Close();
     footer.Controls.Add(cancel);footer.Controls.Add(save);
     form.Controls.Add(footer);
