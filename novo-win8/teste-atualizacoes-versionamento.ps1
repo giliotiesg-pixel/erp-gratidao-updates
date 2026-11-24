@@ -38,3 +38,13 @@ if($workflow.Contains("github.event_name == 'push' ||")){
  throw 'Publicar release ao enviar codigo nao e permitido'
 }
 Write-Host "OK: fonte $localVersion build $localBuild; manifesto publicado build $($manifest.build); release so manual."
+
+if(-not $workflow.Contains('--draft --target') -or -not $workflow.Contains('gh release edit $tag --draft=false --latest') -or -not $workflow.Contains('validar-pacote-oficial.ps1')){
+ throw 'Publicacao precisa homologar artefato e validar rascunho antes de liberar.'
+}
+if(-not $workflow.Contains('git fetch origin main') -or -not $workflow.Contains('git push origin HEAD:main') -or $workflow.Contains('git push --force')){
+ throw 'Publicacao precisa sincronizar sem sobrescrever codigo.'
+}
+if(-not $source.Contains('WriteUpdateLog("BACKUP OK"') -or -not $source.Contains('WriteUpdateLog("DOWNLOAD SHA-256 OK"')){
+ throw 'Diagnostico de atualizacao precisa registrar etapas verificadas.'
+}

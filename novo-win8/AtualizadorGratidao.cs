@@ -217,7 +217,12 @@ namespace ArmazemGratidaoAtualizador {
       .Concat(targets.Where(x=>x.Equals("ArmazemGratidaoNovo.exe",StringComparison.OrdinalIgnoreCase)))){
       string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
       Directory.CreateDirectory(Path.GetDirectoryName(dst));
-      CopyFileWithRetry(Path.Combine(staging,name.Replace('/',Path.DirectorySeparatorChar)),dst);
+      string src=Path.Combine(staging,name.Replace('/',Path.DirectorySeparatorChar));
+      CopyFileWithRetry(src,dst);
+      using(var sha=SHA256.Create())using(var input=File.OpenRead(src))using(var output=File.OpenRead(dst)){
+       byte[] expectedFile=sha.ComputeHash(input),actualFile=sha.ComputeHash(output);
+       if(!expectedFile.SequenceEqual(actualFile))throw new IOException("Arquivo instalado diverge do pacote: "+name);
+      }
      }
     }catch(Exception failure){
      Report("Revertendo arquivos para a versão anterior...",75);
@@ -227,7 +232,7 @@ namespace ArmazemGratidaoAtualizador {
       string dst=Path.Combine(dir,name.Replace('/',Path.DirectorySeparatorChar));
       try{if(File.Exists(old))CopyFileWithRetry(old,dst);}catch(Exception ex){restoreErrors.Add(name+": "+ex.Message);}
      }
-     foreach(string added in created)try{if(File.Exists(added))File.Delete(added);}catch{}
+     foreach(string added in created)try{if(File.Exists(added))File.Delete(added);}catch(Exception ex){restoreErrors.Add(added+": "+ex.Message);}
      throw new Exception("Falhou a substituição: "+failure.Message+
       (restoreErrors.Count>0?"\nRestaurar manualmente: "+string.Join("; ",restoreErrors):"\nArquivos anteriores restaurados.")+
       "\nCópias dos arquivos: "+rollback,failure);

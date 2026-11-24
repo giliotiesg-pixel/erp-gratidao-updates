@@ -330,6 +330,9 @@ jobs:
           $ErrorActionPreference='Stop'
           .\\novo-win8\\teste-pdv-layout.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe' -PreviewFile 'dist/Previa-PDV.png'
           .\\novo-win8\\teste-cadastro-produtos.ps1 -Executable 'novo-win8/bin/x64/Release/ArmazemGratidaoNovo.exe'
+      - name: Homologar todos os arquivos do ZIP oficial
+        shell: powershell
+        run: .\novo-win8\validar-pacote-oficial.ps1 -Dist dist
       - uses: actions/upload-artifact@v4
         with:
           name: Armazem-Gratidao-Unico-verificado
@@ -366,6 +369,9 @@ jobs:
         with:
           name: Armazem-Gratidao-Unico-verificado
           path: dist
+      - name: Revalidar artefato baixado antes de publicar
+        shell: powershell
+        run: .\novo-win8\validar-pacote-oficial.ps1 -Dist dist
       - name: Obter numero e versao exclusivamente do pacote testado
         shell: pwsh
         run: |
@@ -393,17 +399,24 @@ jobs:
           $existing=gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -eq $tag }
           if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases.'}
           if(!$existing){
-            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --latest
+            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --draft --target "$env:GITHUB_SHA"
             if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           }
           $published=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
-          if($LASTEXITCODE -ne 0 -or $published.draft -or $published.prerelease){throw 'Release nao confirmado.'}
+          if($LASTEXITCODE -ne 0 -or $published.prerelease){throw 'Release nao confirmado.'}
           $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
           $updaterSha=(Get-FileHash $updater -Algorithm SHA256).Hash.ToLowerInvariant()
           if($publishedZip.Count -ne 1 -or $publishedZip[0].digest -ne "sha256:$sha" -or $publishedZip[0].browser_download_url -ne $manifest.url -or $publishedUpdater.Count -ne 1 -or $publishedUpdater[0].digest -ne "sha256:$updaterSha"){
             throw 'Arquivos publicados divergentes do pacote testado.'
           }
+          # A versão só se torna pública depois da validação dos dois arquivos enviados.
+          if($published.draft){
+            gh release edit $tag --draft=false --latest
+            if($LASTEXITCODE -ne 0){throw 'Falha ao liberar release homologado.'}
+          }
+          $public=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $public.draft -or $public.prerelease){throw 'Release oficial nao confirmado.'}
           $manifestText=Get-Content dist/manifesto-proposto.json -Raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

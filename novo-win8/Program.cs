@@ -1231,11 +1231,27 @@ namespace ArmazemGratidao {
     "no Gerenciador de Tarefas. A instalacao nao foi iniciada e nenhum "+
     "arquivo foi substituido.",locked);
   }
+  readonly object updateLogLock=new object();
+  string UpdateLogPath(){
+   string path=Path.Combine(dataDir,"Logs","diagnostico-atualizacoes.log");
+   Directory.CreateDirectory(Path.GetDirectoryName(path));return path;
+  }
+  void WriteUpdateLog(string stage,string detail){
+   try{lock(updateLogLock)File.AppendAllText(UpdateLogPath(),DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")+" | "+stage+" | "+detail+Environment.NewLine);}catch{}
+  }
+  void OpenUpdateDiagnostics(){
+   try{
+    string path=UpdateLogPath();
+    if(!File.Exists(path))WriteUpdateLog("INICIAL","Versão instalada "+InstalledVersion+" | "+Application.ExecutablePath);
+    Process.Start("notepad.exe","\""+path+"\"");
+   }catch(Exception ex){MessageBox.Show(ex.Message,"Diagnóstico das atualizações");}
+  }
   async Task CheckUpdates(bool manual=true){
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
    try{
     status.Text="Consultando versão publicada...";
+    WriteUpdateLog("INICIO","Instalada="+InstalledVersion+" | build="+InstalledBuild+" | "+(manual?"manual":"automatica"));
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
     const string updateRepo="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/";
     const string officialSetup="Armazem-Gratidao-Novo-Setup.exe";
@@ -1254,7 +1270,8 @@ namespace ArmazemGratidao {
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
       // O manifesto novo entrega ZIP e usa o atualizador independente.
        // O manifesto antigo permanece fixo no instalador UNICO para versões legadas.
-       manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json"));
+       web.Headers[HttpRequestHeader.CacheControl]="no-cache";
+       manifestJson=await web.DownloadStringTaskAsync(new Uri("https://raw.githubusercontent.com/giliotiesg-pixel/erp-gratidao-updates/main/atualizacao-novo-win8-pacote.json?check="+DateTime.UtcNow.Ticks));
      }
      var manifest=new JavaScriptSerializer().DeserializeObject(manifestJson) as System.Collections.Generic.Dictionary<string,object>;
      if(manifest==null||!manifest.ContainsKey("build")||!manifest.ContainsKey("tag")||!manifest.ContainsKey("asset")||!manifest.ContainsKey("url")||!manifest.ContainsKey("sha256"))
@@ -1274,14 +1291,17 @@ namespace ArmazemGratidao {
      manifestAsset["browser_download_url"]=manifestDownloadUrl;
      release=new System.Collections.Generic.Dictionary<string,object>();
      release["assets"]=new object[]{manifestAsset};
-     remoteBuild=version;
      remoteDisplayVersion=manifest.ContainsKey("version")?Convert.ToString(manifest["version"]):"1.0";
-     if(!System.Text.RegularExpressions.Regex.IsMatch(remoteDisplayVersion??"", @"^\d{1,2}\.\d{1,2}$"))
+     if(!System.Text.RegularExpressions.Regex.IsMatch(remoteDisplayVersion??"", @"^\d{1,2}\.\d{1,2}$")||version>65000||
+      (manifest.ContainsKey("full_version")&&Convert.ToString(manifest["full_version"])!=remoteDisplayVersion+".0."+version))
       throw new Exception("Número da versão publicado é inválido.");
+     remoteBuild=version;
+     WriteUpdateLog("MANIFESTO","Build="+version+" | SHA-256="+sha256);
     }catch(Exception ex){
      // Manifesto legado, incompleto ou temporariamente inacessivel:
      // verificar releases validos sem bloquear o usuario com numero antigo.
-     alternativeError=ex.Message;
+     alternativeError=ex.Message;release=null;remoteBuild=-1;remoteDisplayVersion="";
+     WriteUpdateLog("MANIFESTO FALHOU",ex.Message);
     }
     // Na verificacao manual, comparar o manifesto com os releases publicados.
     // Um manifesto em cache nao pode esconder uma build mais recente.
@@ -1323,7 +1343,7 @@ namespace ArmazemGratidao {
        string tag=Convert.ToString(candidate["tag_name"]);
        if(string.IsNullOrEmpty(tag)||!tag.StartsWith(prefix,StringComparison.OrdinalIgnoreCase))continue;
        int build;
-       if(!int.TryParse(tag.Substring(prefix.Length),out build)||build<=remoteBuild)continue;
+       if(!int.TryParse(tag.Substring(prefix.Length),out build)||build<1||build>65000||build<=remoteBuild)continue;
        var candidateAssets=candidate["assets"] as object[];
        if(candidateAssets==null)continue;
        bool validPackage=false;
@@ -1340,6 +1360,7 @@ namespace ArmazemGratidao {
        }
        if(!validPackage)continue;
        remoteBuild=build;release=candidate;remoteDisplayVersion="";
+       WriteUpdateLog("RELEASE","Build="+build+" | pacote publicado com SHA-256");
       }
      }
     }
@@ -1363,6 +1384,7 @@ namespace ArmazemGratidao {
      return;
     }
     status.Text="Nova versão publicada: "+remoteLabel+".";
+    WriteUpdateLog("VERSAO DISPONIVEL",remoteLabel);
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Pacote de atualização não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
     foreach(object obj in assets){
@@ -1373,9 +1395,9 @@ namespace ArmazemGratidao {
     }
     if(asset==null)throw new Exception("O release não contém atualização compatível.");
     string digest=asset.ContainsKey("digest")?Convert.ToString(asset["digest"]):"";
-    if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71)throw new Exception("Atualização bloqueada: SHA-256 não publicado.");
+    if(!digest.StartsWith("sha256:",StringComparison.OrdinalIgnoreCase)||digest.Length!=71||!digest.Substring(7).All(Uri.IsHexDigit))throw new Exception("Atualização bloqueada: SHA-256 não publicado ou inválido.");
     string url=Convert.ToString(asset["browser_download_url"]);
-    if(!url.StartsWith("https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/",StringComparison.OrdinalIgnoreCase))throw new Exception("Endereço de atualização inválido.");
+    if(url!=updateRepo+prefix+remoteBuild+"/"+Convert.ToString(asset["name"]))throw new Exception("Endereço de atualização inválido ou divergente da build.");
     // Verificacao automatica consulta SOMENTE o manifesto. Nao baixar
     // pacotes grandes durante vendas ou ao abrir a tela inicial.
     if(!manual){
@@ -1400,6 +1422,7 @@ namespace ArmazemGratidao {
     status.Text="Preparando download da "+remoteLabel+"...";
     string installer=await DownloadVerifiedUpdate(remoteBuild,url,digest,isZip);
     status.Text="Download 100% verificado. Preparando backup obrigatório...";
+    WriteUpdateLog("DOWNLOAD SHA-256 OK",installer);
     // O backup vem ANTES de fechar qualquer janela. Se falhar, nada é encerrado.
     // Aguardar qualquer backup diario e copiar em segundo plano, evitando travar a interface.
     status.Text="Criando e conferindo o backup antes da atualização...";
@@ -1409,6 +1432,7 @@ namespace ArmazemGratidao {
      backupPath=await Task.Run(()=>isZip?CreateVerifiedFullUpdateBackup():CreateVerifiedPreUpdateBackup());
     }finally{backupGate.Release();}
     status.Text="Backup confirmado: "+backupPath;
+    WriteUpdateLog("BACKUP OK",backupPath);
     // O usuario pode ter reaberto uma janela antiga durante o backup.
     // Verificar NOVAMENTE antes de encerrar qualquer janela do PDV.
     if(isZip)await Task.Run(()=>EnsureInstalledUpdaterFree(Application.StartupPath));
@@ -1437,7 +1461,7 @@ namespace ArmazemGratidao {
      Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     }
     Close();
-   }catch(Exception ex){status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message,"Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }catch(Exception ex){WriteUpdateLog("ERRO",ex.ToString());status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message+Environment.NewLine+Environment.NewLine+"Consulte Sistema e Manutenção > Diagnóstico das atualizações.","Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
    finally{checkingUpdates=false;}
   }
   // A tela inicial e unica: conserva o ranking, indicadores e todos os modulos.
@@ -2007,6 +2031,7 @@ namespace ArmazemGratidao {
     Tuple.Create("Backups completos diários",(EventHandler)OpenDailyBackupFolder),
     Tuple.Create("Backup completo agora",(EventHandler)RunManualFullBackup),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates())),
+    Tuple.Create("Diagnóstico das atualizações",(EventHandler)((s,a)=>OpenUpdateDiagnostics())),
     // Funções complementares vêm depois dos acessos mais frequentes.
     Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
     Tuple.Create("Estoque pelo celular",(EventHandler)((s,a)=>OpenMobileStock())),
