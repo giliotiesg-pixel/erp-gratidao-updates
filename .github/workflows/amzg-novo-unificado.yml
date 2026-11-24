@@ -389,20 +389,52 @@ jobs:
           if(!(Test-Path $zip) -or !(Test-Path $updater)){throw 'ZIP ou atualizador verificado ausente.'}
           $sha=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if($sha -ne $manifest.sha256){throw 'SHA-256 incorreto, nao publicar.'}
+          # Reexecução segura: nunca substituir um pacote já publicado.
           $existing=gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -eq $tag }
-          if($existing){
-            throw "Build $env:AMZG_BUILD ja publicado. Aumente novo-win8/VERSAO.txt para gerar um release imutavel; nao sobrescrever pacote existente."
+          if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases.'}
+          if(!$existing){
+            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --latest
+            if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           }
-          gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --latest
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
-          gh release view $tag --json assets | Out-Null
-          if($LASTEXITCODE -ne 0){throw 'Release nao confirmado.'}
-          $manifest=(Get-Content dist/manifesto-proposto.json -Raw)
-          [System.IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifest,(New-Object System.Text.UTF8Encoding($false)))
+          $published=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $published.draft -or $published.prerelease){throw 'Release nao confirmado.'}
+          $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
+          $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
+          $updaterSha=(Get-FileHash $updater -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($publishedZip.Count -ne 1 -or $publishedZip[0].digest -ne "sha256:$sha" -or $publishedZip[0].browser_download_url -ne $manifest.url -or $publishedUpdater.Count -ne 1 -or $publishedUpdater[0].digest -ne "sha256:$updaterSha"){
+            throw 'Arquivos publicados divergentes do pacote testado.'
+          }
+          $manifestText=Get-Content dist/manifesto-proposto.json -Raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add atualizacao-novo-win8-pacote.json novo-win8/VERSAO.txt
-          git commit -m "Atualizar manifesto oficial para build $env:AMZG_BUILD"
-          if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
-          git push origin HEAD:main
-          if($LASTEXITCODE -ne 0){throw 'Falha ao publicar manifesto.'}
+          # Reaplicar apenas os dois metadados sobre o HEAD atual, nunca codigo antigo.
+          # Se outro commit entrar entre fetch e push, repetir sem force-push.
+          for($attempt=1;$attempt -le 6;$attempt++){
+            git fetch origin main
+            if($LASTEXITCODE -ne 0){throw 'Falha ao sincronizar main.'}
+            git reset --hard origin/main
+            if($LASTEXITCODE -ne 0){throw 'Falha ao sincronizar checkout local.'}
+            $current=Get-Content atualizacao-novo-win8-pacote.json -Raw | ConvertFrom-Json
+            $currentVersion=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+            if([int]$current.build -gt [int]$env:AMZG_BUILD){Write-Host 'Manifesto mais novo ja publicado; nenhuma regressao.';exit 0}
+            if([int]$current.build -eq [int]$env:AMZG_BUILD){
+              if($current.sha256 -ne $sha -or $current.url -ne $manifest.url){throw 'Manifesto existente diverge do release.'}
+              Write-Host 'Manifesto ja confirmado.';exit 0
+            }
+            [System.IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifestText,(New-Object System.Text.UTF8Encoding($false)))
+            $targetVersion="$env:AMZG_VERSION.$env:AMZG_BUILD"
+            if([version]$currentVersion -le [version]$targetVersion){$targetVersion | Set-Content novo-win8/VERSAO.txt -Encoding ASCII}
+            git add atualizacao-novo-win8-pacote.json novo-win8/VERSAO.txt
+            git commit -m "Atualizar manifesto oficial para build $env:AMZG_BUILD"
+            if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
+            git push origin HEAD:main
+            if($LASTEXITCODE -eq 0){
+              $confirmed=gh api "repos/$env:GITHUB_REPOSITORY/contents/atualizacao-novo-win8-pacote.json?ref=main" | ConvertFrom-Json
+              if($LASTEXITCODE -ne 0){throw 'Falha ao conferir manifesto remoto.'}
+              $remote=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($confirmed.content)) | ConvertFrom-Json
+              if([int]$remote.build -lt [int]$env:AMZG_BUILD -or ([int]$remote.build -eq [int]$env:AMZG_BUILD -and ($remote.sha256 -ne $sha -or $remote.url -ne $manifest.url))){throw 'Manifesto remoto nao confirmado.'}
+              Write-Host 'Release e manifesto sincronizados.';exit 0
+            }
+            Start-Sleep -Seconds (2*$attempt)
+          }
+          throw 'Falha ao publicar manifesto apos seis tentativas, sem sobrescrever codigo.'

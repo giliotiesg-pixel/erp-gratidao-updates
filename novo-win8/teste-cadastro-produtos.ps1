@@ -40,6 +40,8 @@ try{
   $dialogs=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'Cadastrar Produto'})
   if($dialogs.Count -eq 0){return}
   $dlg=$dialogs[0]
+  # DoEvents pode reentrar o Tick e executar o cadastro duas vezes.
+  $timer.Stop()
   try{
    $fields=@{}
    foreach($key in @('amzgInsertBarcode','amzgInsertName','amzgInsertStock','amzgInsertCost','amzgInsertPrice')){
