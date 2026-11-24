@@ -48,3 +48,7 @@ if(-not $workflow.Contains('git fetch origin main') -or -not $workflow.Contains(
 if(-not $source.Contains('WriteUpdateLog("BACKUP OK"') -or -not $source.Contains('WriteUpdateLog("DOWNLOAD SHA-256 OK"')){
  throw 'Diagnostico de atualizacao precisa registrar etapas verificadas.'
 }
+
+if(-not $source.Contains('SetUpdateIndicator(remoteBuild);') -or -not $source.Contains('if(!manual)return;') -or -not $source.Contains('amzgUpdateHeader')){
+ throw 'Verificacao automatica deve apenas sinalizar a atualizacao no painel.'
+}

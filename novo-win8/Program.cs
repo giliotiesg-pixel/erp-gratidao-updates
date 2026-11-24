@@ -765,7 +765,7 @@ namespace ArmazemGratidao {
   readonly string dataDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArmazemGratidaoNovo");
   readonly string dbPath;
   MobileStockServer mobileStock;
-  readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
+  readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=15*60*1000};
   readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*1000};
   bool dailyBackupRunning=false;
   readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
@@ -800,7 +800,26 @@ namespace ArmazemGratidao {
   }
   Form modulesWindow;
   StartMenuPopup startMenuPopup;
-  int lastPromptedBuild=-1;
+  int availableUpdateBuild=-1;
+  Button updateHeaderButton,updateDashboardButton;
+  readonly ToolTip updateIndicatorTip=new ToolTip();
+  void SetUpdateIndicator(int build){
+   availableUpdateBuild=build>InstalledBuild?build:-1;
+   RefreshUpdateIndicator();
+  }
+  void RefreshUpdateIndicator(){
+   bool pending=availableUpdateBuild>InstalledBuild;
+   foreach(var btn in new[]{updateHeaderButton,updateDashboardButton}){
+    if(btn==null||btn.IsDisposed)continue;
+    bool isHeader=btn==updateHeaderButton;
+    btn.Text=pending?"● Atualização disponível":isHeader?"Verificar Atualização":"Atualização";
+    btn.BackColor=pending?Color.FromArgb(180,43,57):isHeader?Color.FromArgb(35,84,154):Color.FromArgb(20,81,170);
+    btn.ForeColor=Color.White;
+    btn.FlatAppearance.MouseOverBackColor=pending?Color.FromArgb(204,56,70):Color.FromArgb(35,103,202);
+    btn.AccessibleDescription=pending?"Atualização disponível. Build "+availableUpdateBuild+". Clique para verificar e instalar.":"Verificar atualizações oficiais.";
+    updateIndicatorTip.SetToolTip(btn,pending?"Nova atualização oficial disponível: build "+availableUpdateBuild+". Clique quando desejar instalar.":"Consultar atualizações do Armazém Gratidão");
+   }
+  }
   int InstalledBuild {
    get {
     // AssemblyVersion 1.0.0.591: 591 e REVISION, nao o campo Build (zero).
@@ -838,12 +857,13 @@ namespace ArmazemGratidao {
    menuToggle.Click+=(sender,args)=>ToggleStartMenu();
    RoundHomeControl(menuToggle,10);header.Controls.Add(menuToggle);
    // Atualização sempre acessível no cabeçalho, independentemente do módulo aberto.
-   var updateHeader=new Button{Text="Verificar Atualização",Left=181,Top=13,Width=177,Height=40,
+   var updateHeader=new Button{Name="amzgUpdateHeader",Text="Verificar Atualização",Left=181,Top=13,Width=177,Height=40,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(35,84,154),ForeColor=Color.White,
     Font=new Font("Segoe UI",9.5f,FontStyle.Bold)};
    updateHeader.FlatAppearance.BorderSize=0;
    updateHeader.Click+=async (sender,args)=>await CheckUpdates();
    RoundHomeControl(updateHeader,9);header.Controls.Add(updateHeader);
+   updateHeaderButton=updateHeader;RefreshUpdateIndicator();
    var inicioHeader=new Button{Text="Início",Left=367,Top=13,Width=90,Height=40,
     FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,
     Font=new Font("Segoe UI",9.5f,FontStyle.Bold)};
@@ -887,7 +907,7 @@ namespace ArmazemGratidao {
     if(header.IsDisposed)return;
     const int gap=6;
     int x=brandCaption.Right+12;
-    int[] baseWidths={88,142,62,119};
+    int[] baseWidths={88,166,62,119};
     int total=baseWidths.Sum()+3*gap;
     int available=Math.Max(305,header.ClientSize.Width-x-10);
     float factor=available>=total?1f:
@@ -954,15 +974,16 @@ namespace ArmazemGratidao {
     }
     await EnsureDailyBackupAsync();
     await Task.Delay(90000);
-    if(!IsDisposed)await CheckUpdates(false);
     if(!IsDisposed)await Task.Run(()=>AutoRecoverSalesIfDue());
    };
    dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
    dailyBackupTimer.Start();
    Shown+=async (s,e)=>{string result=await Task.Run(()=>ScheduledFullBackup.RegisterWindowsTasks());if(!IsDisposed&&result!=null)status.Text=result;};
+   // Consultar sem exibir janelas, mesmo quando o PDV estiver aberto.
+   Shown+=async (s,e)=>{await Task.Delay(5000);if(!IsDisposed&&!Disposing)await CheckUpdates(false);};
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
-   FormClosed+=(s,e)=>{dailyBackupTimer.Stop();dailyBackupTimer.Dispose();updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
+   FormClosed+=(s,e)=>{dailyBackupTimer.Stop();dailyBackupTimer.Dispose();updateTimer.Stop();updateTimer.Dispose();updateIndicatorTip.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
   }
   public void OpenPdvFromModule(){
    if(!File.Exists(dbPath)){MessageBox.Show("Importe o banco antes de vender.","PDV");return;}
@@ -1250,7 +1271,7 @@ namespace ArmazemGratidao {
    if(checkingUpdates){if(manual)MessageBox.Show("Ja existe uma verificacao em andamento.","Atualizacao");return;}
    checkingUpdates=true;
    try{
-    status.Text="Consultando versão publicada...";
+    if(manual)status.Text="Consultando versão publicada...";
     WriteUpdateLog("INICIO","Instalada="+InstalledVersion+" | build="+InstalledBuild+" | "+(manual?"manual":"automatica"));
     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
     const string updateRepo="https://github.com/giliotiesg-pixel/erp-gratidao-updates/releases/download/";
@@ -1264,7 +1285,7 @@ namespace ArmazemGratidao {
     string alternativeError="";
     // Primeiro consultar manifesto estatico (CDN raw). Evita depender da API que pode responder 504.
     try{
-     status.Text="Consultando manifesto oficial de atualizacoes...";
+     if(manual)status.Text="Consultando manifesto oficial de atualizacoes...";
      string manifestJson;
      using(var web=new WebClient()){
       web.Headers[HttpRequestHeader.UserAgent]="ArmazemGratidaoNovo-Windows";
@@ -1307,7 +1328,7 @@ namespace ArmazemGratidao {
     // Um manifesto em cache nao pode esconder uma build mais recente.
     // Se a API falhar mas o manifesto estiver valido, continuar com ele.
     if(manual||release==null){
-     status.Text="Conferindo builds publicadas no GitHub...";
+     if(manual)status.Text="Conferindo builds publicadas no GitHub...";
      string json=null;
      for(int attempt=1;attempt<=3;attempt++){
       try{
@@ -1326,7 +1347,7 @@ namespace ArmazemGratidao {
         alternativeError=ex.Message;
         break;
        }
-       status.Text="GitHub temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
+       if(manual)status.Text="GitHub temporariamente indisponivel ("+code+"). Tentativa "+(attempt+1)+" de 3...";
        await Task.Delay(1500*attempt);
       }
      }
@@ -1365,14 +1386,15 @@ namespace ArmazemGratidao {
      }
     }
     if(release==null){
-     status.Text="Nenhuma versao Windows8 publicada.";
+     if(manual)status.Text="Nenhuma versao Windows8 publicada.";
      if(manual)MessageBox.Show("Nao existe uma atualizacao Windows8 publicada.","Verificar atualizacao");
      return;
     }
     string remoteLabel=string.IsNullOrEmpty(remoteDisplayVersion)?"build "+remoteBuild:
      "versão "+remoteDisplayVersion+" (build "+remoteBuild+")";
     if(remoteBuild<=InstalledBuild){
-     status.Text=InstalledBuild>remoteBuild
+     SetUpdateIndicator(-1);
+     if(manual)status.Text=InstalledBuild>remoteBuild
       ?"Versão "+InstalledVersion+" instalada; canal oficial na "+remoteLabel+"."
       :"Versão "+InstalledVersion+" atualizada (build "+InstalledBuild+").";
      if(manual)MessageBox.Show("Versão instalada: "+InstalledVersion+" (build "+InstalledBuild+")"+Environment.NewLine+
@@ -1383,7 +1405,7 @@ namespace ArmazemGratidao {
       "Verificar atualização");
      return;
     }
-    status.Text="Nova versão publicada: "+remoteLabel+".";
+    if(manual)status.Text="Nova versão publicada: "+remoteLabel+".";
     WriteUpdateLog("VERSAO DISPONIVEL",remoteLabel);
     var assets=release["assets"] as object[];if(assets==null)throw new Exception("Pacote de atualização não encontrado.");
     System.Collections.Generic.Dictionary<string,object> asset=null;
@@ -1400,13 +1422,9 @@ namespace ArmazemGratidao {
     if(url!=updateRepo+prefix+remoteBuild+"/"+Convert.ToString(asset["name"]))throw new Exception("Endereço de atualização inválido ou divergente da build.");
     // Verificacao automatica consulta SOMENTE o manifesto. Nao baixar
     // pacotes grandes durante vendas ou ao abrir a tela inicial.
-    if(!manual){
-     if(lastPromptedBuild!=remoteBuild){
-      lastPromptedBuild=remoteBuild;
-      status.Text="Nova "+remoteLabel+" disponível. Clique em Verificar atualização para instalar.";
-     }
-     return;
-    }
+    SetUpdateIndicator(remoteBuild);
+    // A verificação automática termina aqui: não abre diálogos, não baixa e não instala.
+    if(!manual)return;
     if(MessageBox.Show(this,"Nova "+remoteLabel+" disponível."+Environment.NewLine+
        "O programa, o atualizador e as bibliotecas serão atualizados juntos."+
        Environment.NewLine+"Deseja baixar e instalar agora?"+
@@ -1461,7 +1479,7 @@ namespace ArmazemGratidao {
      Process.Start(new ProcessStartInfo(installer){UseShellExecute=true});
     }
     Close();
-   }catch(Exception ex){WriteUpdateLog("ERRO",ex.ToString());status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message+Environment.NewLine+Environment.NewLine+"Consulte Sistema e Manutenção > Diagnóstico das atualizações.","Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+   }catch(Exception ex){WriteUpdateLog("ERRO",ex.ToString());if(manual)status.Text="Nao foi possivel atualizar: "+ex.Message;if(manual)MessageBox.Show(ex.Message+Environment.NewLine+Environment.NewLine+"Consulte Sistema e Manutenção > Diagnóstico das atualizações.","Atualizacao nao iniciada",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
    finally{checkingUpdates=false;}
   }
   // A tela inicial e unica: conserva o ranking, indicadores e todos os modulos.
@@ -1744,6 +1762,7 @@ namespace ArmazemGratidao {
     btn.Disposed+=(sender,args)=>{if(btn.Image!=null){btn.Image.Dispose();btn.Image=null;}};
     btn.Click+=(sender,args)=>{CloseStartMenu();action.Item2(this,EventArgs.Empty);};
     tiles.Controls.Add(btn);buttons.Add(btn);
+    if(entry.Item2=="Verificar atualização"){updateDashboardButton=btn;RefreshUpdateIndicator();}
    }
    // Ranking em duas tabelas compactas: 1-10 e 11-20.
    var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=18,Top=207,
@@ -1882,6 +1901,7 @@ namespace ArmazemGratidao {
     page.HandleCreated+=onCreated;
    }
    status.Text="Início • Ranking de 20 produtos, indicadores e atalhos. Calculadora somente pelo botão.";
+   RefreshUpdateIndicator();
    RecordPerformance("Montagem da tela inicial",startupWatch.ElapsedMilliseconds);
   }
 

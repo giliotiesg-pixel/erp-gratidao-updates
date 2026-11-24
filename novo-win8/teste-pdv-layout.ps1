@@ -16,6 +16,16 @@ $main=$null;$pdv=$null
 $database=Join-Path $env:RUNNER_TEMP 'pdv-layout-dados-descartaveis.db'
 try{
  $main=[Activator]::CreateInstance($mainType)
+ # Indicador visual persistente, independente do rodape e sem caixas de mensagem.
+ $indicator=$mainType.GetMethod('SetUpdateIndicator',[Reflection.BindingFlags]'Instance,NonPublic')
+ $installed=$mainType.GetProperty('InstalledBuild',[Reflection.BindingFlags]'Instance,NonPublic').GetValue($main,$null)
+ $headerUpdate=@($main.Controls.Find('amzgUpdateHeader',$true))[0]
+ $homeUpdate=@($main.Controls.Find('amzgDashboardTile9',$true))[0]
+ if(!$indicator -or !$headerUpdate -or !$homeUpdate){throw 'Indicador de atualizacao ausente no cabecalho ou painel.'}
+ $indicator.Invoke($main,[object[]]@([int]($installed+1)))|Out-Null
+ if($headerUpdate.Text -notlike '*dispon*' -or $homeUpdate.Text -notlike '*dispon*' -or $headerUpdate.BackColor -ne $homeUpdate.BackColor){throw 'Atualizacao disponivel nao foi sinalizada.'}
+ $indicator.Invoke($main,[object[]]@([int]$installed))|Out-Null
+ if($headerUpdate.Text -like '*dispon*' -or $homeUpdate.Text -like '*dispon*'){throw 'Indicador permaneceu ativo sem versao mais nova.'}
  # Usar o construtor publico de um argumento elimina ambiguidades do binder PowerShell 5.1.
  $ctor=$pdvType.GetConstructor([type[]]@([string]))
  if($null -eq $ctor){throw 'Construtor publico PdvForm(string) ausente.'}
