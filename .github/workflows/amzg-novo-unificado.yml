@@ -449,7 +449,8 @@ jobs:
           $published=@(Find-Release)
           if($published.Count -ne 1){throw 'Release rascunho ausente ou duplicado.'}
           $published=$published[0]
-          if($LASTEXITCODE -ne 0 -or $published.prerelease){throw 'Release nao confirmado.'}
+          # Find-Release ja valida cada comando gh dentro da propria funcao.
+          if($published.prerelease -or $published.tag_name -ne $tag){throw 'Release nao confirmado.'}
           $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
           $updaterSha=(Get-FileHash $updater -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -461,8 +462,15 @@ jobs:
             gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$($published.id)" -F draft=false -f make_latest=true | Out-Null
             if($LASTEXITCODE -ne 0){throw 'Falha ao liberar release homologado.'}
           }
-          $public=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
-          if($LASTEXITCODE -ne 0 -or $public.draft -or $public.prerelease){throw 'Release oficial nao confirmado.'}
+          $public=$null
+          for($attempt=1;$attempt -le 5;$attempt++){
+            $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases/$($published.id)"
+            if($LASTEXITCODE -ne 0){throw 'Falha ao consultar release pelo ID.'}
+            $public=$raw | ConvertFrom-Json
+            if(!$public.draft -and !$public.prerelease -and $public.tag_name -eq $tag){break}
+            Start-Sleep -Seconds 2
+          }
+          if($null -eq $public -or $public.draft -or $public.prerelease -or $public.tag_name -ne $tag){throw 'Release oficial nao confirmado.'}
           $publicZip=@($public.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           if($publicZip.Count -ne 1 -or $publicZip[0].browser_download_url -ne $manifest.url -or $publicZip[0].digest -ne "sha256:$sha"){throw 'URL definitiva ou SHA-256 do release divergente.'}
           $manifestText=Get-Content dist/manifesto-proposto.json -Raw
