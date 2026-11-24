@@ -107,10 +107,20 @@ try{
     $list.PointToScreen([System.Drawing.Point]::Empty).X+$list.Width){
   throw 'Botoes principais nao foram colocados na lateral direita.'
  }
- if((& $screenY $summary) -le (& $screenY $list) -or
-    $total.Parent -eq $null){throw 'Resumo e total nao ficaram na base.'}
- if($list.ClientSize.Width -lt 390 -or $actions.ClientSize.Width -lt 220){
-  throw "Layout estreito ou nao distribuido: lista=$($list.Width), acoes=$($actions.Width)"
+ if((& $screenY $summary) -ge (& $screenY $search) -or
+    (& $screenY $summary) -le (& $screenY $back)){throw 'Cliente, recebido e desconto devem ficar no topo.'}
+ if($total.Parent.Name -ne 'amzgPdvTotalFrame' -or (& $screenY $total) -le (& $screenY $finish)){throw 'Total deve ficar abaixo do botao finalizar.'}
+ if($list.ClientSize.Width -lt 700 -or $actions.ClientSize.Width -gt 220 -or $list.Height -lt 430 -or $grid.RowTemplate.Height -gt 25){
+  throw "Lista nao foi ampliada: $($list.Width)x$($list.Height), acoes=$($actions.Width)"
+ }
+ if($search.Height -gt 60){throw 'Busca de produtos alta demais.'}
+ $stack=& $find 'amzgPdvActionStack'
+ foreach($btn in $stack.Controls){
+  if($btn.Height -ne $finish.Height -or $btn.Width -ne $finish.Width){throw "Botoes laterais devem ter tamanho identico: $($btn.Name)"}
+ }
+ if($finish.BackColor.R -le $finish.BackColor.B -or $stack.Controls.GetChildIndex($finish) -ne ($stack.Controls.Count-1)){throw 'Finalizar precisa ficar vermelho e por ultimo.'}
+ foreach($name in @('amzgPdvOtherPayments','amzgPdvNewSale','amzgPdvWhatsApp','amzgPdvSaleStats')){
+  $null=& $find $name
  }
  foreach($expected in @('amzgPdvAddProduct','amzgPdvMoreOptions',
     'amzgPdvCustomer','amzgPdvReceived','amzgPdvChange','amzgPdvTotal')){
@@ -211,7 +221,7 @@ try{
   if($script:splitError){throw $script:splitError}
   if(!$script:splitDone){throw 'Modal dividido nao testado.'}
  }finally{$splitTimer.Stop();$splitTimer.Dispose()}
- Write-Host 'PDV OK: Voltar no topo, produto abaixo, lista central, botoes a direita e total na base.'
+ Write-Host 'PDV OK: cliente, recebido e desconto no topo; lista ampla, botoes iguais e total na lateral.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{
  if($null -ne $pdv){try{$pdv.Close()}catch{};$pdv.Dispose()}

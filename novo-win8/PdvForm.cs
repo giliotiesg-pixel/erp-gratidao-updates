@@ -17,6 +17,11 @@ namespace ArmazemGratidao {
   sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
   readonly string db;
   bool finishingSale=false;
+  bool paymentPreselected=false;
+  long lastReceiptSaleId=0;
+  string lastReceiptClient="";
+  decimal lastReceiptTotal=0m;
+  readonly Label saleStats=new Label();
   decimal discountValue=0m;
   bool discountPercent=false;
   readonly bool manualEntry;
@@ -136,6 +141,14 @@ namespace ArmazemGratidao {
    var remove=new Button {Text="REMOVER ITEM",Width=125,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};remove.Click+=(s,e)=>RemoveSelected();footer.Controls.Add(remove);
    var clear=new Button {Text="EXCLUIR TODOS",Width=135,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};clear.Click+=(s,e)=>ClearCart();footer.Controls.Add(clear);
    footer.SetFlowBreak(clear,true);
+   var otherPayments=new Button{Text="Outras Formas"};
+   otherPayments.Click+=(sender,args)=>{if(!finishingSale&&cart.Count>0)paymentPreselected=ShowPaymentChoice();else if(cart.Count==0)MessageBox.Show("Adicione produtos à venda.");};
+   var newSale=new Button{Text="Nova Venda"};newSale.Click+=(sender,args)=>StartNewSale();
+   var whatsApp=new Button{Text="Enviar WhatsApp"};
+   whatsApp.Click+=(sender,args)=>{
+    if(lastReceiptSaleId<=0){MessageBox.Show("Finalize uma venda neste PDV para enviar o comprovante. Nenhuma venda em andamento será alterada.");return;}
+    OfferSaleReceipt(lastReceiptSaleId,lastReceiptClient,lastReceiptTotal);
+   };
    foreach(Control button in new Control[]{chooseCustomer,finish,edit,remove,clear})button.Margin=new Padding(4,3,4,3);
    discountLabel.Text="Desconto:";discountMode.Items.AddRange(new object[]{"R$","%"});discountMode.SelectedIndex=0;
    discountMode.SelectedIndexChanged+=(s,e)=>{discountPercent=discountMode.SelectedIndex==1;discountInput.Maximum=discountPercent?100:99999999;discountValue=discountInput.Value;Render();};
@@ -179,6 +192,7 @@ namespace ArmazemGratidao {
    // Mover os MESMOS controles e seus eventos para o layout aprovado na previa.
    PdvModernLayout.Apply(this,header,footer,listArea,rapidInventoryBar,
     code,qty,saleUnit,add,finish,edit,chooseCustomer,openFiado,remove,clear,
+    otherPayments,newSale,whatsApp,saleStats,
     customer,received,changeLabel,discountLabel,discountMode,discountInput,total,
     grid,stockView,manualEntry);
    PositionSuggestions();
@@ -1085,7 +1099,9 @@ namespace ArmazemGratidao {
    foreach(var i in cart)dt.Rows.Add(i.Barcode,i.Name,i.Qty,i.Unit,i.Price,i.Total);
    grid.DataSource=dt;
    if(grid.Columns.Contains("ExcluirItem"))grid.Columns["ExcluirItem"].DisplayIndex=grid.Columns.Count-1;
-   SaveDraft();total.Text="TOTAL: R$ "+FinalAmount().ToString("N2")+(DiscountAmount()>0?"  (desconto R$ "+DiscountAmount().ToString("N2")+")":"");UpdateChange();
+   SaveDraft();total.Text=FinalAmount().ToString("N2",CultureInfo.GetCultureInfo("pt-BR"));
+   saleStats.Text="Itens: "+cart.Count+"   |   Quantidade total: "+cart.Sum(i=>i.Qty).ToString("0.###",CultureInfo.GetCultureInfo("pt-BR"));
+   UpdateChange();
   }
   void UpdateChange(){
    bool cash=Convert.ToString(payment.SelectedItem)=="DINHEIRO";
@@ -1329,10 +1345,17 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível editar o item");}
   }
+  void StartNewSale(){
+   if(finishingSale)return;
+   if(cart.Count>0&&MessageBox.Show("Iniciar nova venda e limpar a venda em andamento? Nenhuma venda registrada será excluída.","Nova venda",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+   cart.Clear();paymentPreselected=false;payment.SelectedIndex=0;customer.Text="Consumidor";
+   discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;
+   code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+  }
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   cart.Clear();paymentPreselected=false;discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
@@ -1778,7 +1801,8 @@ namespace ArmazemGratidao {
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
    if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
-   if(!ShowPaymentChoice())return;
+   bool chosen=paymentPreselected;paymentPreselected=false;
+   if(!chosen&&!ShowPaymentChoice())return;
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
@@ -1967,6 +1991,7 @@ namespace ArmazemGratidao {
       if(salesWindow!=null)try{salesWindow.RefreshAfterRecordedSale();}catch(Exception ex){System.Diagnostics.Debug.WriteLine("Atualização de Vendas: "+ex.Message);}
      }
      cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     lastReceiptSaleId=saleId;lastReceiptClient=customerName;lastReceiptTotal=sum;
      OfferSaleReceipt(saleId,customerName,sum);
     }
     }
