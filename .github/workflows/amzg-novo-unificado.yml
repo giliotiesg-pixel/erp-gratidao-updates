@@ -25,7 +25,46 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Token com escrita para consultar tambem rascunhos.
+  reservar:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    outputs:
+      build: ${{ steps.reserva.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reservar tag imutavel para a compilacao
+        id: reserva
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+          if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'VERSAO.txt invalido'}
+          $floor=[int]$Matches[3]
+          $manifest=Get-Content atualizacao-novo-win8-pacote.json -Raw | ConvertFrom-Json
+          $highest=[int]$manifest.build
+          for($page=1;;$page++){
+            $items=@(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page" | ConvertFrom-Json)
+            if($LASTEXITCODE -ne 0){throw 'Falha ao listar releases.'}
+            foreach($item in $items){if($item.tag_name -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
+            if($items.Count -lt 100){break}
+          }
+          $refs=@(git ls-remote --tags origin 'refs/tags/amzg-novo-win8-build-*')
+          if($LASTEXITCODE -ne 0){throw 'Falha ao consultar tags reservadas.'}
+          foreach($line in $refs){if($line -match 'refs/tags/amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
+          $next=[Math]::Max($floor,$highest+1)
+          if($next -gt 65000){throw 'Build acima do limite'}
+          $tag="amzg-novo-win8-build-$next"
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$env:GITHUB_SHA" | Out-Null
+          if($LASTEXITCODE -ne 0){throw 'Nao foi possivel reservar tag exclusiva.'}
+          "build=$next" >> $env:GITHUB_OUTPUT
+          Write-Host "RESERVA CONFIRMADA: $tag para $env:GITHUB_SHA"
   compilar:
+    needs: reservar
     runs-on: windows-latest
     permissions:
       contents: read
@@ -37,25 +76,18 @@ jobs:
       - name: Validar versionamento e manifesto antes da compilacao
         shell: powershell
         run: .\\novo-win8\\teste-atualizacoes-versionamento.ps1
-      - name: Reservar proxima build automaticamente
-        if: github.ref == 'refs/heads/main'
+      - name: Aplicar build reservada ao codigo
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          RESERVED_BUILD: ${{ needs.reservar.outputs.build }}
         run: |
           $ErrorActionPreference='Stop'
           $v=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
-          if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'VERSAO.txt invalido'}
-          $major=$Matches[1]; $minor=$Matches[2]; $build=[int]$Matches[3]
-          $pages=gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
-          if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases'}
-          $tags=@($pages | ForEach-Object {$_} | ForEach-Object {$_})
-          $highest=0
-          foreach($item in $tags){if($item.tag_name -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
-          $next=[Math]::Max($build,$highest+1)
-          if($next -gt 65000){throw 'Build acima do limite'}
-          "$major.$minor.$next" | Set-Content novo-win8/VERSAO.txt -Encoding ASCII
-          Write-Host "Proxima build: $next"
+          if($v -notmatch '^([0-9]+)\.([0-9]+)\.([0-9]+)$'){throw 'Versao invalida'}
+          $major=$Matches[1];$minor=$Matches[2]
+          if($env:RESERVED_BUILD -notmatch '^[0-9]+$'){throw 'Reserva invalida'}
+          "$major.$minor.$env:RESERVED_BUILD" | Set-Content novo-win8/VERSAO.txt -Encoding ASCII
       - name: Ler versao unica do projeto
         shell: pwsh
         run: |
@@ -396,16 +428,25 @@ jobs:
           if(!(Test-Path $zip) -or !(Test-Path $updater)){throw 'ZIP ou atualizador verificado ausente.'}
           $sha=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if($sha -ne $manifest.sha256){throw 'SHA-256 incorreto, nao publicar.'}
-          # Reexecução segura: nunca substituir um pacote já publicado.
-          $existing=gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -eq $tag }
-          if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases.'}
-          if(!$existing){
-            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --draft --target "$env:GITHUB_SHA"
-            if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
+          $tagRef=gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $tagRef.object.sha -ne $env:GITHUB_SHA){throw 'Tag reservada nao corresponde ao codigo testado.'}
+          function Find-Release {
+            $found=@()
+            for($page=1;;$page++){
+              $items=@(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page" | ConvertFrom-Json)
+              if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases.'}
+              $found+=@($items | Where-Object {$_.tag_name -eq $tag})
+              if($items.Count -lt 100){break}
+            }
+            return $found
           }
-          $allReleases=gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
-          if($LASTEXITCODE -ne 0){throw 'Falha ao localizar release rascunho.'}
-          $published=@($allReleases | ForEach-Object {$_} | ForEach-Object {$_} | Where-Object {$_.tag_name -eq $tag})
+          $existing=@(Find-Release)
+          if($existing.Count -gt 1){throw 'Release duplicado.'}
+          if($existing.Count -eq 0){
+            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial. Backup completo obrigatorio e rollback." --draft --verify-tag
+            if($LASTEXITCODE -ne 0){throw 'Falha ao criar release rascunho.'}
+          }
+          $published=@(Find-Release)
           if($published.Count -ne 1){throw 'Release rascunho ausente ou duplicado.'}
           $published=$published[0]
           if($LASTEXITCODE -ne 0 -or $published.prerelease){throw 'Release nao confirmado.'}

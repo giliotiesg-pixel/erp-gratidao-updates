@@ -39,7 +39,7 @@ if($workflow.Contains("github.event_name == 'push' ||")){
 }
 Write-Host "OK: fonte $localVersion build $localBuild; manifesto publicado build $($manifest.build); release so manual."
 
-if(-not $workflow.Contains('--draft --target') -or -not $workflow.Contains('gh api --method PATCH') -or -not $workflow.Contains('validar-pacote-oficial.ps1')){
+if(-not $workflow.Contains('--draft --verify-tag') -or -not $workflow.Contains('gh api --method PATCH') -or -not $workflow.Contains('validar-pacote-oficial.ps1')){
  throw 'Publicacao precisa homologar artefato e validar rascunho antes de liberar.'
 }
 if(-not $workflow.Contains('git fetch origin main') -or -not $workflow.Contains('git push origin HEAD:main') -or $workflow.Contains('git push --force')){
@@ -51,4 +51,8 @@ if(-not $source.Contains('WriteUpdateLog("BACKUP OK"') -or -not $source.Contains
 
 if(-not $source.Contains('SetUpdateIndicator(remoteBuild);') -or -not $source.Contains('if(!manual)return;') -or -not $source.Contains('amzgUpdateHeader')){
  throw 'Verificacao automatica deve apenas sinalizar a atualizacao no painel.'
+}
+
+if(-not $workflow.Contains('id: reserva') -or -not $workflow.Contains('git ls-remote --tags origin') -or -not $workflow.Contains('repos/$env:GITHUB_REPOSITORY/git/refs') -or -not $workflow.Contains('needs: reservar')){
+ throw 'Cada compilacao oficial deve reservar uma tag exclusiva antes de compilar.'
 }
