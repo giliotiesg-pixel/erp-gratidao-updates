@@ -113,6 +113,47 @@ try{
  if((Get-Item -LiteralPath $preview).Length -lt 7000){
   throw 'Preview da tela do PDV incompleta.'
  }
+ # Troco deve atualizar durante a digitacao, antes de confirmar ou sair do campo.
+ $receivedBox=& $find 'amzgPdvReceived'
+ $changeBox=& $find 'amzgPdvChange'
+ $receivedBox.Text='20,50'
+ if($changeBox.Text -ne 'TROCO: R$ 20,50'){throw 'Troco no rodape nao atualizou enquanto digitava.'}
+ $receivedBox.Text='0,00'
+ $cashMethod=$pdvType.GetMethod('ConfirmCashReceived',[Reflection.BindingFlags]'Instance,NonPublic')
+ if(!$cashMethod){throw 'Modal de dinheiro ausente.'}
+ $script:cashError='';$script:cashDone=$false
+ $cashTimer=New-Object System.Windows.Forms.Timer
+ $cashTimer.Interval=150
+ $cashTimer.Add_Tick({
+  $dlg=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'PDV | Pagamento em dinheiro'}) | Select-Object -First 1
+  if(!$dlg){return}
+  $cashTimer.Stop()
+  try{
+   $input=$dlg.Controls.Find('amzgCashReceived',$true)[0]
+   $change=$dlg.Controls.Find('amzgCashChange',$true)[0]
+   $button=$dlg.Controls.Find('amzgCashConfirm',$true)[0]
+   $input.Text=''
+   if($button.Enabled -or $change.Text -ne 'FALTA: R$ 37,50'){throw 'Campo vazio nao informa falta.'}
+   $input.Text='5'
+   if($button.Enabled -or $change.Text -ne 'FALTA: R$ 32,50'){throw 'Falta nao atualizou na primeira tecla.'}
+   $input.Text='50'
+   if(!$button.Enabled -or $change.Text -ne 'TROCO: R$ 12,50'){throw 'Troco nao atualizou durante digitacao.'}
+   $input.Text='50,25'
+   if($change.Text -ne 'TROCO: R$ 12,75'){throw 'Troco com centavos incorreto.'}
+   $input.Text='37,50'
+   if(!$button.Enabled -or $change.Text -ne 'TROCO: R$ 0,00'){throw 'Pagamento exato incorreto.'}
+   $input.Text='abc'
+   if($button.Enabled){throw 'Valor invalido aceito.'}
+   $script:cashDone=$true
+  }catch{$script:cashError=$_.Exception.Message}
+  finally{$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
+ })
+ try{
+  $cashTimer.Start()
+  $null=$cashMethod.Invoke($pdv,[object[]]@([decimal]37.50))
+  if($script:cashError){throw $script:cashError}
+  if(!$script:cashDone){throw 'Modal de dinheiro nao testado.'}
+ }finally{$cashTimer.Stop();$cashTimer.Dispose()}
  # Testar de verdade o modal de pagamento dividido, inclusive a terceira linha.
  $splitMethod=$pdvType.GetMethod('SelectSplitPayments',[Reflection.BindingFlags]'Instance,NonPublic')
  if(!$splitMethod){throw 'Modal de pagamento dividido ausente.'}

@@ -402,7 +402,11 @@ jobs:
             gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial para instalar pelo botao Verificar atualizacao. Backup completo obrigatorio e rollback. Nao reinstalar o programa." --draft --target "$env:GITHUB_SHA"
             if($LASTEXITCODE -ne 0){throw 'Falha ao publicar release.'}
           }
-          $published=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          $allReleases=gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Falha ao localizar release rascunho.'}
+          $published=@($allReleases | ForEach-Object {$_} | ForEach-Object {$_} | Where-Object {$_.tag_name -eq $tag})
+          if($published.Count -ne 1){throw 'Release rascunho ausente ou duplicado.'}
+          $published=$published[0]
           if($LASTEXITCODE -ne 0 -or $published.prerelease){throw 'Release nao confirmado.'}
           $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
@@ -412,7 +416,7 @@ jobs:
           }
           # A versão só se torna pública depois da validação dos dois arquivos enviados.
           if($published.draft){
-            gh release edit $tag --draft=false --latest
+            gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$($published.id)" -F draft=false -f make_latest=true | Out-Null
             if($LASTEXITCODE -ne 0){throw 'Falha ao liberar release homologado.'}
           }
           $public=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json

@@ -76,7 +76,7 @@ namespace ArmazemGratidao {
    Panel listArea,FlowLayoutPanel rapidInventoryBar,
    TextBox code,NumericUpDown qty,ComboBox saleUnit,Button add,
    Button finish,Button edit,Button chooseCustomer,Button remove,Button clear,
-   TextBox customer,NumericUpDown received,Label changeLabel,
+   TextBox customer,TextBox received,Label changeLabel,
    Label discountLabel,ComboBox discountMode,NumericUpDown discountInput,Label total,
    DataGridView grid,DataGridView stockView,bool manualEntry){
    form.SuspendLayout();

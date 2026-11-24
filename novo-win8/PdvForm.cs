@@ -50,7 +50,19 @@ namespace ArmazemGratidao {
   bool suppressLookup=false;
   bool draftReady=false;
   bool draftSaveWarned=false;
-  readonly NumericUpDown received=new NumericUpDown {DecimalPlaces=2,Maximum=99999999,Width=130};
+  // TextBox preserva a digitacao; NumericUpDown.Value so confirmava ao sair do campo.
+  sealed class CashEntry : TextBox {
+   public CashEntry(){TextAlign=HorizontalAlignment.Right;MaxLength=18;Text="0,00";}
+   public decimal Minimum{get{return 0m;}}
+   public decimal Maximum{get{return 99999999m;}}
+   public bool TryValue(out decimal value){return TrySplitAmount(Text,out value);}
+   public decimal Value {
+    get{decimal value;return TryValue(out value)?value:0m;}
+    set{Text=Math.Max(Minimum,Math.Min(Maximum,value)).ToString("N2",CultureInfo.GetCultureInfo("pt-BR"));}
+   }
+   public void FormatValue(){decimal value;if(TryValue(out value)&&!string.IsNullOrWhiteSpace(Text))Value=value;}
+  }
+  readonly CashEntry received=new CashEntry{Width=130};
   public PdvForm(string database):this(database,false){}
   public PdvForm(string database,bool manualMode) {
    manualEntry=manualMode;
@@ -113,7 +125,8 @@ namespace ArmazemGratidao {
    chooseCustomer.Click+=(s,e)=>ChooseCustomerInWindow();footer.Controls.Add(chooseCustomer);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    footer.SetFlowBreak(changeLabel,true);
-   payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.ValueChanged+=(s,e)=>{UpdateChange();SaveDraft();};
+   payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.TextChanged+=(s,e)=>{UpdateChange();decimal valid;if(received.TryValue(out valid))SaveDraft();};
+   received.Leave+=(s,e)=>received.FormatValue();
    customer.TextChanged+=(s,e)=>SaveDraft();manualDate.ValueChanged+=(s,e)=>SaveDraft();
    received.Enter+=(s,e)=>received.Select(0,received.Text.Length);
    var finish=new Button {Text="FINALIZAR VENDA",Height=38,Width=165,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9,FontStyle.Bold)};finish.FlatAppearance.BorderSize=0;finish.Click+=(s,e)=>Finish();footer.Controls.Add(finish);
@@ -1059,9 +1072,14 @@ namespace ArmazemGratidao {
    changeLabel.Visible=cash;
    received.Enabled=cash;
    if(!cash)return;
-   decimal difference=received.Value-FinalAmount();
-   changeLabel.Text=difference>=0?"TROCO: R$ "+difference.ToString("N2"):"FALTA: R$ "+(-difference).ToString("N2");
-   changeLabel.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
+   decimal value;
+   if(!received.TryValue(out value)){changeLabel.Text="Valor inválido";changeLabel.ForeColor=Color.DarkRed;return;}
+   ShowCashDifference(changeLabel,value,FinalAmount());
+  }
+  static void ShowCashDifference(Label label,decimal value,decimal due){
+   decimal difference=value-due;
+   label.Text=(difference>=0?"TROCO: R$ ":"FALTA: R$ ")+Math.Abs(difference).ToString("N2",CultureInfo.GetCultureInfo("pt-BR"));
+   label.ForeColor=difference>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
   }
 
   void UpdateRegisteredPrice(){
@@ -1703,21 +1721,27 @@ namespace ArmazemGratidao {
      Font=new Font("Segoe UI",17,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160)};
     var inputLabel=new Label{Text="Valor recebido em dinheiro (R$):",Left=20,Top=86,Width=460,Height=26,
      Font=new Font("Segoe UI",10,FontStyle.Bold)};
-    var cash=new NumericUpDown{Left=20,Top=116,Width=462,Height=42,DecimalPlaces=2,Increment=1m,
-     Minimum=0,Maximum=99999999m,Font=new Font("Segoe UI",18,FontStyle.Bold),
-     Value=Math.Min(99999999m,Math.Max(totalDue,received.Value))};
-    var change=new Label{Left=20,Top=167,Width=465,Height=44,Font=new Font("Segoe UI",14,FontStyle.Bold)};
-    Action calculate=()=>{
-     decimal remaining=cash.Value-totalDue;
-     change.Text=remaining>=0?"TROCO: R$ "+remaining.ToString("N2"):"FALTA: R$ "+(-remaining).ToString("N2");
-     change.ForeColor=remaining>=0?Color.FromArgb(22,75,160):Color.FromArgb(175,25,45);
-    };
-    cash.ValueChanged+=(sender,args)=>calculate();calculate();
-    var confirm=new Button{Text="Confirmar dinheiro",Left=20,Top=239,Width=230,Height=42,
+    var cash=new CashEntry{Name="amzgCashReceived",Left=20,Top=116,Width=462,Height=42,
+     Font=new Font("Segoe UI",18,FontStyle.Bold)};
+    // Sugestao do total somente se nenhum valor tiver sido informado antes.
+    cash.Value=received.Value>0m?received.Value:totalDue;
+    var change=new Label{Name="amzgCashChange",Left=20,Top=167,Width=465,Height=44,Font=new Font("Segoe UI",14,FontStyle.Bold)};
+    var confirm=new Button{Name="amzgCashConfirm",Text="Confirmar dinheiro",Left=20,Top=239,Width=230,Height=42,
      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
     var cancel=new Button{Text="Voltar à venda",Left=265,Top=239,Width=216,Height=42,DialogResult=DialogResult.Cancel};
+    Action calculate=()=>{
+     decimal value;
+     bool valid=cash.TryValue(out value)&&!string.IsNullOrWhiteSpace(cash.Text);
+     if(!valid){change.Text=string.IsNullOrWhiteSpace(cash.Text)?"FALTA: R$ "+totalDue.ToString("N2",CultureInfo.GetCultureInfo("pt-BR")):"Valor recebido inválido";change.ForeColor=Color.DarkRed;}
+     else ShowCashDifference(change,value,totalDue);
+     confirm.Enabled=valid&&value>=totalDue;
+    };
+    cash.TextChanged+=(sender,args)=>calculate();
+    cash.Leave+=(sender,args)=>cash.FormatValue();
+    calculate();
     confirm.Click+=(sender,args)=>{
-     if(cash.Value<totalDue){MessageBox.Show("Valor recebido menor que o total. Confira o dinheiro antes de finalizar.","Dinheiro insuficiente",MessageBoxButtons.OK,MessageBoxIcon.Warning);cash.Focus();return;}
+     decimal value;
+     if(!cash.TryValue(out value)||string.IsNullOrWhiteSpace(cash.Text)||value<totalDue){calculate();cash.Focus();return;}
      dialog.DialogResult=DialogResult.OK;dialog.Close();
     };
     dialog.Controls.AddRange(new Control[]{totalLabel,inputLabel,cash,change,confirm,cancel});
