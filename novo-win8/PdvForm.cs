@@ -1315,25 +1315,25 @@ namespace ArmazemGratidao {
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
    var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
-   using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=545,Height=390,
+   using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=620,Height=445,
     StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
     var countLabel=new Label{Left=18,Top=17,Width=180,Height=28,Text="Quantidade de formas:"};
-    var count=new ComboBox{Left=202,Top=13,Width=95,DropDownStyle=ComboBoxStyle.DropDownList};
+    var count=new ComboBox{Name="amzgSplitCount",Left=202,Top=13,Width=180,DropDownStyle=ComboBoxStyle.DropDownList};
     count.Items.AddRange(new object[]{"2 formas","3 formas"});count.SelectedIndex=0;
     var info=new Label{Left=18,Top=52,Width=490,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     dialog.Controls.AddRange(new Control[]{countLabel,count,info});
     var combos=new ComboBox[3];var values=new NumericUpDown[3];var labels=new Label[3];
     for(int i=0;i<3;i++){
-     labels[i]=new Label{Left=18,Top=100+i*57,Width=75,Height=26,Text=(i+1)+"ª forma"};
-     combos[i]=new ComboBox{Left=104,Top=96+i*57,Width=170,DropDownStyle=ComboBoxStyle.DropDownList};
+     labels[i]=new Label{Name="amzgSplitLabel"+(i+1),Left=18,Top=100+i*57,Width=80,Height=26,Text=(i+1)+"ª forma"};
+     combos[i]=new ComboBox{Name="amzgSplitMethod"+(i+1),Left=104,Top=96+i*57,Width=190,DropDownStyle=ComboBoxStyle.DropDownList};
      combos[i].Items.AddRange(methods);
      combos[i].SelectedIndex=i==0?0:-1;
-     values[i]=new NumericUpDown{Left=290,Top=96+i*57,Width=195,DecimalPlaces=2,
+     values[i]=new NumericUpDown{Name="amzgSplitValue"+(i+1),Left=310,Top=96+i*57,Width=195,DecimalPlaces=2,
       Minimum=0,Maximum=99999999,ThousandsSeparator=true};
      dialog.Controls.AddRange(new Control[]{labels[i],combos[i],values[i]});
     }
     var status=new Label{Left=18,Top=275,Width=490,Height=27};
-    var confirm=new Button{Text="Confirmar pagamentos",Left=268,Top=308,Width=218,Height=36};
+    var confirm=new Button{Name="amzgSplitConfirm",Text="Confirmar pagamentos",Left=268,Top=308,Width=218,Height=42};
     bool updating=false;
     Action recalculate=()=>{
      if(updating)return;
@@ -1342,8 +1342,10 @@ namespace ArmazemGratidao {
       int n=count.SelectedIndex==1?3:2;
       for(int i=0;i<3;i++){
        bool enabled=i<n;
-       labels[i].Visible=enabled;combos[i].Visible=enabled;values[i].Visible=enabled;
-       values[i].Enabled=enabled&&i<n-1;
+       labels[i].Visible=true;combos[i].Visible=true;values[i].Visible=true;
+       labels[i].Enabled=enabled;combos[i].Enabled=enabled;
+       values[i].Enabled=enabled;values[i].ReadOnly=!enabled||i==n-1;
+       if(enabled&&i==n-1)values[i].Enabled=false;
        if(!enabled){values[i].Value=0;continue;}
        if(i==n-1){
         decimal previous=0;
@@ -1365,8 +1367,12 @@ namespace ArmazemGratidao {
       confirm.Enabled=!exceeded&&difference==0;
      }finally{updating=false;}
     };
-    count.SelectedIndexChanged+=(s,e)=>recalculate();
+    count.SelectedIndexChanged+=(s,e)=>{
+     if(count.SelectedIndex==1){updating=true;try{values[1].Value=0;}finally{updating=false;}}
+     recalculate();
+    };
     foreach(var v in values)v.ValueChanged+=(s,e)=>recalculate();
+    dialog.Shown+=(s,e)=>recalculate();
     recalculate();
     List<KeyValuePair<string,decimal>> selected=null;
     confirm.Click+=(s,e)=>{
@@ -1383,6 +1389,7 @@ namespace ArmazemGratidao {
      selected=parts;dialog.DialogResult=DialogResult.OK;
     };
     dialog.Controls.Add(status);dialog.Controls.Add(confirm);
+    dialog.AutoScroll=true;
     return dialog.ShowDialog(this)==DialogResult.OK?selected:null;
    }
   }

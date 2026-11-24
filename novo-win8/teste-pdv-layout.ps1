@@ -113,6 +113,42 @@ try{
  if((Get-Item -LiteralPath $preview).Length -lt 7000){
   throw 'Preview da tela do PDV incompleta.'
  }
+ # Testar de verdade o modal de pagamento dividido, inclusive a terceira linha.
+ $splitMethod=$pdvType.GetMethod('SelectSplitPayments',[Reflection.BindingFlags]'Instance,NonPublic')
+ if(!$splitMethod){throw 'Modal de pagamento dividido ausente.'}
+ $script:splitError='';$script:splitDone=$false
+ $splitTimer=New-Object System.Windows.Forms.Timer
+ $splitTimer.Interval=150
+ $splitTimer.Add_Tick({
+  $dlg=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'Pagamento dividido (2 ou 3 formas)'}) | Select-Object -First 1
+  if(!$dlg){return}
+  $splitTimer.Stop()
+  try{
+   $count=$dlg.Controls.Find('amzgSplitCount',$true)[0]
+   $third=$dlg.Controls.Find('amzgSplitMethod3',$true)[0]
+   $v1=$dlg.Controls.Find('amzgSplitValue1',$true)[0]
+   $v2=$dlg.Controls.Find('amzgSplitValue2',$true)[0]
+   $v3=$dlg.Controls.Find('amzgSplitValue3',$true)[0]
+   if(!$third.Visible -or $third.Enabled){throw 'Terceira linha precisa estar visivel e inativa em duas formas.'}
+   $v1.Value=[decimal]30
+   if($v2.Value -ne [decimal]70){throw 'Duas formas: restante incorreto.'}
+   $count.SelectedIndex=1
+   [Windows.Forms.Application]::DoEvents()
+   if(!$third.Visible -or !$third.Enabled -or !$v2.Enabled -or $v3.Enabled){throw 'Tres formas: terceira linha ou campos incorretos.'}
+   $v2.Value=[decimal]20
+   if($v3.Value -ne [decimal]50){throw 'Tres formas: restante incorreto.'}
+   $count.SelectedIndex=0
+   if($third.Enabled -or $v2.Value -ne [decimal]70){throw 'Retorno a duas formas incorreto.'}
+   $script:splitDone=$true
+  }catch{$script:splitError=$_.Exception.Message}
+  finally{$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
+ })
+ try{
+  $splitTimer.Start()
+  $null=$splitMethod.Invoke($pdv,[object[]]@([decimal]100))
+  if($script:splitError){throw $script:splitError}
+  if(!$script:splitDone){throw 'Modal dividido nao testado.'}
+ }finally{$splitTimer.Stop();$splitTimer.Dispose()}
  Write-Host 'PDV OK: Voltar no topo, produto abaixo, lista central, botoes a direita e total na base.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{

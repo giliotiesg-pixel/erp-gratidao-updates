@@ -15,7 +15,8 @@ using System.Runtime.InteropServices;
 using QRCoder;
 namespace ArmazemGratidao {
  static class Program {
-  [STAThread] static void Main() {
+  [STAThread] static void Main(string[] args) {
+   if(args.Length==1&&args[0]=="--backup-diario"){Environment.ExitCode=ScheduledFullBackup.RunHeadless();return;}
    Application.EnableVisualStyles();
    Application.SetCompatibleTextRenderingDefault(false);
    // Personalizar ANTES da primeira pintura; eliminar o antigo atraso de 3,5 s
@@ -765,7 +766,7 @@ namespace ArmazemGratidao {
   readonly string dbPath;
   MobileStockServer mobileStock;
   readonly System.Windows.Forms.Timer updateTimer=new System.Windows.Forms.Timer {Interval=6*60*60*1000};
-  readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*60*1000};
+  readonly System.Windows.Forms.Timer dailyBackupTimer=new System.Windows.Forms.Timer {Interval=60*1000};
   bool dailyBackupRunning=false;
   readonly System.Threading.SemaphoreSlim backupGate=new System.Threading.SemaphoreSlim(1,1);
   bool checkingUpdates=false;
@@ -911,6 +912,8 @@ namespace ArmazemGratidao {
    AddSection(bar,"DADOS E RECUPERAÇÃO");
    AddButton(bar,"Importar banco",ImportDatabase);
    AddButton(bar,"Backup do banco",BackupDatabase);
+   AddButton(bar,"Backups completos diários",OpenDailyBackupFolder);
+   AddButton(bar,"Backup completo agora",RunManualFullBackup);
    AddButton(bar,"Pasta do backup das atualizacoes",ConfigureUpdateBackupFolder);
    AddButton(bar,"Central de manutencao", (sender,args)=>OpenProgramFilesFolder());
    AddButton(bar,"Verificar banco",CheckDatabase);
@@ -956,6 +959,7 @@ namespace ArmazemGratidao {
    };
    dailyBackupTimer.Tick+=async (s,e)=>await EnsureDailyBackupAsync();
    dailyBackupTimer.Start();
+   Shown+=async (s,e)=>{string result=await Task.Run(()=>ScheduledFullBackup.RegisterWindowsTasks());if(!IsDisposed&&result!=null)status.Text=result;};
    updateTimer.Tick+=async (s,e)=>await CheckUpdates(false);
    updateTimer.Start();
    FormClosed+=(s,e)=>{dailyBackupTimer.Stop();dailyBackupTimer.Dispose();updateTimer.Stop();updateTimer.Dispose();if(mobileStock!=null){mobileStock.Dispose();mobileStock=null;}};
@@ -993,38 +997,36 @@ namespace ArmazemGratidao {
     }
    }catch(Exception ex){MessageBox.Show("Nao foi possivel configurar o backup: "+ex.Message,"Backup",MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
-  // Uma copia consistente por dia, ao abrir o sistema e enquanto permanecer aberto.
-  // Falhas ficam visiveis; nunca registrar sucesso sem validar a integridade.
-  async Task EnsureDailyBackupAsync(){
-   if(dailyBackupRunning||!File.Exists(dbPath))return;
+  void OpenDailyBackupFolder(object sender,EventArgs e){
+   try{Process.Start("explorer.exe","\""+ScheduledFullBackup.Root()+"\"");}
+   catch(Exception ex){MessageBox.Show(ex.Message,"Backups completos");}
+  }
+  async void RunManualFullBackup(object sender,EventArgs e){
+   if(dailyBackupRunning){MessageBox.Show("Já existe um backup em andamento.");return;}
+   if(!File.Exists(dbPath)){MessageBox.Show("Banco de dados não encontrado.");return;}
    dailyBackupRunning=true;
-   var backupWatch=Stopwatch.StartNew();
    try{
     await backupGate.WaitAsync();
     try{
-     // Copia e verificacao SQLite feitas fora da thread de interface.
-     string report=await Task.Run(()=>{
-      string folder=UpdateBackupDirectory();
-      string marker=Path.Combine(folder,"ultimo-backup-diario.txt");
-      string today=DateTime.Now.ToString("yyyy-MM-dd");
-      if(File.Exists(marker)){
-       string[] lines=File.ReadAllLines(marker);
-       if(lines.Length>=2&&lines[0]==today&&File.Exists(lines[1])&&new FileInfo(lines[1]).Length>0)return null;
-      }
-      string backup=CreateVerifiedPreUpdateBackup();
-      if(!File.Exists(backup))throw new Exception("Arquivo de backup não encontrado.");
-      string tmp=marker+".tmp";
-      File.WriteAllLines(tmp,new[]{today,backup,DateTime.Now.ToString("o")});
-      if(File.Exists(marker))File.Delete(marker);
-      File.Move(tmp,marker);
-      return "Backup diário verificado: "+DateTime.Now.ToString("dd/MM/yyyy HH:mm");
-     });
-     if(report!=null&&!IsDisposed)status.Text=report;
+     status.Text="Criando backup completo...";
+     string path=await Task.Run(()=>ScheduledFullBackup.Run(true));
+     if(!IsDisposed)status.Text=path==null?"Outro backup está em andamento.":"Backup completo verificado: "+path;
+     if(path!=null&&!IsDisposed)MessageBox.Show("Backup completo verificado em:\n"+path,"Backup concluído");
     }finally{backupGate.Release();}
-   }catch(Exception ex){
-    if(!IsDisposed)status.Text="ATENÇÃO: backup diário falhou: "+ex.Message;
-    // Não bloquear as vendas; uma nova tentativa ocorrerá na próxima verificação.
-   }finally{RecordPerformance("Backup diario",backupWatch.ElapsedMilliseconds);dailyBackupRunning=false;}
+   }catch(Exception ex){if(!IsDisposed){status.Text="Falha no backup: "+ex.Message;MessageBox.Show(ex.Message,"Backup não concluído");}}
+   finally{dailyBackupRunning=false;}
+  }
+  async Task EnsureDailyBackupAsync(){
+   if(dailyBackupRunning||!File.Exists(dbPath))return;
+   dailyBackupRunning=true;
+   try{
+    await backupGate.WaitAsync();
+    try{
+     string path=await Task.Run(()=>ScheduledFullBackup.Run(false));
+     if(path!=null&&!IsDisposed)status.Text="Backup completo verificado: "+path;
+    }finally{backupGate.Release();}
+   }catch(Exception ex){if(!IsDisposed)status.Text="ATENÇÃO: backup completo falhou: "+ex.Message;}
+   finally{dailyBackupRunning=false;}
   }
   string CreateVerifiedPreUpdateBackup(string destination=null){
    if(!File.Exists(dbPath))return "Sem banco cadastrado (instalação inicial)";
@@ -2002,6 +2004,8 @@ namespace ArmazemGratidao {
     Tuple.Create("Lucro",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new LucroForm(dbPath));})),
     Tuple.Create("Relatórios",(EventHandler)((s,a)=>OpenHomeModule("Relatorios"))),
     Tuple.Create("Backup do banco",(EventHandler)BackupDatabase),
+    Tuple.Create("Backups completos diários",(EventHandler)OpenDailyBackupFolder),
+    Tuple.Create("Backup completo agora",(EventHandler)RunManualFullBackup),
     Tuple.Create("Verificar atualização",(EventHandler)(async (s,a)=>await CheckUpdates())),
     // Funções complementares vêm depois dos acessos mais frequentes.
     Tuple.Create("Lançar vendas anotadas",(EventHandler)((s,a)=>{if(!File.Exists(dbPath)){MessageBox.Show("Importe primeiro o banco.");return;}OpenModuleWindow(new PdvForm(dbPath,true));})),
