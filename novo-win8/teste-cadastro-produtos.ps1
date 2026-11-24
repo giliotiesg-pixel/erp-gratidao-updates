@@ -58,7 +58,7 @@ try{
    if(@($dlg.Controls.Find('amzgOpenCalculatorModule',$true)).Count -ne 1){
     throw 'Botao Calculadora ausente no cadastro de produtos.'
    }
-   if($cost.Text -ne '' -or $price.Text -ne '' -or $stock.Text -ne '0'){throw 'Campos iniciais devem ser vazios em reais e zero para unidades.'}
+   if($cost.Text -ne '' -or $price.Text -ne '' -or $stock.Text -ne '0'){throw "Campos iniciais invalidos: custo=[$($cost.Text)] preco=[$($price.Text)] qtd=[$($stock.Text)]"}
    $weighted=@($dlg.Controls.Find('amzgInsertByWeight',$true))[0]
    $weighted.Checked=$true
    $stock.Text='1,250'

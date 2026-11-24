@@ -2176,6 +2176,7 @@ namespace ArmazemGratidao {
     footer.BringToFront();
     form.Shown+=(s,e)=>{
      // Nao iniciar a janela no meio do formulario: a barra superior deve ficar visivel.
+     cost.Text="";price.Text="";stock.Value=0m;
      panel.AutoScrollPosition=new Point(0,0);
      barcode.Focus();
      panel.AutoScrollPosition=new Point(0,0);

@@ -1313,83 +1313,113 @@ namespace ArmazemGratidao {
    // O saldo parcial depende desta tabela; não iniciar a gravação se ela não existir.
    if(method=="FIADO")RequireColumns(conn,"credit_payments","sale_id","amount","payment_method","paid_at","note");
   }
+  // Valores lidos do texto a cada tecla, sem depender de sair do campo.
+  static bool TrySplitAmount(string text,out decimal value){
+   value=0m;
+   string input=(text??"").Trim();
+   if(input.Length==0)return true;
+   var br=CultureInfo.GetCultureInfo("pt-BR");
+   if(System.Text.RegularExpressions.Regex.IsMatch(input,@"^\d+(,\d{0,2})?$")||
+      System.Text.RegularExpressions.Regex.IsMatch(input,@"^\d{1,3}(\.\d{3})+(,\d{0,2})?$")){
+    if(!decimal.TryParse(input,NumberStyles.AllowDecimalPoint|NumberStyles.AllowThousands,br,out value))return false;
+   }else if(System.Text.RegularExpressions.Regex.IsMatch(input,@"^\d+\.\d{1,2}$")){
+    if(!decimal.TryParse(input,NumberStyles.AllowDecimalPoint,CultureInfo.InvariantCulture,out value))return false;
+   }else return false;
+   return value>=0&&value<=99999999m&&Math.Round(value,2)==value;
+  }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
    var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
+   var br=CultureInfo.GetCultureInfo("pt-BR");
    using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=620,Height=445,
-    StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
-    var countLabel=new Label{Left=18,Top=17,Width=180,Height=28,Text="Quantidade de formas:"};
-    var count=new ComboBox{Name="amzgSplitCount",Left=202,Top=13,Width=180,DropDownStyle=ComboBoxStyle.DropDownList};
-    count.Items.AddRange(new object[]{"2 formas","3 formas"});count.SelectedIndex=0;
-    var info=new Label{Left=18,Top=52,Width=490,Height=28,Text="Total da venda: R$ "+amount.ToString("N2"),Font=new Font("Segoe UI",11,FontStyle.Bold)};
-    dialog.Controls.AddRange(new Control[]{countLabel,count,info});
-    var combos=new ComboBox[3];var values=new NumericUpDown[3];var labels=new Label[3];
+    StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,AutoScroll=true}){
+    var countLabel=new Label{Left=18,Top=17,Width=175,Height=28,Text="Quantidade de formas:"};
+    var two=new RadioButton{Name="amzgSplitTwo",Text="2 formas",Appearance=Appearance.Button,Left=202,Top=10,Width=115,Height=34,TextAlign=ContentAlignment.MiddleCenter,Checked=true};
+    var three=new RadioButton{Name="amzgSplitThree",Text="3 formas",Appearance=Appearance.Button,Left=325,Top=10,Width=115,Height=34,TextAlign=ContentAlignment.MiddleCenter};
+    var info=new Label{Left=18,Top=52,Width=490,Height=28,Text="Total da venda: "+amount.ToString("C2",br),Font=new Font("Segoe UI",11,FontStyle.Bold)};
+    dialog.Controls.AddRange(new Control[]{countLabel,two,three,info});
+    var combos=new ComboBox[3];var values=new TextBox[3];var labels=new Label[3];
     for(int i=0;i<3;i++){
      labels[i]=new Label{Name="amzgSplitLabel"+(i+1),Left=18,Top=100+i*57,Width=80,Height=26,Text=(i+1)+"ª forma"};
      combos[i]=new ComboBox{Name="amzgSplitMethod"+(i+1),Left=104,Top=96+i*57,Width=190,DropDownStyle=ComboBoxStyle.DropDownList};
-     combos[i].Items.AddRange(methods);
-     combos[i].SelectedIndex=i==0?0:-1;
-     values[i]=new NumericUpDown{Name="amzgSplitValue"+(i+1),Left=310,Top=96+i*57,Width=195,DecimalPlaces=2,
-      Minimum=0,Maximum=99999999,ThousandsSeparator=true};
+     combos[i].Items.AddRange(methods);combos[i].SelectedIndex=i==0?0:-1;
+     values[i]=new TextBox{Name="amzgSplitValue"+(i+1),Left=310,Top=96+i*57,Width=195,TextAlign=HorizontalAlignment.Right,MaxLength=18};
      dialog.Controls.AddRange(new Control[]{labels[i],combos[i],values[i]});
+     int index=i;
+     values[i].Enter+=(sender,args)=>{if(!values[index].ReadOnly)values[index].SelectAll();};
     }
-    var status=new Label{Left=18,Top=275,Width=490,Height=27};
+    var status=new Label{Name="amzgSplitStatus",Left=18,Top=275,Width=540,Height=31};
     var confirm=new Button{Name="amzgSplitConfirm",Text="Confirmar pagamentos",Left=268,Top=308,Width=218,Height=42};
-    bool updating=false;
+    bool updating=false,secondManual=false;
+    decimal[] parts=new decimal[3];
     Action recalculate=()=>{
      if(updating)return;
      updating=true;
      try{
-      int n=count.SelectedIndex==1?3:2;
+      int n=three.Checked?3:2;
+      two.BackColor=n==2?Color.FromArgb(22,75,160):Color.FromArgb(231,240,252);
+      two.ForeColor=n==2?Color.White:Color.FromArgb(22,75,160);
+      three.BackColor=n==3?Color.FromArgb(22,75,160):Color.FromArgb(231,240,252);
+      three.ForeColor=n==3?Color.White:Color.FromArgb(22,75,160);
       for(int i=0;i<3;i++){
-       bool enabled=i<n;
-       labels[i].Visible=enabled;combos[i].Visible=enabled;values[i].Visible=enabled;
-       labels[i].Enabled=enabled;combos[i].Enabled=enabled;
-       values[i].Enabled=enabled;values[i].ReadOnly=!enabled||i==n-1;
-       if(enabled&&i==n-1)values[i].Enabled=false;
-       if(!enabled){values[i].Value=0;continue;}
-       if(i==n-1){
-        decimal previous=0;
-        for(int j=0;j<i;j++)previous+=values[j].Value;
-        decimal remaining=amount-previous;
-        values[i].Value=Math.Max(values[i].Minimum,Math.Min(values[i].Maximum,remaining));
-       }
+       bool visible=i<n;
+       labels[i].Visible=visible;combos[i].Visible=visible;values[i].Visible=visible;
+       combos[i].Enabled=visible;values[i].Enabled=visible;
+       values[i].ReadOnly=!visible||i==n-1;
+       values[i].TabStop=visible&&i<n-1;
       }
-      decimal paid=0;
-      for(int i=0;i<n;i++)paid+=values[i].Value;
-      decimal difference=amount-paid;
-      bool exceeded=false;
-      for(int i=0;i<n-1;i++)if(values[i].Value>amount)exceeded=true;
-      decimal manual=0;
-      for(int i=0;i<n-1;i++)manual+=values[i].Value;
-      exceeded=exceeded||manual>amount;
-      status.Text=exceeded?"Valores informados ultrapassam o total da venda.":"Somado: R$ "+paid.ToString("N2")+"  |  Restante: R$ "+difference.ToString("N2");
-      status.ForeColor=exceeded?Color.DarkRed:Color.FromArgb(22,75,160);
-      confirm.Enabled=!exceeded&&difference==0;
+      decimal first,second=0m;
+      bool valid=TrySplitAmount(values[0].Text,out first);
+      parts[0]=valid?first:0m;
+      decimal afterFirst=Math.Max(0m,amount-parts[0]);
+      if(n==2||!secondManual)values[1].Text=afterFirst.ToString("N2",br);
+      if(n==3){
+       bool secondValid=TrySplitAmount(values[1].Text,out second);
+       valid=valid&&secondValid;
+       parts[1]=secondValid?second:0m;
+       parts[2]=Math.Max(0m,amount-parts[0]-parts[1]);
+       values[2].Text=parts[2].ToString("N2",br);
+      }else{
+       parts[1]=afterFirst;parts[2]=0m;values[2].Text="";
+      }
+      decimal manual=parts[0]+(n==3?parts[1]:0m);
+      bool exceeded=manual>amount;
+      decimal unpaid=Math.Max(0m,amount-manual);
+      status.Text=!valid?"Informe valores válidos com até duas casas decimais.":exceeded?"Valores informados ultrapassam o total da venda.":"Restante automático na "+n+"ª forma: "+unpaid.ToString("C2",br);
+      status.ForeColor=!valid||exceeded?Color.DarkRed:Color.FromArgb(22,75,160);
+      confirm.Enabled=valid&&!exceeded&&parts.Take(n).All(x=>x>0m)&&parts.Take(n).Sum()==amount;
      }finally{updating=false;}
     };
-    count.SelectedIndexChanged+=(s,e)=>{
-     if(count.SelectedIndex==1){updating=true;try{values[1].Value=0;}finally{updating=false;}}
-     recalculate();
-    };
-    foreach(var v in values)v.ValueChanged+=(s,e)=>recalculate();
-    dialog.Shown+=(s,e)=>{recalculate();dialog.PerformLayout();};
+    two.CheckedChanged+=(sender,args)=>{if(two.Checked){secondManual=false;recalculate();}};
+    three.CheckedChanged+=(sender,args)=>{if(three.Checked){secondManual=false;recalculate();}};
+    values[0].TextChanged+=(sender,args)=>recalculate();
+    values[1].TextChanged+=(sender,args)=>{if(!updating&&three.Checked){secondManual=true;recalculate();}};
+    for(int i=0;i<2;i++){
+     int index=i;
+     values[i].Leave+=(sender,args)=>{
+      if(values[index].ReadOnly||string.IsNullOrWhiteSpace(values[index].Text))return;
+      decimal value;if(TrySplitAmount(values[index].Text,out value)){
+       updating=true;try{values[index].Text=value.ToString("N2",br);}finally{updating=false;}recalculate();
+      }
+     };
+    }
+    dialog.Shown+=(sender,args)=>{recalculate();dialog.PerformLayout();values[0].Focus();};
     recalculate();
     List<KeyValuePair<string,decimal>> selected=null;
-    confirm.Click+=(s,e)=>{
-     int n=count.SelectedIndex==1?3:2;
-     var parts=new List<KeyValuePair<string,decimal>>();
+    confirm.Click+=(sender,args)=>{
+     recalculate();
+     if(!confirm.Enabled)return;
+     int n=three.Checked?3:2;
+     var result=new List<KeyValuePair<string,decimal>>();
      for(int i=0;i<n;i++){
       if(combos[i].SelectedIndex<0){MessageBox.Show("Escolha a "+(i+1)+"ª forma de pagamento.");return;}
-      if(values[i].Value<=0){MessageBox.Show("Informe um valor maior que zero na "+(i+1)+"ª forma.");return;}
       string method=Convert.ToString(combos[i].SelectedItem);
-      if(parts.Any(p=>p.Key==method)){MessageBox.Show("Utilize cada forma de pagamento apenas uma vez.");return;}
-      parts.Add(new KeyValuePair<string,decimal>(method,values[i].Value));
+      if(result.Any(p=>p.Key==method)){MessageBox.Show("Utilize cada forma de pagamento apenas uma vez.");return;}
+      result.Add(new KeyValuePair<string,decimal>(method,parts[i]));
      }
-     if(parts.Sum(p=>p.Value)!=amount){MessageBox.Show("A soma dos pagamentos deve ser exatamente R$ "+amount.ToString("N2"));return;}
-     selected=parts;dialog.DialogResult=DialogResult.OK;
+     if(result.Sum(p=>p.Value)!=amount){MessageBox.Show("A soma dos pagamentos deve ser exatamente "+amount.ToString("C2",br));return;}
+     selected=result;dialog.DialogResult=DialogResult.OK;
     };
     dialog.Controls.Add(status);dialog.Controls.Add(confirm);
-    dialog.AutoScroll=true;
     return dialog.ShowDialog(this)==DialogResult.OK?selected:null;
    }
   }

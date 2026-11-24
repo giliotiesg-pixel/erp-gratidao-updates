@@ -124,21 +124,29 @@ try{
   if(!$dlg){return}
   $splitTimer.Stop()
   try{
-   $count=$dlg.Controls.Find('amzgSplitCount',$true)[0]
+   $two=$dlg.Controls.Find('amzgSplitTwo',$true)[0]
+   $three=$dlg.Controls.Find('amzgSplitThree',$true)[0]
    $third=$dlg.Controls.Find('amzgSplitMethod3',$true)[0]
    $v1=$dlg.Controls.Find('amzgSplitValue1',$true)[0]
    $v2=$dlg.Controls.Find('amzgSplitValue2',$true)[0]
    $v3=$dlg.Controls.Find('amzgSplitValue3',$true)[0]
-   if($third.Visible -or $third.Enabled -or $v3.Visible){throw 'Terceira linha precisa ficar oculta em duas formas.'}
-   $v1.Value=[decimal]30
-   if($v2.Value -ne [decimal]70){throw 'Duas formas: restante incorreto.'}
-   $count.SelectedIndex=1
+   $confirm=$dlg.Controls.Find('amzgSplitConfirm',$true)[0]
+   if(!$two.Checked -or $third.Visible -or $v3.Visible){throw 'Terceira linha precisa ficar oculta em duas formas.'}
+   $v1.Text='3'
+   if($v2.Text -ne '97,00'){throw 'Primeira tecla nao atualizou o restante.'}
+   $v1.Text='30,25'
+   if($v2.Text -ne '69,75' -or !$v2.ReadOnly){throw 'Duas formas: restante incorreto.'}
+   $three.Checked=$true
    [Windows.Forms.Application]::DoEvents()
-   if(!$third.Visible -or !$third.Enabled -or !$v2.Enabled -or $v3.Enabled){throw 'Tres formas: terceira linha ou campos incorretos.'}
-   $v2.Value=[decimal]20
-   if($v3.Value -ne [decimal]50){throw 'Tres formas: restante incorreto.'}
-   $count.SelectedIndex=0
-   if($third.Visible -or $third.Enabled -or $v3.Visible -or $v2.Value -ne [decimal]70){throw 'Retorno a duas formas incorreto.'}
+   if(!$third.Visible -or !$third.Enabled -or $v2.ReadOnly -or !$v3.ReadOnly){throw 'Tres formas: terceira linha ou campos incorretos.'}
+   if($v2.Text -ne '69,75'){throw 'Segunda forma deve iniciar com o restante sugerido.'}
+   $v2.Text='20,10'
+   if($v3.Text -ne '49,65'){throw 'Tres formas: restante incorreto durante digitacao.'}
+   $v1.Text='95'
+   if($confirm.Enabled){throw 'Pagamento acima do total foi aceito.'}
+   $v1.Text='30,25'
+   $two.Checked=$true
+   if($third.Visible -or $v3.Visible -or $v2.Text -ne '69,75'){throw 'Retorno a duas formas incorreto.'}
    $script:splitDone=$true
   }catch{$script:splitError=$_.Exception.Message}
   finally{$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
