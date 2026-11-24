@@ -123,6 +123,8 @@ namespace ArmazemGratidao {
    footer.Controls.Add(customer);
    var chooseCustomer=new Button {Text="CLIENTE / CADASTRAR",Width=170,Height=38,BackColor=Color.FromArgb(31,104,172),ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
    chooseCustomer.Click+=(s,e)=>ChooseCustomerInWindow();footer.Controls.Add(chooseCustomer);
+   var openFiado=new Button{Text="FIADO",Width=170,Height=38,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   openFiado.Click+=(s,e)=>OpenFiadoFromPdv();footer.Controls.Add(openFiado);
    footer.Controls.Add(new Label {Text="Recebido:",AutoSize=true,Padding=new Padding(0,9,0,0)});footer.Controls.Add(received);footer.Controls.Add(changeLabel);
    footer.SetFlowBreak(changeLabel,true);
    payment.SelectedIndexChanged+=(s,e)=>{UpdateChange();SaveDraft();};received.TextChanged+=(s,e)=>{UpdateChange();decimal valid;if(received.TryValue(out valid))SaveDraft();};
@@ -176,13 +178,31 @@ namespace ArmazemGratidao {
    if(manualEntry){lookupDelay.Interval=160;suggestions.Width=600;suggestions.Height=245;}
    // Mover os MESMOS controles e seus eventos para o layout aprovado na previa.
    PdvModernLayout.Apply(this,header,footer,listArea,rapidInventoryBar,
-    code,qty,saleUnit,add,finish,edit,chooseCustomer,remove,clear,
+    code,qty,saleUnit,add,finish,edit,chooseCustomer,openFiado,remove,clear,
     customer,received,changeLabel,discountLabel,discountMode,discountInput,total,
     grid,stockView,manualEntry);
    PositionSuggestions();
    LoadDraft();
    FormClosing+=(sender,args)=>SaveDraft();
    Render();code.Focus();
+  }
+  void OpenFiadoFromPdv(){
+   if(finishingSale)return;
+   if(!File.Exists(db)){MessageBox.Show(this,"Banco de dados não encontrado.","Fiado");return;}
+   try{
+    SaveDraft();
+    var main=Application.OpenForms.OfType<MainForm>().FirstOrDefault(f=>!f.IsDisposed);
+    if(main!=null){main.OpenFiadoFromPdv(this,db);return;}
+    // Também funciona quando o PDV é aberto isoladamente.
+    var existing=Application.OpenForms.OfType<FiadoClientesForm>().FirstOrDefault(f=>!f.IsDisposed);
+    if(existing!=null){
+     if(existing.WindowState==FormWindowState.Minimized)existing.WindowState=FormWindowState.Normal;
+     existing.Show();existing.BringToFront();existing.Activate();return;
+    }
+    var window=new FiadoClientesForm(db);
+    window.FormClosed+=(sender,args)=>{if(!IsDisposed){BringToFront();Activate();}};
+    window.Show(this);
+   }catch(Exception ex){MessageBox.Show(this,ex.Message,"Não foi possível abrir o Fiado",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
   }
   SQLiteConnection Open() {var c=new SQLiteConnection(new SQLiteConnectionStringBuilder {DataSource=db,FailIfMissing=true}.ToString());c.Open();return c;}
   static decimal Dec(object o) {return Convert.ToDecimal(o,CultureInfo.InvariantCulture);}

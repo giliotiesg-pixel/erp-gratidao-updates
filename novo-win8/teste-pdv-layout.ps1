@@ -78,6 +78,9 @@ try{
  $summary=& $find 'amzgPdvSummary'
  $total=& $find 'amzgPdvTotal'
  $other=& $find 'amzgPdvMoreOptions'
+ $fiado=& $find 'amzgPdvFiado'
+ if(!$fiado.Visible -or !$fiado.Enabled -or $fiado.Text -ne 'Fiado' -or $fiado.Parent.Name -ne 'amzgPdvActionStack'){throw 'Botao Fiado precisa estar visivel nas acoes do PDV.'}
+ if(!$mainType.GetMethod('OpenFiadoFromPdv')){throw 'Navegacao Fiado a partir do PDV ausente.'}
  $grid=@($pdv.Controls.Find('amzgPdvItemBox',$true)[0].Controls |
     Where-Object {$_ -is [System.Windows.Forms.DataGridView] -and $_.Visible}) |
     Select-Object -First 1

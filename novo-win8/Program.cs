@@ -162,7 +162,7 @@ namespace ArmazemGratidao {
    if(local!=null){local.Controls.Remove(back);local.Controls.Remove(toggle);
     local.Visible=false;local.Height=0;}
    var mainBack=header.Controls.OfType<Button>().FirstOrDefault();
-   if(mainBack!=null){mainBack.Text="← Menu Inicial";mainBack.Width=124;}
+   if(mainBack!=null){mainBack.Text=form.Tag is PdvForm?"← Voltar ao PDV":"← Menu Inicial";mainBack.Width=124;}
    back.Dock=DockStyle.Right;back.Width=149;back.Height=28;
    toggle.Dock=DockStyle.Right;toggle.Width=116;toggle.Height=28;
    back.Visible=false;toggle.Visible=false;
@@ -2231,6 +2231,20 @@ namespace ArmazemGratidao {
   // Mantem as janelas abertas de forma independente; nao usar 'using' com Show().
   // Navegacao padronizada: a seta retorna ao menu sem encerrar o aplicativo.
   // O fechamento normal da janela preserva validacoes de alteracoes pendentes.
+  public void OpenFiadoFromPdv(PdvForm pdv,string database){
+   var existing=Application.OpenForms.OfType<FiadoClientesForm>().FirstOrDefault(f=>!f.IsDisposed);
+   if(existing!=null){
+    existing.Tag=pdv;
+    var bar=existing.Controls.Find("amzgBackBar",true).FirstOrDefault();
+    if(bar!=null){var button=bar.Controls.OfType<Button>().FirstOrDefault();if(button!=null)button.Text="← Voltar ao PDV";}
+    if(existing.WindowState==FormWindowState.Minimized)existing.WindowState=FormWindowState.Normal;
+    existing.Show();existing.BringToFront();existing.Activate();return;
+   }
+   var fiado=new FiadoClientesForm(database);
+   fiado.Tag=pdv;
+   fiado.FormClosed+=(sender,args)=>{if(!pdv.IsDisposed){if(pdv.WindowState==FormWindowState.Minimized)pdv.WindowState=FormWindowState.Normal;pdv.BringToFront();pdv.Activate();}};
+   OpenModuleWindow(fiado);
+  }
   void AddBackToMenu(Form form){
    if(form==null||form.IsDisposed||form.Controls.Find("amzgBackBar",true).Length>0)return;
    var backBar=new Panel{Name="amzgBackBar",Dock=DockStyle.Top,Height=33,
@@ -2241,8 +2255,13 @@ namespace ArmazemGratidao {
    back.FlatAppearance.BorderSize=0;
    RoundHomeControl(back,9);
    back.Click+=(sender,args)=>{
+    var returnPdv=form.Tag as PdvForm;
     form.Close();
     if(!form.IsDisposed&&form.Visible)return;
+    if(returnPdv!=null&&!returnPdv.IsDisposed){
+     if(returnPdv.WindowState==FormWindowState.Minimized)returnPdv.WindowState=FormWindowState.Normal;
+     returnPdv.Show();returnPdv.BringToFront();returnPdv.Activate();return;
+    }
     ShowMainMenu();
     WindowState=FormWindowState.Normal;
     BringToFront();Activate();

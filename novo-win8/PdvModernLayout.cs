@@ -75,7 +75,7 @@ namespace ArmazemGratidao {
   public static void Apply(PdvForm form,FlowLayoutPanel header,FlowLayoutPanel footer,
    Panel listArea,FlowLayoutPanel rapidInventoryBar,
    TextBox code,NumericUpDown qty,ComboBox saleUnit,Button add,
-   Button finish,Button edit,Button chooseCustomer,Button remove,Button clear,
+   Button finish,Button edit,Button chooseCustomer,Button openFiado,Button remove,Button clear,
    TextBox customer,TextBox received,Label changeLabel,
    Label discountLabel,ComboBox discountMode,NumericUpDown discountInput,Label total,
    DataGridView grid,DataGridView stockView,bool manualEntry){
@@ -245,22 +245,24 @@ namespace ArmazemGratidao {
    edit.Name="amzgPdvEdit";
    ButtonTheme(chooseCustomer,"♙  Cliente / Cadastrar",Color.FromArgb(223,234,250),DeepNavy,44);
    chooseCustomer.Name="amzgPdvChooseCustomer";
+   ButtonTheme(openFiado,"Fiado",Color.FromArgb(223,234,250),DeepNavy,44);
+   openFiado.Name="amzgPdvFiado";
    ButtonTheme(remove,"▤  Remover Item",Color.FromArgb(253,234,238),Red,44);
    remove.Name="amzgPdvRemove";
    ButtonTheme(clear,"▤  Excluir Todos",Color.FromArgb(224,235,249),DeepNavy,38);
    clear.Name="amzgPdvClear";
-   foreach(Button btn in new[]{finish,edit,chooseCustomer,remove,clear}){
+   foreach(Button btn in new[]{finish,edit,chooseCustomer,openFiado,remove,clear}){
     btn.Dock=DockStyle.None;
     btn.Margin=new Padding(3,3,3,3);
     buttons.Controls.Add(btn);
    }
    // Botao de exclusao permanece menos proeminente, abaixo da separacao.
-   buttons.Controls.SetChildIndex(clear,4);
+   buttons.Controls.SetChildIndex(clear,5);
    var separator=new Label{Name="amzgPdvActionDivider",Height=13,
     BorderStyle=BorderStyle.None,
     BackColor=Surface,Margin=new Padding(6,6,6,3)};
    buttons.Controls.Add(separator);
-   buttons.Controls.SetChildIndex(separator,4);
+   buttons.Controls.SetChildIndex(separator,5);
    var others=new Button{Name="amzgPdvMoreOptions",Text="⚙  Outras Opções   ⌄",
     Height=37,FlatStyle=FlatStyle.Flat,ForeColor=DeepNavy,
     BackColor=Color.FromArgb(220,232,250),
