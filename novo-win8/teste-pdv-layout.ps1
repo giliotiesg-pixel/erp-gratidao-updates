@@ -17,8 +17,11 @@ $database=Join-Path $env:RUNNER_TEMP ('pdv-layout-'+[Guid]::NewGuid().ToString('
 $seed=@'
 import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
-c.execute("CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT, price REAL, stock REAL)")
-c.execute("INSERT INTO products VALUES(1,'Produto de teste',10,100)")
+c.execute("CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT, price REAL, stock REAL, barcode TEXT, internal_code TEXT, cost REAL DEFAULT 0, sold_by_weight INTEGER DEFAULT 0)")
+c.execute("INSERT INTO products(id,name,price,stock,barcode,internal_code,cost) VALUES(1,'Produto de teste',10,100,'7890000000001','1',5)")
+c.execute("INSERT INTO products VALUES(2,'Salsicha',12,100,'7890000000002','2',6,0)")
+c.execute("INSERT INTO products VALUES(3,'Arroz 5 kg',25,100,'7890000000003','3',15,0)")
+c.execute("INSERT INTO products VALUES(4,'Queijo colonial',40,100,'7890000000004','4',20,1)")
 c.commit()
 c.close()
 '@
@@ -304,6 +307,39 @@ c.close()
  $check | python - $database
  if($LASTEXITCODE -ne 0){throw 'Preco nao persistiu com auditoria ou estoque mudou antes da venda'}
  $cart.Clear();$pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
+ $weightMethod=$pdvType.GetMethod('IsWeightSale',[Reflection.BindingFlags]'Static,NonPublic')
+ foreach($ex in @(
+  @{name='Salsicha';flag=$false;expected=$true},
+  @{name='Linguiça';flag=$false;expected=$true},
+  @{name='Calabresa';flag=$false;expected=$true},
+  @{name='Frango inteiro';flag=$false;expected=$true},
+  @{name='Linguiça calabresa quilo';flag=$false;expected=$true},
+  @{name='Queijo / kg';flag=$false;expected=$true},
+  @{name='Queijo colonial';flag=$true;expected=$true},
+  @{name='Arroz 5 kg';flag=$false;expected=$false},
+  @{name='Calabresa pacote 1 kg';flag=$false;expected=$false},
+  @{name='Salsicha 500 g';flag=$false;expected=$false},
+  @{name='Coca-Cola 600 ml';flag=$false;expected=$false}
+ )){
+  if([bool]$weightMethod.Invoke($null,[object[]]@([string]$ex.name,[bool]$ex.flag)) -ne [bool]$ex.expected){throw "Unidade incorreta: $($ex.name)"}
+ }
+ $unit=& $find 'amzgPdvUnitInput'
+ $qty=& $find 'amzgPdvQtyInput'
+ $lookup=$pdvType.GetMethod('FindSuggestions',$private)
+ $addProduct=$pdvType.GetMethod('AddProduct',$private)
+ $code.Text='7890000000002'
+ $lookup.Invoke($pdv,$null)|Out-Null
+ if($unit.SelectedItem -ne 'KG' -or $qty.DecimalPlaces -ne 3){throw 'Busca nao selecionou KG e tres decimais'}
+ $qty.Value=[decimal]0.375
+ $addProduct.Invoke($pdv,[object[]]@($false))|Out-Null
+ if($cart.Count -ne 1 -or $itemType.GetField('Unit').GetValue($cart[0]) -ne 'KG' -or $itemType.GetProperty('Total').GetValue($cart[0],$null) -ne [decimal]4.50){throw 'Venda por peso incorreta'}
+ if($unit.SelectedItem -ne 'UN'){throw 'Unidade nao retornou ao padrao'}
+ $code.Text='7890000000003';$lookup.Invoke($pdv,$null)|Out-Null
+ if($unit.SelectedItem -ne 'UN'){throw 'Pacote de arroz foi interpretado como peso'}
+ $code.Text='7890000000004';$lookup.Invoke($pdv,$null)|Out-Null
+ if($unit.SelectedItem -ne 'KG'){throw 'Cadastro por peso ignorado'}
+ $code.Clear();$cart.Clear();$pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
+ Write-Host 'PDV PESO OK: descricao, cadastro, pacote e 375 g.'
  Write-Host 'PDV OK: quadro 70%, entrada superior, menu oculto, total e finalizar fixos; edicao e preco persistente testados.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{

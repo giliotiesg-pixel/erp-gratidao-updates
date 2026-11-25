@@ -14,7 +14,7 @@ using System.Security.Cryptography;
 
 namespace ArmazemGratidao {
  public sealed class PdvForm : StyledDialogForm {
-  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost,LineDiscount;public string Unit="UN";public decimal Gross {get{return Math.Round(Qty*Price,2,MidpointRounding.AwayFromZero);}} public decimal Total {get{return Math.Max(0,Gross-LineDiscount);}}}
+  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost,LineDiscount;public bool SoldByWeight;public string Unit="UN";public decimal Gross {get{return Math.Round(Qty*Price,2,MidpointRounding.AwayFromZero);}} public decimal Total {get{return Math.Max(0,Gross-LineDiscount);}}}
   readonly string db;
   bool finishingSale=false;
   bool paymentPreselected=false;
@@ -54,6 +54,7 @@ namespace ArmazemGratidao {
   readonly ListBox suggestions=new ListBox {Visible=false,Width=510,Height=190,Font=new Font("Segoe UI",10)};
   readonly Dictionary<int,string> suggestionCodes=new Dictionary<int,string>();
   bool suppressLookup=false;
+  bool manualUnitChoice=false;
   bool draftReady=false;
   bool draftSaveWarned=false;
   // TextBox preserva a digitacao; NumericUpDown.Value so confirmava ao sair do campo.
@@ -84,8 +85,9 @@ namespace ArmazemGratidao {
    }
    header.Controls.Add(new Label {Text="Código / Nome:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});
    header.Controls.Add(code);header.Controls.Add(new Label {Text="Qtd:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(qty);
-   saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;
-   saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
+   saleUnit.Items.AddRange(new object[]{"UN","KG"});saleUnit.SelectedIndex=0;qty.DecimalPlaces=0;qty.Minimum=1m;
+   saleUnit.SelectionChangeCommitted+=(s,e)=>manualUnitChoice=true;
+   saleUnit.SelectedIndexChanged+=(s,e)=>{bool byKg=Convert.ToString(saleUnit.SelectedItem)=="KG";qty.Increment=byKg?0.001M:1M;qty.Minimum=byKg?0.001M:1M;qty.DecimalPlaces=byKg?3:0;if(!byKg&&qty.Value!=decimal.Truncate(qty.Value))qty.Value=decimal.Ceiling(qty.Value);};
    header.Controls.Add(new Label {Text="Unidade:",AutoSize=true,ForeColor=Color.Black,Padding=new Padding(0,9,0,0)});header.Controls.Add(saleUnit);
    var add=new Button {Text="ADICIONAR PRODUTO",Width=190,Height=40,Font=new Font("Segoe UI",10,FontStyle.Bold),BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};add.FlatAppearance.BorderSize=0;add.Click+=(s,e)=>AddProduct();header.Controls.Add(add);
    if(manualEntry){
@@ -115,7 +117,7 @@ namespace ArmazemGratidao {
     rapidInventoryBar.Controls.Add(stockHint);
    }
    code.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Down&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.Focus();suggestions.SelectedIndex=0;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;lookupDelay.Stop();if(manualEntry&&suggestions.Visible&&suggestions.Items.Count>0){suggestions.SelectedIndex=0;ChooseSuggestion();}else{suggestions.Visible=false;AddProduct();}}};
-   code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
+   code.TextChanged+=(s,e)=>{lookupDelay.Stop();if(!suppressLookup)manualUnitChoice=false;if(!suppressLookup&&code.Text.Trim().Length>=(manualEntry?1:2))lookupDelay.Start();else suggestions.Visible=false;};
    lookupDelay.Tick+=(s,e)=>{lookupDelay.Stop();FindSuggestions();};
    suggestions.MouseClick+=(s,e)=>{int index=suggestions.IndexFromPoint(e.Location);if(e.Button==MouseButtons.Left&&index>=0){suggestions.SelectedIndex=index;ChooseSuggestion();}};
    suggestions.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;ChooseSuggestion();}else if(e.KeyCode==Keys.Escape){suggestions.Visible=false;code.Focus();}};
@@ -435,6 +437,33 @@ namespace ArmazemGratidao {
    foreach(char c in normalized)if(CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark)result.Append(c);
    return result.ToString().Normalize(NormalizationForm.FormC);
   }
+  // Cadastro por peso tem prioridade; descrição antiga pode indicar venda a granel.
+  // Embalagens com peso nominal continuam em unidades, salvo marca explícita.
+  internal static bool IsWeightSale(string description,bool registered){
+   if(registered)return true;
+   string name=SearchFold(description).Trim();
+   const string kg=@"(?:kg|quilos?|quilogramas?)";
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"(?:/|\bpor\s+|\ba cada\s+)\s*"+kg+@"\b|\ba granel\b|\bvendid[oa]\s+por\s+peso\b"))return true;
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\b(?:pacote|pct|embalagem|bandeja|caixa|unidade|un|peca|fardo|lata|pote|saco|enlatad[oa]|empanad[oa]|hamburguer|nuggets|sanduiche|pizza)\b"))return false;
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\d\s*"+kg+@"\b|\d\s*(?:g|gr|gramas?|ml|l|litros?)\b"))return false;
+   if(System.Text.RegularExpressions.Regex.IsMatch(name,@"\b"+kg+@"\b"))return true;
+   return System.Text.RegularExpressions.Regex.IsMatch(name,@"^(?:salsichas?|linguicas?|calabresas?|frango|coxa\s+de\s+frango|sobrecoxa\s+de\s+frango|peito\s+de\s+frango|file\s+de\s+frango|asa\s+de\s+frango|coxinha\s+da\s+asa)\b");
+  }
+  static string WeightExpression(SQLiteConnection connection){
+   var columns=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+   using(var q=new SQLiteCommand("PRAGMA table_info(products)",connection))
+   using(var rd=q.ExecuteReader())while(rd.Read())columns.Add(Convert.ToString(rd["name"]));
+   foreach(string field in new[]{"sold_by_weight","is_weighted","por_peso"})
+    if(columns.Contains(field))return "COALESCE("+field+",0)";
+   return "0";
+  }
+  void SelectDetectedUnit(bool byWeight){
+   if(!manualEntry&&!manualUnitChoice)saleUnit.SelectedItem=byWeight?"KG":"UN";
+  }
+  void ResetEntryUnit(){
+   manualUnitChoice=false;
+   if(!manualEntry)saleUnit.SelectedItem="UN";
+  }
   void PositionSuggestions(){
    if(code.Parent==null||IsDisposed||!IsHandleCreated)return;
    Point location=PointToClient(code.Parent.PointToScreen(new Point(code.Left,code.Bottom)));
@@ -448,9 +477,9 @@ namespace ArmazemGratidao {
    try{
     suggestions.Items.Clear();suggestionCodes.Clear();
     string folded=SearchFold(term);
-    var matches=new List<Tuple<string,string,decimal,decimal,int>>();
+    var matches=new List<Tuple<string,string,decimal,decimal,int,bool,bool>>();
     using(var connection=Open())
-    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock FROM products",connection))
+    using(var cmd=new SQLiteCommand("SELECT barcode,internal_code,name,price,stock,"+WeightExpression(connection)+" AS pdv_weight FROM products",connection))
     using(var reader=cmd.ExecuteReader())while(reader.Read()){
      string name=Convert.ToString(reader["name"]);
      string barcode=Convert.ToString(reader["barcode"]);
@@ -460,10 +489,14 @@ namespace ArmazemGratidao {
      string normalized=SearchFold(name);
      bool begins=normalized.StartsWith(folded,StringComparison.Ordinal);
      if(!begins&&!normalized.Contains(folded)&&!barcode.StartsWith(term,StringComparison.OrdinalIgnoreCase)&&!internalCode.StartsWith(term,StringComparison.OrdinalIgnoreCase))continue;
-     matches.Add(Tuple.Create(name,key,Dec(reader["price"]),Dec(reader["stock"]),begins?0:1));
+     bool exact=string.Equals(barcode,term,StringComparison.OrdinalIgnoreCase)||string.Equals(internalCode,term,StringComparison.OrdinalIgnoreCase)||normalized==folded;
+     matches.Add(Tuple.Create(name,key,Dec(reader["price"]),Dec(reader["stock"]),begins?0:1,IsWeightSale(name,Dec(reader["pdv_weight"])!=0m),exact));
     }
+    var exactMatches=matches.Where(x=>x.Item7).ToList();
+    if(exactMatches.Count==1)SelectDetectedUnit(exactMatches[0].Item6);
+    else if(matches.Count==1)SelectDetectedUnit(matches[0].Item6);
     foreach(var item in matches.OrderBy(x=>x.Item5).ThenBy(x=>x.Item1,StringComparer.CurrentCultureIgnoreCase).Take(30)){
-     int index=suggestions.Items.Add(item.Item1+"  |  R$ "+item.Item3.ToString("N2")+"  |  QTD "+item.Item4.ToString("N3")+"  |  "+item.Item2);
+     int index=suggestions.Items.Add(item.Item1+"  |  R$ "+item.Item3.ToString("N2")+(item.Item6?"/kg":" /un")+"  |  QTD "+item.Item4.ToString("N3")+"  |  "+item.Item2);
      suggestionCodes[index]=item.Item2;
     }
     suggestions.Visible=suggestions.Items.Count>0;
@@ -927,20 +960,21 @@ namespace ArmazemGratidao {
     var matches=new List<Item>();
     var stocks=new Dictionary<long,decimal>();
     using(var connection=Open()){
+     string weightSql=WeightExpression(connection);
      // Priorizar a busca exata por código; pesquisar descrição apenas se não houver código correspondente.
-     using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products WHERE barcode=@code OR internal_code=@code ORDER BY name,id LIMIT 101",connection)){
+     using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock,"+weightSql+" AS pdv_weight FROM products WHERE barcode=@code OR internal_code=@code ORDER BY name,id LIMIT 101",connection)){
       cmd.Parameters.AddWithValue("@code",search);
       using(var reader=cmd.ExecuteReader())while(reader.Read()){
-       var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+       var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"]),SoldByWeight=IsWeightSale(Convert.ToString(reader["name"]),Dec(reader["pdv_weight"])!=0m)};
        matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
       }
      }
      if(matches.Count==0){
-      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock FROM products ORDER BY name,id",connection)){
+      using(var cmd=new SQLiteCommand("SELECT id,barcode,internal_code,name,price,cost,stock,"+weightSql+" AS pdv_weight FROM products ORDER BY name,id",connection)){
        using(var reader=cmd.ExecuteReader())while(reader.Read()){
         if(!SearchFold(Convert.ToString(reader["name"])).Contains(SearchFold(search)))continue;
         if(matches.Count>=101)break;
-        var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"])};
+        var item=new Item {Id=Convert.ToInt64(reader["id"]),Barcode=Convert.ToString(reader["barcode"]),InternalCode=Convert.ToString(reader["internal_code"]),Name=Convert.ToString(reader["name"]),Price=Dec(reader["price"]),Cost=Dec(reader["cost"]),SoldByWeight=IsWeightSale(Convert.ToString(reader["name"]),Dec(reader["pdv_weight"])!=0m)};
         matches.Add(item);stocks[item.Id]=Dec(reader["stock"]);
        }
       }
@@ -980,8 +1014,11 @@ namespace ArmazemGratidao {
       selected=matches[selectedIndex];
      }
     }
+    SelectDetectedUnit(selected.SoldByWeight);
+    bool byWeight=Convert.ToString(saleUnit.SelectedItem)=="KG";
     decimal quantity=qty.Value;
-    if(askQuantity){
+    // Não lançar 1 kg automaticamente quando a balança ainda não foi informada.
+    if(askQuantity||(!manualEntry&&byWeight&&quantity==1m)){
      decimal? entered=AskProductQuantity(selected,quantity);
      if(!entered.HasValue)return;
      quantity=entered.Value;
@@ -1001,7 +1038,7 @@ namespace ArmazemGratidao {
     }
     if(existing!=null)existing.Qty+=quantity;
     else {selected.Qty=quantity;selected.Unit=unit;cart.Add(selected);}
-    suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;Render();code.Focus();
+    suppressLookup=true;code.Clear();suppressLookup=false;suggestions.Visible=false;qty.Value=1;ResetEntryUnit();Render();code.Focus();
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao adicionar");}
   }
   decimal DiscountAmount(){
@@ -1403,12 +1440,12 @@ namespace ArmazemGratidao {
    if(cart.Count>0&&MessageBox.Show("Iniciar nova venda e limpar a venda em andamento? Nenhuma venda registrada será excluída.","Nova venda",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
    cart.Clear();paymentPreselected=false;payment.SelectedIndex=0;customer.Text="Consumidor";
    discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";
-   code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   code.Clear();qty.Value=1;ResetEntryUnit();received.Value=0;Render();code.Focus();
   }
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();paymentPreselected=false;discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   cart.Clear();paymentPreselected=false;discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";code.Clear();qty.Value=1;ResetEntryUnit();received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
