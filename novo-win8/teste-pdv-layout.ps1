@@ -13,7 +13,17 @@ $asm=[System.Reflection.Assembly]::LoadFrom($exe)
 $pdvType=$asm.GetType('ArmazemGratidao.PdvForm',$true)
 $mainType=$asm.GetType('ArmazemGratidao.MainForm',$true)
 $main=$null;$pdv=$null
-$database=Join-Path $env:RUNNER_TEMP 'pdv-layout-dados-descartaveis.db'
+$database=Join-Path $env:RUNNER_TEMP ('pdv-layout-'+[Guid]::NewGuid().ToString('N')+'.db')
+$seed=@'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT, price REAL, stock REAL)")
+c.execute("INSERT INTO products VALUES(1,'Produto de teste',10,100)")
+c.commit()
+c.close()
+'@
+$seed | python - $database
+if($LASTEXITCODE -ne 0){throw 'Falha ao criar banco de teste PDV'}
 try{
  $main=[Activator]::CreateInstance($mainType)
  # Indicador visual persistente, independente do rodape e sem caixas de mensagem.
@@ -234,7 +244,47 @@ try{
   if($script:splitError){throw $script:splitError}
   if(!$script:splitDone){throw 'Modal dividido nao testado.'}
  }finally{$splitTimer.Stop();$splitTimer.Dispose()}
- Write-Host 'PDV OK: quadro 70%, entrada superior, menu oculto, total e finalizar fixos.'
+ # Exercer o editor real e validar a persistencia no banco descartavel.
+ $private=[Reflection.BindingFlags]'Instance,NonPublic'
+ $itemType=$pdvType.GetNestedType('Item',[Reflection.BindingFlags]::NonPublic)
+ $cart=$pdvType.GetField('cart',$private).GetValue($pdv)
+ $item=[Activator]::CreateInstance($itemType,$true)
+ foreach($entry in @(@('Id',[long]1),@('Name','Produto de teste'),@('Barcode','7890000000001'),@('InternalCode','1'),@('Qty',[decimal]2),@('Price',[decimal]10),@('Cost',[decimal]5),@('Unit','UN'))){
+  $itemType.GetField([string]$entry[0]).SetValue($item,$entry[1])
+ }
+ $cart.Add($item)
+ $pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
+ $grid.CurrentCell=$grid.Rows[0].Cells['Produto']
+ $edit=$pdvType.GetMethod('EditSelected',$private)
+ $script:editDone=$false;$script:editError=''
+ $editTimer=New-Object Windows.Forms.Timer
+ $editTimer.Interval=150
+ $editTimer.Add_Tick({
+  $dlg=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Text -eq 'Editar produto da venda'})|Select-Object -First 1
+  if(!$dlg){return}
+  $editTimer.Stop()
+  try{
+   $q=$dlg.Controls.Find('amzgEditQty',$true)[0];$p=$dlg.Controls.Find('amzgEditPrice',$true)[0]
+   $d=$dlg.Controls.Find('amzgEditDiscount',$true)[0];$save=$dlg.Controls.Find('amzgEditSave',$true)[0]
+   if($d.Visible){throw 'Desconto deve iniciar oculto'}
+   $q.Value=[decimal]3;$p.Value=[decimal]12.5;$d.Value=[decimal]2.5
+   $save.PerformClick();$script:editDone=$true
+  }catch{$script:editError=$_.Exception.Message;$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
+ })
+ try{$editTimer.Start();$edit.Invoke($pdv,$null)|Out-Null}finally{$editTimer.Stop();$editTimer.Dispose()}
+ if($script:editError){throw $script:editError}
+ if(!$script:editDone -or $itemType.GetField('Price').GetValue($item) -ne [decimal]12.5 -or $itemType.GetProperty('Total').GetValue($item,$null) -ne [decimal]35){throw 'Edicao do carrinho ou desconto incorretos'}
+ $check=@'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+assert c.execute("SELECT price,stock FROM products WHERE id=1").fetchone()==(12.5,100)
+assert c.execute("SELECT previous_price,new_price FROM product_price_audit WHERE product_id=1").fetchone()==(10,12.5)
+c.close()
+'@
+ $check | python - $database
+ if($LASTEXITCODE -ne 0){throw 'Preco nao persistiu com auditoria ou estoque mudou antes da venda'}
+ $cart.Clear();$pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
+ Write-Host 'PDV OK: quadro 70%, entrada superior, menu oculto, total e finalizar fixos; edicao e preco persistente testados.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{
  if($null -ne $pdv){try{$pdv.Close()}catch{};$pdv.Dispose()}

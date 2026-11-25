@@ -24,6 +24,7 @@ namespace ArmazemGratidao {
   readonly Label saleStats=new Label();
   decimal discountValue=0m;
   bool discountPercent=false;
+  string discountReason="";
   readonly bool manualEntry;
   public bool IsManualEntry {get{return manualEntry;}}
 
@@ -1009,18 +1010,20 @@ namespace ArmazemGratidao {
   }
   decimal FinalAmount(){return cart.Sum(i=>i.Total)-DiscountAmount();}
   void ConfigureDiscount(){
-   using(var dlg=new StyledDialogForm{Text="Desconto na venda",Width=440,Height=250,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
+   using(var dlg=new StyledDialogForm{Text="Desconto na venda",Width=440,Height=310,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false}){
     var mode=new ComboBox{Left=20,Top=28,Width=175,DropDownStyle=ComboBoxStyle.DropDownList};
     mode.Items.AddRange(new object[]{"Valor em R$","Porcentagem %"});mode.SelectedIndex=discountPercent?1:0;
     var value=new NumericUpDown{Left=210,Top=28,Width=175,Maximum=10000000,DecimalPlaces=2,Value=discountValue};
-    var preview=new Label{Left=20,Top=85,Width=390,Height=35,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+    var reason=new ComboBox{Name="amzgDiscountReason",Left=20,Top=85,Width=365,DropDownStyle=ComboBoxStyle.DropDown};
+    reason.Items.AddRange(new object[]{"Pagamento à vista","Desconto comercial","Outro motivo"});reason.Text=string.IsNullOrWhiteSpace(discountReason)?"Pagamento à vista":discountReason;
+    var preview=new Label{Left=20,Top=130,Width=390,Height=35,Font=new Font("Segoe UI",10,FontStyle.Bold)};
     Action update=()=>{decimal gross=cart.Sum(i=>i.Total);decimal amount=mode.SelectedIndex==1?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;preview.Text="Desconto: R$ "+amount.ToString("N2")+" | Total: R$ "+(gross-amount).ToString("N2");preview.ForeColor=amount>=gross?Color.DarkRed:Color.DarkBlue;};
     mode.SelectedIndexChanged+=(sender,args)=>{value.Maximum=mode.SelectedIndex==1?100:10000000;if(value.Value>value.Maximum)value.Value=value.Maximum;update();};
     value.ValueChanged+=(sender,args)=>update();if(mode.SelectedIndex==1)value.Maximum=100;update();
-    var apply=new Button{Text="Aplicar desconto",Left=20,Top=145,Width=175,Height=38};
-    var cancel=new Button{Text="Cancelar",Left=210,Top=145,Width=175,Height=38};
-    apply.Click+=(sender,args)=>{decimal gross=cart.Sum(i=>i.Total);decimal amount=mode.SelectedIndex==1?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;if(amount>=gross&&gross>0){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}discountValue=value.Value;discountPercent=mode.SelectedIndex==1;Render();dlg.DialogResult=DialogResult.OK;};
-    cancel.Click+=(sender,args)=>dlg.Close();dlg.Controls.AddRange(new Control[]{mode,value,preview,apply,cancel});dlg.ShowDialog(this);
+    var apply=new Button{Text="Aplicar desconto",Left=20,Top=195,Width=175,Height=38};
+    var cancel=new Button{Text="Cancelar",Left=210,Top=195,Width=175,Height=38};
+    apply.Click+=(sender,args)=>{decimal gross=cart.Sum(i=>i.Total);decimal amount=mode.SelectedIndex==1?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;if(amount>=gross&&gross>0){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}discountMode.SelectedIndex=mode.SelectedIndex;discountInput.Value=value.Value;discountValue=value.Value;discountPercent=mode.SelectedIndex==1;discountReason=value.Value>0?reason.Text.Trim():"";Render();dlg.DialogResult=DialogResult.OK;};
+    cancel.Click+=(sender,args)=>dlg.Close();dlg.Controls.AddRange(new Control[]{mode,value,reason,preview,apply,cancel});dlg.ShowDialog(this);
    }
   }
   sealed class CartDraftLine {
@@ -1041,6 +1044,7 @@ namespace ArmazemGratidao {
    public decimal Received {get;set;}
    public decimal DiscountValue {get;set;}
    public bool DiscountPercent {get;set;}
+   public string DiscountReason {get;set;}
    public string SaleDate {get;set;}
   }
   string DraftPath(){
@@ -1063,10 +1067,9 @@ namespace ArmazemGratidao {
      cart.Clear();
      foreach(var row in saved.Items)cart.Add(new Item{Id=row.Id,Barcode=row.Barcode,InternalCode=row.InternalCode,
        Name=row.Name,Qty=row.Qty,Price=row.Price,Cost=row.Cost,LineDiscount=Math.Max(0,Math.Min(row.LineDiscount,Math.Round(row.Qty*row.Price,2))),Unit=row.Unit??"UN"});
-     discountValue=saved.DiscountValue;
-     discountPercent=saved.DiscountPercent;
-     discountMode.SelectedIndex=discountPercent?1:0;
-     discountInput.Value=Math.Max(discountInput.Minimum,Math.Min(discountInput.Maximum,discountValue));
+     discountMode.SelectedIndex=saved.DiscountPercent?1:0;
+     discountInput.Value=Math.Max(discountInput.Minimum,Math.Min(discountInput.Maximum,saved.DiscountValue));
+     discountValue=discountInput.Value;discountPercent=saved.DiscountPercent;discountReason=saved.DiscountReason??"";
      customer.Text=string.IsNullOrWhiteSpace(saved.Customer)?"Consumidor":saved.Customer;
      int paymentIndex=payment.Items.IndexOf(saved.Payment??"");
      if(paymentIndex>=0)payment.SelectedIndex=paymentIndex;
@@ -1091,7 +1094,7 @@ namespace ArmazemGratidao {
      Items=cart.Select(i=>new CartDraftLine{Id=i.Id,Barcode=i.Barcode,InternalCode=i.InternalCode,
        Name=i.Name,Qty=i.Qty,Price=i.Price,Cost=i.Cost,LineDiscount=i.LineDiscount,Unit=i.Unit}).ToList(),
      Customer=customer.Text,Payment=Convert.ToString(payment.SelectedItem),Received=received.Value,
-     DiscountValue=discountValue,DiscountPercent=discountPercent,
+     DiscountValue=discountValue,DiscountPercent=discountPercent,DiscountReason=discountReason,
      SaleDate=manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):""
     };
     string path=DraftPath(),folder=Path.GetDirectoryName(path);
@@ -1399,13 +1402,13 @@ namespace ArmazemGratidao {
    if(finishingSale)return;
    if(cart.Count>0&&MessageBox.Show("Iniciar nova venda e limpar a venda em andamento? Nenhuma venda registrada será excluída.","Nova venda",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
    cart.Clear();paymentPreselected=false;payment.SelectedIndex=0;customer.Text="Consumidor";
-   discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;
+   discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";
    code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void ClearCart(){
    if(cart.Count==0){MessageBox.Show("O carrinho já está vazio.");return;}
    if(MessageBox.Show("Remover todos os itens desta venda em andamento? Nenhuma venda registrada será excluída.","Confirmar limpeza",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-   cart.Clear();paymentPreselected=false;discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
+   cart.Clear();paymentPreselected=false;discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";code.Clear();qty.Value=1;received.Value=0;Render();code.Focus();
   }
   void RemoveSelected(){if(grid.CurrentRow==null)return;int n=grid.CurrentRow.Index;if(n>=0&&n<cart.Count){cart.RemoveAt(n);Render();}}
   static void RequireColumns(SQLiteConnection conn,string table,params string[] required) {
@@ -1574,6 +1577,7 @@ namespace ArmazemGratidao {
       string name=ReceiptAscii(Convert.ToString(rd["name"]));
       if(name.Length>39)name=name.Substring(0,39);
       lines.Add(name.PadRight(40)+Dec(rd["quantity"]).ToString("0.###").PadLeft(7)+" "+Dec(rd["unit_price"]).ToString("N2").PadLeft(10)+" "+Dec(rd["total"]).ToString("N2").PadLeft(10));
+      decimal itemDiscount=Math.Round(Dec(rd["quantity"])*Dec(rd["unit_price"]),2,MidpointRounding.AwayFromZero)-Dec(rd["total"]);if(itemDiscount>0)lines.Add("  Desconto do item: R$ "+itemDiscount.ToString("N2"));
      }
     }
    }
@@ -1689,6 +1693,7 @@ namespace ArmazemGratidao {
      using(var rd=cmd.ExecuteReader())while(rd.Read()){
       lines.Add(Convert.ToString(rd["name"]));
       lines.Add(Dec(rd["quantity"]).ToString("0.###")+" x R$ "+Dec(rd["unit_price"]).ToString("N2")+" = R$ "+Dec(rd["total"]).ToString("N2"));
+      decimal itemDiscount=Math.Round(Dec(rd["quantity"])*Dec(rd["unit_price"]),2,MidpointRounding.AwayFromZero)-Dec(rd["total"]);if(itemDiscount>0)lines.Add("Desconto do item: R$ "+itemDiscount.ToString("N2"));
      }
     }
    }
@@ -1925,7 +1930,7 @@ namespace ArmazemGratidao {
    if(bottleCount>0)details+=Environment.NewLine+"Cascos: "+bottleCount+" | Caução "+(bottlePaid?"recebida":"pendente")+" (fora da venda)";
    if(estimatedFee>0)details+=Environment.NewLine+"Taxas da operadora: R$ "+estimatedFee.ToString("N2")+" (custo da loja)";
 
-   if(discount>0)details+=Environment.NewLine+"Subtotal: R$ "+gross.ToString("N2")+" | Desconto: R$ "+discount.ToString("N2");
+   if(discount>0)details+=Environment.NewLine+"Subtotal: R$ "+gross.ToString("N2")+" | Desconto: R$ "+discount.ToString("N2")+(string.IsNullOrWhiteSpace(discountReason)?"":" | Motivo: "+discountReason);
    if(manualEntry && manualDate.Value>DateTime.Now.AddMinutes(2)){MessageBox.Show("A data da venda anotada não pode estar no futuro.");return;}
    if(MessageBox.Show("Total: R$ "+sum.ToString("N2")+Environment.NewLine+details+Environment.NewLine+Environment.NewLine+"Confirmar finalização?","Conferir pagamento",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
    finishingSale=true;
@@ -1990,6 +1995,8 @@ namespace ArmazemGratidao {
       using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
        ins.Parameters.AddWithValue("@sale",saleId);ins.Parameters.AddWithValue("@gross",gross);ins.Parameters.AddWithValue("@amount",discount);ins.Parameters.AddWithValue("@type",discountPercent?"PERCENT":"AMOUNT");ins.Parameters.AddWithValue("@value",discountValue);ins.ExecuteNonQuery();
       }
+      using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discount_reasons(sale_id INTEGER PRIMARY KEY,reason TEXT NOT NULL)",c,tx))q.ExecuteNonQuery();
+      using(var q=new SQLiteCommand("INSERT INTO sale_discount_reasons(sale_id,reason) VALUES(@id,@reason)",c,tx)){q.Parameters.AddWithValue("@id",saleId);q.Parameters.AddWithValue("@reason",discountReason);q.ExecuteNonQuery();}
      }
      foreach(var i in cart) {
       decimal before;
@@ -2048,7 +2055,7 @@ namespace ArmazemGratidao {
       var salesWindow=window as ConsultaForm;
       if(salesWindow!=null)try{salesWindow.RefreshAfterRecordedSale();}catch(Exception ex){System.Diagnostics.Debug.WriteLine("Atualização de Vendas: "+ex.Message);}
      }
-     cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;received.Value=0;customer.Text="Consumidor";Render();code.Focus();
+     cart.Clear();discountMode.SelectedIndex=0;discountInput.Value=0;discountValue=0;discountPercent=false;discountReason="";received.Value=0;customer.Text="Consumidor";Render();code.Focus();
      lastReceiptSaleId=saleId;lastReceiptClient=customerName;lastReceiptTotal=sum;
      OfferSaleReceipt(saleId,customerName,sum);
     }
