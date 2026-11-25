@@ -125,8 +125,16 @@ try{
  $ratio=$list.Width/($list.Width+$actions.Width)
  if($ratio -lt 0.68 -or $ratio -gt 0.72){throw "Proporcao 70/30 incorreta: $ratio"}
  if($list.Height -lt ($layout.ClientSize.Height*0.72)){throw 'Quadro nao ocupa altura util'}
- if($back.PointToScreen([Drawing.Point]::Empty).Y -lt $search.PointToScreen([Drawing.Point]::Empty).Y -or $back.PointToScreen([Drawing.Point]::Empty).Y -gt $search.PointToScreen([Drawing.Point]::Empty).Y+$search.Height){throw 'Menu inicial fora da linha de entrada'}
- if($finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions -or $actions.Controls.Count -ne 2){throw 'Somente total e finalizar devem estar na lateral direita'}
+ if($back.Parent.Parent -ne $brand){throw 'Menu inicial deve permanecer no cabecalho'}
+ $entryArea=& $find 'amzgPdvEntryArea'
+ if($search.Parent -ne $entryArea -or $entryArea.Parent -ne $actions){throw 'Campos de entrada devem estar na lateral direita'}
+ foreach($name in @('amzgPdvCodeInput','amzgPdvQtyInput','amzgPdvUnitInput','amzgPdvCustomer')){
+  $input=& $find $name
+  if(!$search.Contains($input) -and $input.Parent.Parent -ne $search){throw "Campo fora da lateral: $name"}
+  if(!$input.Visible -or $input.PointToScreen([Drawing.Point]::Empty).X -lt $actions.PointToScreen([Drawing.Point]::Empty).X){throw "Campo oculto ou fora da lateral: $name"}
+ }
+ if($search.Bottom -gt $entryArea.ClientSize.Height){throw 'Campos de entrada cortados'}
+ if($finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions -or $actions.Controls.Count -ne 3){throw 'Campos, total e finalizar devem estar na lateral direita'}
  if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
  if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
  if((& $find 'amzgPdvAddProduct').Visible -or (& $find 'amzgPdvSaleStats').Visible){throw 'Inserir e contador devem ficar ocultos'}
