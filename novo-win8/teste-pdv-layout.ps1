@@ -139,7 +139,7 @@ try{
  $totalBottom=$totalTop+$total.Parent.Height
  $finishTop=$finish.PointToScreen([Drawing.Point]::Empty).Y
  if(($totalTop-$entryBottom) -lt 0 -or ($totalTop-$entryBottom) -gt 12 -or ($finishTop-$totalBottom) -lt 0 -or ($finishTop-$totalBottom) -gt 12){throw 'Espaco excessivo entre campos, total e finalizar'}
- if($entryArea.Height -gt 170){throw 'Painel de entrada nao esta compacto'}
+ if($entryArea.Height -gt 185){throw 'Painel de entrada nao esta compacto'}
  foreach($name in @('amzgPdvCodeInput','amzgPdvQtyInput','amzgPdvUnitInput','amzgPdvCustomer')){
   $input=& $find $name
   if($input.Bottom -gt $input.Parent.ClientSize.Height){throw "Campo cortado: $name"}

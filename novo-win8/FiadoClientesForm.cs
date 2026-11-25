@@ -62,7 +62,7 @@ namespace ArmazemGratidao {
    SetupSaleSelection(openSales,pending,false);
    SetupSaleSelection(paidSales,previous,true);
    openSales.SelectionChanged+=(sender,args)=>UpdatePaymentSelection(true);
-   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Vendas individuais | Os pagamentos no saldo total aparecem no extrato por data",
+   var pendingTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Saldo real por venda | Abatimentos gerais: das vendas mais antigas para as novas",
     TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(22,75,160),
     Font=new Font("Segoe UI",8.5f)};
    var paidTip=new Label{Dock=DockStyle.Bottom,Height=23,Text="Clique em Detalhes para consultar a venda paga",
@@ -457,7 +457,8 @@ namespace ArmazemGratidao {
       string time=Convert.ToString(row.Cells["data"].Value);
       DateTime parsed;
       if(DateTime.TryParse(time,out parsed))time=parsed.ToString("dd/MM/yyyy HH:mm");
-      string status=paid?"PAGA":"EM ABERTO";
+      decimal general=grid.Columns.Contains("abatimento_geral")?Convert.ToDecimal(row.Cells["abatimento_geral"].Value):0m;
+       string status=paid?"PAGA":"EM ABERTO";
       decimal gross=Convert.ToDecimal(row.Cells["valor"].Value);
       decimal received=Convert.ToDecimal(row.Cells["pago"].Value);
       decimal open=paid?0m:Convert.ToDecimal(row.Cells["saldo"].Value);
@@ -479,7 +480,8 @@ namespace ArmazemGratidao {
        FlatStyle=FlatStyle.Flat,BackColor=Color.White,
        ForeColor=paid?Color.FromArgb(12,110,80):Color.FromArgb(180,43,57),
        Font=new Font("Segoe UI",7.3f,FontStyle.Bold),AutoEllipsis=true};
-      details.FlatAppearance.BorderColor=details.ForeColor;
+      if(general>0m){var tooltip=new ToolTip();tooltip.SetToolTip(figures,"Inclui R$ "+general.ToString("N2")+" conciliados do saldo total (não é um novo pagamento).");card.Disposed+=(s,e)=>tooltip.Dispose();}
+       details.FlatAppearance.BorderColor=details.ForeColor;
       details.FlatAppearance.BorderSize=1;
       Action selectRow=()=>{
        if(selectedRow.DataGridView==null)return;
@@ -748,10 +750,20 @@ namespace ArmazemGratidao {
    try {
     // Respeitar data real mesmo em vendas lançadas retroativamente;
     // manter sale_id estável para itens, pagamentos e histórico.
-    var sql="SELECT s.id AS venda,s.created_at AS data,s.status AS situacao,s.gross_total AS valor,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
-    openSales.DataSource=Query(sql+" AND "+Balance+">0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
-    paidSales.DataSource=Query(sql+" AND "+Balance+"<=0.005 ORDER BY datetime(s.created_at) ASC,s.id ASC","@name",name);
-    paymentHistory.DataSource=Query("SELECT p.paid_at AS data,p.sale_id AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE ORDER BY p.paid_at DESC,p.id DESC","@name",name);
+    DataTable reconciled;
+    bool hasGeneral;
+    using(var account=Open(true)){
+     reconciled=FiadoAccountLedger.ReconciledSales(account,null,name);
+     hasGeneral=FiadoAccountLedger.Exists(account);
+    }
+    var open=reconciled.Clone();var paid=reconciled.Clone();
+    foreach(DataRow row in reconciled.Rows){
+     if(Convert.ToDecimal(row["saldo"])>0.005m)open.ImportRow(row);else paid.ImportRow(row);
+    }
+    openSales.DataSource=open;paidSales.DataSource=paid;
+    string historySql="SELECT p.paid_at AS data,CAST(p.sale_id AS TEXT) AS venda,p.payment_method AS forma,p.amount AS valor FROM credit_payments p INNER JOIN sales s ON s.id=p.sale_id WHERE "+CreditFilter+" AND TRIM(s.customer_name)=@name COLLATE NOCASE";
+    if(hasGeneral)historySql+=" UNION ALL SELECT received_at,'SALDO TOTAL',method,amount FROM fiado_account_receipts WHERE customer_name=@name COLLATE NOCASE";
+    paymentHistory.DataSource=Query(historySql+" ORDER BY data DESC","@name",name);
     var dt=(DataTable)openSales.DataSource;decimal total=0;foreach(DataRow r in dt.Rows)total+=Convert.ToDecimal(r["saldo"]);
     decimal credit=0m;
     using(var cn=Open(true))using(var check=new SQLiteCommand("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='customer_credit_entries'",cn)){
@@ -772,7 +784,7 @@ namespace ArmazemGratidao {
     }
     decimal generalPaid;
     using(var account=Open(true))generalPaid=FiadoAccountLedger.Received(account,null,name);
-    decimal netDue=Math.Max(0m,total-generalPaid);
+    decimal netDue=total; // saldo ja conciliado; nao subtrair novamente
     selected.Text="FIADO | "+name+"  |  Saldo atual R$ "+netDue.ToString("N2")+
      "  |  Recebido no total R$ "+generalPaid.ToString("N2")+
      "  |  Crédito antecipado R$ "+credit.ToString("N2");
@@ -1410,6 +1422,11 @@ namespace ArmazemGratidao {
    decimal total=Convert.ToDecimal(sale["gross_total"]);
    decimal received=Convert.ToDecimal(sale["recebido"]);
    decimal pending=Math.Max(0m,total-received);
+   decimal generalAllocated=0m;
+   using(var account=Open(true)){
+    var row=FiadoAccountLedger.ReconciledSales(account,null,name).Rows.Cast<DataRow>().FirstOrDefault(x=>Convert.ToInt64(x["venda"])==id);
+    if(row!=null){received=Convert.ToDecimal(row["pago"]);pending=Convert.ToDecimal(row["saldo"]);generalAllocated=Convert.ToDecimal(row["abatimento_geral"]);}
+   }
    var screen=Screen.FromControl(this).WorkingArea;
    int windowWidth=Math.Min(1100,Math.Max(640,screen.Width-52));
    int windowHeight=Math.Min(675,Math.Max(460,screen.Height-70));
@@ -1461,7 +1478,7 @@ namespace ArmazemGratidao {
    var amounts=new Label{
     Name="amzgFiadoSaleDetailAmounts",
     Text="TOTAL: R$ "+total.ToString("N2")+"     RECEBIDO: R$ "+
-     received.ToString("N2")+"     EM ABERTO: R$ "+pending.ToString("N2"),
+     received.ToString("N2")+"     EM ABERTO: R$ "+pending.ToString("N2")+(generalAllocated>0m?" | Saldo total conciliado: R$ "+generalAllocated.ToString("N2"):""),
     Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
     Font=new Font("Segoe UI",11f,FontStyle.Bold),
     ForeColor=Color.FromArgb(171,44,58),AutoEllipsis=true
@@ -1679,8 +1696,9 @@ namespace ArmazemGratidao {
   void SendCustomerStatement(){
    if(string.IsNullOrWhiteSpace(customer)){MessageBox.Show("Selecione um cliente.");return;}
    try{
-    var sales=Query("SELECT s.id AS venda,s.created_at AS data,s.gross_total AS total,COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) AS pago,"+Balance+" AS saldo FROM sales s WHERE "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@name AND "+Balance+">0.005 ORDER BY s.created_at,s.id","@name",customer);
-    if(sales.Rows.Count==0){MessageBox.Show("Este cliente não possui vendas em aberto.");return;}
+    DataTable sales;
+    using(var account=Open(true))sales=FiadoAccountLedger.ReconciledSales(account,null,customer);
+    if(!sales.Rows.Cast<DataRow>().Any(x=>Convert.ToDecimal(x["saldo"])>0.005m)){MessageBox.Show("Este cliente não possui vendas em aberto.");return;}
     var sb=new System.Text.StringBuilder();
     sb.AppendLine("ARMAZEM GRATIDAO - EXTRATO DE FIADO");
     sb.AppendLine("Cliente: "+customer);
@@ -1688,6 +1706,7 @@ namespace ArmazemGratidao {
     sb.AppendLine("--------------------------------");
     decimal totalDue=0;
     foreach(DataRow sale in sales.Rows){
+     if(Convert.ToDecimal(sale["saldo"])<=0.005m)continue;
      long id=Convert.ToInt64(sale["venda"]);
      decimal balance=Convert.ToDecimal(sale["saldo"]);
      totalDue+=balance;
@@ -1700,13 +1719,13 @@ namespace ArmazemGratidao {
       foreach(DataRow paymentRow in payments.Rows)
        sb.AppendLine("  "+Convert.ToString(paymentRow["paid_at"])+" | "+Convert.ToString(paymentRow["payment_method"])+" | R$ "+Convert.ToDecimal(paymentRow["amount"]).ToString("N2"));
      }
-     sb.AppendLine("  Total: R$ "+Convert.ToDecimal(sale["total"]).ToString("N2")+" | Pago: R$ "+Convert.ToDecimal(sale["pago"]).ToString("N2")+" | Saldo: R$ "+balance.ToString("N2"));
+     sb.AppendLine("  Total: R$ "+Convert.ToDecimal(sale["valor"]).ToString("N2")+" | Pago: R$ "+Convert.ToDecimal(sale["pago"]).ToString("N2")+" | Saldo: R$ "+balance.ToString("N2"));
      sb.AppendLine("--------------------------------");
     }
     decimal receivedOnTotal;
     using(var account=Open(true))receivedOnTotal=FiadoAccountLedger.Received(account,null,customer);
-    sb.AppendLine("PAGAMENTOS DIRETOS NO SALDO TOTAL: R$ "+receivedOnTotal.ToString("N2"));
-    sb.AppendLine("SALDO FINAL EM ABERTO: R$ "+Math.Max(0m,totalDue-receivedOnTotal).ToString("N2"));
+    sb.AppendLine("PAGAMENTOS DIRETOS NO SALDO TOTAL (já considerados): R$ "+receivedOnTotal.ToString("N2"));
+    sb.AppendLine("SALDO FINAL EM ABERTO: R$ "+totalDue.ToString("N2"));
     sb.AppendLine("Credito depositado antecipadamente nao e um segundo pagamento do Fiado.");
     sb.AppendLine("Documento informativo, nao fiscal.");
     using(var form=new StyledDialogForm {Text="Extrato do cliente - "+customer,Width=720,Height=660,StartPosition=FormStartPosition.CenterParent}){
@@ -2015,14 +2034,12 @@ namespace ArmazemGratidao {
    try{
     var balances=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<long,decimal>>();
     using(var conn=Open(true)){
+     var reconciled=FiadoAccountLedger.ReconciledSales(conn,null,customer);
      foreach(long id in ids){
-      using(var cmd=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer",conn)){
-       cmd.Parameters.AddWithValue("@id",id);cmd.Parameters.AddWithValue("@customer",customer);
-       object value=cmd.ExecuteScalar();
-       if(value==null||value==DBNull.Value)throw new Exception("Venda #"+id+" não pertence ao cliente ou foi removida.");
-       decimal saldo=Convert.ToDecimal(value);
-       if(saldo>0.005M)balances.Add(new System.Collections.Generic.KeyValuePair<long,decimal>(id,saldo));
-      }
+      var row=reconciled.Rows.Cast<DataRow>().FirstOrDefault(x=>Convert.ToInt64(x["venda"])==id);
+      if(row==null)throw new Exception("Venda #"+id+" não pertence ao cliente ou foi removida.");
+      decimal saldo=Convert.ToDecimal(row["saldo"]);
+      if(saldo>0.005m)balances.Add(new System.Collections.Generic.KeyValuePair<long,decimal>(id,saldo));
      }
     }
     if(balances.Count==0){MessageBox.Show("Nenhuma venda em aberto para dar baixa.");return;}
@@ -2065,13 +2082,11 @@ namespace ArmazemGratidao {
       if(useDepositedCredit && CustomerCreditBalance(conn,tx,customer)+0.005m<requested)
        throw new Exception("Credito do cliente foi alterado. Atualize os saldos antes de receber.");
       decimal remaining=requested;
+      var reconciled=FiadoAccountLedger.ReconciledSales(conn,tx,customer);
       foreach(var row in balances){
-       using(var check=new SQLiteCommand("SELECT "+Balance+" FROM sales s WHERE s.id=@id AND "+CreditFilter+" AND COALESCE(NULLIF(TRIM(s.customer_name),''),'SEM CLIENTE')=@customer",conn,tx)){
-        check.Parameters.AddWithValue("@id",row.Key);check.Parameters.AddWithValue("@customer",customer);
-        object value=check.ExecuteScalar();
-        if(value==null||value==DBNull.Value||Math.Abs(Convert.ToDecimal(value)-row.Value)>0.005M)
-         throw new Exception("O saldo da venda #"+row.Key+" mudou. Atualize e confira antes de receber.");
-       }
+       var current=reconciled.Rows.Cast<DataRow>().FirstOrDefault(x=>Convert.ToInt64(x["venda"])==row.Key);
+       if(current==null||Math.Abs(Convert.ToDecimal(current["saldo"])-row.Value)>0.005m)
+        throw new Exception("O saldo da venda #"+row.Key+" mudou. Atualize e confira antes de receber.");
       }
       foreach(var row in balances){
        if(remaining<=0.005M)break;
@@ -2557,7 +2572,7 @@ namespace ArmazemGratidao {
       cmd.Parameters.AddWithValue("@sale",saleId);
       using(var adapter=new SQLiteDataAdapter(cmd))adapter.Fill(payments);
      }
-     if(payments.Rows.Count==0){MessageBox.Show("Nao existem baixas nesta venda.");return false;}
+     if(payments.Rows.Count==0){MessageBox.Show("Não existem baixas individuais nesta venda. Se foi quitada pelo saldo total, use Corrigir recebimento geral. O saldo será recalculado sem duplicar pagamentos.");return false;}
      payments.Columns.Add("Reabrir",typeof(bool));
      foreach(DataRow row in payments.Rows)row["Reabrir"]=false;
      using(var dialog=new StyledDialogForm{Text="Reabrir venda #"+saleId+" - "+name,Width=940,Height=520,

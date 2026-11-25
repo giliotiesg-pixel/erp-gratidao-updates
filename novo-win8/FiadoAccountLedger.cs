@@ -51,6 +51,27 @@ namespace ArmazemGratidao {
   internal static decimal Due(SQLiteConnection cn,SQLiteTransaction tx,string client){
    return Math.Max(0m,SalesDue(cn,tx,client)-Received(cn,tx,client));
   }
+  // Projecao de leitura: abate o saldo geral nas vendas antigas primeiro.
+  // Nao cria pagamentos ficticios nem modifica os lancamentos originais.
+  internal static DataTable ReconciledSales(SQLiteConnection cn,SQLiteTransaction tx,string client){
+   var result=new DataTable();
+   result.Columns.Add("venda",typeof(long));result.Columns.Add("data",typeof(string));
+   result.Columns.Add("situacao",typeof(string));result.Columns.Add("valor",typeof(decimal));
+   result.Columns.Add("pago",typeof(decimal));result.Columns.Add("saldo",typeof(decimal));
+   result.Columns.Add("abatimento_geral",typeof(decimal));
+   decimal remaining=Received(cn,tx,client);
+   using(var q=new SQLiteCommand("SELECT s.id,s.created_at,COALESCE(s.gross_total,0),COALESCE((SELECT SUM(p.amount) FROM credit_payments p WHERE p.sale_id=s.id),0) FROM sales s WHERE "+CreditFilter+" AND TRIM(COALESCE(s.customer_name,''))=@name COLLATE NOCASE ORDER BY datetime(s.created_at),s.id",cn,tx)){
+    q.Parameters.AddWithValue("@name",(client??"").Trim());
+    using(var rd=q.ExecuteReader())while(rd.Read()){
+     decimal total=decimal.Round(Convert.ToDecimal(rd[2]),2),direct=decimal.Round(Convert.ToDecimal(rd[3]),2);
+     decimal raw=Math.Max(0m,total-direct);
+     decimal allocated=Math.Min(raw,remaining);remaining-=allocated;
+     decimal balance=raw-allocated;
+     result.Rows.Add(Convert.ToInt64(rd[0]),Convert.ToString(rd[1]),balance>0.005m?"EM ABERTO":"PAGA",total,direct+allocated,balance,allocated);
+    }
+   }
+   return result;
+  }
   internal static string BackupVerified(SQLiteConnection cn,string database,string prefix){
    string directory=Path.GetDirectoryName(database);
    string config=Path.Combine(directory,"backup-location.txt");

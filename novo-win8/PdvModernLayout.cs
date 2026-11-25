@@ -91,7 +91,7 @@ namespace ArmazemGratidao {
    // Os quatro campos ficam exclusivamente na lateral direita, acima do total.
    var top=new TableLayoutPanel{Name="amzgPdvSearchBar",Dock=DockStyle.Fill,Height=155,ColumnCount=2,RowCount=3,Margin=Padding.Empty,Padding=new Padding(5,2,5,3),BackColor=Pale};
    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
-   top.RowStyles.Add(new RowStyle(SizeType.Absolute,50));top.RowStyles.Add(new RowStyle(SizeType.Absolute,50));top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   top.RowStyles.Add(new RowStyle(SizeType.Absolute,57));top.RowStyles.Add(new RowStyle(SizeType.Absolute,57));top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    code.Name="amzgPdvCodeInput";qty.Name="amzgPdvQtyInput";unit.Name="amzgPdvUnitInput";customer.Name="amzgPdvCustomer";
    code.Font=new Font("Segoe UI",12f,FontStyle.Bold);qty.Font=new Font("Segoe UI",12f,FontStyle.Bold);unit.Font=new Font("Segoe UI",11f,FontStyle.Bold);
    customer.Font=new Font("Segoe UI",10,FontStyle.Bold);customer.Cursor=Cursors.Hand;customer.Click+=(sender,args)=>form.RunWideMenu("Clientes");
@@ -163,7 +163,7 @@ namespace ArmazemGratidao {
    var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Margin=new Padding(3,0,0,0)};
    side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
    // Campos, total e finalizar juntos no topo; toda a folga fica depois do botao.
-   side.RowStyles.Add(new RowStyle(SizeType.Absolute,158));side.RowStyles.Add(new RowStyle(SizeType.Absolute,92));side.RowStyles.Add(new RowStyle(SizeType.Absolute,48));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   side.RowStyles.Add(new RowStyle(SizeType.Absolute,180));side.RowStyles.Add(new RowStyle(SizeType.Absolute,92));side.RowStyles.Add(new RowStyle(SizeType.Absolute,48));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    var entryArea=new Panel{Name="amzgPdvEntryArea",Dock=DockStyle.Fill,Margin=new Padding(3,0,3,3),AutoScroll=true,BackColor=Surface};entryArea.Controls.Add(top);side.Controls.Add(entryArea,0,0);
    // Recebido e troco são estados internos: a entrada ocorre exclusivamente no pagamento em dinheiro.
    received.Name="amzgPdvReceived";change.Name="amzgPdvChange";

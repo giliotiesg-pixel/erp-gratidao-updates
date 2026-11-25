@@ -37,6 +37,7 @@ try{
  $testClass=@'
 using System;
 using System.Data.SQLite;
+using System.Data;
 using System.IO;
 using System.Reflection;
 public static class AMZGFiadoTest {
@@ -79,6 +80,24 @@ public static class AMZGFiadoTest {
    if(available!=80)throw new Exception("Carteira residual esperada R$80, encontrada R$"+available);
    using(var q=new SQLiteCommand("UPDATE fiado_account_receipts SET amount=80 WHERE receipt_key='teste-1'",cn))q.ExecuteNonQuery();
    Verify(ledger,cn,"Corrigido pagamento R$100 para R$80",280,80,200);
+   using(var q=new SQLiteCommand(@"INSERT INTO sales VALUES(2143,'Cliente teste','FIADO','FIADO',65.93,'2026-11-18 18:40');
+    INSERT INTO sales VALUES(2118,'Cliente teste','FIADO','FIADO',15.99,'2026-11-20 20:48');
+    INSERT INTO sales VALUES(2190,'Cliente teste','FIADO','FIADO',36.98,'2026-11-22 20:27');
+    INSERT INTO sales VALUES(2206,'Cliente teste','FIADO','FIADO',20.28,'2026-11-23 21:39');
+    INSERT INTO sales VALUES(2231,'Cliente teste','FIADO','FIADO',1.99,'2026-11-24 20:00');
+    INSERT INTO sales VALUES(2242,'Cliente teste','FIADO','FIADO',54.25,'2026-11-25 20:42');
+    INSERT INTO credit_payments VALUES(3,2143,34.29,'PIX','2026-11-19');
+    INSERT INTO credit_payments VALUES(4,2118,5,'PIX','2026-11-21');
+    INSERT INTO fiado_account_receipts(receipt_key,customer_name,amount,received_at,method,description,balance_before,balance_after)
+    VALUES('foto','Cliente teste',101.88,'2026-11-24 21:00','PIX','Saldo total',101.88,0)",cn))q.ExecuteNonQuery();
+   var projection=(DataTable)Invoke(ledger,"ReconciledSales",cn,null,"Cliente teste");
+   if(projection.Rows.Count!=6)throw new Exception("Vendas ausentes na conciliacao");
+   for(int i=0;i<5;i++)if(Convert.ToDecimal(projection.Rows[i]["saldo"])!=0m)throw new Exception("Venda antiga nao baixada");
+   if(Convert.ToInt64(projection.Rows[5]["venda"])!=2242L||Convert.ToDecimal(projection.Rows[5]["saldo"])!=54.25m)throw new Exception("Venda nova incorreta");
+   using(var q=new SQLiteCommand("UPDATE fiado_account_receipts SET amount=100 WHERE receipt_key='foto'",cn))q.ExecuteNonQuery();
+   projection=(DataTable)Invoke(ledger,"ReconciledSales",cn,null,"Cliente teste");
+   if(Convert.ToDecimal(projection.Rows[4]["saldo"])!=1.88m||Convert.ToDecimal(projection.Rows[5]["saldo"])!=54.25m)throw new Exception("Pagamento parcial ou correcao incorreta");
+   using(var q=new SQLiteCommand("SELECT COUNT(*) FROM credit_payments WHERE sale_id>=2000",cn))if(Convert.ToInt32(q.ExecuteScalar())!=2)throw new Exception("Conciliacao duplicou pagamentos");
    var backup=Convert.ToString(Invoke(ledger,"BackupVerified",cn,database,"antes-teste-fiado-"));
    if(!File.Exists(backup)||new FileInfo(backup).Length<=0)
     throw new Exception("Backup verificado nao existe.");
