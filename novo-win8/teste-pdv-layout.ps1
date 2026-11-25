@@ -80,6 +80,22 @@ try{
  }
  $brand=& $find 'amzgPdvBrand'
  $back=& $find 'amzgBackBar'
+ $backButton=& $find 'amzgPdvBackToMenu'
+ if($backButton.Parent -ne $back -or $backButton.Dock -ne [Windows.Forms.DockStyle]::None -or
+    $backButton.Width -gt 150 -or $backButton.Height -gt 26 -or $backButton.Height -lt 18 -or
+    $backButton.Top -lt 0 -or $backButton.Bottom -gt $back.ClientSize.Height){
+  throw "PDV: botao Menu Inicial fora do padrao: $($backButton.Bounds), faixa=$($back.ClientSize)"
+ }
+ $natural=[Windows.Forms.TextRenderer]::MeasureText($backButton.Text,$backButton.Font).Width
+ if($natural -gt $backButton.ClientSize.Width){throw 'PDV: texto do botao Menu Inicial cortado.'}
+ $originalSize=$pdv.Size
+ try{
+  $pdv.Width=[Math]::Max($pdv.MinimumSize.Width,$pdv.Width-100)
+  [Windows.Forms.Application]::DoEvents()
+  if($backButton.Width -gt 150 -or $backButton.Bottom -gt $back.ClientSize.Height -or $backButton.Right -gt $back.ClientSize.Width){
+   throw 'PDV: botao Menu Inicial nao se ajustou ao redimensionar.'
+  }
+ }finally{$pdv.Size=$originalSize;[Windows.Forms.Application]::DoEvents()}
  $search=& $find 'amzgPdvSearchBar'
  $code=& $find 'amzgPdvCodeInput'
  $list=& $find 'amzgPdvItemBox'

@@ -2313,13 +2313,39 @@ namespace ArmazemGratidao {
     back.FlatAppearance.MouseOverBackColor=Color.FromArgb(225,51,65);
     salesBackSlot.Controls.Add(backBar);
    }else if(pdvBackSlot!=null){
-    // No PDV, o botao Voltar fica antes do campo Codigo/Nome.
+    // A faixa ocupa toda a largura, mas o botao nunca acompanha essa largura.
     backBar.Dock=DockStyle.Fill;
     backBar.Margin=Padding.Empty;
+    backBar.Padding=Padding.Empty;
     backBar.BackColor=Color.FromArgb(248,250,254);
-    back.Left=4;back.Top=5;back.Width=256;back.Height=39;
-    back.Font=new Font("Segoe UI",10,FontStyle.Bold);
+    back.Name="amzgPdvBackToMenu";
+    back.Text="← Menu Inicial";
+    back.AccessibleName="Voltar ao Menu Inicial";
+    back.AutoSize=false;
+    back.AutoEllipsis=true;
+    back.UseVisualStyleBackColor=false;
+    back.UseMnemonic=false;
+    back.Dock=DockStyle.None;
+    back.Anchor=AnchorStyles.Top|AnchorStyles.Left;
+    back.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
+    back.Padding=Padding.Empty;
+    back.MinimumSize=Size.Empty;
+    back.MaximumSize=new Size(150,26);
+    var backTip=new ToolTip();
+    backTip.SetToolTip(back,"Voltar ao Menu Inicial");
+    back.Disposed+=(sender,args)=>backTip.Dispose();
+    Action fitBack=()=>{
+     if(back.IsDisposed||backBar.ClientSize.Height<4)return;
+     int height=Math.Max(1,Math.Min(24,backBar.ClientSize.Height-4));
+     int natural=TextRenderer.MeasureText(back.Text,back.Font).Width+14;
+     int width=Math.Max(1,Math.Min(Math.Min(150,Math.Max(100,natural)),backBar.ClientSize.Width-8));
+     var bounds=new Rectangle(4,Math.Max(0,(backBar.ClientSize.Height-height)/2),width,height);
+     if(back.Bounds!=bounds)back.Bounds=bounds;
+    };
+    backBar.ClientSizeChanged+=(sender,args)=>fitBack();
+    form.Shown+=(sender,args)=>fitBack();
     pdvBackSlot.Controls.Add(backBar);
+    fitBack();
    }else if(stockArea!=null){
     backBar.Dock=DockStyle.Fill;
     backBar.Margin=new Padding(0);
