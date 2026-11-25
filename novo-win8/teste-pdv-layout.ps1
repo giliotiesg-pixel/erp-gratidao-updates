@@ -117,7 +117,7 @@ try{
  $fiado=& $find 'amzgPdvFiado'
  if($fiado.Visible){throw 'Fiado deve ficar oculto no menu'}
  if(!$mainType.GetMethod('OpenFiadoFromPdv')){throw 'Navegacao Fiado ausente'}
- $grid=@($list.Controls | Where-Object {$_ -is [System.Windows.Forms.DataGridView] -and $_.Visible}) | Select-Object -First 1
+ $grid=& $find 'amzgPdvWideGrid'
  if($null -eq $grid){throw 'Tabela de itens ausente'}
  $layout=& $find 'amzgPdvLayout'
  $ratio=$list.Width/($list.Width+$actions.Width)
@@ -128,15 +128,35 @@ try{
  if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
  if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
  if((& $find 'amzgPdvAddProduct').Visible -or (& $find 'amzgPdvSaleStats').Visible){throw 'Inserir e contador devem ficar ocultos'}
+ # Cabeçalhos e largura são obrigatórios mesmo sem itens ou com apenas um produto.
+ $assertGrid={
+  if(!$grid.ColumnHeadersVisible -or $grid.ColumnHeadersHeight -lt 34 -or $grid.CellBorderStyle -ne [Windows.Forms.DataGridViewCellBorderStyle]::None){throw 'Cabecalho ausente/baixo ou linhas de grade indevidas'}
+  $expected=@('Codigo','Produto','Unidade','Quantidade','Preco','Total')
+  $visible=@($grid.Columns | Where-Object {$_.Visible} | Sort-Object DisplayIndex)
+  if(($visible.Name -join ',') -ne ($expected -join ',')){throw 'Colunas obrigatorias ausentes ou fora da ordem'}
+  $captions=@('Código de barras','Descrição do produto','Un.','Qtd.','Valor unit. (R$)','Total (R$)')
+  if(($visible.HeaderText -join '|') -ne ($captions -join '|')){throw 'Titulos de colunas incorretos'}
+  $sum=($visible | Measure-Object -Property Width -Sum).Sum
+  if($sum -lt ($grid.ClientSize.Width-25) -or $sum -gt ($grid.ClientSize.Width+2)){throw "Colunas nao preenchem a largura: $sum / $($grid.ClientSize.Width)"}
+  $title=& $find 'amzgPdvListTitle'
+  if($title.PointToScreen([Drawing.Point]::Empty).Y+$title.Height -gt $grid.PointToScreen([Drawing.Point]::Empty).Y){throw 'Titulo cobre o cabecalho'}
+ }
+ & $assertGrid
  # Popular uma tabela descartavel com 24 produtos para medir a capacidade real.
  $originalData=$grid.DataSource
  try{
   $sample=$originalData.Clone()
+  $null=$sample.Rows.Add('7894900011609','Coca-Cola 600 ml',[decimal]1,'UN',[decimal]6.5,[decimal]6.5)
+  $grid.DataSource=$sample
+  [Windows.Forms.Application]::DoEvents()
+  & $assertGrid
+  $sample.Rows.Clear()
   for($i=1;$i -le 24;$i++){
    $null=$sample.Rows.Add([string]("789000000"+$i.ToString("0000")),("Produto de teste "+$i),[decimal]1,"UN",[decimal]5.99,[decimal]5.99)
   }
   $grid.DataSource=$sample
   [Windows.Forms.Application]::DoEvents()
+  & $assertGrid
   $visibleRows=$grid.DisplayedRowCount($false)
   if($visibleRows -lt 15){throw "PDV precisa mostrar pelo menos 15 linhas completas: $visibleRows"}
   if($finish.PointToScreen([Drawing.Point]::Empty).Y -lt $total.Parent.PointToScreen([Drawing.Point]::Empty).Y+$total.Parent.Height){throw 'Finalizar encoberto pelo total.'}

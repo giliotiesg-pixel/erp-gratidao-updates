@@ -468,7 +468,8 @@ namespace ArmazemGratidao {
  static class RoundedGridTheme {
   static readonly System.Collections.Generic.HashSet<DataGridView> styled=new System.Collections.Generic.HashSet<DataGridView>();
   static void Apply(DataGridView table){
-   if(table.IsDisposed||!styled.Add(table))return;
+   // O PDV principal tem um tema próprio, com colunas Fill e cabeçalho fixo.
+   if(table.IsDisposed||table.Name=="amzgPdvWideGrid"||!styled.Add(table))return;
    // Cabecalho de planilha padronizado: texto completo em ate duas linhas,
    // nunca sobrepor os dados ou esconder colunas por falta de largura.
    table.ColumnHeadersVisible=true;

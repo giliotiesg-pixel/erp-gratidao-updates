@@ -97,26 +97,57 @@ namespace ArmazemGratidao {
    var main=new TableLayoutPanel{Name="amzgPdvMain",Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};
    main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    listArea.Name="amzgPdvItemBox";listArea.Dock=DockStyle.Fill;listArea.Margin=new Padding(0,0,5,0);listArea.Padding=new Padding(1);listArea.BackColor=Color.White;
-   grid.Dock=DockStyle.Fill;grid.BackgroundColor=Color.White;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Navy;grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9,FontStyle.Bold);grid.ColumnHeadersHeight=29;grid.RowTemplate.Height=24;grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;grid.MultiSelect=false;
+   // Colunas explicitamente ligadas ao DataTable; não usar DisplayedCells,
+   // que encolhe a descrição e deixa o resto da largura vazio com apenas um item.
+   grid.Name="amzgPdvWideGrid";grid.Dock=DockStyle.Fill;grid.Margin=Padding.Empty;
+   grid.BackgroundColor=Color.White;grid.BorderStyle=BorderStyle.None;grid.EnableHeadersVisualStyles=false;
+   grid.AutoGenerateColumns=false;grid.Columns.Clear();
+   grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+   grid.ColumnHeadersVisible=true;grid.RowHeadersVisible=false;
+   grid.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+   grid.ColumnHeadersHeight=36;grid.ColumnHeadersBorderStyle=DataGridViewHeaderBorderStyle.None;
+   grid.CellBorderStyle=DataGridViewCellBorderStyle.None;
+   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(204,224,249);
+   grid.ColumnHeadersDefaultCellStyle.ForeColor=DeepNavy;
+   grid.ColumnHeadersDefaultCellStyle.SelectionBackColor=Color.FromArgb(204,224,249);
+   grid.ColumnHeadersDefaultCellStyle.SelectionForeColor=DeepNavy;
+   grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9.5f,FontStyle.Bold);
+   grid.ColumnHeadersDefaultCellStyle.WrapMode=DataGridViewTriState.True;
+   grid.ColumnHeadersDefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleLeft;
+   grid.ColumnHeadersDefaultCellStyle.Padding=new Padding(3,0,3,0);
+   grid.Font=new Font("Segoe UI",10f,FontStyle.Bold);
+   grid.DefaultCellStyle.ForeColor=Color.FromArgb(16,34,65);
+   grid.DefaultCellStyle.BackColor=Color.White;
+   grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(166,207,248);
+   grid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(16,34,65);
+   grid.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
+   grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(230,238,249);
+   grid.RowTemplate.Height=24;grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
+   grid.MultiSelect=false;grid.ScrollBars=ScrollBars.Both;grid.AllowUserToResizeRows=false;
+   string[] fields={"Codigo","Produto","Unidade","Quantidade","Preco","Total"};
+   string[] captions={"Código de barras","Descrição do produto","Un.","Qtd.","Valor unit. (R$)","Total (R$)"};
+   int[] min={105,115,34,43,70,67};float[] weight={21,34,7,9,15,14};
+   for(int i=0;i<fields.Length;i++){
+    var col=new DataGridViewTextBoxColumn{Name=fields[i],DataPropertyName=fields[i],HeaderText=captions[i],
+     AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=min[i],FillWeight=weight[i],SortMode=DataGridViewColumnSortMode.NotSortable};
+    col.DefaultCellStyle.Padding=new Padding(3,0,3,0);
+    if(i==2||i==3)col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleCenter;
+    if(i==3)col.DefaultCellStyle.Format="0.###";
+    if(i==4||i==5){col.DefaultCellStyle.Format="N2";col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
+    grid.Columns.Add(col);
+   }
    grid.DataBindingComplete+=(sender,args)=>{
-    foreach(DataGridViewColumn col in grid.Columns){
-     col.SortMode=DataGridViewColumnSortMode.NotSortable;
-     switch(col.Name){
-      case "Codigo":col.HeaderText="Código";col.MinimumWidth=102;col.FillWeight=105;break;
-      case "Produto":col.MinimumWidth=120;col.FillWeight=230;break;
-      case "Quantidade":col.HeaderText="Qtd.";col.MinimumWidth=48;col.FillWeight=55;break;
-      case "Unidade":col.HeaderText="UN";col.MinimumWidth=35;col.FillWeight=40;break;
-      case "Preco":col.HeaderText="Preço (R$)";col.MinimumWidth=67;col.FillWeight=85;break;
-      case "Total":col.HeaderText="Total (R$)";col.MinimumWidth=67;col.FillWeight=85;break;
-      case "ExcluirItem":col.Visible=false;break;
-     }
-     if(col.Name=="Preco"||col.Name=="Total"){col.DefaultCellStyle.Format="N2";col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
-     col.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
-    }
-    grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;foreach(DataGridViewRow r in grid.Rows)r.Height=24;
+    grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
+    foreach(DataGridViewRow r in grid.Rows)r.Height=24;
    };
-   var listTitle=new Label{Text="Produtos da venda",Dock=DockStyle.Top,Height=29,BackColor=Navy,ForeColor=Color.White,Font=new Font("Segoe UI",11,FontStyle.Bold),Padding=new Padding(8,0,0,0),TextAlign=ContentAlignment.MiddleLeft};
-   listArea.Controls.Add(listTitle);listTitle.BringToFront();main.Controls.Add(listArea,0,0);
+   // Duas linhas independentes garantem que o título nunca cubra o cabeçalho.
+   var listLayout=new TableLayoutPanel{Name="amzgPdvGridLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
+   listLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+   listLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var listTitle=new Label{Name="amzgPdvListTitle",Text="Produtos da venda",Dock=DockStyle.Fill,Margin=Padding.Empty,BackColor=DeepNavy,ForeColor=Color.White,Font=new Font("Segoe UI",13,FontStyle.Bold),Padding=new Padding(9,0,0,0),TextAlign=ContentAlignment.MiddleLeft};
+   listLayout.Controls.Add(listTitle,0,0);listLayout.Controls.Add(grid,0,1);
+   listArea.Controls.Add(listLayout);listLayout.BringToFront();Outline(listArea);main.Controls.Add(listArea,0,0);
    var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=new Padding(3,0,0,0)};
    side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,75));side.RowStyles.Add(new RowStyle(SizeType.Absolute,66));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,105));side.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
    received.Name="amzgPdvReceived";received.Font=new Font("Segoe UI",19,FontStyle.Bold);
