@@ -2000,7 +2000,7 @@ namespace ArmazemGratidao {
     var cash=new CashEntry{Name="amzgCashReceived",Left=20,Top=116,Width=462,Height=42,
      Font=new Font("Segoe UI",18,FontStyle.Bold)};
     // Sugestao do total somente se nenhum valor tiver sido informado antes.
-    cash.Value=received.Value>0m?received.Value:totalDue;
+    cash.Value=manualEntry&&received.Value>0m?received.Value:totalDue;
     var change=new Label{Name="amzgCashChange",Left=20,Top=167,Width=465,Height=44,Font=new Font("Segoe UI",14,FontStyle.Bold)};
     var confirm=new Button{Name="amzgCashConfirm",Text="Confirmar dinheiro",Left=20,Top=239,Width=230,Height=42,
      BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};

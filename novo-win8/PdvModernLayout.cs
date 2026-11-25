@@ -153,19 +153,19 @@ namespace ArmazemGratidao {
    var listTitle=new Label{Name="amzgPdvListTitle",Text="Produtos da venda",Dock=DockStyle.Fill,Margin=Padding.Empty,BackColor=DeepNavy,ForeColor=Color.White,Font=new Font("Segoe UI",13,FontStyle.Bold),Padding=new Padding(9,0,0,0),TextAlign=ContentAlignment.MiddleLeft};
    listLayout.Controls.Add(listTitle,0,0);listLayout.Controls.Add(grid,0,1);
    listArea.Controls.Add(listLayout);listLayout.BringToFront();Outline(listArea);main.Controls.Add(listArea,0,0);
-   var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=new Padding(3,0,0,0)};
-   side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,75));side.RowStyles.Add(new RowStyle(SizeType.Absolute,66));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,105));side.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
-   received.Name="amzgPdvReceived";received.Font=new Font("Segoe UI",19,FontStyle.Bold);
-   var summary=Cell("Recebido (R$)",received);summary.Name="amzgPdvSummary";summary.BackColor=Pale;side.Controls.Add(summary,0,0);
-   change.Name="amzgPdvChange";change.AutoSize=false;change.Dock=DockStyle.Fill;change.Font=new Font("Segoe UI",15,FontStyle.Bold);change.TextAlign=ContentAlignment.MiddleCenter;change.BackColor=Pale;side.Controls.Add(change,0,1);
+   var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=new Padding(3,0,0,0)};
+   side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   side.RowStyles.Add(new RowStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,105));side.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+   // Recebido e troco são estados internos: a entrada ocorre exclusivamente no pagamento em dinheiro.
+   received.Name="amzgPdvReceived";change.Name="amzgPdvChange";
    var totalFrame=new Panel{Name="amzgPdvTotalFrame",Dock=DockStyle.Fill,BackColor=DeepNavy,Margin=new Padding(3)};
    var totalTitle=new Label{Text="TOTAL DA VENDA (R$)",Dock=DockStyle.Top,Height=29,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
    total.Name="amzgPdvTotal";total.AutoSize=false;total.Dock=DockStyle.Fill;total.BackColor=DeepNavy;total.ForeColor=Color.White;total.Font=new Font("Segoe UI",26,FontStyle.Bold);total.TextAlign=ContentAlignment.MiddleCenter;total.AutoEllipsis=true;
-   totalFrame.Controls.Add(total);totalFrame.Controls.Add(totalTitle);side.Controls.Add(totalFrame,0,3);Rounded(totalFrame,9);
-   ButtonTheme(finish,"Finalizar Venda",Red,Color.White,44);finish.Name="amzgPdvFinish";finish.Dock=DockStyle.Fill;finish.Margin=new Padding(3);side.Controls.Add(finish,0,4);
+   totalFrame.Controls.Add(total);totalFrame.Controls.Add(totalTitle);side.Controls.Add(totalFrame,0,1);Rounded(totalFrame,9);
+   ButtonTheme(finish,"Finalizar Venda",Red,Color.White,44);finish.Name="amzgPdvFinish";finish.Dock=DockStyle.Fill;finish.Margin=new Padding(3);side.Controls.Add(finish,0,2);
    main.Controls.Add(side,1,0);root.Controls.Add(main,0,2);
    var hidden=new Panel{Name="amzgPdvHiddenState",Visible=false,Size=new Size(1,1)};
-   foreach(Control c in new Control[]{add,edit,chooseCustomer,fiado,remove,clear,otherPayments,newSale,whatsApp,stats,discountLabel,discountMode,discountInput})hidden.Controls.Add(c);
+   foreach(Control c in new Control[]{add,edit,chooseCustomer,fiado,remove,clear,otherPayments,newSale,whatsApp,stats,discountLabel,discountMode,discountInput,received,change})hidden.Controls.Add(c);
    add.Name="amzgPdvAddProduct";edit.Name="amzgPdvEdit";fiado.Name="amzgPdvFiado";otherPayments.Name="amzgPdvOtherPayments";newSale.Name="amzgPdvNewSale";whatsApp.Name="amzgPdvWhatsApp";stats.Name="amzgPdvSaleStats";
    form.Controls.Remove(header);form.Controls.Remove(footer);header.Dispose();footer.Dispose();form.Controls.Add(hidden);form.Controls.Add(root);root.BringToFront();
    var suggestion=form.Controls.Find("pdvSuggestions",true);if(suggestion.Length>0)suggestion[0].BringToFront();form.ResumeLayout(true);

@@ -114,7 +114,6 @@ try{
  $list=& $find 'amzgPdvItemBox'
  $actions=& $find 'amzgPdvActions'
  $finish=& $find 'amzgPdvFinish'
- $summary=& $find 'amzgPdvSummary'
  $total=& $find 'amzgPdvTotal'
  $other=& $find 'amzgPdvMoreOptions'
  $fiado=& $find 'amzgPdvFiado'
@@ -127,7 +126,7 @@ try{
  if($ratio -lt 0.68 -or $ratio -gt 0.72){throw "Proporcao 70/30 incorreta: $ratio"}
  if($list.Height -lt ($layout.ClientSize.Height*0.72)){throw 'Quadro nao ocupa altura util'}
  if($back.PointToScreen([Drawing.Point]::Empty).Y -lt $search.PointToScreen([Drawing.Point]::Empty).Y -or $back.PointToScreen([Drawing.Point]::Empty).Y -gt $search.PointToScreen([Drawing.Point]::Empty).Y+$search.Height){throw 'Menu inicial fora da linha de entrada'}
- if($summary.Parent -ne $actions -or $finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions){throw 'Resumo e finalizar devem estar na lateral direita'}
+ if($finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions -or $actions.Controls.Count -ne 2){throw 'Somente total e finalizar devem estar na lateral direita'}
  if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
  if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
  if((& $find 'amzgPdvAddProduct').Visible -or (& $find 'amzgPdvSaleStats').Visible){throw 'Inserir e contador devem ficar ocultos'}
@@ -182,12 +181,10 @@ try{
  if((Get-Item -LiteralPath $preview).Length -lt 7000){
   throw 'Preview da tela do PDV incompleta.'
  }
- # Troco deve atualizar durante a digitacao, antes de confirmar ou sair do campo.
+ # Recebido e troco ficam ocultos no PDV; o modal de dinheiro abaixo testa a digitacao real.
  $receivedBox=& $find 'amzgPdvReceived'
  $changeBox=& $find 'amzgPdvChange'
- $receivedBox.Text='20,50'
- if($changeBox.Text -ne 'TROCO: R$ 20,50'){throw 'Troco no rodape nao atualizou enquanto digitava.'}
- $receivedBox.Text='0,00'
+ if($receivedBox.Visible -or $changeBox.Visible){throw 'Recebido e troco devem aparecer somente no pagamento'}
  $cashMethod=$pdvType.GetMethod('ConfirmCashReceived',[Reflection.BindingFlags]'Instance,NonPublic')
  if(!$cashMethod){throw 'Modal de dinheiro ausente.'}
  $script:cashError='';$script:cashDone=$false
