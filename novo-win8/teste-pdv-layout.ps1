@@ -110,8 +110,12 @@ try{
  if((& $screenY $summary) -ge (& $screenY $search) -or
     (& $screenY $summary) -le (& $screenY $back)){throw 'Cliente, recebido e desconto devem ficar no topo.'}
  if($total.Parent.Name -ne 'amzgPdvTotalFrame' -or (& $screenY $total) -le (& $screenY $finish)){throw 'Total deve ficar abaixo do botao finalizar.'}
- if($list.ClientSize.Width -lt 700 -or $actions.ClientSize.Width -gt 220 -or $list.Height -lt 430 -or $grid.RowTemplate.Height -gt 25){
-  throw "Lista nao foi ampliada: $($list.Width)x$($list.Height), acoes=$($actions.Width)"
+ $layout=& $find 'amzgPdvLayout'
+ # O Windows limita a janela ao monitor real (inclusive o monitor virtual do CI).
+ # Exigir proporcao de area, alem da altura minima que permita 15 linhas completas.
+ $minHeight=[Math]::Max(392,[int][Math]::Floor($layout.ClientSize.Height*0.66))
+ if($list.ClientSize.Width -lt 700 -or $actions.ClientSize.Width -gt 220 -or $list.Height -lt $minHeight -or $grid.RowTemplate.Height -gt 25){
+  throw "Lista nao foi ampliada: $($list.Width)x$($list.Height), minimo=$minHeight, acoes=$($actions.Width), janela=$($layout.ClientSize)"
  }
  if($search.Height -gt 60){throw 'Busca de produtos alta demais.'}
  $stack=& $find 'amzgPdvActionStack'
@@ -119,6 +123,20 @@ try{
   if($btn.Height -ne $finish.Height -or $btn.Width -ne $finish.Width){throw "Botoes laterais devem ter tamanho identico: $($btn.Name)"}
  }
  if($finish.BackColor.R -le $finish.BackColor.B -or $stack.Controls.GetChildIndex($finish) -ne ($stack.Controls.Count-1)){throw 'Finalizar precisa ficar vermelho e por ultimo.'}
+ # Popular uma tabela descartavel com 24 produtos para medir a capacidade real.
+ $originalData=$grid.DataSource
+ try{
+  $sample=$originalData.Clone()
+  for($i=1;$i -le 24;$i++){
+   $null=$sample.Rows.Add([string]("789000000"+$i.ToString("0000")),("Produto de teste "+$i),[decimal]1,"UN",[decimal]5.99,[decimal]5.99)
+  }
+  $grid.DataSource=$sample
+  [Windows.Forms.Application]::DoEvents()
+  $visibleRows=$grid.DisplayedRowCount($false)
+  if($visibleRows -lt 15){throw "PDV precisa mostrar pelo menos 15 linhas completas: $visibleRows"}
+  if($finish.PointToScreen([Drawing.Point]::Empty).Y+$finish.Height -gt $total.Parent.PointToScreen([Drawing.Point]::Empty).Y){throw 'Finalizar encoberto pelo total.'}
+  Write-Host "PDV VISUAL: $visibleRows linhas completas; lista $($list.Width)x$($list.Height)."
+ }finally{$grid.DataSource=$originalData}
  foreach($name in @('amzgPdvOtherPayments','amzgPdvNewSale','amzgPdvWhatsApp','amzgPdvSaleStats')){
   $null=& $find $name
  }

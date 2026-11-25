@@ -88,13 +88,13 @@ namespace ArmazemGratidao {
     BackColor=Surface,ColumnCount=1,RowCount=manualEntry?7:6,
     Padding=new Padding(7,0,7,4),Margin=Padding.Empty};
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,45)); // marca
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,34)); // voltar
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,48)); // cliente, recebido, desconto
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,57)); // produto compacto
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,35)); // marca
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,32)); // voltar
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,38)); // cliente, recebido, desconto
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,52)); // produto compacto
    if(manualEntry)layout.RowStyles.Add(new RowStyle(SizeType.Absolute,49));
    layout.RowStyles.Add(new RowStyle(SizeType.Percent,100)); // lista ampliada e acoes
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,27)); // contagem de itens
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,20)); // contagem de itens
    int row=0;
 
    var branding=new Panel{Name="amzgPdvBrand",Dock=DockStyle.Fill,
@@ -107,7 +107,7 @@ namespace ArmazemGratidao {
     using(var red=new Pen(Color.FromArgb(217,39,64),5f))
      args.Graphics.DrawLine(red,branding.Width-195,branding.Height-5,branding.Width,branding.Height-5);
     using(var pen=new Pen(Color.White,2.1f)){
-     int x=Math.Max(18,(branding.Width-385)/2), y=15;
+     int x=Math.Max(18,(branding.Width-385)/2), y=5;
      args.Graphics.DrawLine(pen,x,y,x+7,y);
      args.Graphics.DrawLine(pen,x+7,y,x+12,y+20);
      args.Graphics.DrawLine(pen,x+12,y+20,x+35,y+20);
@@ -120,7 +120,7 @@ namespace ArmazemGratidao {
    var brandText=new Label{Text=manualEntry?"Armazém Gratidão - Vendas Anotadas":"Armazém Gratidão - PDV",
     AutoSize=false,Dock=DockStyle.Fill,
     TextAlign=ContentAlignment.MiddleCenter,BackColor=Color.Transparent,
-    Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.White};
+    Font=new Font("Segoe UI",14f,FontStyle.Bold),ForeColor=Color.White};
    branding.Controls.Add(brandText);
    layout.Controls.Add(branding,0,row++);
 
@@ -182,7 +182,7 @@ namespace ArmazemGratidao {
    }
 
    var main=new TableLayoutPanel{Name="amzgPdvMain",Dock=DockStyle.Fill,
-    ColumnCount=2,RowCount=1,Margin=new Padding(0,4,0,6),
+    ColumnCount=2,RowCount=1,Margin=new Padding(0,2,0,2),
     BackColor=Surface};
    main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
    main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));
@@ -245,7 +245,7 @@ namespace ArmazemGratidao {
 
    var side=new Panel{Name="amzgPdvActions",Dock=DockStyle.Fill,
     BackColor=Surface,Margin=Padding.Empty,Padding=new Padding(3)};
-   var totalFrame=new Panel{Name="amzgPdvTotalFrame",Dock=DockStyle.Bottom,Height=75,BackColor=Red,Margin=Padding.Empty};
+   var totalFrame=new Panel{Name="amzgPdvTotalFrame",Dock=DockStyle.Bottom,Height=70,BackColor=Red,Margin=Padding.Empty};
    var totalTitle=new Label{Text="Total da Venda (R$)",Dock=DockStyle.Top,Height=23,
     BackColor=Navy,ForeColor=Color.White,TextAlign=ContentAlignment.MiddleCenter,
     Font=new Font("Segoe UI",10,FontStyle.Bold)};
@@ -259,7 +259,7 @@ namespace ArmazemGratidao {
     BackColor=Surface,Margin=Padding.Empty,Padding=new Padding(1,0,1,3)};
    scroll.Controls.Add(buttons);
    side.Controls.Add(scroll);side.Controls.Add(totalFrame);
-   const int actionHeight=32;
+   const int actionHeight=30;
    ButtonTheme(edit,"✎  Editar Qtd. / Preço",Navy,Color.White,actionHeight);edit.Name="amzgPdvEdit";
    ButtonTheme(remove,"⊖  Remover Item",Navy,Color.White,actionHeight);remove.Name="amzgPdvRemove";
    ButtonTheme(clear,"▤  Excluir Todos",Navy,Color.White,actionHeight);clear.Name="amzgPdvClear";
@@ -289,10 +289,17 @@ namespace ArmazemGratidao {
     buttons.Controls.Add(btn);
    }
    Action fitSide=()=>{
+    int count=buttons.Controls.Count;
+    int height=Math.Max(24,Math.Min(30,(scroll.ClientSize.Height-8)/Math.Max(1,count)-2));
     int width=Math.Max(115,scroll.ClientSize.Width-(scroll.VerticalScroll.Visible?SystemInformation.VerticalScrollBarWidth:0)-7);
-    foreach(Control item in buttons.Controls)if(item.Width!=width)item.Width=width;
+    foreach(Control item in buttons.Controls){
+     if(item.Width!=width)item.Width=width;
+     if(item.Height!=height)item.Height=height;
+    }
    };
-   scroll.Resize+=(sender,args)=>fitSide();fitSide();
+   scroll.Resize+=(sender,args)=>fitSide();
+   form.Shown+=(sender,args)=>fitSide();
+   fitSide();
    main.Controls.Add(side,1,0);
    layout.Controls.Add(main,0,row++);
 
@@ -310,7 +317,7 @@ namespace ArmazemGratidao {
    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,19));
    top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    top.Controls.Add(TextLabel("Cliente:"),0,0);
-   customer.Name="amzgPdvCustomer";customer.Dock=DockStyle.Fill;customer.Margin=new Padding(1,5,4,1);
+   customer.Name="amzgPdvCustomer";customer.Dock=DockStyle.Fill;customer.Margin=new Padding(1,2,4,1);
    customer.BackColor=Color.White;customer.Cursor=Cursors.Hand;customer.Font=new Font("Segoe UI",10f,FontStyle.Bold);
    customer.Click+=(sender,args)=>chooseCustomer.PerformClick();
    top.Controls.Add(customer,1,0);
@@ -319,11 +326,11 @@ namespace ArmazemGratidao {
    chooseCustomer.Margin=new Padding(1,2,4,2);
    top.Controls.Add(chooseCustomer,2,0);
    top.Controls.Add(TextLabel("Recebido:"),3,0);
-   received.Name="amzgPdvReceived";received.Dock=DockStyle.Fill;received.Margin=new Padding(1,5,4,1);
+   received.Name="amzgPdvReceived";received.Dock=DockStyle.Fill;received.Margin=new Padding(1,2,4,1);
    received.Font=new Font("Segoe UI",10f);
    top.Controls.Add(received,4,0);
    top.Controls.Add(TextLabel("Desconto:"),5,0);
-   var discountGroup=new TableLayoutPanel{ColumnCount=2,RowCount=1,Dock=DockStyle.Fill,Margin=new Padding(1,5,3,1)};
+   var discountGroup=new TableLayoutPanel{ColumnCount=2,RowCount=1,Dock=DockStyle.Fill,Margin=new Padding(1,2,3,1)};
    discountGroup.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,43));
    discountGroup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
    discountMode.Dock=DockStyle.Fill;discountMode.Margin=new Padding(0,0,2,0);
