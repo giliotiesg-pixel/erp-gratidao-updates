@@ -278,7 +278,7 @@ namespace ArmazemGratidao {
   static ModernCalculatorForm independent;
   public static void Prepare(Form form){
    if(form==null||form.IsDisposed||form is MainForm||form is ModernCalculatorForm||
-     form is StartMenuPopup||!installed.Add(form))return;
+     form is StartMenuPopup||(form is PdvForm&&!((PdvForm)form).IsManualEntry)||!installed.Add(form))return;
    var bar=new Panel{Name="amzgCalculatorShortcutBar",Dock=DockStyle.Top,Height=33,
     BackColor=Color.FromArgb(230,240,252),Padding=new Padding(4,2,8,2)};
    var button=new Button{Name="amzgOpenCalculatorModule",Text="▦  Calculadora",
@@ -302,7 +302,7 @@ namespace ArmazemGratidao {
    }else{form.Controls.Add(bar);bar.BringToFront();}
    form.FormClosed+=(sender,args)=>installed.Remove(form);
   }
-  static void Open(){
+  internal static void Open(){
    var main=Application.OpenForms.OfType<MainForm>().FirstOrDefault(x=>!x.IsDisposed);
    if(main!=null){main.OpenCalculatorFromModule();return;}
    if(independent!=null&&!independent.IsDisposed){

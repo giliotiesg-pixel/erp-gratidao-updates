@@ -50,7 +50,7 @@ try{
  $pdv.Size=[System.Drawing.Size]::new(1180,740)
  $pdv.Show()
  [System.Windows.Forms.Application]::DoEvents()
- if(@($pdv.Controls.Find('amzgOpenCalculatorModule',$true)).Count -ne 1){throw 'Calculadora ausente no PDV'}
+ if(@($pdv.Controls.Find('amzgOpenCalculatorModule',$true)).Count -ne 0){throw 'Calculadora deve estar no menu ocultavel'}
  $binding=[Reflection.BindingFlags]::Static -bor [Reflection.BindingFlags]::NonPublic
  $detect=$pdvType.GetMethod('IsCocaReturnableBottle',$binding)
  if($null -eq $detect){throw 'Detector de cascos ausente.'}
@@ -105,40 +105,19 @@ try{
  $total=& $find 'amzgPdvTotal'
  $other=& $find 'amzgPdvMoreOptions'
  $fiado=& $find 'amzgPdvFiado'
- if(!$fiado.Visible -or !$fiado.Enabled -or $fiado.Text -ne 'Fiado' -or $fiado.Parent.Name -ne 'amzgPdvActionStack'){throw 'Botao Fiado precisa estar visivel nas acoes do PDV.'}
- if(!$mainType.GetMethod('OpenFiadoFromPdv')){throw 'Navegacao Fiado a partir do PDV ausente.'}
- $grid=@($pdv.Controls.Find('amzgPdvItemBox',$true)[0].Controls |
-    Where-Object {$_ -is [System.Windows.Forms.DataGridView] -and $_.Visible}) |
-    Select-Object -First 1
- if($null -eq $grid){throw 'Tabela de itens ausente no novo PDV.'}
- $screenY={param($control)
-  return $control.PointToScreen([System.Drawing.Point]::Empty).Y
- }
- if((& $screenY $brand) -ge (& $screenY $back) -or
-    (& $screenY $back) -ge (& $screenY $search) -or
-    (& $screenY $search) -ge (& $screenY $list)){
-  throw 'Ordem incorreta: marca, Voltar, Codigo/Nome e lista.'
- }
- if($actions.PointToScreen([System.Drawing.Point]::Empty).X -le
-    $list.PointToScreen([System.Drawing.Point]::Empty).X+$list.Width){
-  throw 'Botoes principais nao foram colocados na lateral direita.'
- }
- if((& $screenY $summary) -ge (& $screenY $search) -or
-    (& $screenY $summary) -le (& $screenY $back)){throw 'Cliente, recebido e desconto devem ficar no topo.'}
- if($total.Parent.Name -ne 'amzgPdvTotalFrame' -or (& $screenY $total) -le (& $screenY $finish)){throw 'Total deve ficar abaixo do botao finalizar.'}
+ if($fiado.Visible){throw 'Fiado deve ficar oculto no menu'}
+ if(!$mainType.GetMethod('OpenFiadoFromPdv')){throw 'Navegacao Fiado ausente'}
+ $grid=@($list.Controls | Where-Object {$_ -is [System.Windows.Forms.DataGridView] -and $_.Visible}) | Select-Object -First 1
+ if($null -eq $grid){throw 'Tabela de itens ausente'}
  $layout=& $find 'amzgPdvLayout'
- # O Windows limita a janela ao monitor real (inclusive o monitor virtual do CI).
- # Exigir proporcao de area, alem da altura minima que permita 15 linhas completas.
- $minHeight=[Math]::Max(392,[int][Math]::Floor($layout.ClientSize.Height*0.66))
- if($list.ClientSize.Width -lt 700 -or $actions.ClientSize.Width -gt 220 -or $list.Height -lt $minHeight -or $grid.RowTemplate.Height -gt 25){
-  throw "Lista nao foi ampliada: $($list.Width)x$($list.Height), minimo=$minHeight, acoes=$($actions.Width), janela=$($layout.ClientSize)"
- }
- if($search.Height -gt 60){throw 'Busca de produtos alta demais.'}
- $stack=& $find 'amzgPdvActionStack'
- foreach($btn in $stack.Controls){
-  if($btn.Height -ne $finish.Height -or $btn.Width -ne $finish.Width){throw "Botoes laterais devem ter tamanho identico: $($btn.Name)"}
- }
- if($finish.BackColor.R -le $finish.BackColor.B -or $stack.Controls.GetChildIndex($finish) -ne ($stack.Controls.Count-1)){throw 'Finalizar precisa ficar vermelho e por ultimo.'}
+ $ratio=$list.Width/($list.Width+$actions.Width)
+ if($ratio -lt 0.68 -or $ratio -gt 0.72){throw "Proporcao 70/30 incorreta: $ratio"}
+ if($list.Height -lt ($layout.ClientSize.Height*0.72)){throw 'Quadro nao ocupa altura util'}
+ if($back.PointToScreen([Drawing.Point]::Empty).Y -lt $search.PointToScreen([Drawing.Point]::Empty).Y -or $back.PointToScreen([Drawing.Point]::Empty).Y -gt $search.PointToScreen([Drawing.Point]::Empty).Y+$search.Height){throw 'Menu inicial fora da linha de entrada'}
+ if($summary.Parent -ne $actions -or $finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions){throw 'Resumo e finalizar devem estar na lateral direita'}
+ if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
+ if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
+ if((& $find 'amzgPdvAddProduct').Visible -or (& $find 'amzgPdvSaleStats').Visible){throw 'Inserir e contador devem ficar ocultos'}
  # Popular uma tabela descartavel com 24 produtos para medir a capacidade real.
  $originalData=$grid.DataSource
  try{
@@ -150,7 +129,7 @@ try{
   [Windows.Forms.Application]::DoEvents()
   $visibleRows=$grid.DisplayedRowCount($false)
   if($visibleRows -lt 15){throw "PDV precisa mostrar pelo menos 15 linhas completas: $visibleRows"}
-  if($finish.PointToScreen([Drawing.Point]::Empty).Y+$finish.Height -gt $total.Parent.PointToScreen([Drawing.Point]::Empty).Y){throw 'Finalizar encoberto pelo total.'}
+  if($finish.PointToScreen([Drawing.Point]::Empty).Y -lt $total.Parent.PointToScreen([Drawing.Point]::Empty).Y+$total.Parent.Height){throw 'Finalizar encoberto pelo total.'}
   Write-Host "PDV VISUAL: $visibleRows linhas completas; lista $($list.Width)x$($list.Height)."
  }finally{$grid.DataSource=$originalData}
  foreach($name in @('amzgPdvOtherPayments','amzgPdvNewSale','amzgPdvWhatsApp','amzgPdvSaleStats')){
@@ -255,7 +234,7 @@ try{
   if($script:splitError){throw $script:splitError}
   if(!$script:splitDone){throw 'Modal dividido nao testado.'}
  }finally{$splitTimer.Stop();$splitTimer.Dispose()}
- Write-Host 'PDV OK: cliente, recebido e desconto no topo; lista ampla, botoes iguais e total na lateral.'
+ Write-Host 'PDV OK: quadro 70%, entrada superior, menu oculto, total e finalizar fixos.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{
  if($null -ne $pdv){try{$pdv.Close()}catch{};$pdv.Dispose()}

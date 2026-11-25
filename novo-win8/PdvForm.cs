@@ -14,7 +14,7 @@ using System.Security.Cryptography;
 
 namespace ArmazemGratidao {
  public sealed class PdvForm : StyledDialogForm {
-  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost;public string Unit="UN";public decimal Total {get{return Math.Round(Qty*Price,2);}}}
+  sealed class Item {public long Id;public string Barcode,InternalCode,Name;public decimal Qty,Price,Cost,LineDiscount;public string Unit="UN";public decimal Gross {get{return Math.Round(Qty*Price,2,MidpointRounding.AwayFromZero);}} public decimal Total {get{return Math.Max(0,Gross-LineDiscount);}}}
   readonly string db;
   bool finishingSale=false;
   bool paymentPreselected=false;
@@ -199,6 +199,19 @@ namespace ArmazemGratidao {
    LoadDraft();
    FormClosing+=(sender,args)=>SaveDraft();
    Render();code.Focus();
+  }
+  internal void RunWideMenu(string action){
+   switch(action){
+    case "Clientes":ChooseCustomerInWindow();break;
+    case "Calculadora":CalculatorShortcut.Open();break;
+    case "Editar Qtd. / Preço":EditSelected();break;
+    case "Remover Item":RemoveSelected();break;
+    case "Excluir Todos":ClearCart();break;
+    case "Fiado":OpenFiadoFromPdv();break;
+    case "Outras Formas":if(!finishingSale&&cart.Count>0)paymentPreselected=ShowPaymentChoice();else if(cart.Count==0)MessageBox.Show("Adicione produtos à venda.");break;
+    case "Nova Venda":StartNewSale();break;
+    case "Enviar WhatsApp":if(lastReceiptSaleId>0)OfferSaleReceipt(lastReceiptSaleId,lastReceiptClient,lastReceiptTotal);else MessageBox.Show("Finalize uma venda neste PDV para enviar o comprovante.");break;
+   }
   }
   void OpenFiadoFromPdv(){
    if(finishingSale)return;
@@ -1018,6 +1031,7 @@ namespace ArmazemGratidao {
    public decimal Qty {get;set;}
    public decimal Price {get;set;}
    public decimal Cost {get;set;}
+   public decimal LineDiscount {get;set;}
    public string Unit {get;set;}
   }
   sealed class CartDraft {
@@ -1048,7 +1062,7 @@ namespace ArmazemGratidao {
      }
      cart.Clear();
      foreach(var row in saved.Items)cart.Add(new Item{Id=row.Id,Barcode=row.Barcode,InternalCode=row.InternalCode,
-       Name=row.Name,Qty=row.Qty,Price=row.Price,Cost=row.Cost,Unit=row.Unit??"UN"});
+       Name=row.Name,Qty=row.Qty,Price=row.Price,Cost=row.Cost,LineDiscount=Math.Max(0,Math.Min(row.LineDiscount,Math.Round(row.Qty*row.Price,2))),Unit=row.Unit??"UN"});
      discountValue=saved.DiscountValue;
      discountPercent=saved.DiscountPercent;
      discountMode.SelectedIndex=discountPercent?1:0;
@@ -1075,7 +1089,7 @@ namespace ArmazemGratidao {
    try{
     var snapshot=new CartDraft{
      Items=cart.Select(i=>new CartDraftLine{Id=i.Id,Barcode=i.Barcode,InternalCode=i.InternalCode,
-       Name=i.Name,Qty=i.Qty,Price=i.Price,Cost=i.Cost,Unit=i.Unit}).ToList(),
+       Name=i.Name,Qty=i.Qty,Price=i.Price,Cost=i.Cost,LineDiscount=i.LineDiscount,Unit=i.Unit}).ToList(),
      Customer=customer.Text,Payment=Convert.ToString(payment.SelectedItem),Received=received.Value,
      DiscountValue=discountValue,DiscountPercent=discountPercent,
      SaleDate=manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):""
@@ -1309,18 +1323,36 @@ namespace ArmazemGratidao {
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
    var item=cart[grid.CurrentRow.Index];
    try{
-    using(var dialog=new StyledDialogForm {Text="Editar item da venda",Width=450,Height=265,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
-     var nameLabel=new Label {Text=item.Name,Left=15,Top=15,Width=400,Height=35,Font=new Font("Segoe UI",11,FontStyle.Bold)};
-     var quantityLabel=new Label {Text="Quantidade:",Left=15,Top=65,Width=125};
-     var quantityInput=new NumericUpDown {Left=150,Top=60,Width=210,DecimalPlaces=3,Minimum=0.001M,Maximum=999999,Value=item.Qty};
-     var priceLabel=new Label {Text="Preço unitário (R$):",Left=15,Top=105,Width=130};
-     var priceInput=new NumericUpDown {Left=150,Top=100,Width=210,DecimalPlaces=2,Minimum=0,Maximum=99999999,Value=item.Price};
-     var preview=new Label {Left=15,Top=145,Width=400,Height=26,Font=new Font("Segoe UI",11,FontStyle.Bold)};
-     Action update=()=>preview.Text="Subtotal: R$ "+Math.Round(quantityInput.Value*priceInput.Value,2).ToString("N2");
-     quantityInput.ValueChanged+=(s,e)=>update();priceInput.ValueChanged+=(s,e)=>update();update();
-     var save=new Button {Text="Aplicar alterações",Left=205,Top=180,Width=155,Height=34,DialogResult=DialogResult.OK};
-     dialog.Controls.AddRange(new Control[]{nameLabel,quantityLabel,quantityInput,priceLabel,priceInput,preview,save});
-     dialog.AcceptButton=save;
+    decimal registeredPrice;string registeredName;
+    using(var conn=Open())using(var q=new SQLiteCommand("SELECT price,name FROM products WHERE id=@id",conn)){
+     q.Parameters.AddWithValue("@id",item.Id);
+     using(var rd=q.ExecuteReader()){if(!rd.Read())throw new Exception("Produto não encontrado.");registeredPrice=Dec(rd[0]);registeredName=Convert.ToString(rd[1]);}
+    }
+    using(var dialog=new StyledDialogForm{Text="Editar produto da venda",Width=540,Height=440,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+     var codeLabel=new Label{Text="Código: "+item.Barcode+" | Interno: "+item.InternalCode+" | "+item.Unit,Left=18,Top=15,Width=490,Height=25};
+     var nameLabel=new Label{Text="Descrição do produto",Left=18,Top=44,Width=480,Height=22};
+     var nameInput=new TextBox{Name="amzgEditName",Text=item.Name,Left=18,Top=66,Width=490,Font=new Font("Segoe UI",11)};
+     var quantityLabel=new Label{Text="Quantidade",Left=18,Top=103,Width=230};
+     var quantityInput=new NumericUpDown{Name="amzgEditQty",Left=18,Top=126,Width=230,DecimalPlaces=3,Minimum=0.001M,Maximum=999999,Value=item.Qty,Font=new Font("Segoe UI",14)};
+     var priceLabel=new Label{Text="Preço unitário (R$)",Left=267,Top=103,Width=240};
+     var priceInput=new NumericUpDown{Name="amzgEditPrice",Left=267,Top=126,Width=241,DecimalPlaces=2,Minimum=0,Maximum=99999999,Value=item.Price,Font=new Font("Segoe UI",14)};
+     var note=new Label{Text="Preço e descrição alterados serão gravados no cadastro.",Left=18,Top=165,Width=490,Height=27};
+     var toggle=new Button{Text="Desconto neste produto",Left=18,Top=195,Width=490,Height=30};
+     var mode=new ComboBox{Left=18,Top=232,Width=230,DropDownStyle=ComboBoxStyle.DropDownList,Visible=false};
+     mode.Items.AddRange(new object[]{"Valor em R$","Porcentagem %"});mode.SelectedIndex=0;
+     var disc=new NumericUpDown{Name="amzgEditDiscount",Left=267,Top=232,Width=241,DecimalPlaces=2,Maximum=99999999,Value=Math.Min(99999999,item.LineDiscount),Visible=false};
+     toggle.Click+=(s,e)=>{mode.Visible=disc.Visible=!disc.Visible;};
+     var preview=new Label{Left=18,Top=270,Width=490,Height=48,Font=new Font("Segoe UI",13,FontStyle.Bold)};
+     Func<decimal> gross=()=>Math.Round(quantityInput.Value*priceInput.Value,2,MidpointRounding.AwayFromZero);
+     Func<decimal> amount=()=>mode.SelectedIndex==1?Math.Round(gross()*disc.Value/100m,2,MidpointRounding.AwayFromZero):disc.Value;
+     Action update=()=>preview.Text="Desconto: R$ "+amount().ToString("N2")+" | Total: R$ "+Math.Max(0,gross()-amount()).ToString("N2");
+     mode.SelectedIndexChanged+=(s,e)=>{disc.Maximum=mode.SelectedIndex==1?100:99999999;update();};
+     quantityInput.ValueChanged+=(s,e)=>update();priceInput.ValueChanged+=(s,e)=>update();disc.ValueChanged+=(s,e)=>update();update();
+     var save=new Button{Name="amzgEditSave",Text="Salvar alterações",Left=18,Top=330,Width=240,Height=38};
+     var cancel=new Button{Text="Cancelar",Left=267,Top=330,Width=241,Height=38,DialogResult=DialogResult.Cancel};
+     save.Click+=(s,e)=>{if(string.IsNullOrWhiteSpace(nameInput.Text)||amount()>=gross()){MessageBox.Show("Confira a descrição e o desconto: o total do produto deve ser maior que zero.");return;}dialog.DialogResult=DialogResult.OK;};
+     dialog.Controls.AddRange(new Control[]{codeLabel,nameLabel,nameInput,quantityLabel,quantityInput,priceLabel,priceInput,note,toggle,mode,disc,preview,save,cancel});
+     dialog.AcceptButton=save;dialog.CancelButton=cancel;
      if(dialog.ShowDialog(this)!=DialogResult.OK)return;
      decimal available;
      using(var connection=Open())using(var cmd=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",connection)){
@@ -1340,7 +1372,25 @@ namespace ArmazemGratidao {
       }
       if(required>available){MessageBox.Show("Estoque ainda insuficiente. Disponível: "+available.ToString("N3"));return;}
      }
-     item.Qty=quantityInput.Value;item.Price=priceInput.Value;
+     decimal newPrice=priceInput.Value;string newName=nameInput.Text.Trim();
+     if(newPrice!=item.Price||newName!=item.Name){
+      using(var conn=Open()){
+       string backup=db+".antes-editar-produto-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+       using(var dest=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){dest.Open();conn.BackupDatabase(dest,"main","main",-1,null,0);}
+       using(var tx=conn.BeginTransaction()){
+        using(var q=new SQLiteCommand("UPDATE products SET price=@price,name=@name WHERE id=@id AND price=@old AND name=@oldName",conn,tx)){
+         q.Parameters.AddWithValue("@price",newPrice==item.Price?registeredPrice:newPrice);q.Parameters.AddWithValue("@name",newName==item.Name?registeredName:newName);q.Parameters.AddWithValue("@id",item.Id);q.Parameters.AddWithValue("@old",registeredPrice);q.Parameters.AddWithValue("@oldName",registeredName);
+         if(q.ExecuteNonQuery()!=1)throw new Exception("Cadastro alterado em outra janela. Abra novamente o produto.");
+        }
+        if(newPrice!=item.Price&&newPrice!=registeredPrice){
+         using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_price_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_price NUMERIC NOT NULL,new_price NUMERIC NOT NULL,changed_at TEXT NOT NULL,origin TEXT NOT NULL)",conn,tx))q.ExecuteNonQuery();
+         using(var q=new SQLiteCommand("INSERT INTO product_price_audit(product_id,previous_price,new_price,changed_at,origin) VALUES(@id,@old,@new,datetime('now','localtime'),'PDV')",conn,tx)){q.Parameters.AddWithValue("@id",item.Id);q.Parameters.AddWithValue("@old",registeredPrice);q.Parameters.AddWithValue("@new",newPrice);q.ExecuteNonQuery();}
+        }
+        tx.Commit();
+       }
+      }
+     }
+     item.Qty=quantityInput.Value;item.Price=newPrice;item.Name=newName;item.LineDiscount=amount();
      Render();
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Não foi possível editar o item");}
@@ -1710,7 +1760,9 @@ namespace ArmazemGratidao {
      choices.Controls.Add(btn);
     }
     var cancel=new Button{Text="Voltar à venda",Dock=DockStyle.Bottom,Height=44,DialogResult=DialogResult.Cancel};
-    dialog.Controls.Add(choices);dialog.Controls.Add(info);dialog.Controls.Add(title);dialog.Controls.Add(cancel);
+    var discountButton=new Button{Name="amzgPaymentDiscount",Text="Conceder desconto (R$ ou %)",Dock=DockStyle.Top,Height=39};
+    discountButton.Click+=(sender,args)=>{ConfigureDiscount();title.Text="TOTAL DA VENDA: R$ "+FinalAmount().ToString("N2");};
+    dialog.Controls.Add(choices);dialog.Controls.Add(discountButton);dialog.Controls.Add(info);dialog.Controls.Add(title);dialog.Controls.Add(cancel);
     return dialog.ShowDialog(this)==DialogResult.OK;
    }
   }
@@ -1800,9 +1852,9 @@ namespace ArmazemGratidao {
   void Finish(){
    if(finishingSale)return;
    if(cart.Count==0){MessageBox.Show("Carrinho vazio.");return;}
-   if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    bool chosen=paymentPreselected;paymentPreselected=false;
    if(!chosen&&!ShowPaymentChoice())return;
+   if(DiscountAmount()>=cart.Sum(i=>i.Total)){MessageBox.Show("O desconto deve ser menor que o total da venda.");return;}
    if(!ConfirmManualSaleDate())return;
    foreach(var item in cart){
     if(item.Id<=0||item.Qty<=0||item.Price<0||item.Cost<0||item.Total<=0){
@@ -1930,6 +1982,9 @@ namespace ArmazemGratidao {
      if(bottleCount>0)CascosForm.RecordFromSale(c,tx,saleId,customerName,bottleCount,bottlePaid,manualEntry?manualDate.Value.ToString("yyyy-MM-dd HH:mm:ss"):DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
      // Nao consumir carteira automaticamente ao finalizar nova venda fiada.
      // O cliente decide quando usar o credito em Fiado > Pagar Fiado com credito.
+     if(cart.Any(i=>i.LineDiscount>0)){
+      using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_item_discounts(sale_item_id INTEGER PRIMARY KEY,sale_id INTEGER NOT NULL,discount_amount NUMERIC NOT NULL,gross_before NUMERIC NOT NULL)",c,tx))q.ExecuteNonQuery();
+     }
      if(discount>0){
       using(var create=new SQLiteCommand("CREATE TABLE IF NOT EXISTS sale_discounts(sale_id INTEGER PRIMARY KEY,gross_before NUMERIC NOT NULL,discount_amount NUMERIC NOT NULL,discount_type TEXT NOT NULL,discount_value NUMERIC NOT NULL)",c,tx))create.ExecuteNonQuery();
       using(var ins=new SQLiteCommand("INSERT INTO sale_discounts(sale_id,gross_before,discount_amount,discount_type,discount_value) VALUES(@sale,@gross,@amount,@type,@value)",c,tx)){
@@ -1943,6 +1998,9 @@ namespace ArmazemGratidao {
       using(var q=new SQLiteCommand("UPDATE products SET stock=stock-@qty WHERE id=@id AND stock>=@qty",c,tx)){q.Parameters.AddWithValue("@qty",i.Qty);q.Parameters.AddWithValue("@id",i.Id);if(q.ExecuteNonQuery()!=1)throw new Exception("Falha na baixa de estoque: "+i.Name);}
       using(var q=new SQLiteCommand("INSERT INTO sale_items(sale_id,product_id,barcode,name,quantity,unit_price,unit_cost,total) VALUES(@sale,@id,@barcode,@name,@qty,@price,@cost,@total)",c,tx)){
        q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@id",i.Id);q.Parameters.AddWithValue("@barcode",i.Barcode);q.Parameters.AddWithValue("@name",i.Name);q.Parameters.AddWithValue("@qty",i.Qty);q.Parameters.AddWithValue("@price",i.Price);q.Parameters.AddWithValue("@cost",i.Cost);q.Parameters.AddWithValue("@total",i.Total);q.ExecuteNonQuery();
+      }
+      if(i.LineDiscount>0){
+       using(var q=new SQLiteCommand("INSERT INTO sale_item_discounts(sale_item_id,sale_id,discount_amount,gross_before) VALUES(last_insert_rowid(),@sale,@discount,@gross)",c,tx)){q.Parameters.AddWithValue("@sale",saleId);q.Parameters.AddWithValue("@discount",i.LineDiscount);q.Parameters.AddWithValue("@gross",i.Gross);q.ExecuteNonQuery();}
       }
       using(var q=new SQLiteCommand("INSERT INTO stock_audit_log(product_id,product_name,barcode,event_type,quantity_before,quantity_after,quantity_delta,reference_type,reference_id,reason) VALUES(@id,@name,@barcode,'VENDA',@before,@after,@delta,'SALE',@sale,'Baixa de estoque no PDV')",c,tx)){
        q.Parameters.AddWithValue("@id",i.Id);q.Parameters.AddWithValue("@name",i.Name);q.Parameters.AddWithValue("@barcode",i.Barcode);q.Parameters.AddWithValue("@before",before);q.Parameters.AddWithValue("@after",before-i.Qty);q.Parameters.AddWithValue("@delta",-i.Qty);q.Parameters.AddWithValue("@sale",saleId);q.ExecuteNonQuery();

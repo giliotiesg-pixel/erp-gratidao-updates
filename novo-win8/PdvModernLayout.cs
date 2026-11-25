@@ -72,6 +72,69 @@ namespace ArmazemGratidao {
    Rounded(button,10);
   }
 
+  static void ApplyWide(PdvForm form,FlowLayoutPanel header,FlowLayoutPanel footer,Panel listArea,TextBox code,NumericUpDown qty,ComboBox unit,Button add,Button finish,Button edit,Button chooseCustomer,Button fiado,Button remove,Button clear,Button otherPayments,Button newSale,Button whatsApp,Label stats,TextBox customer,TextBox received,Label change,Label discountLabel,ComboBox discountMode,NumericUpDown discountInput,Label total,DataGridView grid){
+   form.SuspendLayout();form.BackColor=Surface;form.MinimumSize=new Size(860,570);
+   var root=new TableLayoutPanel{Name="amzgPdvLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(6),Margin=Padding.Empty};
+   root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   root.RowStyles.Add(new RowStyle(SizeType.Absolute,36));root.RowStyles.Add(new RowStyle(SizeType.Absolute,53));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var brand=new Panel{Name="amzgPdvBrand",Dock=DockStyle.Fill,BackColor=DeepNavy,Margin=Padding.Empty};
+   var title=new Label{Text="Armazém Gratidão - PDV",Dock=DockStyle.Fill,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
+   var more=new Button{Name="amzgPdvMoreOptions",Dock=DockStyle.Right,Width=112};
+   ButtonTheme(more,"☰ Opções",Navy,Color.White,32);more.Name="amzgPdvMoreOptions";
+   var menu=new ContextMenuStrip{Name="amzgPdvMenu",Font=new Font("Segoe UI",10)};
+   foreach(string name in new[]{"Clientes","Calculadora","Editar Qtd. / Preço","Remover Item","Excluir Todos","Fiado","Outras Formas","Nova Venda","Enviar WhatsApp"}){
+    string action=name;menu.Items.Add(name,null,(sender,args)=>form.RunWideMenu(action));
+   }
+   more.Click+=(sender,args)=>menu.Show(more,new Point(Math.Max(0,more.Width-menu.Width),more.Height));form.FormClosed+=(sender,args)=>menu.Dispose();
+   brand.Controls.Add(title);brand.Controls.Add(more);root.Controls.Add(brand,0,0);
+   var top=new TableLayoutPanel{Name="amzgPdvSearchBar",Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=new Padding(0,3,0,3),BackColor=Pale};
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,63));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,88));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,65));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,37));top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   var backSlot=new Panel{Name="pdvBackSlot",Dock=DockStyle.Fill,Margin=Padding.Empty};top.Controls.Add(backSlot,0,0);
+   code.Name="amzgPdvCodeInput";qty.Name="amzgPdvQtyInput";unit.Name="amzgPdvUnitInput";customer.Name="amzgPdvCustomer";
+   code.Font=new Font("Segoe UI",10.5f);qty.Font=new Font("Segoe UI",10.5f);unit.Font=new Font("Segoe UI",10);
+   customer.Font=new Font("Segoe UI",10,FontStyle.Bold);customer.Cursor=Cursors.Hand;customer.Click+=(sender,args)=>form.RunWideMenu("Clientes");
+   top.Controls.Add(Cell("Código / Nome do produto",code),1,0);top.Controls.Add(Cell("Qtd.",qty),2,0);top.Controls.Add(Cell("UN",unit),3,0);top.Controls.Add(Cell("Código / Cliente",customer),4,0);root.Controls.Add(top,0,1);
+   var main=new TableLayoutPanel{Name="amzgPdvMain",Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};
+   main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   listArea.Name="amzgPdvItemBox";listArea.Dock=DockStyle.Fill;listArea.Margin=new Padding(0,0,5,0);listArea.Padding=new Padding(1);listArea.BackColor=Color.White;
+   grid.Dock=DockStyle.Fill;grid.BackgroundColor=Color.White;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Navy;grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9,FontStyle.Bold);grid.ColumnHeadersHeight=29;grid.RowTemplate.Height=24;grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;grid.MultiSelect=false;
+   grid.DataBindingComplete+=(sender,args)=>{
+    foreach(DataGridViewColumn col in grid.Columns){
+     col.SortMode=DataGridViewColumnSortMode.NotSortable;
+     switch(col.Name){
+      case "Codigo":col.HeaderText="Código";col.MinimumWidth=102;col.FillWeight=105;break;
+      case "Produto":col.MinimumWidth=120;col.FillWeight=230;break;
+      case "Quantidade":col.HeaderText="Qtd.";col.MinimumWidth=48;col.FillWeight=55;break;
+      case "Unidade":col.HeaderText="UN";col.MinimumWidth=35;col.FillWeight=40;break;
+      case "Preco":col.HeaderText="Preço (R$)";col.MinimumWidth=67;col.FillWeight=85;break;
+      case "Total":col.HeaderText="Total (R$)";col.MinimumWidth=67;col.FillWeight=85;break;
+      case "ExcluirItem":col.Visible=false;break;
+     }
+     if(col.Name=="Preco"||col.Name=="Total"){col.DefaultCellStyle.Format="N2";col.DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;}
+     col.DefaultCellStyle.WrapMode=DataGridViewTriState.False;
+    }
+    grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;foreach(DataGridViewRow r in grid.Rows)r.Height=24;
+   };
+   var listTitle=new Label{Text="Produtos da venda",Dock=DockStyle.Top,Height=29,BackColor=Navy,ForeColor=Color.White,Font=new Font("Segoe UI",11,FontStyle.Bold),Padding=new Padding(8,0,0,0),TextAlign=ContentAlignment.MiddleLeft};
+   listArea.Controls.Add(listTitle);listTitle.BringToFront();main.Controls.Add(listArea,0,0);
+   var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=new Padding(3,0,0,0)};
+   side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,75));side.RowStyles.Add(new RowStyle(SizeType.Absolute,66));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));side.RowStyles.Add(new RowStyle(SizeType.Absolute,105));side.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+   received.Name="amzgPdvReceived";received.Font=new Font("Segoe UI",19,FontStyle.Bold);
+   var summary=Cell("Recebido (R$)",received);summary.Name="amzgPdvSummary";summary.BackColor=Pale;side.Controls.Add(summary,0,0);
+   change.Name="amzgPdvChange";change.AutoSize=false;change.Dock=DockStyle.Fill;change.Font=new Font("Segoe UI",15,FontStyle.Bold);change.TextAlign=ContentAlignment.MiddleCenter;change.BackColor=Pale;side.Controls.Add(change,0,1);
+   var totalFrame=new Panel{Name="amzgPdvTotalFrame",Dock=DockStyle.Fill,BackColor=DeepNavy,Margin=new Padding(3)};
+   var totalTitle=new Label{Text="TOTAL DA VENDA (R$)",Dock=DockStyle.Top,Height=29,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
+   total.Name="amzgPdvTotal";total.AutoSize=false;total.Dock=DockStyle.Fill;total.BackColor=DeepNavy;total.ForeColor=Color.White;total.Font=new Font("Segoe UI",26,FontStyle.Bold);total.TextAlign=ContentAlignment.MiddleCenter;total.AutoEllipsis=true;
+   totalFrame.Controls.Add(total);totalFrame.Controls.Add(totalTitle);side.Controls.Add(totalFrame,0,3);Rounded(totalFrame,9);
+   ButtonTheme(finish,"Finalizar Venda",Red,Color.White,44);finish.Name="amzgPdvFinish";finish.Dock=DockStyle.Fill;finish.Margin=new Padding(3);side.Controls.Add(finish,0,4);
+   main.Controls.Add(side,1,0);root.Controls.Add(main,0,2);
+   var hidden=new Panel{Name="amzgPdvHiddenState",Visible=false,Size=new Size(1,1)};
+   foreach(Control c in new Control[]{add,edit,chooseCustomer,fiado,remove,clear,otherPayments,newSale,whatsApp,stats,discountLabel,discountMode,discountInput})hidden.Controls.Add(c);
+   add.Name="amzgPdvAddProduct";edit.Name="amzgPdvEdit";fiado.Name="amzgPdvFiado";otherPayments.Name="amzgPdvOtherPayments";newSale.Name="amzgPdvNewSale";whatsApp.Name="amzgPdvWhatsApp";stats.Name="amzgPdvSaleStats";
+   form.Controls.Remove(header);form.Controls.Remove(footer);header.Dispose();footer.Dispose();form.Controls.Add(hidden);form.Controls.Add(root);root.BringToFront();
+   var suggestion=form.Controls.Find("pdvSuggestions",true);if(suggestion.Length>0)suggestion[0].BringToFront();form.ResumeLayout(true);
+  }
+
   public static void Apply(PdvForm form,FlowLayoutPanel header,FlowLayoutPanel footer,
    Panel listArea,FlowLayoutPanel rapidInventoryBar,
    TextBox code,NumericUpDown qty,ComboBox saleUnit,Button add,
@@ -80,6 +143,7 @@ namespace ArmazemGratidao {
    TextBox customer,TextBox received,Label changeLabel,
    Label discountLabel,ComboBox discountMode,NumericUpDown discountInput,Label total,
    DataGridView grid,DataGridView stockView,bool manualEntry){
+   if(!manualEntry){ApplyWide(form,header,footer,listArea,code,qty,saleUnit,add,finish,edit,chooseCustomer,openFiado,remove,clear,otherPayments,newSale,whatsApp,saleStats,customer,received,changeLabel,discountLabel,discountMode,discountInput,total,grid);return;}
    form.SuspendLayout();
    form.BackColor=Surface;
    form.MinimumSize=new Size(860,570);
