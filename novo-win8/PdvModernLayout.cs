@@ -82,7 +82,7 @@ namespace ArmazemGratidao {
    var more=new Button{Name="amzgPdvMoreOptions",Dock=DockStyle.Right,Width=112};
    ButtonTheme(more,"☰ Opções",Navy,Color.White,32);more.Name="amzgPdvMoreOptions";
    var menu=new ContextMenuStrip{Name="amzgPdvMenu",Font=new Font("Segoe UI",10)};
-   foreach(string name in new[]{"Clientes","Calculadora","Editar Qtd. / Preço","Remover Item","Excluir Todos","Fiado","Outras Formas","Nova Venda","Enviar WhatsApp"}){
+   foreach(string name in new[]{"Clientes","Calculadora","Editar Qtd. / Preço","Remover Item","Remover todos","Fiado","Outras Formas","Nova Venda","Enviar WhatsApp"}){
     string action=name;menu.Items.Add(name,null,(sender,args)=>form.RunWideMenu(action));
    }
    more.Click+=(sender,args)=>menu.Show(more,new Point(Math.Max(0,more.Width-menu.Width),more.Height));form.FormClosed+=(sender,args)=>menu.Dispose();
@@ -140,6 +140,11 @@ namespace ArmazemGratidao {
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
     foreach(DataGridViewRow r in grid.Rows)r.Height=24;
    };
+   var delete=new DataGridViewButtonColumn{Name="ExcluirItem",HeaderText="Excluir",Text="×",UseColumnTextForButtonValue=true,AutoSizeMode=DataGridViewAutoSizeColumnMode.None,Width=52,MinimumWidth=45,FlatStyle=FlatStyle.Flat,SortMode=DataGridViewColumnSortMode.NotSortable};
+   delete.DefaultCellStyle.BackColor=Color.FromArgb(255,237,240);
+   delete.DefaultCellStyle.ForeColor=Red;
+   delete.DefaultCellStyle.Font=new Font("Segoe UI",12,FontStyle.Bold);
+   grid.Columns.Add(delete);
    // Duas linhas independentes garantem que o título nunca cubra o cabeçalho.
    var listLayout=new TableLayoutPanel{Name="amzgPdvGridLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
    listLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));

@@ -1,4 +1,4 @@
-param(
+﻿param(
  [Parameter(Mandatory=$true)][string]$Executable,
  [Parameter(Mandatory=$true)][string]$PreviewFile
 )
@@ -134,11 +134,11 @@ try{
  # Cabeçalhos e largura são obrigatórios mesmo sem itens ou com apenas um produto.
  $assertGrid={
   if(!$grid.ColumnHeadersVisible -or $grid.ColumnHeadersHeight -lt 34 -or $grid.CellBorderStyle -ne [Windows.Forms.DataGridViewCellBorderStyle]::None){throw 'Cabecalho ausente/baixo ou linhas de grade indevidas'}
-  $expected=@('Codigo','Produto','Unidade','Quantidade','Preco','Total')
+  $expected=@('Codigo','Produto','Unidade','Quantidade','Preco','Total','ExcluirItem')
   $visible=@($grid.Columns | Where-Object {$_.Visible} | Sort-Object DisplayIndex)
   if(($visible.Name -join ',') -ne ($expected -join ',')){throw 'Colunas obrigatorias ausentes ou fora da ordem'}
-  $captions=@('Código de barras','Descrição do produto','Un.','Qtd.','Valor unit. (R$)','Total (R$)')
-  if(($visible.HeaderText -join '|') -ne ($captions -join '|')){throw 'Titulos de colunas incorretos'}
+  $captions=@(('C'+[char]0x00f3+'digo de barras'),('Descri'+[char]0x00e7+[char]0x00e3+'o do produto'),'Un.','Qtd.','Valor unit. (R$)','Total (R$)','Excluir')
+  if(($visible.HeaderText -join '|') -ne ($captions -join '|')){throw "Titulos de colunas incorretos: [$($visible.HeaderText -join '|')] esperado [$($captions -join '|')]"}
   $sum=($visible | Measure-Object -Property Width -Sum).Sum
   if($sum -lt ($grid.ClientSize.Width-25) -or $sum -gt ($grid.ClientSize.Width+2)){throw "Colunas nao preenchem a largura: $sum / $($grid.ClientSize.Width)"}
   $title=& $find 'amzgPdvListTitle'
@@ -276,6 +276,11 @@ try{
   $itemType.GetField([string]$entry[0]).SetValue($item,$entry[1])
  }
  $cart.Add($item)
+ $item2=[Activator]::CreateInstance($itemType,$true)
+ foreach($entry in @(@('Id',[long]3),@('Name','Arroz 5 kg'),@('Barcode','7890000000003'),@('InternalCode','3'),@('Qty',[decimal]1),@('Price',[decimal]25),@('Cost',[decimal]15),@('Unit','UN'))){
+  $itemType.GetField([string]$entry[0]).SetValue($item2,$entry[1])
+ }
+ $cart.Add($item2)
  $pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
  $grid.CurrentCell=$grid.Rows[0].Cells['Produto']
  $edit=$pdvType.GetMethod('EditSelected',$private)
@@ -287,21 +292,29 @@ try{
   if(!$dlg){return}
   $editTimer.Stop()
   try{
-   $q=$dlg.Controls.Find('amzgEditQty',$true)[0];$p=$dlg.Controls.Find('amzgEditPrice',$true)[0]
-   $d=$dlg.Controls.Find('amzgEditDiscount',$true)[0];$save=$dlg.Controls.Find('amzgEditSave',$true)[0]
-   if($d.Visible){throw 'Desconto deve iniciar oculto'}
-   $q.Value=[decimal]3;$p.Value=[decimal]12.5;$d.Value=[decimal]2.5
+   $table=$dlg.Controls.Find('amzgEditCartGrid',$true)[0];$save=$dlg.Controls.Find('amzgEditCartSave',$true)[0]
+   if($table.Rows.Count -ne 2){throw 'Editor deve listar todos os produtos do carrinho'}
+   $table.EndEdit()|Out-Null
+   $table.Rows[0].Cells['Quantidade'].Value=[decimal]3
+   $table.Rows[0].Cells['Preco'].Value=[decimal]12.5
+   $table.Rows[0].Cells['Desconto'].Value=[decimal]2.5
+   $table.Rows[1].Cells['Produto'].Value='Arroz corrigido 5 kg'
+   $table.Rows[1].Cells['Tipo'].Value='%'
+   $table.Rows[1].Cells['Desconto'].Value=[decimal]10
    $save.PerformClick();$script:editDone=$true
   }catch{$script:editError=$_.Exception.Message;$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
  })
  try{$editTimer.Start();$edit.Invoke($pdv,$null)|Out-Null}finally{$editTimer.Stop();$editTimer.Dispose()}
  if($script:editError){throw $script:editError}
  if(!$script:editDone -or $itemType.GetField('Price').GetValue($item) -ne [decimal]12.5 -or $itemType.GetProperty('Total').GetValue($item,$null) -ne [decimal]35){throw 'Edicao do carrinho ou desconto incorretos'}
+ if($itemType.GetProperty('Total').GetValue($item2,$null) -ne [decimal]22.5 -or $itemType.GetField('Name').GetValue($item2) -ne 'Arroz corrigido 5 kg'){throw 'Segundo produto nao foi atualizado'}
+ if(!($grid.Columns['ExcluirItem'] -is [Windows.Forms.DataGridViewButtonColumn])){throw 'Botao de exclusao individual ausente'}
  $check=@'
 import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
 assert c.execute("SELECT price,stock FROM products WHERE id=1").fetchone()==(12.5,100)
 assert c.execute("SELECT previous_price,new_price FROM product_price_audit WHERE product_id=1").fetchone()==(10,12.5)
+assert c.execute("SELECT name,price,stock FROM products WHERE id=3").fetchone()==("Arroz corrigido 5 kg",25,100)
 c.close()
 '@
  $check | python - $database

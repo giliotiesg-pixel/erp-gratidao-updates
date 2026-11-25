@@ -209,7 +209,7 @@ namespace ArmazemGratidao {
     case "Calculadora":CalculatorShortcut.Open();break;
     case "Editar Qtd. / Preço":EditSelected();break;
     case "Remover Item":RemoveSelected();break;
-    case "Excluir Todos":ClearCart();break;
+    case "Remover todos":case "Excluir Todos":ClearCart();break;
     case "Fiado":OpenFiadoFromPdv();break;
     case "Outras Formas":if(!finishingSale&&cart.Count>0)paymentPreselected=ShowPaymentChoice();else if(cart.Count==0)MessageBox.Show("Adicione produtos à venda.");break;
     case "Nova Venda":StartNewSale();break;
@@ -1359,7 +1359,146 @@ namespace ArmazemGratidao {
     dialog.Controls.AddRange(new Control[]{hint,item,registered});dialog.ShowDialog(this);
    }
   }
+  sealed class CartEditLine {
+   public Item Item;public string Name,Unit;public decimal Qty,Price,Discount;
+   public decimal Gross {get{return Math.Round(Qty*Price,2,MidpointRounding.AwayFromZero);}}
+  }
+  void EditCartProducts(){
+   if(finishingSale)return;
+   if(cart.Count==0){MessageBox.Show("Adicione produtos ao carrinho.");return;}
+   try{
+    var original=cart.ToList();
+    var registered=new Dictionary<long,Tuple<string,decimal>>();
+    using(var conn=Open())foreach(var item in original.GroupBy(x=>x.Id).Select(g=>g.First())){
+     using(var q=new SQLiteCommand("SELECT name,price FROM products WHERE id=@id",conn)){
+      q.Parameters.AddWithValue("@id",item.Id);
+      using(var rd=q.ExecuteReader()){
+       if(!rd.Read())throw new Exception("Produto não encontrado: "+item.Name);
+       registered[item.Id]=Tuple.Create(Convert.ToString(rd[0]),Dec(rd[1]));
+      }
+     }
+    }
+    using(var dlg=new StyledDialogForm{Text="Editar produto da venda",Width=1250,Height=690,MinimumSize=new Size(740,450),StartPosition=FormStartPosition.CenterParent,BackColor=Color.White}){
+     var table=new DataGridView{Name="amzgEditCartGrid",Dock=DockStyle.Fill,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.CellSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,ScrollBars=ScrollBars.Both,EditMode=DataGridViewEditMode.EditOnEnter,BackgroundColor=Color.White};
+     string[] fields={"Codigo","Interno","Produto","Unidade","Quantidade","Preco","Tipo","Desconto","Total"};
+     string[] titles={"Código de barras","Cód. interno","Descrição do produto","Un.","Quantidade","Valor unit. (R$)","Desconto R$/%","Valor desconto","Total (R$)"};
+     int[] min={115,65,175,48,78,90,82,90,90};float[] weights={14,8,25,5,9,10,9,10,10};
+     for(int i=0;i<fields.Length;i++){
+      DataGridViewColumn col;
+      if(i==3||i==6){
+       var combo=new DataGridViewComboBoxColumn{DisplayStyle=DataGridViewComboBoxDisplayStyle.DropDownButton,FlatStyle=FlatStyle.Flat};
+       combo.Items.AddRange(i==3?new object[]{"UN","KG"}:new object[]{"R$","%"});col=combo;
+      }else col=new DataGridViewTextBoxColumn();
+      col.Name=fields[i];col.HeaderText=titles[i];col.MinimumWidth=min[i];col.FillWeight=weights[i];col.SortMode=DataGridViewColumnSortMode.NotSortable;
+      col.ReadOnly=i==0||i==1||i==8;
+      if(!col.ReadOnly)col.DefaultCellStyle.BackColor=Color.FromArgb(255,250,225);
+      if(i==4)col.DefaultCellStyle.Format="0.###";
+      if(i==5||i==7||i==8)col.DefaultCellStyle.Format="N2";
+      table.Columns.Add(col);
+     }
+     table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;table.ColumnHeadersHeight=42;table.RowTemplate.Height=30;
+     foreach(var item in original)table.Rows.Add(item.Barcode,item.InternalCode,item.Name,item.Unit,item.Qty,item.Price,"R$",item.LineDiscount,item.Total);
+     var hint=new Label{Text="Edite as células amarelas. Preço e descrição atualizam o cadastro; quantidade, unidade e desconto valem para a venda atual.",Dock=DockStyle.Top,Height=52,Padding=new Padding(9),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=54,WrapContents=false,Padding=new Padding(8,4,4,4)};
+     var save=new Button{Name="amzgEditCartSave",Text="Salvar alterações",Width=185,Height=36,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+     var cancel=new Button{Text="Cancelar",Width=110,Height=36,DialogResult=DialogResult.Cancel};
+     var summary=new Label{Name="amzgEditCartTotal",AutoSize=true,Padding=new Padding(12,9,0,0),Font=new Font("Segoe UI",12,FontStyle.Bold)};
+     footer.Controls.Add(save);footer.Controls.Add(cancel);footer.Controls.Add(summary);
+     Func<DataGridViewRow,string,decimal> number=(row,key)=>{
+      object v=row.Cells[key].Value;
+      if(v is decimal)return (decimal)v;
+      decimal n;if(!decimal.TryParse(Convert.ToString(v),NumberStyles.Number,CultureInfo.CurrentCulture,out n))throw new Exception("Valor inválido em "+key+".");
+      return n;
+     };
+     Func<DataGridViewRow,decimal> gross=row=>Math.Round(number(row,"Quantidade")*number(row,"Preco"),2,MidpointRounding.AwayFromZero);
+     Func<DataGridViewRow,decimal> amount=row=>Convert.ToString(row.Cells["Tipo"].Value)=="%"?Math.Round(gross(row)*number(row,"Desconto")/100m,2,MidpointRounding.AwayFromZero):number(row,"Desconto");
+     bool refreshing=false;
+     Action refresh=()=>{
+      if(refreshing)return;refreshing=true;
+      try{
+       decimal net=0m;
+       foreach(DataGridViewRow row in table.Rows){decimal value=gross(row)-amount(row);row.Cells["Total"].Value=value;net+=value;}
+       decimal general=discountPercent?Math.Round(net*discountValue/100m,2,MidpointRounding.AwayFromZero):discountValue;
+       summary.Text="Total da venda: R$ "+Math.Max(0,net-Math.Min(net,general)).ToString("N2",CultureInfo.GetCultureInfo("pt-BR"));
+      }catch{summary.Text="Confira os valores informados.";}finally{refreshing=false;}
+     };
+     table.CellValueChanged+=(sender,args)=>{if(args.RowIndex>=0&&args.ColumnIndex>=0&&table.Columns[args.ColumnIndex].Name!="Total")refresh();};
+     table.CurrentCellDirtyStateChanged+=(sender,args)=>{if(table.IsCurrentCellDirty&&table.CurrentCell is DataGridViewComboBoxCell)table.CommitEdit(DataGridViewDataErrorContexts.Commit);};
+     table.DataError+=(sender,args)=>{args.ThrowException=false;};
+     refresh();
+     save.Click+=(sender,args)=>{
+      try{
+       if(!table.EndEdit())throw new Exception("Corrija a célula em edição.");
+       var edits=new List<CartEditLine>();
+       for(int i=0;i<table.Rows.Count;i++){
+        var row=table.Rows[i];var item=original[i];
+        string name=Convert.ToString(row.Cells["Produto"].Value).Trim(),unit=Convert.ToString(row.Cells["Unidade"].Value);
+        decimal qtyNew=number(row,"Quantidade"),price=number(row,"Preco"),discount=number(row,"Desconto");
+        if(name.Length==0||qtyNew<=0||qtyNew>999999m||Math.Round(qtyNew,3)!=qtyNew||price<=0||price>99999999m||Math.Round(price,2)!=price||discount<0||(unit!="UN"&&unit!="KG")||(unit=="UN"&&qtyNew!=decimal.Truncate(qtyNew)))throw new Exception("Quantidade, unidade, descrição ou preço inválido: "+name);
+        if(Convert.ToString(row.Cells["Tipo"].Value)=="%"&&discount>100m)throw new Exception("Desconto percentual inválido: "+name);
+        decimal d=amount(row);
+        if(d>=gross(row))throw new Exception("O desconto deve ser menor que o total do produto: "+name);
+        edits.Add(new CartEditLine{Item=item,Name=name,Unit=unit,Qty=qtyNew,Price=price,Discount=d});
+       }
+       var changes=new Dictionary<long,Tuple<string,decimal>>();
+       foreach(var group in edits.GroupBy(x=>x.Item.Id)){
+        var names=group.Where(x=>x.Name!=x.Item.Name).Select(x=>x.Name).Distinct().ToList();
+        var prices=group.Where(x=>x.Price!=x.Item.Price).Select(x=>x.Price).Distinct().ToList();
+        if(names.Count>1||prices.Count>1)throw new Exception("Use a mesma descrição e preço para linhas do mesmo produto.");
+        if(group.Select(x=>x.Unit).Distinct().Count()>1)throw new Exception("Use uma única unidade para "+group.First().Name);
+        var old=registered[group.Key];
+        if(names.Count>0||prices.Count>0){
+         var next=Tuple.Create(names.Count>0?names[0]:old.Item1,prices.Count>0?prices[0]:old.Item2);
+         foreach(var entry in group){
+          if(names.Count>0)entry.Name=next.Item1;
+          if(prices.Count>0)entry.Price=next.Item2;
+          if(entry.Discount>=entry.Gross)throw new Exception("Confira o desconto de "+entry.Name);
+         }
+         if(next.Item1!=old.Item1||next.Item2!=old.Item2)changes[group.Key]=next;
+        }
+       }
+       using(var conn=Open()){
+        if(changes.Count>0){
+         string backup=db+".antes-editar-carrinho-pdv-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".db";
+         using(var copy=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=backup}.ToString())){copy.Open();conn.BackupDatabase(copy,"main","main",-1,null,0);}
+        }
+        using(var tx=conn.BeginTransaction()){
+         foreach(var group in edits.GroupBy(x=>x.Item.Id)){
+          using(var q=new SQLiteCommand("SELECT stock FROM products WHERE id=@id",conn,tx)){
+           q.Parameters.AddWithValue("@id",group.Key);object value=q.ExecuteScalar();
+           if(value==null||value==DBNull.Value)throw new Exception("Produto não encontrado.");
+           if(group.Sum(x=>x.Qty)>Dec(value)&&group.Sum(x=>x.Qty)>group.Sum(x=>x.Item.Qty))throw new Exception("Estoque insuficiente para "+group.First().Name+". Confira o estoque antes de aumentar a quantidade.");
+          }
+         }
+         foreach(var change in changes){
+          var old=registered[change.Key];var next=change.Value;
+          using(var q=new SQLiteCommand("UPDATE products SET name=@name,price=@price WHERE id=@id AND name=@oldName AND price=@oldPrice",conn,tx)){
+           q.Parameters.AddWithValue("@name",next.Item1);q.Parameters.AddWithValue("@price",next.Item2);q.Parameters.AddWithValue("@id",change.Key);q.Parameters.AddWithValue("@oldName",old.Item1);q.Parameters.AddWithValue("@oldPrice",old.Item2);
+           if(q.ExecuteNonQuery()!=1)throw new Exception("Cadastro mudou em outra janela. Reabra o editor.");
+          }
+          if(old.Item2!=next.Item2){
+           using(var q=new SQLiteCommand("CREATE TABLE IF NOT EXISTS product_price_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_price NUMERIC NOT NULL,new_price NUMERIC NOT NULL,changed_at TEXT NOT NULL,origin TEXT NOT NULL)",conn,tx))q.ExecuteNonQuery();
+           using(var q=new SQLiteCommand("INSERT INTO product_price_audit(product_id,previous_price,new_price,changed_at,origin) VALUES(@id,@old,@new,datetime('now','localtime'),'PDV')",conn,tx)){
+            q.Parameters.AddWithValue("@id",change.Key);q.Parameters.AddWithValue("@old",old.Item2);q.Parameters.AddWithValue("@new",next.Item2);q.ExecuteNonQuery();
+           }
+          }
+         }
+         tx.Commit();
+        }
+       }
+       foreach(var entry in edits){entry.Item.Name=entry.Name;entry.Item.Price=entry.Price;entry.Item.Qty=entry.Qty;entry.Item.Unit=entry.Unit;entry.Item.LineDiscount=entry.Discount;}
+       Render();dlg.DialogResult=DialogResult.OK;
+      }catch(Exception ex){MessageBox.Show(dlg,"Alterações não gravadas: "+ex.Message,"Editar produtos",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+     };
+     dlg.CancelButton=cancel;dlg.Controls.Add(table);dlg.Controls.Add(hint);dlg.Controls.Add(footer);
+     int selected=grid.CurrentRow==null?0:Math.Max(0,grid.CurrentRow.Index);
+     dlg.Shown+=(sender,args)=>{if(selected<table.Rows.Count){table.CurrentCell=table.Rows[selected].Cells["Quantidade"];table.Focus();}};
+     dlg.ShowDialog(this);
+    }
+   }catch(Exception ex){MessageBox.Show("Não foi possível abrir o editor: "+ex.Message);}
+  }
   void EditSelected(){
+   if(!manualEntry){EditCartProducts();return;}
    if(grid.CurrentRow==null||grid.CurrentRow.Index<0||grid.CurrentRow.Index>=cart.Count){MessageBox.Show("Selecione um produto do carrinho.");return;}
    var item=cart[grid.CurrentRow.Index];
    try{
