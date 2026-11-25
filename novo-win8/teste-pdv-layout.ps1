@@ -134,6 +134,16 @@ try{
   if(!$input.Visible -or $input.PointToScreen([Drawing.Point]::Empty).X -lt $actions.PointToScreen([Drawing.Point]::Empty).X){throw "Campo oculto ou fora da lateral: $name"}
  }
  if($search.Bottom -gt $entryArea.ClientSize.Height){throw 'Campos de entrada cortados'}
+ $entryBottom=$entryArea.PointToScreen([Drawing.Point]::Empty).Y+$entryArea.Height
+ $totalTop=$total.Parent.PointToScreen([Drawing.Point]::Empty).Y
+ $totalBottom=$totalTop+$total.Parent.Height
+ $finishTop=$finish.PointToScreen([Drawing.Point]::Empty).Y
+ if(($totalTop-$entryBottom) -lt 0 -or ($totalTop-$entryBottom) -gt 12 -or ($finishTop-$totalBottom) -lt 0 -or ($finishTop-$totalBottom) -gt 12){throw 'Espaco excessivo entre campos, total e finalizar'}
+ if($entryArea.Height -gt 170){throw 'Painel de entrada nao esta compacto'}
+ foreach($name in @('amzgPdvCodeInput','amzgPdvQtyInput','amzgPdvUnitInput','amzgPdvCustomer')){
+  $input=& $find $name
+  if($input.Bottom -gt $input.Parent.ClientSize.Height){throw "Campo cortado: $name"}
+ }
  if($finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions -or $actions.Controls.Count -ne 3){throw 'Campos, total e finalizar devem estar na lateral direita'}
  if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
  if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
