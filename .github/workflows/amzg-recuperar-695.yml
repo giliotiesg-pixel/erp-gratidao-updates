@@ -1,0 +1,95 @@
+name: AMZG - recuperar publicacao validada 695
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/amzg-recuperar-695.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: amzg-recuperar-695
+  cancel-in-progress: false
+jobs:
+  recuperar:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recuperar artefato da compilacao aprovada
+        uses: actions/download-artifact@v4
+        with:
+          name: Armazem-Gratidao-Unico-verificado
+          run-id: 45521543640
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Revalidar o ZIP integral
+        shell: powershell
+        run: .\novo-win8\validar-pacote-oficial.ps1 -Dist dist
+      - name: Validar rascunho pelo ID e concluir publicacao
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='amzg-novo-win8-build-695'
+          $expectedCommit='d351128f7f799ba5aa5f2353979846105c3af896'
+          $id=457515742
+          $m=Get-Content dist/manifesto-proposto.json -Raw | ConvertFrom-Json
+          $zipSha=(Get-FileHash dist/Armazem-Gratidao-Atualizacao.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $updSha=(Get-FileHash dist/AtualizadorGratidao.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($m.build -ne 695 -or $m.tag -ne $tag -or $m.sha256 -ne $zipSha){throw 'Artefato nao corresponde a build 695.'}
+          $ref=gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $ref.object.sha -ne $expectedCommit){throw 'Tag nao corresponde ao commit aprovado.'}
+          function Get-VerifiedRelease {
+            $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases/$id"
+            if($LASTEXITCODE -ne 0){throw 'Falha ao consultar release pelo ID.'}
+            $r=$raw | ConvertFrom-Json
+            if($r.tag_name -ne $tag -or $r.prerelease){throw 'Release divergente.'}
+            $z=@($r.assets | Where-Object {$_.name -eq $m.asset -and $_.state -eq 'uploaded'})
+            $u=@($r.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
+            if($z.Count -ne 1 -or $u.Count -ne 1 -or $z[0].digest -ne "sha256:$zipSha" -or $u[0].digest -ne "sha256:$updSha"){throw 'Digest do rascunho diverge do artefato homologado.'}
+            return $r
+          }
+          $release=Get-VerifiedRelease
+          if($release.draft){
+            gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/$id" -F draft=false -f make_latest=true | Out-Null
+            if($LASTEXITCODE -ne 0){throw 'Falha ao publicar rascunho homologado.'}
+          }
+          for($i=1;$i -le 6;$i++){
+            $release=Get-VerifiedRelease
+            if(!$release.draft){break}
+            Start-Sleep -Seconds 2
+          }
+          $z=@($release.assets | Where-Object {$_.name -eq $m.asset})
+          if($release.draft -or $z[0].browser_download_url -ne $m.url){throw 'Release ainda nao esta publico com URL definitiva.'}
+          $manifestText=Get-Content dist/manifesto-proposto.json -Raw
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for($attempt=1;$attempt -le 6;$attempt++){
+            git fetch origin main
+            if($LASTEXITCODE -ne 0){throw 'Falha ao buscar main.'}
+            git reset --hard origin/main
+            if($LASTEXITCODE -ne 0){throw 'Falha ao sincronizar checkout.'}
+            $current=Get-Content atualizacao-novo-win8-pacote.json -Raw | ConvertFrom-Json
+            if($current.build -gt 695){Write-Host 'Versao superior ja publicada.';exit 0}
+            if($current.build -eq 695){
+              if($current.sha256 -ne $zipSha -or $current.url -ne $m.url){throw 'Manifesto 695 divergente.'}
+              Write-Host 'Build 695 ja sincronizada.';exit 0
+            }
+            [IO.File]::WriteAllText((Join-Path $PWD 'atualizacao-novo-win8-pacote.json'),$manifestText,[Text.UTF8Encoding]::new($false))
+            $currentVersion=(Get-Content novo-win8/VERSAO.txt -Raw).Trim()
+            if([version]$currentVersion -le [version]'1.4.695'){'1.4.695' | Set-Content novo-win8/VERSAO.txt -Encoding ASCII}
+            git add atualizacao-novo-win8-pacote.json novo-win8/VERSAO.txt
+            git commit -m "Sincronizar manifesto oficial da build 695 homologada"
+            if($LASTEXITCODE -ne 0){throw 'Falha ao registrar manifesto.'}
+            git push origin HEAD:main
+            if($LASTEXITCODE -eq 0){
+              $remote=gh api "repos/$env:GITHUB_REPOSITORY/contents/atualizacao-novo-win8-pacote.json?ref=main" | ConvertFrom-Json
+              if($LASTEXITCODE -ne 0){throw 'Falha ao conferir manifesto remoto.'}
+              $rm=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($remote.content)) | ConvertFrom-Json
+              if($rm.build -ne 695 -or $rm.sha256 -ne $zipSha -or $rm.url -ne $m.url){throw 'Manifesto remoto divergente.'}
+              Write-Host 'BUILD 695 PUBLICADA E MANIFESTO CONFIRMADO';exit 0
+            }
+            Start-Sleep -Seconds 3
+          }
+          throw 'Falha ao sincronizar manifesto.'

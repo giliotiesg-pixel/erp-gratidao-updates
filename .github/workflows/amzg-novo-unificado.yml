@@ -48,8 +48,9 @@ jobs:
           $manifest=Get-Content atualizacao-novo-win8-pacote.json -Raw | ConvertFrom-Json
           $highest=[int]$manifest.build
           for($page=1;;$page++){
-            $items=@(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page" | ConvertFrom-Json)
+            $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page"
             if($LASTEXITCODE -ne 0){throw 'Falha ao listar releases.'}
+            $items=$raw | ConvertFrom-Json -NoEnumerate
             foreach($item in $items){if($item.tag_name -match '^amzg-novo-win8-build-([0-9]+)$'){$highest=[Math]::Max($highest,[int]$Matches[1])}}
             if($items.Count -lt 100){break}
           }
@@ -414,7 +415,7 @@ jobs:
           "AMZG_VERSION=$($m.version)" >> $env:GITHUB_ENV
           "$($m.version).$($m.build)" | Set-Content novo-win8/VERSAO.txt -Encoding ASCII
       - name: Publicar somente os arquivos verificados no release
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           $tag="amzg-novo-win8-build-$env:AMZG_BUILD"
@@ -430,27 +431,50 @@ jobs:
           if($sha -ne $manifest.sha256){throw 'SHA-256 incorreto, nao publicar.'}
           $tagRef=gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" | ConvertFrom-Json
           if($LASTEXITCODE -ne 0 -or $tagRef.object.sha -ne $env:GITHUB_SHA){throw 'Tag reservada nao corresponde ao codigo testado.'}
+          # Trabalhar com o ID retornado pela API de criacao; nao procurar
+          # o rascunho recem-criado em uma listagem eventualmente desatualizada.
           function Find-Release {
-            $found=@()
             for($page=1;;$page++){
-              $items=@(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page" | ConvertFrom-Json)
+              $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page"
               if($LASTEXITCODE -ne 0){throw 'Falha ao consultar releases.'}
-              $found+=@($items | Where-Object {$_.tag_name -eq $tag})
+              $items=$raw | ConvertFrom-Json -NoEnumerate
+              foreach($item in $items){if($item.tag_name -eq $tag){$item}}
               if($items.Count -lt 100){break}
             }
-            return $found
           }
           $existing=@(Find-Release)
           if($existing.Count -gt 1){throw 'Release duplicado.'}
-          if($existing.Count -eq 0){
-            gh release create $tag $zip $updater --title "Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" --notes "Atualizacao ZIP oficial. Backup completo obrigatorio e rollback." --draft --verify-tag
+          if($existing.Count -eq 1){
+            $id=$existing[0].id
+          }else{
+            $raw=gh api --method POST "repos/$env:GITHUB_REPOSITORY/releases" -f tag_name="$tag" -f target_commitish="$env:GITHUB_SHA" -f name="Armazem Gratidao v$env:AMZG_VERSION (build $env:AMZG_BUILD)" -f body="Atualizacao ZIP oficial. Backup completo obrigatorio e rollback." -F draft=true -F prerelease=false
             if($LASTEXITCODE -ne 0){throw 'Falha ao criar release rascunho.'}
+            $created=$raw | ConvertFrom-Json
+            $id=$created.id
           }
-          $published=@(Find-Release)
-          if($published.Count -ne 1){throw 'Release rascunho ausente ou duplicado.'}
-          $published=$published[0]
-          # Find-Release ja valida cada comando gh dentro da propria funcao.
+          if(!$id){throw 'API nao retornou ID do release.'}
+          function Read-ReleaseById {
+            $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases/$id"
+            if($LASTEXITCODE -ne 0){throw 'Falha ao consultar release pelo ID.'}
+            $raw | ConvertFrom-Json
+          }
+          $published=Read-ReleaseById
           if($published.prerelease -or $published.tag_name -ne $tag){throw 'Release nao confirmado.'}
+          # Nunca sobrescrever arquivos publicados. Em rascunho, anexar somente ausentes.
+          foreach($file in @($zip,$updater)){
+            $name=Split-Path $file -Leaf
+            $present=@($published.assets | Where-Object {$_.name -eq $name})
+            if($present.Count -gt 1){throw "Anexo duplicado: $name"}
+            if($present.Count -eq 0){
+              if(!$published.draft){throw "Release publicado incompleto: $name"}
+              $upload=$published.upload_url -replace '\{\?name,label\}$',''
+              if($upload -ne "https://uploads.github.com/repos/$env:GITHUB_REPOSITORY/releases/$id/assets"){throw 'URL de upload invalida.'}
+              $uploadUrl=$upload+'?name='+[Uri]::EscapeDataString($name)
+              gh api --method POST "$uploadUrl" -H 'Content-Type: application/octet-stream' --input "$file" | Out-Null
+              if($LASTEXITCODE -ne 0){throw "Falha no envio de $name"}
+            }
+          }
+          $published=Read-ReleaseById
           $publishedZip=@($published.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           $publishedUpdater=@($published.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
           $updaterSha=(Get-FileHash $updater -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -467,12 +491,15 @@ jobs:
             $raw=gh api "repos/$env:GITHUB_REPOSITORY/releases/$($published.id)"
             if($LASTEXITCODE -ne 0){throw 'Falha ao consultar release pelo ID.'}
             $public=$raw | ConvertFrom-Json
-            if(!$public.draft -and !$public.prerelease -and $public.tag_name -eq $tag){break}
+            $readyZip=@($public.assets | Where-Object {$_.name -eq $manifest.asset -and $_.browser_download_url -eq $manifest.url})
+            if(!$public.draft -and !$public.prerelease -and $public.tag_name -eq $tag -and $readyZip.Count -eq 1){break}
             Start-Sleep -Seconds 2
           }
           if($null -eq $public -or $public.draft -or $public.prerelease -or $public.tag_name -ne $tag){throw 'Release oficial nao confirmado.'}
           $publicZip=@($public.assets | Where-Object {$_.name -eq $manifest.asset -and $_.state -eq 'uploaded'})
           if($publicZip.Count -ne 1 -or $publicZip[0].browser_download_url -ne $manifest.url -or $publicZip[0].digest -ne "sha256:$sha"){throw 'URL definitiva ou SHA-256 do release divergente.'}
+          $publicUpdater=@($public.assets | Where-Object {$_.name -eq 'AtualizadorGratidao.exe' -and $_.state -eq 'uploaded'})
+          if($publicUpdater.Count -ne 1 -or $publicUpdater[0].digest -ne "sha256:$updaterSha"){throw 'Atualizador publicado divergente.'}
           $manifestText=Get-Content dist/manifesto-proposto.json -Raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

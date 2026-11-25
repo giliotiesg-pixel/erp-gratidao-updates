@@ -39,7 +39,7 @@ if($workflow.Contains("github.event_name == 'push' ||")){
 }
 Write-Host "OK: fonte $localVersion build $localBuild; manifesto publicado build $($manifest.build); release so manual."
 
-if(-not $workflow.Contains('--draft --verify-tag') -or -not $workflow.Contains('gh api --method PATCH') -or -not $workflow.Contains('validar-pacote-oficial.ps1')){
+if(-not $workflow.Contains('repos/$env:GITHUB_REPOSITORY/releases" -f tag_name=') -or -not $workflow.Contains('gh api --method PATCH') -or -not $workflow.Contains('validar-pacote-oficial.ps1')){
  throw 'Publicacao precisa homologar artefato e validar rascunho antes de liberar.'
 }
 if(-not $workflow.Contains('git fetch origin main') -or -not $workflow.Contains('git push origin HEAD:main') -or $workflow.Contains('git push --force')){
@@ -55,4 +55,8 @@ if(-not $source.Contains('SetUpdateIndicator(remoteBuild);') -or -not $source.Co
 
 if(-not $workflow.Contains('id: reserva') -or -not $workflow.Contains('git ls-remote --tags origin') -or -not $workflow.Contains('repos/$env:GITHUB_REPOSITORY/git/refs') -or -not $workflow.Contains('needs: reservar')){
  throw 'Cada compilacao oficial deve reservar uma tag exclusiva antes de compilar.'
+}
+
+if(-not $workflow.Contains('$id=$created.id') -or -not $workflow.Contains('Read-ReleaseById') -or -not $workflow.Contains('ConvertFrom-Json -NoEnumerate')){
+ throw 'Publicacao deve preservar ID retornado pela API e consultar rascunho diretamente.'
 }
