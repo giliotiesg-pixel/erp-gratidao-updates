@@ -232,6 +232,40 @@ try{
   if($script:cashError){throw $script:cashError}
   if(!$script:cashDone){throw 'Modal de dinheiro nao testado.'}
  }finally{$cashTimer.Stop();$cashTimer.Dispose()}
+ # A escolha de pagamento deve exibir todos os metodos, sem sobreposicao.
+ $choiceMethod=$pdvType.GetMethod('ShowPaymentChoice',[Reflection.BindingFlags]'Instance,NonPublic')
+ if(!$choiceMethod){throw 'Modal de escolha de pagamento ausente.'}
+ $script:choiceDone=$false;$script:choiceError=''
+ $choiceTimer=New-Object System.Windows.Forms.Timer
+ $choiceTimer.Interval=150
+ $choiceTimer.Add_Tick({
+  $dlg=@([Windows.Forms.Application]::OpenForms | Where-Object {$_.Name -eq 'amzgPaymentChoice'}) | Select-Object -First 1
+  if(!$dlg){return}
+  $choiceTimer.Stop()
+  try{
+   $dlg.Size=[System.Drawing.Size]::new(800,480)
+   $dlg.PerformLayout()
+   [Windows.Forms.Application]::DoEvents()
+   $grid=$dlg.Controls.Find('amzgPaymentGrid',$true)[0]
+   $back=$dlg.Controls.Find('amzgPaymentBack',$true)[0]
+   $calc=$dlg.Controls.Find('amzgOpenCalculatorModule',$true)
+   if(!$grid -or !$back -or $calc.Count -ne 1 -or $grid.ColumnCount -ne 4 -or $grid.RowCount -ne 5 -or $grid.AutoScroll){throw 'Grade de pagamento ou cabecalho incorreto.'}
+   $keys=@('DINHEIRO','PIX','PIX_QR','PIX_SEM_QR','DEBITO','DEBITO_VISA','DEBITO_MASTERCARD','DEBITO_ELO','CREDITO','CREDITO_VISA','CREDITO_MASTERCARD','CREDITO_ELO','ALELO','PLUXXE','TICKET','VR','ALIMENTACAO','FIADO','DIVIDIDO')
+   foreach($key in $keys){
+    $b=$dlg.Controls.Find(('amzgPay_'+$key),$true)[0]
+    if(!$b -or !$b.Visible -or $b.Width -le 0 -or $b.Height -le 0 -or $b.Right -gt $grid.ClientSize.Width -or $b.Bottom -gt $grid.ClientSize.Height){throw "Forma de pagamento cortada: $key"}
+    if($b.RectangleToScreen($b.ClientRectangle).IntersectsWith($back.RectangleToScreen($back.ClientRectangle))){throw "Rodape sobreposto: $key"}
+   }
+   $script:choiceDone=$true
+  }catch{$script:choiceError=$_.Exception.Message}
+  finally{$dlg.DialogResult=[Windows.Forms.DialogResult]::Cancel;$dlg.Close()}
+ })
+ try{
+  $choiceTimer.Start()
+  $null=$choiceMethod.Invoke($pdv,@())
+  if($script:choiceError){throw $script:choiceError}
+  if(!$script:choiceDone){throw 'Modal de escolha de pagamento nao testado.'}
+ }finally{$choiceTimer.Stop();$choiceTimer.Dispose()}
  # Testar de verdade o modal de pagamento dividido, inclusive a terceira linha.
  $splitMethod=$pdvType.GetMethod('SelectSplitPayments',[Reflection.BindingFlags]'Instance,NonPublic')
  if(!$splitMethod){throw 'Modal de pagamento dividido ausente.'}

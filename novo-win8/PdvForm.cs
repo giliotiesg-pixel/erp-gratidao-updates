@@ -1928,28 +1928,131 @@ namespace ArmazemGratidao {
     manualDate.Value=picker.Value;return true;
    }
   }
-  bool ShowPaymentChoice(){
-   using(var dialog=new StyledDialogForm{Text="Escolha a forma de pagamento",Width=690,Height=530,
-    MinimumSize=new Size(570,450),StartPosition=FormStartPosition.CenterParent,
-    BackColor=Color.FromArgb(238,245,252)}){
-    var title=new Label{Text="TOTAL DA VENDA: R$ "+FinalAmount().ToString("N2"),Dock=DockStyle.Top,
-     Height=72,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160)};
-    var info=new Label{Text="Selecione a forma de pagamento. Para dividir em até 3 formas, escolha DIVIDIDO.",Dock=DockStyle.Top,Height=50,
-     TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-    var choices=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true,Padding=new Padding(18)};
-    foreach(string name in payment.Items.Cast<object>().Select(x=>Convert.ToString(x))){
-     string selected=name;
-     var btn=new Button{Text=selected,Width=185,Height=58,Margin=new Padding(7),
-      Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=selected=="FIADO"?Color.FromArgb(175,35,48):Color.FromArgb(22,75,160),
-      ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
-     btn.FlatAppearance.BorderSize=0;
-     btn.Click+=(sender,args)=>{payment.SelectedItem=selected;dialog.DialogResult=DialogResult.OK;dialog.Close();};
-     choices.Controls.Add(btn);
+  // Dialogo de pagamento com layout proprio: nenhuma barra global pode sobrepor a grade.
+  static void RoundPaymentControl(Control control,int radius){
+   Action fit=()=>{
+    int w=control.Width-1,h=control.Height-1,d=radius*2;
+    if(w<d+2||h<d+2)return;
+    using(var path=new System.Drawing.Drawing2D.GraphicsPath()){
+     path.AddArc(0,0,d,d,180,90);path.AddArc(w-d,0,d,d,270,90);
+     path.AddArc(w-d,h-d,d,d,0,90);path.AddArc(0,h-d,d,d,90,90);path.CloseFigure();
+     var old=control.Region;control.Region=new Region(path);if(old!=null)old.Dispose();
     }
-    var cancel=new Button{Text="Voltar à venda",Dock=DockStyle.Bottom,Height=44,DialogResult=DialogResult.Cancel};
-    var discountButton=new Button{Name="amzgPaymentDiscount",Text="Conceder desconto (R$ ou %)",Dock=DockStyle.Top,Height=39};
-    discountButton.Click+=(sender,args)=>{ConfigureDiscount();title.Text="TOTAL DA VENDA: R$ "+FinalAmount().ToString("N2");};
-    dialog.Controls.Add(choices);dialog.Controls.Add(discountButton);dialog.Controls.Add(info);dialog.Controls.Add(title);dialog.Controls.Add(cancel);
+   };
+   control.Resize+=(s,e)=>fit();fit();
+  }
+  bool ShowPaymentChoice(){
+   var blue=Color.FromArgb(7,43,98);
+   var red=Color.FromArgb(190,0,0);
+   var background=Color.FromArgb(234,237,242);
+   var work=Screen.FromControl(this).WorkingArea;
+   using(var dialog=new Form{Name="amzgPaymentChoice",Text="Armazém Gratidão - PDV",
+    StartPosition=FormStartPosition.CenterParent,BackColor=background,
+    ForeColor=blue,AutoScaleMode=AutoScaleMode.None,
+    Font=new Font("Segoe UI",10,FontStyle.Bold),
+    Size=new Size(Math.Min(920,work.Width-24),Math.Min(560,work.Height-24)),
+    MinimumSize=new Size(Math.Min(640,work.Width-24),Math.Min(420,work.Height-24))}){
+    bool compact=dialog.Width<780||dialog.Height<490;
+    float buttonFont=compact?9f:11f;
+    Func<string,string,Color,Button> makeButton=(name,text,color)=>{
+     var b=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(4,3,4,3),
+      Font=new Font("Segoe UI",buttonFont,FontStyle.Bold),BackColor=color,ForeColor=Color.White,
+      UseVisualStyleBackColor=false,FlatStyle=FlatStyle.Flat,UseMnemonic=false};
+     b.FlatAppearance.BorderSize=0;
+     b.FlatAppearance.MouseOverBackColor=Color.FromArgb(35,80,140);
+     b.FlatAppearance.MouseDownBackColor=Color.FromArgb(15,50,100);
+     RoundPaymentControl(b,8);return b;
+    };
+    var root=new TableLayoutPanel{Name="amzgPaymentRoot",Dock=DockStyle.Fill,
+     ColumnCount=1,RowCount=5,Padding=new Padding(10),Margin=new Padding(0),BackColor=background};
+    root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:46));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?42:55));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:44));
+    root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?42:50));
+    var header=new Label{Text="Escolha a forma de pagamento",Dock=DockStyle.Fill,
+     Margin=new Padding(4,0,4,3),BackColor=blue,ForeColor=Color.White,
+     TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",compact?15:20,FontStyle.Bold)};
+    RoundPaymentControl(header,9);root.Controls.Add(header,0,0);
+    var title=new Label{Name="amzgPaymentTotal",Dock=DockStyle.Fill,Margin=new Padding(0),
+     TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",compact?18:24,FontStyle.Bold),ForeColor=red};
+    root.Controls.Add(title,0,1);
+    var discountBar=new TableLayoutPanel{Name="amzgPaymentDiscountBar",Dock=DockStyle.Fill,
+     ColumnCount=5,RowCount=1,Margin=new Padding(4,2,4,3),CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
+    foreach(float percent in new float[]{31,15,16,17,21})discountBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,percent));
+    discountBar.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    var discountButton=new Button{Name="amzgPaymentDiscount",Text="Conceder desconto:",Dock=DockStyle.Fill,
+     Margin=new Padding(0),FlatStyle=FlatStyle.Flat,BackColor=background,ForeColor=blue,
+     UseVisualStyleBackColor=false,Font=new Font("Segoe UI",compact?9:11,FontStyle.Bold)};
+    discountButton.FlatAppearance.BorderSize=0;
+    var reais=new RadioButton{Name="amzgPaymentDiscountAmount",Text="R$ (valor)",Dock=DockStyle.Fill,
+     Margin=new Padding(0),Checked=!discountPercent,Font=new Font("Segoe UI",9,FontStyle.Regular)};
+    var percentMode=new RadioButton{Name="amzgPaymentDiscountPercent",Text="% (percentual)",Dock=DockStyle.Fill,
+     Margin=new Padding(0),Checked=discountPercent,Font=new Font("Segoe UI",9,FontStyle.Regular)};
+    var value=new NumericUpDown{Name="amzgPaymentDiscountValue",DecimalPlaces=2,Minimum=0,
+     Maximum=discountPercent?100m:99999999m,Value=Math.Min(discountPercent?100m:99999999m,discountValue),
+     Dock=DockStyle.Fill,Margin=new Padding(3,7,3,0),TextAlign=HorizontalAlignment.Right,
+     Font=new Font("Segoe UI",11,FontStyle.Bold),BackColor=Color.White};
+    var calculator=makeButton("amzgOpenCalculatorModule","▦ Calculadora",blue);
+    calculator.Click+=(s,e)=>CalculatorShortcut.Open();
+    discountBar.Controls.Add(discountButton,0,0);discountBar.Controls.Add(reais,1,0);
+    discountBar.Controls.Add(percentMode,2,0);discountBar.Controls.Add(value,3,0);
+    discountBar.Controls.Add(calculator,4,0);root.Controls.Add(discountBar,0,2);
+    decimal gross=cart.Sum(i=>i.Total);
+    Func<decimal> proposed=()=>percentMode.Checked?Math.Round(gross*value.Value/100m,2,MidpointRounding.AwayFromZero):value.Value;
+    Action refresh=()=>title.Text="TOTAL DA VENDA: R$ "+Math.Max(0,gross-proposed()).ToString("N2",CultureInfo.GetCultureInfo("pt-BR"));
+    percentMode.CheckedChanged+=(s,e)=>{value.Maximum=percentMode.Checked?100m:99999999m;refresh();};
+    value.ValueChanged+=(s,e)=>refresh();
+    // Mantem a janela de motivo do desconto acessivel pelo titulo da faixa.
+    discountButton.Click+=(s,e)=>{
+     ConfigureDiscount();percentMode.Checked=discountPercent;reais.Checked=!discountPercent;
+     value.Maximum=discountPercent?100m:99999999m;value.Value=Math.Min(value.Maximum,discountValue);refresh();
+    };
+    refresh();
+    var labels=new Dictionary<string,string>{
+     {"PIX_QR","PIX QR"},{"PIX_SEM_QR","PIX SEM QR"},{"DEBITO","DÉBITO"},
+     {"DEBITO_VISA","DÉBITO VISA"},{"DEBITO_MASTERCARD","DÉBITO\\nMASTERCARD"},{"DEBITO_ELO","DÉBITO ELO"},
+     {"CREDITO","CRÉDITO"},{"CREDITO_VISA","CRÉDITO VISA"},{"CREDITO_MASTERCARD","CRÉDITO\\nMASTERCARD"},
+     {"CREDITO_ELO","CRÉDITO ELO"},{"ALIMENTACAO","ALIMENTAÇÃO"},{"PLUXXE","PLUXEE"},
+     {"DIVIDIDO","DIVIDIDO\\n(até 3 formas)"}
+    };
+    string[] order={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","DEBITO_VISA","DEBITO_MASTERCARD","DEBITO_ELO",
+     "CREDITO","CREDITO_VISA","CREDITO_MASTERCARD","CREDITO_ELO","ALELO","PLUXXE","TICKET","VR","ALIMENTACAO","FIADO","DIVIDIDO"};
+    var methods=payment.Items.Cast<object>().Select(x=>Convert.ToString(x)).ToArray();
+    var arranged=order.Where(methods.Contains).Concat(methods.Where(x=>!order.Contains(x))).ToArray();
+    int rows=Math.Max(1,(arranged.Length+3)/4);
+    var choices=new TableLayoutPanel{Name="amzgPaymentGrid",Dock=DockStyle.Fill,ColumnCount=4,RowCount=rows,
+     AutoScroll=false,Margin=new Padding(0,3,0,3),GrowStyle=TableLayoutPanelGrowStyle.FixedSize};
+    for(int col=0;col<4;col++)choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+    for(int row=0;row<rows;row++)choices.RowStyles.Add(new RowStyle(SizeType.Percent,100f/rows));
+    for(int index=0;index<arranged.Length;index++){
+     string selected=arranged[index],caption;
+     if(!labels.TryGetValue(selected,out caption))caption=selected.Replace('_',' ');
+     var btn=makeButton("amzgPay_"+selected,caption,blue);
+     btn.Click+=(sender,args)=>{
+      // Preserva os identificadores usados pelo caixa, taxas, Pix e fiado.
+      if(gross>0&&proposed()>=gross){MessageBox.Show(dialog,"O desconto deve ser menor que o total da venda.");value.Focus();return;}
+      if(discountValue!=value.Value||discountPercent!=percentMode.Checked){
+       discountMode.SelectedIndex=percentMode.Checked?1:0;discountInput.Value=value.Value;
+       discountPercent=percentMode.Checked;discountValue=value.Value;
+       discountReason=value.Value==0?"":(string.IsNullOrWhiteSpace(discountReason)?"Pagamento à vista":discountReason);Render();
+      }
+      payment.SelectedItem=selected;dialog.DialogResult=DialogResult.OK;dialog.Close();
+     };
+     choices.Controls.Add(btn,index%4,index/4);
+    }
+    root.Controls.Add(choices,0,3);
+    var footer=new TableLayoutPanel{Name="amzgPaymentFooter",Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,
+     Margin=new Padding(4,3,4,0),Padding=new Padding(0,4,0,0)};
+    footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
+    footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
+    footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
+    footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    var cancel=makeButton("amzgPaymentBack","← Voltar à venda",red);
+    cancel.DialogResult=DialogResult.Cancel;
+    footer.Controls.Add(cancel,1,0);root.Controls.Add(footer,0,4);
+    dialog.Controls.Add(root);dialog.CancelButton=cancel;
     return dialog.ShowDialog(this)==DialogResult.OK;
    }
   }
