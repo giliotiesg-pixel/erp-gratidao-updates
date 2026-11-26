@@ -243,22 +243,23 @@ try{
   if(!$dlg){return}
   $choiceTimer.Stop()
   try{
-   $dlg.Size=[System.Drawing.Size]::new(760,550)
+   $dlg.Size=[System.Drawing.Size]::new(700,420)
    $dlg.PerformLayout()
    [Windows.Forms.Application]::DoEvents()
    $grid=$dlg.Controls.Find('amzgPaymentGrid',$true)[0]
    $back=$dlg.Controls.Find('amzgPaymentBack',$true)[0]
    $calc=$dlg.Controls.Find('amzgOpenCalculatorModule',$true)
-   if(!$grid -or !$back -or $calc.Count -ne 1 -or $grid.ColumnCount -ne 2 -or $grid.RowCount -ne 9 -or $grid.AutoScroll){throw 'Grade de pagamento ou cabecalho incorreto.'}
+   if(!$grid -or !$back -or $calc.Count -ne 1 -or $grid.ColumnCount -ne 3 -or $grid.RowCount -ne 4 -or $grid.AutoScroll){throw 'Grade de pagamento ou cabecalho incorreto.'}
    $left=@('DINHEIRO','PIX','PIX_QR','PIX_SEM_QR')
-   $right=@('DEBITO','CREDITO','ALIMENTACAO','ALELO','PLUXXE','TICKET','VR','FIADO','DIVIDIDO')
-   $keys=$left+$right
+   $middle=@('DEBITO','CREDITO','ALELO','PLUXXE')
+   $right=@('TICKET','VR','FIADO','DIVIDIDO')
+   $keys=$left+$middle+$right
    if($grid.Controls.Count -ne $keys.Count){throw 'Quantidade incorreta de botoes de pagamento.'}
-   foreach($removed in @('DEBITO_VISA','CREDITO_VISA','DEBITO_MASTERCARD','CREDITO_MASTERCARD','DEBITO_ELO','CREDITO_ELO')){
+   foreach($removed in @('DEBITO_VISA','CREDITO_VISA','DEBITO_MASTERCARD','CREDITO_MASTERCARD','DEBITO_ELO','CREDITO_ELO','ALIMENTACAO')){
     if($dlg.Controls.Find(('amzgPay_'+$removed),$true).Count -ne 0){throw "Bandeira removida ainda aparece: $removed"}
    }
-   for($col=0;$col -lt 2;$col++){
-    $expected=if($col -eq 0){$left}else{$right}
+   for($col=0;$col -lt 3;$col++){
+    $expected=if($col -eq 0){$left}elseif($col -eq 1){$middle}else{$right}
     for($row=0;$row -lt $expected.Count;$row++){
      $button=$grid.GetControlFromPosition($col,$row)
      if(!$button -or $button.Name -ne ('amzgPay_'+$expected[$row])){throw "Pagamento fora da ordem: coluna $col linha $row"}

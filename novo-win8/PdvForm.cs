@@ -1624,7 +1624,7 @@ namespace ArmazemGratidao {
    return value>=0&&value<=99999999m&&Math.Round(value,2)==value;
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
-   var methods=paymentLeft.Concat(paymentRight.Where(x=>x!="DIVIDIDO")).ToArray();
+   var methods=paymentLeft.Concat(paymentMiddle).Concat(paymentRight.Where(x=>x!="DIVIDIDO")).ToArray();
    var br=CultureInfo.GetCultureInfo("pt-BR");
    using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=620,Height=445,
     StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,AutoScroll=true}){
@@ -1943,7 +1943,8 @@ namespace ArmazemGratidao {
   }
   // Identificadores antigos continuam validos no historico e nas taxas cadastradas.
   static readonly string[] paymentLeft={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR"};
-  static readonly string[] paymentRight={"DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"};
+  static readonly string[] paymentMiddle={"DEBITO","CREDITO","ALELO","PLUXXE"};
+  static readonly string[] paymentRight={"TICKET","VR","FIADO","DIVIDIDO"};
   bool ShowPaymentChoice(){
    var blue=Color.FromArgb(7,43,98);
    var red=Color.FromArgb(190,0,0);
@@ -1953,9 +1954,9 @@ namespace ArmazemGratidao {
     StartPosition=FormStartPosition.CenterParent,BackColor=background,
     ForeColor=blue,AutoScaleMode=AutoScaleMode.None,
     Font=new Font("Segoe UI",10,FontStyle.Bold),
-    Size=new Size(Math.Min(790,work.Width-24),Math.Min(625,work.Height-24)),
-    MinimumSize=new Size(Math.Min(700,work.Width-24),Math.Min(530,work.Height-24))}){
-    bool compact=dialog.Width<740||dialog.Height<590;
+    Size=new Size(Math.Min(790,work.Width-24),Math.Min(470,work.Height-24)),
+    MinimumSize=new Size(Math.Min(680,work.Width-24),Math.Min(390,work.Height-24))}){
+    bool compact=dialog.Width<740||dialog.Height<440;
     float buttonFont=compact?9f:10f;
     Func<string,string,Color,Button> makeButton=(name,text,color)=>{
      var b=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(4,3,4,3),
@@ -2015,15 +2016,16 @@ namespace ArmazemGratidao {
     refresh();
     var labels=new Dictionary<string,string>{
      {"PIX_QR","PIX QR"},{"PIX_SEM_QR","PIX SEM QR"},{"DEBITO","DÉBITO"},{"CREDITO","CRÉDITO"},
-     {"ALIMENTACAO","ALIMENTAÇÃO"},{"PLUXXE","PLUXEE"},{"DIVIDIDO","DIVIDIDO (até 3 formas)"}
+     {"PLUXXE","PLUXEE"},{"DIVIDIDO","DIVIDIDO (até 3 formas)"}
     };
-    int rows=Math.Max(paymentLeft.Length,paymentRight.Length);
-    var choices=new TableLayoutPanel{Name="amzgPaymentGrid",Dock=DockStyle.Fill,ColumnCount=2,RowCount=rows,
+    var columns=new[]{paymentLeft,paymentMiddle,paymentRight};
+    int rows=columns.Max(x=>x.Length);
+    var choices=new TableLayoutPanel{Name="amzgPaymentGrid",Dock=DockStyle.Fill,ColumnCount=columns.Length,RowCount=rows,
      AutoScroll=false,Margin=new Padding(0,3,0,3),GrowStyle=TableLayoutPanelGrowStyle.FixedSize};
-    for(int col=0;col<2;col++)choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+    for(int col=0;col<columns.Length;col++)choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/columns.Length));
     for(int row=0;row<rows;row++)choices.RowStyles.Add(new RowStyle(SizeType.Percent,100f/rows));
-    for(int column=0;column<2;column++){
-     var methods=column==0?paymentLeft:paymentRight;
+    for(int column=0;column<columns.Length;column++){
+     var methods=columns[column];
      for(int row=0;row<methods.Length;row++){
       string selected=methods[row],caption;
       if(!payment.Items.Contains(selected))continue;
