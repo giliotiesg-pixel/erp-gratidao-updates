@@ -61,7 +61,7 @@ try{
  $form.Show()
  [Windows.Forms.Application]::DoEvents()
  foreach($name in @('amzgSalesLayout','amzgSalesBanner','amzgSalesNavigation',
-  'amzgSalesFilters','amzgSalesListPanel','amzgSalesDetailPanel','amzgSalesTotalsBar',
+  'amzgSalesFilters','amzgSalesListPanel','amzgSalesDoubleClickHint','amzgSalesTotalsBar',
   'amzgSalesNewSale','amzgSalesToday','amzgSalesPrevious','amzgSalesEdit',
   'amzgSalesDelete','amzgSalesReports','amzgSalesSearch','amzgSalesUpdate',
   'amzgSalesBackSlot','amzgBackBar')){
@@ -74,24 +74,13 @@ try{
  }
  $grid=@($form.Controls.Find('amzgSalesListPanel',$true))[0].Controls |
   Where-Object {$_.GetType().Name -eq 'DataGridView'} | Select-Object -First 1
- $items=@($form.Controls.Find('amzgSalesDetailPanel',$true))[0].Controls |
-  Where-Object {$_.GetType().Name -eq 'DataGridView'} | Select-Object -First 1
- if($null -eq $grid -or $null -eq $items -or
-    $grid.Rows.Count -lt 2 -or $items.Rows.Count -lt 2){
-  throw "Lista de vendas ou detalhes vazios na amostra: $($grid.Rows.Count) / $($items.Rows.Count)"
- }
+ if($null -eq $grid -or $grid.Rows.Count -lt 2){throw 'Lista de vendas vazia.'}
+ if(@($form.Controls.Find('amzgSalesDetailPanel',$true)).Count -ne 0 -or @($form.Controls.Find('amzgSalesBannerTotals',$true)).Count -ne 0){throw 'Detalhes ou totais ainda ocupam painel principal.'}
+ $left=$form.Controls.Find('amzgSalesListPanel',$true)[0]
+ $layout=$form.Controls.Find('amzgSalesLayout',$true)[0]
+ if($left.Width -lt ($layout.ClientSize.Width-40)){throw 'Lista nao ocupa largura total.'}
  $visible=@($grid.Columns | Where-Object {$_.Visible})
- if($visible.Count -ne 5){throw "Esperadas cinco colunas de venda, encontradas: $($visible.Count)"}
- $total=@($form.Controls.Find('amzgSalesDetailSummary',$true))[0]
- $right=@($form.Controls.Find('amzgSalesDetailPanel',$true))[0]
- $left=@($form.Controls.Find('amzgSalesListPanel',$true))[0]
- if($total.Height -lt 85 -or $left.Width -lt 350 -or $right.Width -lt 350){
-  throw 'Painel de venda fora do layout de duas colunas.'
- }
- $info=@($form.Controls.Find('amzgSalesInfoValue',$true))
- if($info.Count -ne 1 -or $info[0].Width -lt 165){
-  throw 'Cliente, data ou pagamento estao espremidos no painel de detalhes.'
- }
+ if($visible.Count -ne 5){throw 'Colunas de venda ausentes.'}
  $flags=[Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance
  $form.Controls.Find('amzgSalesPrevious',$true)[0].PerformClick()
  [Windows.Forms.Application]::DoEvents()
@@ -140,6 +129,7 @@ try{
      $rows.Count -ne 1 -or $calc.Count -ne 1){
    throw 'Faltam cabecalho, tabela, corpo ou barra da calculadora da venda.'
   }
+  foreach($name in @("amzgSalesDetailAction0","amzgSalesDetailAction1","amzgSalesDetailAction2","amzgSalesDetailAction3","amzgSalesDetailAction4","amzgSalesDetailAction5","amzgSalesDetailSave","amzgSalesDetailClose")){if(@($detail.Controls.Find($name,$true)).Count -ne 1){throw "Acao de detalhe ausente: $name"}}
   $saleGrid=$rows[0]
   foreach($w in @(670,850,1020)){
    $detail.Size=[Drawing.Size]::new($w,560)
@@ -156,19 +146,19 @@ try{
       $tableY -lt $headerY+$title[0].Height){
     throw "Venda secundaria $w pixels: calculadora, cabecalho e tabela sobrepostos."
    }
-   if($saleGrid.Rows.Count -ne 2 -or $saleGrid.Columns.Count -ne 5){
+   if($saleGrid.Rows.Count -ne 2 -or @($saleGrid.Columns | Where-Object {$_.Visible}).Count -ne 5){
     throw 'Venda secundaria: produtos ou colunas ausentes.'
    }
    # Windows PowerShell 5.1 le scripts UTF-8 sem BOM usando codificacao ANSI.
    # Validar indices e titulos efetivamente renderizados, sem literais acentuados.
    for($i=0;$i -lt 5;$i++){
-    $column=$saleGrid.Columns[$i]
+    $column=@($saleGrid.Columns | Where-Object {$_.Visible} | Sort-Object DisplayIndex)[$i]
     if($null -eq $column -or !$column.Visible -or $column.Width -lt 80 -or
        [string]::IsNullOrWhiteSpace($column.HeaderText)){
      throw "Venda secundaria $w pixels: coluna indice $i escondida/sem titulo."
     }
    }
-   $last=$saleGrid.Columns[4]
+   $last=@($saleGrid.Columns | Where-Object {$_.Visible} | Sort-Object DisplayIndex)[4]
    $rect=$saleGrid.GetColumnDisplayRectangle($last.Index,$true)
    if($rect.Width -lt 80 -or $rect.Right -gt $saleGrid.ClientSize.Width+2){
     throw "Venda secundaria $w pixels: coluna Valor cortada."
@@ -196,7 +186,7 @@ try{
  if((Get-Item -LiteralPath $preview).Length -lt 15000){
   throw 'Captura do modulo de Vendas incompleta.'
  }
- Write-Host "VENDAS OK: painel duplo, cinco colunas, detalhes reais, retorno superior e filtros preservados."
+ Write-Host "VENDAS OK: lista integral, cinco colunas, detalhes em janela separada, retorno superior e filtros preservados."
  Write-Host "PREVIA MODULO VENDAS: $preview"
 }finally{
  if($null -ne $form){try{$form.Close()}catch{};$form.Dispose()}

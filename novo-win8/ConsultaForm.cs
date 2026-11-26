@@ -36,7 +36,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   string chosenCustomer="";
   readonly Color salesBlue=Color.FromArgb(18,70,153);
   readonly Color salesLight=Color.FromArgb(242,247,253);
-  SplitContainer salesSplit;
+  long? detailSaleId;long detailItemId;Form detailOwner;bool detailOpen;
 
   // Estilo nativo, leve e compacto: preserva as funcoes dos controles.
   static void SalesRound(Control control,int radius){
@@ -172,11 +172,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var layout=new TableLayoutPanel{Name="amzgSalesLayout",Dock=DockStyle.Fill,
     ColumnCount=1,RowCount=5,Padding=new Padding(9,0,9,9),Margin=Padding.Empty};
    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,110f));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,62f));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,72f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,64f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,48f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,51f));
    layout.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
-   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,76f));
+   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,52f));
 
    var banner=new Panel{Name="amzgSalesBanner",Dock=DockStyle.Fill,Margin=Padding.Empty,
     BackColor=Color.FromArgb(11,47,107)};
@@ -185,70 +185,17 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      Color.FromArgb(11,44,104),Color.FromArgb(17,76,161),0f))
      args.Graphics.FillRectangle(gradient,banner.ClientRectangle);
    };
-   var bannerColumns=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,
-    Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.Transparent};
-   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,29));
-   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,37));
-   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34));
-   var brand=new Label{Name="amzgSalesBrand",Text="ARMAZÉM GRATIDÃO",
-    Font=new Font("Segoe UI",17f,FontStyle.Bold),ForeColor=Color.White,
-    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
-   var module=new Label{Name="amzgSalesModuleTitle",Text="MÓDULO VENDAS",
-    Font=new Font("Segoe UI",21f,FontStyle.Bold),ForeColor=Color.White,
-    Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoEllipsis=true};
-   var bannerTotals=new TableLayoutPanel{Name="amzgSalesBannerTotals",
-    Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,
-    Margin=new Padding(5,20,5,20),BackColor=Color.FromArgb(25,73,140)};
-   bannerTotals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-   bannerTotals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-   bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,40));
-   bannerTotals.RowStyles.Add(new RowStyle(SizeType.Percent,60));
-   headerDayCaption.Dock=DockStyle.Fill;headerDayCaption.Text="Total do Dia";
-   headerDayCaption.Font=new Font("Segoe UI",9,FontStyle.Bold);headerDayCaption.ForeColor=Color.White;
-   headerDayCaption.TextAlign=ContentAlignment.MiddleCenter;headerDayCaption.AutoEllipsis=true;
-   bannerTotals.Controls.Add(headerDayCaption,0,0);
-   bannerTotals.Controls.Add(SalesText("Total do Mês",new Font("Segoe UI",9,FontStyle.Bold),Color.White),1,0);
-   foreach(var lbl in new[]{headerToday,headerMonth}){
-    lbl.Dock=DockStyle.Fill;lbl.Text="R$ 0,00";
-    lbl.Font=new Font("Segoe UI",15.5f,FontStyle.Bold);
-    lbl.ForeColor=Color.FromArgb(255,226,84);
-    lbl.TextAlign=ContentAlignment.MiddleCenter;
-   }
-   bannerTotals.Controls.Add(headerToday,0,1);
-   bannerTotals.Controls.Add(headerMonth,1,1);
-   SalesRound(bannerTotals,12);
-   // Logotipo oficial incorporado no executavel; somente no cabecalho,
-   // nunca como marca d'agua sobre os dados.
-   var branding=new Panel{Dock=DockStyle.Fill,BackColor=Color.Transparent};
-   var emblem=new PictureBox{Left=9,Top=15,Width=76,Height=78,
-    SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
-   try{
-    using(var file=typeof(ConsultaForm).Assembly.GetManifestResourceStream(
-     "ArmazemGratidao.LogotipoMarcaDagua.jpg")){
-     if(file!=null)using(var original=Image.FromStream(file))
-      emblem.Image=new Bitmap(original);
-    }
-   }catch{ /* A marca escrita continua se a imagem falhar. */ }
+   var bannerColumns=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Margin=Padding.Empty};
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,64));
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));
+   bannerColumns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
+   var emblem=new PictureBox{Dock=DockStyle.Fill,Margin=new Padding(8),Image=SalesCartIcon(),SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};
    emblem.Disposed+=(sender,args)=>{if(emblem.Image!=null)emblem.Image.Dispose();};
-   brand.Dock=DockStyle.None;brand.Left=89;brand.Top=19;brand.Height=69;
-   brand.TextAlign=ContentAlignment.MiddleLeft;
-   brand.Font=new Font("Segoe UI",15f,FontStyle.Bold);
-   branding.Resize+=(sender,args)=>{brand.Width=Math.Max(100,branding.Width-94);};
-   branding.Controls.Add(emblem);branding.Controls.Add(brand);
-   bannerColumns.Controls.Add(branding,0,0);
-   var moduleArea=new Panel{Name="amzgSalesModuleHeader",Dock=DockStyle.Fill,
-    BackColor=Color.Transparent};
-   var moduleCart=new PictureBox{Name="amzgSalesCartIcon",
-    Image=SalesCartIcon(),SizeMode=PictureBoxSizeMode.Zoom,
-    Left=5,Top=25,Width=55,Height=57,BackColor=Color.Transparent};
-   moduleCart.Disposed+=(sender,args)=>{if(moduleCart.Image!=null)moduleCart.Image.Dispose();};
-   module.Dock=DockStyle.None;module.Left=65;module.Top=20;
-   module.Height=66;module.TextAlign=ContentAlignment.MiddleLeft;
-   module.Font=new Font("Segoe UI",18f,FontStyle.Bold);
-   moduleArea.Resize+=(sender,args)=>{module.Width=Math.Max(140,moduleArea.Width-70);};
-   moduleArea.Controls.Add(moduleCart);moduleArea.Controls.Add(module);
-   bannerColumns.Controls.Add(moduleArea,1,0);
-   bannerColumns.Controls.Add(bannerTotals,2,0);
+   bannerColumns.Controls.Add(emblem,0,0);
+   var brand=new Label{Name="amzgSalesBrand",Text="ARMAZÉM GRATIDÃO",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",21f,FontStyle.Bold),ForeColor=Color.White,AutoEllipsis=true};
+   bannerColumns.Controls.Add(brand,1,0);
+   var module=new Label{Name="amzgSalesModuleTitle",Text="VENDAS",Dock=DockStyle.Fill,Margin=new Padding(8,9,12,9),TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19f,FontStyle.Bold),BackColor=Color.FromArgb(190,16,30),ForeColor=Color.White};
+   SalesRound(module,10);bannerColumns.Controls.Add(module,2,0);
    banner.Controls.Add(bannerColumns);
    layout.Controls.Add(banner,0,0);
 
@@ -305,7 +252,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    bool narrowNav=false;
    Action fitNavigation=()=>{
     if(navigation.IsDisposed)return;
-    bool twoRows=layout.ClientSize.Width<1230;
+    bool twoRows=layout.ClientSize.Width<1000;
     if(twoRows==narrowNav&&navigation.Controls.Count==7)return;
     narrowNav=twoRows;
     Control[] actions=navigation.Controls.Cast<Control>().ToArray();
@@ -328,7 +275,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       int col=twoRows?i%4:i,row=twoRows?i/4:0;
       navigation.Controls.Add(actions[i],col,row);
      }
-     layout.RowStyles[1].Height=twoRows?108f:62f;
+     layout.RowStyles[1].Height=twoRows?82f:48f;
     }finally{navigation.ResumeLayout(true);}
    };
    layout.SizeChanged+=(sender,args)=>fitNavigation();
@@ -342,24 +289,24 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    filters.Controls.Add(SalesText("Período:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),0,0);
    filters.Controls.Add(SalesText("De:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),1,0);
    dateFilter.Format=DateTimePickerFormat.Custom;dateFilter.CustomFormat="dd/MM/yyyy";
-   dateFilter.Dock=DockStyle.Fill;dateFilter.Margin=new Padding(1,11,2,11);
+   dateFilter.Dock=DockStyle.Fill;dateFilter.Margin=new Padding(1,4,2,4);
    dateFilter.Value=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);
    filters.Controls.Add(dateFilter,2,0);
    filters.Controls.Add(SalesText("Até:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),3,0);
    rangeEnd.Format=DateTimePickerFormat.Custom;rangeEnd.CustomFormat="dd/MM/yyyy";
-   rangeEnd.Dock=DockStyle.Fill;rangeEnd.Margin=new Padding(1,11,2,11);
+   rangeEnd.Dock=DockStyle.Fill;rangeEnd.Margin=new Padding(1,4,2,4);
    rangeEnd.Value=DateTime.Today;
    filters.Controls.Add(rangeEnd,4,0);
    filters.Controls.Add(SalesText("Cliente:",new Font("Segoe UI",9,FontStyle.Bold),Color.FromArgb(25,52,92)),5,0);
-   customerFilter.Dock=DockStyle.Fill;customerFilter.Margin=new Padding(1,11,2,11);
+   customerFilter.Dock=DockStyle.Fill;customerFilter.Margin=new Padding(1,4,2,4);
    filters.Controls.Add(customerFilter,6,0);
    filters.Controls.Add(SalesText("Nº da Venda:",new Font("Segoe UI",8.6f,FontStyle.Bold),Color.FromArgb(25,52,92)),7,0);
-   saleSearch.Dock=DockStyle.Fill;saleSearch.Margin=new Padding(1,12,2,12);
+   saleSearch.Dock=DockStyle.Fill;saleSearch.Margin=new Padding(1,4,2,4);
    filters.Controls.Add(saleSearch,8,0);
    var search=SalesButton("amzgSalesSearch","⌕  Pesquisar",salesBlue);
    var update=SalesButton("amzgSalesUpdate","↻  Atualizar",Color.FromArgb(56,110,188));
-   search.Margin=new Padding(2,8,2,8);
-   update.Margin=new Padding(2,8,2,8);
+   search.Margin=new Padding(2,2,2,2);
+   update.Margin=new Padding(2,2,2,2);
    search.Click+=(sender,args)=>{
     if(saleSearch.Text.Trim().Length>0)SearchSale();
     else if(dateFilter.Value.Date>rangeEnd.Value.Date)
@@ -384,88 +331,18 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    SalesRound(filters,12);
    layout.Controls.Add(filters,0,2);
 
-   salesSplit=new SplitContainer{Name="amzgSalesSplit",Dock=DockStyle.Fill,
-    Orientation=Orientation.Vertical,Margin=new Padding(0,10,0,4),
-    SplitterWidth=9,
-    BackColor=Color.FromArgb(236,244,253)};
-   // Painel esquerdo: lista das vendas, colunas fixas legiveis.
-   var left=new Panel{Name="amzgSalesListPanel",Dock=DockStyle.Fill,
-    BackColor=Color.White,Padding=new Padding(2)};
-   var leftHeader=new Label{Name="amzgSalesListTitle",Dock=DockStyle.Top,Height=40,
-    BackColor=salesBlue,ForeColor=Color.White,
-    Font=new Font("Segoe UI",11f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,
-    Text="  Vendas do Dia"};
-   left.Controls.Add(master);left.Controls.Add(leftHeader);
-   salesSplit.Panel1.Controls.Add(left);
-   // Painel direito: dados e itens da venda selecionada, sem popup obrigatorio.
-   var right=new Panel{Name="amzgSalesDetailPanel",Dock=DockStyle.Fill,
-    BackColor=Color.White,Padding=new Padding(2)};
-   heading.Name="amzgSalesDetailTitle";
-   heading.Height=40;heading.BackColor=salesBlue;heading.ForeColor=Color.White;
-   heading.Font=new Font("Segoe UI",11f,FontStyle.Bold);
-   heading.Padding=new Padding(12,0,0,0);heading.Text="DETALHES DA VENDA";
-   var saleHeader=new Panel{Name="amzgSalesDetailSummary",Dock=DockStyle.Top,Height=102,
-    BackColor=Color.FromArgb(234,241,251)};
-   var infoCaption=new Label{Dock=DockStyle.Left,Width=145,Text="  Cliente:\n  Data / Hora:\n  Forma(s) Pgto:",
-    Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(22,58,121),Padding=new Padding(5,5,0,0)};
-   var valuePanel=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,5,0,0)};
-   saleInfo.Name="amzgSalesInfoValue";
-   saleInfo.Text="Selecione uma venda\n\n";
-   valuePanel.Controls.Add(saleInfo);
-   var totalPanel=new Panel{Dock=DockStyle.Right,Width=195,
-    BackColor=Color.FromArgb(244,246,251)};
-   totalPanel.Controls.Add(new Label{Dock=DockStyle.Top,Height=27,
-    Text="Total da Venda",Font=new Font("Segoe UI",10f,FontStyle.Bold),
-    ForeColor=Color.FromArgb(22,58,121),TextAlign=ContentAlignment.MiddleCenter});
-   saleTotal.Text="R$ 0,00";totalPanel.Controls.Add(saleTotal);
-   var smallInfo=new Font("Segoe UI",9f,FontStyle.Bold);
-   var largeInfo=saleInfo.Font;
-   bool compactInfo=false;
-   right.SizeChanged+=(sender,args)=>{
-    bool compact=right.ClientSize.Width<610;
-    if(compact!=compactInfo){
-     compactInfo=compact;
-     infoCaption.Width=compact?108:145;
-     totalPanel.Width=compact?154:195;
-     saleInfo.Font=compact?smallInfo:largeInfo;
-    }
-   };
-   FormClosed+=(sender,args)=>smallInfo.Dispose();
-   saleHeader.Controls.Add(valuePanel);saleHeader.Controls.Add(infoCaption);saleHeader.Controls.Add(totalPanel);
-   right.Controls.Add(details);right.Controls.Add(saleHeader);right.Controls.Add(heading);
-   salesSplit.Panel2.Controls.Add(right);
-   layout.Controls.Add(salesSplit,0,3);
-   salesSplit.SizeChanged+=(sender,args)=>{
-    if(salesSplit.IsDisposed||salesSplit.Width<710)return;
-    int target=(int)(salesSplit.Width*0.51);
-    int min=300;
-    int max=salesSplit.Width-salesSplit.SplitterWidth-300;
-    if(max>=min){
-     int clamped=Math.Max(min,Math.Min(max,target));
-     if(salesSplit.SplitterDistance!=clamped)salesSplit.SplitterDistance=clamped;
-    }
-   };
-   var bottom=new TableLayoutPanel{Name="amzgSalesTotalsBar",Dock=DockStyle.Fill,
-    ColumnCount=4,RowCount=1,Margin=new Padding(0,5,0,0),
-    Padding=new Padding(10,6,10,6),BackColor=Color.FromArgb(13,61,138)};
-   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));
-   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,26));
-   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,28));
-   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,22));
-   foreach(var label in new[]{footerCount,footerToday,footerMonth}){
-    label.Dock=DockStyle.Fill;label.TextAlign=ContentAlignment.MiddleCenter;
-    label.ForeColor=Color.White;label.Font=new Font("Segoe UI",10.5f,FontStyle.Bold);
-    label.AutoEllipsis=true;
+   var left=new Panel{Name="amzgSalesListPanel",Dock=DockStyle.Fill,Margin=new Padding(0,5,0,4),BackColor=Color.White,Padding=new Padding(2)};
+   var leftHeader=new Label{Name="amzgSalesListTitle",Dock=DockStyle.Top,Height=35,BackColor=Color.FromArgb(7,43,98),ForeColor=Color.White,Font=new Font("Segoe UI",12f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Text="  LISTA DE VENDAS"};
+   var instruction=new Label{Name="amzgSalesDoubleClickHint",Dock=DockStyle.Bottom,Height=30,Text="Duplo clique em qualquer venda para abrir os detalhes.",TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",9f,FontStyle.Bold),ForeColor=Color.FromArgb(22,58,121),BackColor=Color.FromArgb(225,238,253)};
+   left.Controls.Add(master);left.Controls.Add(instruction);left.Controls.Add(leftHeader);
+   SalesRound(left,10);layout.Controls.Add(left,0,3);
+   var bottom=new TableLayoutPanel{Name="amzgSalesTotalsBar",Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0,3,0,0),Padding=new Padding(10,3,10,3),BackColor=Color.FromArgb(7,43,98)};
+   bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   foreach(var label in new[]{footerToday,footerMonth}){
+    label.Dock=DockStyle.Fill;label.TextAlign=ContentAlignment.MiddleCenter;label.ForeColor=Color.FromArgb(255,226,84);label.Font=new Font("Segoe UI",13f,FontStyle.Bold);label.AutoEllipsis=true;
    }
-   bottom.Controls.Add(footerCount,0,0);
-   bottom.Controls.Add(footerToday,1,0);
-   bottom.Controls.Add(footerMonth,2,0);
-   var daily=SalesButton("amzgSalesDailyTotals","▥  Consultar Totais por Dia",Color.FromArgb(24,94,181));
-   daily.Margin=new Padding(4,7,4,7);
-   daily.Click+=(sender,args)=>ShowDailyTotals();
-   bottom.Controls.Add(daily,3,0);
-   SalesRound(bottom,12);layout.Controls.Add(bottom,0,4);
+   bottom.Controls.Add(footerToday,0,0);bottom.Controls.Add(footerMonth,1,0);
+   SalesRound(bottom,10);layout.Controls.Add(bottom,0,4);
    Controls.Add(layout);
    LoadCustomerOptions();
   }
@@ -513,10 +390,12 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
     }
    }else BuildSalesPage();
-   master.SelectionChanged+=(sender,args)=>{if(!loadingMaster)LoadDetails();};
-   // Clique seleciona e atualiza o painel direito. Duplo clique abre a janela antiga.
-   master.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0&&!loadingMaster&&!credit)ShowSaleItems();};
-   Activated+=(sender,args)=>{if(!credit&&!loadingMaster)LoadMaster();};
+   master.SelectionChanged+=(sender,args)=>{if(!loadingMaster&&credit)LoadDetails();};
+   master.CellDoubleClick+=(sender,args)=>{
+    if(args.RowIndex<0||loadingMaster||credit||detailOpen)return;
+    master.CurrentCell=master.Rows[args.RowIndex].Cells["cliente"];ShowSaleItems();
+   };
+   Activated+=(sender,args)=>{if(!credit&&!loadingMaster&&!detailOpen)LoadMaster();};
    LoadMaster();
   }
 
@@ -774,9 +653,9 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var number=master.Columns["Ordem cronológica"];
    number.HeaderText="Nº Venda";number.DisplayIndex=0;number.FillWeight=74;number.MinimumWidth=73;
    var client=master.Columns["cliente"];
-   client.HeaderText="Cliente";client.DisplayIndex=1;client.FillWeight=183;client.MinimumWidth=130;
+   client.HeaderText="Cliente";client.DisplayIndex=2;client.FillWeight=183;client.MinimumWidth=130;
    var date=master.Columns["data"];
-   date.HeaderText="Data / Hora";date.DisplayIndex=2;date.FillWeight=160;date.MinimumWidth=122;
+   date.HeaderText="Data / Hora";date.DisplayIndex=1;date.FillWeight=160;date.MinimumWidth=122;
    var items=master.Columns["itens"];
    items.HeaderText="Itens";items.DisplayIndex=3;items.FillWeight=52;items.MinimumWidth=51;
    var total=master.Columns["total"];
@@ -847,13 +726,15 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       " | TOTAL DO MÊS: "+monthText;
     }
    }catch(Exception ex){MessageBox.Show(ex.Message,"Erro ao abrir módulo");}
-   finally{loadingMaster=false;LoadDetails();}
+   finally{loadingMaster=false;if(credit)LoadDetails();else if(selectedDate)DisplayDayTotal(dateFilter.Value.ToString("yyyy-MM-dd"));else if(previous&&master.CurrentRow!=null)DisplayDayTotal(Convert.ToString(master.CurrentRow.Cells["data"].Value));}
   }
 
   void ShowSaleItems(){
    try{
     long id=SelectedSale();
-    using(var dialog=BuildSaleItemsWindow(id))dialog.ShowDialog(this);
+    detailOpen=true;
+    try{using(var dialog=BuildSaleItemsWindow(id))dialog.ShowDialog(this);}
+    finally{detailOpen=false;LoadMaster();}
    }catch(Exception ex){
     MessageBox.Show("Não foi possível abrir os produtos: "+ex.Message,
      "Vendas",MessageBoxButtons.OK,MessageBoxIcon.Error);
@@ -867,7 +748,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     "@id",id);
    if(sale.Rows.Count==0)throw new InvalidOperationException("Venda não encontrada.");
    var items=Query(
-    "SELECT barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',"+
+    "SELECT id AS item_id,barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',"+
     "unit_price AS 'Preço (R$)',total AS 'Valor (R$)' "+
     "FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
    var area=Screen.FromControl(this).WorkingArea;
@@ -886,13 +767,16 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    };
    var body=new TableLayoutPanel{
     Name="amzgSalesItemsBody",Dock=DockStyle.Fill,
-    ColumnCount=1,RowCount=2,
+    ColumnCount=1,RowCount=5,
     BackColor=Color.FromArgb(229,242,255),
     Margin=Padding.Empty,Padding=new Padding(10,8,10,10)
    };
    body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   body.RowStyles.Add(new RowStyle(SizeType.Absolute,128));
+   body.RowStyles.Add(new RowStyle(SizeType.Absolute,104));
    body.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   body.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+   body.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
+   body.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
    var header=new Label{
     Name="amzgSalesItemsHeader",Dock=DockStyle.Fill,
     Margin=new Padding(0,0,0,8),Padding=new Padding(14,8,10,8),
@@ -901,13 +785,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     ForeColor=Color.FromArgb(20,73,158),
     BackColor=Color.FromArgb(221,238,255)
    };
-   var row=sale.Rows[0];
-   header.Text="VENDA #"+id+"  |  "+Convert.ToString(row["created_at"])+
-    Environment.NewLine+"Cliente: "+Convert.ToString(row["customer_name"])+
-    "  |  Pagamento: "+Convert.ToString(row["payment_method"])+
-    Environment.NewLine+"Total da venda: R$ "+
-    Convert.ToDecimal(row["gross_total"]).ToString("N2")+
-    "  |  "+items.Rows.Count+" produto(s)";
+   var totalLabel=new Label{Name="amzgSalesItemsTotal",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,Font=new Font("Segoe UI",14f,FontStyle.Bold),ForeColor=Color.FromArgb(182,29,49)};
 
    var list=new DataGridView{
     Name="amzgSalesItemsGrid",Dock=DockStyle.Fill,
@@ -933,13 +811,14 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     if(list.IsDisposed||list.ClientSize.Width<100)return;
     string[] names={"Código","Produto","Quantidade","Preço (R$)","Valor (R$)"};
     if(names.Any(n=>!list.Columns.Contains(n)))return;
+    if(list.Columns.Contains("item_id"))list.Columns["item_id"].Visible=false;
     int inner=Math.Max(0,list.ClientSize.Width-SystemInformation.VerticalScrollBarWidth-6);
     bool compact=inner<750;
-    int barcode=compact?116:145;
-    int qty=compact?90:104;
-    int price=compact?105:124;
-    int value=compact?105:120;
-    int product=Math.Max(compact?155:190,inner-barcode-qty-price-value);
+    int barcode=compact?90:120;
+    int qty=compact?80:100;
+    int price=compact?92:115;
+    int value=compact?92:115;
+    int product=Math.Max(130,inner-barcode-qty-price-value);
     int[] widths={barcode,product,qty,price,value};
     for(int i=0;i<names.Length;i++){
      var col=list.Columns[names[i]];
@@ -962,12 +841,51 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    list.SizeChanged+=(sender,args)=>fitColumns();
    body.Controls.Add(header,0,0);
    body.Controls.Add(list,0,1);
+   body.Controls.Add(totalLabel,0,2);
+   Action refreshDetail=()=>{
+    var current=Query("SELECT created_at,customer_name,gross_total,payment_method FROM sales WHERE id=@id","@id",id);
+    if(current.Rows.Count==0){dialog.Close();return;}
+    var row=current.Rows[0];
+    var ordinal=Query("SELECT COUNT(*) FROM sales WHERE datetime(created_at)<datetime((SELECT created_at FROM sales WHERE id=@id)) OR (datetime(created_at)=datetime((SELECT created_at FROM sales WHERE id=@id)) AND id<=@id)","@id",id);
+    string number=Convert.ToString(ordinal.Rows[0][0]);
+    dialog.Text="Detalhes da venda nº "+number;
+    header.Text="DETALHES DA VENDA Nº "+number+Environment.NewLine+"Cliente: "+Convert.ToString(row["customer_name"])+Environment.NewLine+"Data e hora: "+Convert.ToString(row["created_at"])+"  |  Pagamento: "+Convert.ToString(row["payment_method"]);
+    totalLabel.Text="Total da venda: R$ "+Convert.ToDecimal(row["gross_total"]).ToString("N2");
+    list.DataSource=Query("SELECT id AS item_id,barcode AS 'Código',name AS 'Produto',quantity AS 'Quantidade',unit_price AS 'Preço (R$)',total AS 'Valor (R$)' FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
+    fitColumns();
+   };
+   Action<Action> run=action=>{
+    long? oldSale=detailSaleId;long oldItem=detailItemId;Form oldOwner=detailOwner;
+    detailSaleId=id;detailOwner=dialog;
+    detailItemId=list.CurrentRow!=null&&list.Columns.Contains("item_id")?Convert.ToInt64(list.CurrentRow.Cells["item_id"].Value):0;
+    try{action();refreshDetail();}
+    finally{detailSaleId=oldSale;detailItemId=oldItem;detailOwner=oldOwner;}
+   };
+   var commands=new TableLayoutPanel{Name="amzgSalesItemsActions",Dock=DockStyle.Fill,ColumnCount=3,RowCount=2,Margin=Padding.Empty};
+   for(int i=0;i<3;i++)commands.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
+   for(int i=0;i<2;i++)commands.RowStyles.Add(new RowStyle(SizeType.Percent,50));
+   string[] captions={"Editar produto","Alterar quantidade","Alterar preço","Corrigir cliente do fiado","Alterar data e hora","Gerar comprovante"};
+   Action[] handlers={ChangeProduct,ChangeProduct,ChangeProduct,EditSaleCustomer,EditSaleDate,()=>{try{string file=PdvForm.CreateSaleReceiptPdfForDatabase(db,id);System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file){UseShellExecute=true});}catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Comprovante");}}};
+   for(int i=0;i<captions.Length;i++){
+    int index=i;var btn=SalesButton("amzgSalesDetailAction"+i,captions[i],salesBlue);
+    btn.Margin=new Padding(3);btn.Click+=(sender,args)=>run(handlers[index]);commands.Controls.Add(btn,i%3,i/3);
+   }
+   list.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)run(ChangeProduct);};
+   body.Controls.Add(commands,0,3);
+   var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};
+   footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   var save=SalesButton("amzgSalesDetailSave","Concluir alterações",Color.FromArgb(12,120,61));
+   var close=SalesButton("amzgSalesDetailClose","Fechar janela",Color.FromArgb(190,20,32));
+   save.Margin=new Padding(3);close.Margin=new Padding(3);
+   save.Click+=(sender,args)=>{LoadMaster();dialog.Close();};close.Click+=(sender,args)=>dialog.Close();
+   footer.Controls.Add(save,0,0);footer.Controls.Add(close,1,0);body.Controls.Add(footer,0,4);
    dialog.Controls.Add(body);
-   list.DataSource=items;
+   refreshDetail();
    dialog.Shown+=(sender,args)=>fitColumns();
    return dialog;
   }
   long SelectedSale(){
+   if(detailSaleId.HasValue)return detailSaleId.Value;
    if(master.CurrentRow==null||master.CurrentRow.IsNewRow||!master.Columns.Contains("venda"))throw new Exception("Selecione uma venda.");
    return Convert.ToInt64(master.CurrentRow.Cells["venda"].Value);
   }
@@ -1087,7 +1005,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      var cancel=new Button{Text="Cancelar",Left=267,Top=267,Width=130,Height=35,DialogResult=DialogResult.Cancel};
      dlg.Controls.AddRange(new Control[]{title,origin,values,selectLabel,choice,notice,save,cancel});
      dlg.AcceptButton=save;dlg.CancelButton=cancel;
-     if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+     if(dlg.ShowDialog(detailOwner??this)!=DialogResult.OK)return;
      string entered=choice.Text.Trim();
      string newName=customers.FirstOrDefault(name=>string.Equals(name,entered,StringComparison.OrdinalIgnoreCase));
      if(string.IsNullOrEmpty(newName))throw new Exception("Selecione um cliente existente na lista. Nenhuma venda foi alterada.");
@@ -1198,7 +1116,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel,Left=218,Top=161,Width=120,Height=34};
      dialog.Controls.AddRange(new Control[]{dateLabel,datePicker,timeLabel,timePicker,save,cancel});
      dialog.AcceptButton=save;dialog.CancelButton=cancel;
-     if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+     if(dialog.ShowDialog(detailOwner??this)!=DialogResult.OK)return;
      DateTime corrected=datePicker.Value.Date+timePicker.Value.TimeOfDay;
      string after=corrected.ToString("yyyy-MM-dd HH:mm:ss");
      if(after==before){MessageBox.Show("A data e a hora já estão corretas.");return;}
@@ -1275,8 +1193,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     if(saleItems.Rows.Count==0)throw new Exception("Esta venda não possui produtos.");
     decimal subtotal=0m;
     foreach(DataRow r in saleItems.Rows)subtotal+=Convert.ToDecimal(r["valor"]);
-    long initiallySelected=0;
-    if(details.CurrentRow!=null&&details.Columns.Contains("item_id"))
+    long initiallySelected=detailItemId;
+    if(initiallySelected==0&&details.CurrentRow!=null&&details.Columns.Contains("item_id"))
      initiallySelected=Convert.ToInt64(details.CurrentRow.Cells["item_id"].Value);
 
     using(var dialog=new StyledDialogForm{Name="amzgChangeProductDialog",
@@ -1637,7 +1555,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
      changing=false;
      loadSelection();
      projected();
-     if(dialog.ShowDialog(this)==DialogResult.OK){
+     if(dialog.ShowDialog(detailOwner??this)==DialogResult.OK){
       LoadMaster();
       // Selecao da mesma venda apos atualizacao dos totais agregados.
       foreach(DataGridViewRow row in master.Rows)
@@ -1840,7 +1758,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   }
   bool loadingDetails=false;
   void LoadDetails(){
-   if(loadingMaster||loadingDetails||IsDisposed||Disposing)return;
+   if(!credit||loadingMaster||loadingDetails||IsDisposed||Disposing)return;
    loadingDetails=true;
    try{
     string key=credit?"cliente":"venda";

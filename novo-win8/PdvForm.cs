@@ -1734,19 +1734,23 @@ namespace ArmazemGratidao {
    byte[] data=Encoding.ASCII.GetBytes(ReceiptAscii(value));
    return "<"+BitConverter.ToString(data).Replace("-","")+">";
   }
-  string CreateSaleReceiptPdf(long saleId){
+  string CreateSaleReceiptPdf(long saleId){return CreateSaleReceiptPdfForDatabase(db,saleId);}
+  internal static string CreateSaleReceiptPdfForDatabase(string database,long saleId){
+   string clientName="",paymentMethod="";
    var lines=new List<string>();
    lines.Add("ARMAZEM GRATIDAO");
    lines.Add("COMPROVANTE DE VENDA - NAO FISCAL");
    lines.Add("Este documento nao substitui nota fiscal ou NFC-e.");
    lines.Add(new string('-',70));
-   using(var conn=Open()){
+   using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{DataSource=database,ReadOnly=true,FailIfMissing=true}.ToString())){
+    conn.Open();
     using(var cmd=new SQLiteCommand("SELECT id,created_at,customer_name,payment_method,gross_total FROM sales WHERE id=@id",conn)){
      cmd.Parameters.AddWithValue("@id",saleId);
      using(var rd=cmd.ExecuteReader()){
       if(!rd.Read())throw new Exception("Venda nao encontrada para gerar comprovante.");
       lines.Add("Venda: "+Convert.ToString(rd["id"])+"   Data: "+Convert.ToString(rd["created_at"]));
-      lines.Add("Cliente: "+Convert.ToString(rd["customer_name"]));
+      clientName=Convert.ToString(rd["customer_name"]);paymentMethod=Convert.ToString(rd["payment_method"]);
+      lines.Add("Cliente: "+clientName);
       lines.Add("Pagamento: "+Convert.ToString(rd["payment_method"]));
       lines.Add("TOTAL: R$ "+Dec(rd["gross_total"]).ToString("N2"));
      }
@@ -1766,7 +1770,10 @@ namespace ArmazemGratidao {
    lines.Add(new string('-',70));
    lines.Add("Obrigado pela preferencia!");
    lines.Add("Documento de controle interno - nao fiscal.");
-   return WriteComprovantePdf(lines,"Venda-"+saleId+".pdf");
+   string safe=string.Join("_",clientName.Split(Path.GetInvalidFileNameChars(),StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.');
+   if(safe.Length>70)safe=safe.Substring(0,70);
+   string filename="Venda-"+saleId+(paymentMethod.IndexOf("FIADO",StringComparison.OrdinalIgnoreCase)>=0?"-"+safe:"")+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+".pdf";
+   return WriteComprovantePdf(lines,filename);
   }
   // Pasta Documentos pode estar sem permissao no Windows 8. Em caso de
   // acesso negado, salvar na pasta de dados do ERP, que ja e usada pelo SQLite.
@@ -1792,7 +1799,7 @@ namespace ArmazemGratidao {
    return recovered;
   }
 
-  string WriteComprovantePdf(List<string> lines,string filename){
+  static string WriteComprovantePdf(List<string> lines,string filename){
    // PDF escrito em objetos padrao; cada pagina suporta 55 linhas.
    var objects=new List<string>();
    objects.Add(""); // catalogo
