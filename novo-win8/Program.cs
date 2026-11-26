@@ -168,6 +168,14 @@ namespace ArmazemGratidao {
    back.Visible=false;toggle.Visible=false;
    header.Controls.Add(toggle);header.Controls.Add(back);
    toggle.BringToFront();back.BringToFront();
+   header.BackColor=Color.FromArgb(7,43,98);
+   if(mainBack!=null){
+    mainBack.Dock=DockStyle.Right;mainBack.Width=138;mainBack.BackColor=Color.FromArgb(180,43,57);
+    mainBack.Text=form.Tag is PdvForm?"← Voltar ao PDV":"← Voltar ao menu";
+   }
+   var heading=new Label{Name="amzgFiadoHeading",Text="FIADO POR CLIENTE",Dock=DockStyle.Fill,
+    TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0),Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.White,AutoEllipsis=true};
+   header.Controls.Add(heading);heading.BringToFront();
    // A barra superior fica fora do Dock.Fill; o WinForms nao pode encobri-la.
    var fiado=(FiadoClientesForm)form;
    var page=fiado.Controls.OfType<SplitContainer>().FirstOrDefault();
