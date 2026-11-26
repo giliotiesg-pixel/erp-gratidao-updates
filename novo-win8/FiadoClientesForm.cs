@@ -61,15 +61,24 @@ namespace ArmazemGratidao {
      }
     }
     var blue=Color.FromArgb(9,37,88);var debt=Color.FromArgb(185,0,15);
-    using(var nameFont=new Font("Segoe UI",Width<200?9.5f:11f,FontStyle.Bold))
-    using(var valueFont=new Font("Segoe UI",Width<200?14f:16f,FontStyle.Bold))
-    using(var statusFont=new Font("Segoe UI",8f,FontStyle.Bold)){
-     TextRenderer.DrawText(g,clientName,nameFont,new Rectangle(9,5,Math.Max(1,Width-18),31),blue,TextFormatFlags.WordBreak|TextFormatFlags.EndEllipsis|TextFormatFlags.VerticalCenter);
-     TextRenderer.DrawText(g,"R$ "+BalanceValue.ToString("N2"),valueFont,new Rectangle(9,36,Math.Max(1,Width-18),26),BalanceValue>0.005m?debt:Color.FromArgb(0,112,38),TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
-     string status=IsInternal?"Interno (fora do total)":BalanceValue>0.005m?"Em aberto":"Sem saldo";
+    using(var nameFont=new Font("Segoe UI",Width<180?8.5f:9.5f,FontStyle.Bold))
+    using(var statusFont=new Font("Segoe UI",7.3f,FontStyle.Bold)){
+     TextRenderer.DrawText(g,clientName,nameFont,new Rectangle(7,3,Math.Max(1,Width-14),29),blue,TextFormatFlags.WordBreak|TextFormatFlags.EndEllipsis|TextFormatFlags.VerticalCenter);
+     string status=IsInternal?(Width>=215?"Interno (fora do total)":"Interno"):BalanceValue>0.005m?"Em aberto":"Sem saldo";
      Color badge=IsInternal?blue:BalanceValue>0.005m?debt:Color.FromArgb(100,110,118);
-     int bw=Math.Min(Width-16,TextRenderer.MeasureText(status,statusFont).Width+17);
-     var badgeRect=new Rectangle((Width-bw)/2,Math.Max(63,Height-24),bw,19);
+     int bw=Math.Min(Math.Max(45,Width/2),TextRenderer.MeasureText(status,statusFont).Width+10);
+     var badgeRect=new Rectangle(Width-bw-7,Height-24,bw,17);
+     int valueWidth=Math.Max(1,badgeRect.Left-10);
+     string money="R$ "+BalanceValue.ToString("N2");
+     float points=12f;
+     while(points>8f){
+      using(var measureFont=new Font("Segoe UI",points,FontStyle.Bold)){
+       if(TextRenderer.MeasureText(money,measureFont).Width<=valueWidth)break;
+      }
+      points-=0.5f;
+     }
+     using(var valueFont=new Font("Segoe UI",points,FontStyle.Bold))
+      TextRenderer.DrawText(g,money,valueFont,new Rectangle(7,Height-29,valueWidth,26),BalanceValue>0.005m?debt:Color.FromArgb(0,112,38),TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
      using(var brush=new SolidBrush(badge))g.FillRectangle(brush,badgeRect);
      TextRenderer.DrawText(g,status,statusFont,badgeRect,Color.White,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
     }
@@ -87,10 +96,10 @@ namespace ArmazemGratidao {
    // Tela inicial do Fiado: totais, pesquisa e filtros acima dos cartoes.
    var clientRoot=new TableLayoutPanel{Name="amzgFiadoClientsRoot",Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Padding=new Padding(7),BackColor=Color.FromArgb(234,239,246)};
    clientRoot.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
-   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,46));
+   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,37));
    clientRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,43));
+   clientRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,37));
    var totals=new TableLayoutPanel{Name="amzgFiadoClientTotals",Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=new Padding(0,0,0,4),BackColor=Color.FromArgb(246,249,253),CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
    foreach(float ratio in new float[]{30,20,30,20})totals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,ratio));
    totals.RowStyles.Add(new RowStyle(SizeType.Percent,100));
@@ -98,13 +107,13 @@ namespace ArmazemGratidao {
    totals.Controls.Add(totalTitle("TOTAL EM ABERTO (SEM INTERNOS):"),0,0);totals.Controls.Add(clientTotalValue,1,0);
    totals.Controls.Add(totalTitle("INTERNOS FORA DO TOTAL:"),2,0);totals.Controls.Add(clientInternalValue,3,0);
    clientRoot.Controls.Add(totals,0,0);
-   var filters=new TableLayoutPanel{Name="amzgFiadoClientFilters",Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=new Padding(0,0,0,3)};
-   foreach(float ratio in new float[]{48,14,24,14})filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,ratio));
+   var filters=new TableLayoutPanel{Name="amzgFiadoClientFilters",Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=new Padding(0,0,0,3)};
+   foreach(float ratio in new float[]{37,14,21,14,14})filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,ratio));
    filters.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    clientSearch.AccessibleName="Pesquisar cliente pelo nome";
    filters.Controls.Add(clientSearch,0,0);
-   var filterButtons=new Button[3];
-   string[] captions={"Todos","Com saldo em aberto","Sem saldo"};
+   var filterButtons=new Button[4];
+   string[] captions={"Todos","Com saldo em aberto","Sem saldo","Internos"};
    Action paintFilters=()=>{
     for(int i=0;i<filterButtons.Length;i++){
      var button=filterButtons[i];if(button==null)continue;
@@ -112,7 +121,7 @@ namespace ArmazemGratidao {
      button.ForeColor=i==clientFilter?Color.White:Color.FromArgb(7,43,98);
     }
    };
-   for(int i=0;i<3;i++){
+   for(int i=0;i<filterButtons.Length;i++){
     int index=i;
     var filter=new Button{Name="amzgFiadoClientFilter"+i,Text=captions[i],Dock=DockStyle.Fill,Margin=new Padding(3,4,3,3),Font=new Font("Segoe UI",9f,FontStyle.Bold),FlatStyle=FlatStyle.Flat,UseVisualStyleBackColor=false};
     filter.FlatAppearance.BorderSize=1;filter.FlatAppearance.BorderColor=Color.FromArgb(150,170,194);
@@ -711,13 +720,13 @@ namespace ArmazemGratidao {
    arrangingClientCards=true;
    clients.SuspendLayout();
    try{
-    const int gap=7;
+    const int gap=5;
     int available=Math.Max(120,clients.ClientSize.Width-clients.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-2);
-    int count=Math.Max(1,Math.Min(5,available/175));
+    int count=Math.Max(1,Math.Min(6,available/155));
     int width=Math.Max(100,available/count-gap);
     foreach(Control control in clients.Controls){
      if(!(control is ClientCardButton))continue;
-     control.Size=new Size(width,90);control.Margin=new Padding(0,0,gap,gap);
+     control.Size=new Size(width,64);control.Margin=new Padding(0,0,gap,gap);
     }
    }finally{clients.ResumeLayout();arrangingClientCards=false;}
   }
@@ -779,8 +788,9 @@ namespace ArmazemGratidao {
      if(string.Equals(name,customer,StringComparison.OrdinalIgnoreCase))selectedClientStillHasFiado=true;
      if(InternalFiado(name))internalBalance+=balance;else allBalance+=balance;
      if(!name.ToUpperInvariant().Contains(clientSearch.Text.Trim().ToUpperInvariant()))continue;
-     if(clientFilter==1&&balance<=0.005m||clientFilter==2&&balance>0.005m)continue;
+     if((clientFilter==1&&balance<=0.005m)||(clientFilter==2&&balance>0.005m)||(clientFilter==3&&!InternalFiado(name)))continue;
      var b=new ClientCardButton(name,balance,InternalFiado(name));
+     var cardHint=new ToolTip();cardHint.SetToolTip(b,b.Text+(InternalFiado(name)?" | Interno (fora do total)":""));b.Disposed+=(sender,args)=>cardHint.Dispose();
      b.Click+=(sender,args)=>{clientMarkedForRemoval=Convert.ToString(((Button)sender).Tag);SelectClient(clientMarkedForRemoval);};
      b.MouseDown+=(sender,args)=>{clientMarkedForRemoval=Convert.ToString(((Button)sender).Tag);};
      clients.Controls.Add(b);

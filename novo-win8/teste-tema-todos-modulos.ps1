@@ -259,7 +259,7 @@ foreach($sample in $items){
    if(!$totalOpen -or !$totalInternal -or !$totalOpen.Visible -or !$totalInternal.Visible){throw 'Fiado: indicadores de saldo ausentes.'}
    $initialTotal=$totalOpen.Text;$initialInternal=$totalInternal.Text
    $allCount=$clientList.Controls.Count
-   foreach($index in @(1,2,0)){
+   foreach($index in @(1,2,3,0)){
     $filter=$form.Controls.Find(('amzgFiadoClientFilter'+$index),$true)[0]
     if(!$filter -or !$filter.Visible){throw 'Fiado: filtro de clientes ausente.'}
     $filter.PerformClick()
@@ -268,7 +268,7 @@ foreach($sample in $items){
    }
    if($clientList.Controls.Count -ne $allCount){throw 'Fiado: filtro Todos nao restaurou clientes.'}
    foreach($card in $clientList.Controls){
-    if($card.Name -ne 'amzgFiadoClientCard' -or $card.Height -ne 90){throw 'Fiado: cartao de cliente nao padronizado.'}
+    if($card.Name -ne 'amzgFiadoClientCard' -or $card.Height -ne 64){throw 'Fiado: cartao de cliente nao padronizado.'}
    }
    $buttonsClients=@($clientList.Controls | Where-Object {$_ -is [Windows.Forms.Button]})
    if($buttonsClients.Count -lt 1){throw 'Cliente do Fiado nao encontrado no banco de teste.'}
