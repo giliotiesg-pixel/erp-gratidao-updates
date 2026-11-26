@@ -821,7 +821,7 @@ namespace ArmazemGratidao {
    foreach(var btn in new[]{updateHeaderButton,updateDashboardButton}){
     if(btn==null||btn.IsDisposed)continue;
     bool isHeader=btn==updateHeaderButton;
-    btn.Text=pending?"● Atualização disponível":isHeader?"Verificar Atualização":"Atualização";
+    btn.Text=pending?(isHeader?"● Atualização disponível":"10. Atualização disponível"):isHeader?"Verificar Atualização":"10. Atualização";
     btn.BackColor=pending?Color.FromArgb(180,43,57):isHeader?Color.FromArgb(35,84,154):Color.FromArgb(20,81,170);
     btn.ForeColor=Color.White;
     btn.FlatAppearance.MouseOverBackColor=pending?Color.FromArgb(204,56,70):Color.FromArgb(35,103,202);
@@ -844,7 +844,7 @@ namespace ArmazemGratidao {
    }
   }
   readonly FlowLayoutPanel sideMenu=new FlowLayoutPanel {Dock=DockStyle.Left,Width=231,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(5,7,5,7),BackColor=Color.FromArgb(234,241,251)};
-  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(15,61,128)};
+  readonly Panel header=new Panel {Dock=DockStyle.Top,Height=52,BackColor=Color.FromArgb(7,43,98)};
   readonly Button menuToggle=new Button {Name="amzgStartHeader",Text="▦  Menu Principal",Width=155,Height=40,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};
   readonly DataGridView grid=new DataGridView { Dock=DockStyle.Fill,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false };
   readonly Label status=new Label { Dock=DockStyle.Bottom,Height=27,TextAlign=ContentAlignment.MiddleLeft };
@@ -904,20 +904,20 @@ namespace ArmazemGratidao {
    if(brandPicture.Image==null)brandPicture.Image=HomeShortcutImage("PDV");
    brandPicture.Disposed+=(sender,args)=>{if(brandPicture.Image!=null){
     brandPicture.Image.Dispose();brandPicture.Image=null;}};
-   var brandCaption=new Label{Name="amzgHeaderBrand",Text="ARMAZÉM\nGRATIDÃO",
-    Font=new Font("Segoe UI",10.4f,FontStyle.Bold),
+   var brandCaption=new Label{Name="amzgHeaderBrand",Text="Armazém Gratidão",
+    Font=new Font("Segoe UI",17f,FontStyle.Bold),
     ForeColor=Color.White,BackColor=Color.Transparent,
     TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=false,
-    Left=53,Top=5,Width=136,Height=42};
+    Left=53,Top=5,Width=245,Height=42};
    header.Controls.Add(brandPicture);
    header.Controls.Add(brandCaption);
    // Cabecalho fino. Nao encostar nos indicadores nem desperdiçar altura.
    Action alignHeader=()=>{
     if(header.IsDisposed)return;
     const int gap=6;
-    int x=brandCaption.Right+12;
-    int[] baseWidths={88,166,62,119};
+    int[] baseWidths={88,166,72,119};
     int total=baseWidths.Sum()+3*gap;
+    int x=Math.Max(brandCaption.Right+12,header.ClientSize.Width-total-12);
     int available=Math.Max(305,header.ClientSize.Width-x-10);
     float factor=available>=total?1f:
      Math.Max(0.73f,(float)(available-3*gap)/(total-3*gap));
@@ -1720,31 +1720,36 @@ namespace ArmazemGratidao {
    page.Controls.Add(canvas);
    // A marca ja esta no cabecalho, sem duplicar nome nem descricao.
    // O botao Iniciar do cabecalho continua sempre presente.
-   var metrics=new Panel{Name="amzgDashboardMetrics",Left=18,Top=10,
+   var metrics=new Panel{Name="amzgDashboardMetrics",Left=12,Top=8,
     Width=979,Height=75,BackColor=Color.Transparent};
    canvas.Controls.Add(metrics);
-   string[] labels={"VENDAS DO DIA","TOTAL VENDIDO HOJE",
-    "PRODUTOS CADASTRADOS","TOTAL VENDIDO NO MÊS"};
-   var values=new Label[4];
-   var metricCards=new Panel[4];
-   for(int i=0;i<4;i++){
-    Color accent=(i%2==0)?Color.FromArgb(23,93,185):Color.FromArgb(211,37,57);
+   string[] labels={"TOTAL VENDIDO HOJE","QTD. DE VENDAS (HOJE)",
+    "PRODUTOS CADASTRADOS","TOTAL VENDIDO NO MÊS","TOTAL DE VENDAS (GERAL)"};
+   string[] metricIcons={"Caixa","Vendas","Produtos","Relatórios","Lucro"};
+   var values=new Label[labels.Length];
+   var metricCards=new Panel[labels.Length];
+   for(int i=0;i<labels.Length;i++){
+    Color accent=i==2?Color.FromArgb(23,93,185):Color.FromArgb(211,37,57);
     var card=new Panel{Name="amzgDashboardMetric"+i,Top=0,Width=230,
-     Height=70,BackColor=Color.White};
+     Height=70,BackColor=Color.FromArgb(232,241,253)};
     RoundHomeControl(card,12);
     var bar=new Panel{Dock=DockStyle.Left,Width=6,BackColor=accent};
     var caption=new Label{Text=labels[i],Left=13,Top=7,Width=200,
-     Height=17,Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
+     Height=23,Font=new Font("Segoe UI",8.2f,FontStyle.Bold),
      ForeColor=Color.FromArgb(155,39,60),AutoEllipsis=true};
-    var figure=new Label{Text="—",Left=13,Top=26,Width=200,Height=38,
+    var figure=new Label{Name="amzgDashboardValue"+i,Text="—",Left=13,Top=30,Width=200,Height=35,
      Font=new Font("Segoe UI",16f,FontStyle.Bold),
      ForeColor=Color.FromArgb(19,55,112),AutoEllipsis=true};
-    card.Controls.Add(bar);card.Controls.Add(caption);card.Controls.Add(figure);
+    var image=new PictureBox{Name="amzgMetricIcon",Image=HomeShortcutImage(metricIcons[i]),SizeMode=PictureBoxSizeMode.Zoom,Left=12,Top=16,Width=36,Height=36,BackColor=Color.Transparent};
+    image.Disposed+=(sender,args)=>{if(image.Image!=null)image.Image.Dispose();};
+    card.Controls.Add(bar);card.Controls.Add(image);card.Controls.Add(caption);card.Controls.Add(figure);
     metrics.Controls.Add(card);metricCards[i]=card;values[i]=figure;
    }
-   var tiles=new Panel{Name="amzgDashboardTiles",Left=18,Top=98,
-    Width=979,Height=94,BackColor=Color.Transparent};
-   canvas.Controls.Add(tiles);
+   var menuPanel=new Panel{Name="amzgDashboardMenuPanel",Left=12,Top=91,Width=430,Height=400,BackColor=Color.White};
+   RoundHomeControl(menuPanel,12);
+   var menuTitle=new Label{Name="amzgDashboardMenuTitle",Text="  ▦  Menu Principal",Left=0,Top=0,Width=430,Height=38,BackColor=Color.FromArgb(7,43,98),ForeColor=Color.White,Font=new Font("Segoe UI",13f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft};
+   var tiles=new Panel{Name="amzgDashboardTiles",Left=0,Top=38,Width=430,Height=362,BackColor=Color.White};
+   menuPanel.Controls.Add(menuTitle);menuPanel.Controls.Add(tiles);canvas.Controls.Add(menuPanel);
    var quick=new[]{
     Tuple.Create("PDV","PDV  •  Nova venda"),Tuple.Create("Vendas","Vendas"),
     Tuple.Create("Produtos","Produtos"),Tuple.Create("Estoque","Estoque"),
@@ -1758,9 +1763,9 @@ namespace ArmazemGratidao {
    for(int i=0;i<quick.Length;i++){
     var entry=quick[i];var action=moduleActions.FirstOrDefault(a=>a.Item1==entry.Item2);
     if(action==null)continue;
-    var btn=new Button{Name="amzgDashboardTile"+i,Tag=entry.Item2,Text=entry.Item1,
+    var btn=new Button{Name="amzgDashboardTile"+i,Tag=entry.Item2,Text=(i+1)+". "+entry.Item1,
      FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(20,81,170),
-     ForeColor=Color.White,Font=new Font("Segoe UI",9.2f,FontStyle.Bold),
+     ForeColor=Color.White,Font=new Font("Segoe UI",12f,FontStyle.Bold),
      Image=HomeWhiteTileIcon(entry.Item1),ImageAlign=ContentAlignment.MiddleLeft,
      TextImageRelation=TextImageRelation.ImageBeforeText,
      TextAlign=ContentAlignment.MiddleCenter,Cursor=Cursors.Hand,UseMnemonic=false,
@@ -1773,21 +1778,21 @@ namespace ArmazemGratidao {
     tiles.Controls.Add(btn);buttons.Add(btn);
     if(entry.Item2=="Verificar atualização"){updateDashboardButton=btn;RefreshUpdateIndicator();}
    }
-   // Ranking em duas tabelas compactas: 1-10 e 11-20.
-   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=18,Top=207,
-    Width=979,Height=320,BackColor=Color.White};
+   // Ranking unico de 1 a 20, a direita dos atalhos.
+   var ranking=new Panel{Name="amzgDashboardRankingPanel",Left=455,Top=91,
+    Width=550,Height=400,BackColor=Color.White};
    RoundHomeControl(ranking,12);
    var rankHeader=new Panel{Name="amzgDashboardRankingHeader",
     Left=0,Top=0,Width=979,Height=38,
-    BackColor=Color.FromArgb(19,73,157)};
+    BackColor=Color.FromArgb(183,15,32)};
    var rankTitle=new Label{Name="amzgDashboardRankingTitle",Dock=DockStyle.Fill,
-    Text="  RANKING  •  PRODUTOS MAIS VENDIDOS NO MÊS",
+    Text="  Ranking de produtos • 20 mais vendidos no mês",
     TextAlign=ContentAlignment.MiddleLeft,
     Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.White,
     AutoEllipsis=true};
    var refresh=new Button{Name="amzgDashboardRefresh",Dock=DockStyle.Right,
-    Width=153,Text="↻  Atualizar",FlatStyle=FlatStyle.Flat,
-    BackColor=Color.FromArgb(40,107,199),ForeColor=Color.White,
+    Width=90,Text="↻ Atualizar",FlatStyle=FlatStyle.Flat,
+    BackColor=Color.FromArgb(145,12,26),ForeColor=Color.White,
     Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
    refresh.FlatAppearance.BorderSize=0;
    refresh.FlatAppearance.MouseOverBackColor=Color.FromArgb(58,130,222);
@@ -1796,45 +1801,56 @@ namespace ArmazemGratidao {
    var rankArea=new Panel{Name="amzgRankingTables",
     Left=0,Top=38,Width=979,Height=282,
     Padding=new Padding(9,5,9,7),BackColor=Color.White};
-   var leftGrid=CreateHomeRankingGrid("amzgRankingLeft");
    var rightGrid=CreateHomeRankingGrid("amzgRankingRight");
-   leftGrid.Top=5;rightGrid.Top=5;
-   rankArea.Controls.Add(leftGrid);rankArea.Controls.Add(rightGrid);
+   rightGrid.Top=5;
+   rankArea.Controls.Add(rightGrid);
    ranking.Controls.Add(rankArea);
    canvas.Controls.Add(ranking);
 
+   bool fittingHome=false;
    Action fit=()=>{
-    if(page.IsDisposed||canvas.IsDisposed)return;
-    int width=Math.Max(944,page.ClientSize.Width-2);
-    canvas.Width=width;
-    metrics.Width=width-36;
-    const int mGap=11;
-    int cardWidth=(metrics.Width-3*mGap)/4;
-    for(int i=0;i<4;i++){
-     metricCards[i].Left=i*(cardWidth+mGap);
-     metricCards[i].Width=cardWidth;
-     foreach(Control c in metricCards[i].Controls)
-      if(c is Label)c.Width=cardWidth-23;
-    }
-    tiles.Width=width-36;
-    const int tGap=11;
-    int buttonWidth=(tiles.Width-4*tGap)/5;
-    for(int i=0;i<buttons.Count;i++){
-     buttons[i].Left=(i%5)*(buttonWidth+tGap);
-     buttons[i].Top=(i/5)*48;
-     buttons[i].Width=buttonWidth;
-    }
-    ranking.Width=width-36;
-    rankHeader.Width=ranking.ClientSize.Width;
-    rankArea.Width=ranking.ClientSize.Width;
-    rankArea.Height=ranking.ClientSize.Height-38;
-    int tableWidth=Math.Max(320,(rankArea.ClientSize.Width-rankArea.Padding.Horizontal-12)/2);
-    leftGrid.Left=rankArea.Padding.Left;
-    rightGrid.Left=rankArea.Padding.Left+tableWidth+12;
-    leftGrid.Width=tableWidth;rightGrid.Width=tableWidth;
-    int h=Math.Max(210,rankArea.ClientSize.Height-rankArea.Padding.Vertical);
-    leftGrid.Height=h;rightGrid.Height=h;
-    page.AutoScrollMinSize=new Size(width,566);
+    if(page.IsDisposed||canvas.IsDisposed||fittingHome)return;
+    fittingHome=true;
+    try{
+     int width=Math.Max(900,page.ClientSize.Width-2);
+     int height=Math.Max(488,page.ClientSize.Height-2);
+     canvas.Size=new Size(width,height);
+     metrics.Width=width-24;
+     const int mGap=8;
+     int cardWidth=(metrics.Width-(metricCards.Length-1)*mGap)/metricCards.Length;
+     for(int i=0;i<metricCards.Length;i++){
+      var card=metricCards[i];card.Left=i*(cardWidth+mGap);card.Width=cardWidth;
+      var icon=card.Controls.Find("amzgMetricIcon",false).FirstOrDefault();
+      bool showIcon=cardWidth>=205;
+      if(icon!=null)icon.Visible=showIcon;
+      foreach(Control c in card.Controls)if(c is Label){
+       c.Left=showIcon?53:12;c.Width=Math.Max(40,cardWidth-c.Left-8);
+       if(c==values[i])c.Font=new Font("Segoe UI",cardWidth<195?12f:14f,FontStyle.Bold);
+      }
+     }
+     int panelHeight=height-103,usable=width-36;
+     menuPanel.Bounds=new Rectangle(12,91,(int)(usable*.44),panelHeight);
+     menuTitle.Width=menuPanel.ClientSize.Width;
+     tiles.Bounds=new Rectangle(0,38,menuPanel.ClientSize.Width,Math.Max(1,panelHeight-38));
+     const int gap=8;
+     int buttonWidth=Math.Max(80,(tiles.ClientSize.Width-3*gap)/2);
+     int buttonHeight=Math.Max(40,(tiles.ClientSize.Height-6*gap)/5);
+     for(int i=0;i<buttons.Count;i++){
+      buttons[i].Bounds=new Rectangle(gap+(i%2)*(buttonWidth+gap),gap+(i/2)*(buttonHeight+gap),buttonWidth,buttonHeight);
+      buttons[i].Font=new Font("Segoe UI",buttonWidth<190?9.5f:11.5f,FontStyle.Bold);
+     }
+     ranking.Bounds=new Rectangle(menuPanel.Right+12,91,width-menuPanel.Right-24,panelHeight);
+     rankHeader.Width=ranking.ClientSize.Width;
+     rankArea.Width=ranking.ClientSize.Width;
+     rankArea.Height=Math.Max(1,ranking.ClientSize.Height-38);
+     rightGrid.Left=rankArea.Padding.Left;
+     rightGrid.Width=Math.Max(200,rankArea.ClientSize.Width-rankArea.Padding.Horizontal);
+     rightGrid.Height=Math.Max(200,rankArea.ClientSize.Height-rankArea.Padding.Vertical);
+     int rowHeight=Math.Max(16,(rightGrid.Height-rightGrid.ColumnHeadersHeight-2)/20);
+     rightGrid.RowTemplate.Height=rowHeight;
+     foreach(DataGridViewRow row in rightGrid.Rows)row.Height=rowHeight;
+     page.AutoScrollMinSize=new Size(width,height);
+    }finally{fittingHome=false;}
    };
    page.Resize+=(sender,args)=>fit();
    rankArea.Resize+=(sender,args)=>fit();
@@ -1859,13 +1875,13 @@ namespace ArmazemGratidao {
    Action reload=async ()=>{
     if(loading||page.IsDisposed)return;
     loading=true;refresh.Enabled=false;
-    for(int i=0;i<4;i++)values[i].Text="Carregando...";
+    for(int i=0;i<values.Length;i++)values[i].Text="Carregando...";
     try{
      var totalsWatch=Stopwatch.StartNew();
      DashboardSnapshot snapshot=await Task.Run(()=>ReadHomeDashboardSummary());
      RecordPerformance("Indicadores de vendas",totalsWatch.ElapsedMilliseconds);
      if(page.IsDisposed)return;
-     for(int i=0;i<4;i++)values[i].Text=snapshot.Indicators[i];
+     for(int i=0;i<values.Length;i++)values[i].Text=snapshot.Indicators[i];
      // Mostrar indicadores antes de consultar o ranking.
      await Task.Yield();
      if(page.IsDisposed)return;
@@ -1879,17 +1895,17 @@ namespace ArmazemGratidao {
       return;
      }
      if(page.IsDisposed)return;
-     leftGrid.Rows.Clear();rightGrid.Rows.Clear();
+     rightGrid.Rows.Clear();
      var culture=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
      for(int i=0;i<snapshot.Ranking.Count&&i<20;i++){
       var p=snapshot.Ranking[i];
       decimal qty=p.Item2;
       string count=qty==decimal.Truncate(qty)?
        qty.ToString("N0",culture):qty.ToString("N3",culture);
-      var table=i<10?leftGrid:rightGrid;
-      table.Rows.Add((i+1).ToString("00"),p.Item1,count);
+      int row=rightGrid.Rows.Add((i+1).ToString(),p.Item1,count);
+      rightGrid.Rows[row].Tag=qty;
      }
-     leftGrid.ClearSelection();rightGrid.ClearSelection();
+     rightGrid.ClearSelection();fit();rightGrid.Invalidate();
     }catch(Exception ex){
      if(!page.IsDisposed){
       foreach(var label in values)label.Text="Indisponível";
@@ -1914,7 +1930,7 @@ namespace ArmazemGratidao {
    RecordPerformance("Montagem da tela inicial",startupWatch.ElapsedMilliseconds);
   }
 
-  // Duas tabelas lado a lado sem ocupar toda a altura da tela.
+  // Lista mensal unica com quantidade e barra proporcional.
   static DataGridView CreateHomeRankingGrid(string name){
    var grid=new DataGridView{Name=name,ReadOnly=true,
     AllowUserToAddRows=false,AllowUserToDeleteRows=false,
@@ -1924,10 +1940,10 @@ namespace ArmazemGratidao {
     ScrollBars=ScrollBars.Vertical,BorderStyle=BorderStyle.None,
     BackgroundColor=Color.White,GridColor=Color.FromArgb(218,229,243),
     ColumnHeadersHeight=27,ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-    EnableHeadersVisualStyles=false,Font=new Font("Segoe UI",9f),
-    Height=247,Width=435,RowTemplate={Height=22}};
-   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(225,234,247);
-   grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(25,52,99);
+    EnableHeadersVisualStyles=false,Font=new Font("Segoe UI",8.5f),
+    Height=247,Width=435,RowTemplate={Height=20}};
+   grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(7,43,98);
+   grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;
    grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9f,FontStyle.Bold);
    grid.DefaultCellStyle.ForeColor=Color.FromArgb(30,55,92);
    grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(224,238,254);
@@ -1936,14 +1952,38 @@ namespace ArmazemGratidao {
    grid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText="Nº",Width=41,
     SortMode=DataGridViewColumnSortMode.NotSortable});
    grid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText="Produto",
-    AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=190,
+    AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill,MinimumWidth=120,
     SortMode=DataGridViewColumnSortMode.NotSortable});
-   grid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText="Qtd. total",Width=83,
+   grid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText="Qtd. total",Width=145,
     DefaultCellStyle=new DataGridViewCellStyle{Alignment=DataGridViewContentAlignment.MiddleRight},
     SortMode=DataGridViewColumnSortMode.NotSortable});
    grid.CellFormatting+=(sender,args)=>{
     if(args.RowIndex>=0&&args.ColumnIndex==1&&args.Value!=null)
      grid.Rows[args.RowIndex].Cells[args.ColumnIndex].ToolTipText=Convert.ToString(args.Value);
+   };
+   grid.CellPainting+=(sender,args)=>{
+    if(args.RowIndex<0||args.ColumnIndex<0)return;
+    if(args.ColumnIndex==0&&args.RowIndex<3){
+     args.PaintBackground(args.CellBounds,true);
+     Color color=args.RowIndex==0?Color.FromArgb(205,145,0):args.RowIndex==1?Color.FromArgb(109,121,137):Color.FromArgb(157,83,33);
+     var rect=new Rectangle(args.CellBounds.Left+8,args.CellBounds.Top+2,Math.Max(12,args.CellBounds.Width-16),Math.Max(10,args.CellBounds.Height-4));
+     using(var brush=new SolidBrush(color))args.Graphics.FillEllipse(brush,rect);
+     TextRenderer.DrawText(args.Graphics,Convert.ToString(args.FormattedValue),grid.Font,rect,Color.White,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);
+     args.Handled=true;return;
+    }
+    if(args.ColumnIndex!=2)return;
+    args.PaintBackground(args.CellBounds,true);
+    decimal amount=grid.Rows[args.RowIndex].Tag is decimal?(decimal)grid.Rows[args.RowIndex].Tag:0m;
+    decimal maximum=grid.Rows.Count>0&&grid.Rows[0].Tag is decimal?(decimal)grid.Rows[0].Tag:0m;
+    var number=new Rectangle(args.CellBounds.Left+3,args.CellBounds.Top,58,args.CellBounds.Height);
+    TextRenderer.DrawText(args.Graphics,Convert.ToString(args.FormattedValue),grid.Font,number,Color.FromArgb(20,47,88),TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+    var bar=new Rectangle(number.Right+4,args.CellBounds.Top+Math.Max(2,(args.CellBounds.Height-8)/2),Math.Max(1,args.CellBounds.Right-number.Right-9),8);
+    using(var brush=new SolidBrush(Color.FromArgb(221,231,241)))args.Graphics.FillRectangle(brush,bar);
+    if(maximum>0m&&amount>0m){
+     bar.Width=Math.Max(1,(int)(bar.Width*Math.Min(1m,amount/maximum)));
+     using(var brush=new SolidBrush(Color.FromArgb(42,155,56)))args.Graphics.FillRectangle(brush,bar);
+    }
+    args.Handled=true;
    };
    return grid;
   }
@@ -1956,7 +1996,7 @@ namespace ArmazemGratidao {
 
   // Sem dados falsos: retorna ate 20 produtos vendidos no mes com Qtd. total.
   DashboardSnapshot ReadHomeDashboardSummary(){
-   var result=new DashboardSnapshot{Indicators=new[]{"—","—","—","—"}};
+   var result=new DashboardSnapshot{Indicators=new[]{"—","—","—","—","—"}};
    if(!File.Exists(dbPath))return result;
    using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
     DataSource=dbPath,ReadOnly=true,FailIfMissing=true}.ToString())){
@@ -1966,7 +2006,7 @@ namespace ArmazemGratidao {
     string month=DateTime.Today.ToString("yyyy-MM")+"-01";
     string nextMonth=DateTime.Today.AddMonths(1).ToString("yyyy-MM")+"-01";
     long count=0,products=0;
-    decimal today=0m,monthTotal=0m;
+    decimal today=0m,monthTotal=0m,allTotal=0m;
     using(var cmd=new SQLiteCommand(
      "SELECT COUNT(*),COALESCE(SUM(gross_total),0) FROM sales WHERE created_at>=@day AND created_at<@nextDay AND UPPER(COALESCE(status,'')) NOT LIKE '%EXCLUID%'",conn)){
      cmd.Parameters.AddWithValue("@day",day);
@@ -1983,10 +2023,10 @@ namespace ArmazemGratidao {
      cmd.Parameters.AddWithValue("@nextMonth",nextMonth);
      monthTotal=Convert.ToDecimal(cmd.ExecuteScalar());
     }
+    using(var cmd=new SQLiteCommand("SELECT COALESCE(SUM(gross_total),0) FROM sales WHERE UPPER(COALESCE(status,\'\')) NOT LIKE \'%EXCLUID%\'",conn))allTotal=Convert.ToDecimal(cmd.ExecuteScalar());
     var br=System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
-    result.Indicators=new[]{count.ToString("N0",br),
-     "R$ "+today.ToString("N2",br),products.ToString("N0",br),
-     "R$ "+monthTotal.ToString("N2",br)};
+    result.Indicators=new[]{"R$ "+today.ToString("N2",br),count.ToString("N0",br),products.ToString("N0",br),
+     "R$ "+monthTotal.ToString("N2",br),"R$ "+allTotal.ToString("N2",br)};
    }
    return result;
   }

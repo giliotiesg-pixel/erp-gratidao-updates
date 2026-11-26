@@ -43,26 +43,26 @@ try{
  if(@($homePanel.Controls | Where-Object {$_.GetType().Name -eq 'BrandedHomePanel'}).Count -gt 0){
   throw 'Nao removeram a marca dagua do fundo.'
  }
- $rankingLeft=@($form.Controls.Find('amzgRankingLeft',$true))
  $rankingRight=@($form.Controls.Find('amzgRankingRight',$true))
- if($rankingLeft.Count -ne 1 -or $rankingRight.Count -ne 1){
-  throw 'Ranking com duas listas de 10 produtos nao encontrado.'
+ if($rankingRight.Count -ne 1 -or @($form.Controls.Find('amzgRankingLeft',$true)).Count -ne 0){
+  throw 'Ranking deve ser uma lista unica de 20 produtos a direita.'
  }
- if($rankingLeft[0].Columns.Count -ne 3 -or $rankingRight[0].Columns.Count -ne 3 -or
-   $rankingLeft[0].Columns[2].HeaderText -ne 'Qtd. total' -or
-   $rankingRight[0].Columns[2].HeaderText -ne 'Qtd. total'){
+ if($rankingRight[0].Columns.Count -ne 3 -or $rankingRight[0].Columns[2].HeaderText -ne 'Qtd. total'){
   throw 'Ranking nao possui coluna de quantidade total.'
  }
  $rankPanel=@($form.Controls.Find('amzgDashboardRankingPanel',$true))
- if($rankPanel.Count -ne 1 -or $rankPanel[0].Height -gt 330){
-  throw 'Ranking nao ficou compacto.'
+ $menuPanel=@($form.Controls.Find('amzgDashboardMenuPanel',$true))
+ if($rankPanel.Count -ne 1 -or $menuPanel.Count -ne 1 -or $menuPanel[0].Right -ge $rankPanel[0].Left -or $menuPanel[0].Top -ne $rankPanel[0].Top){
+  throw 'Menu e ranking nao ficaram lado a lado.'
  }
  $rankHeader=@($form.Controls.Find('amzgDashboardRankingHeader',$true))
  $rankTables=@($form.Controls.Find('amzgRankingTables',$true))
  if($rankHeader.Count -ne 1 -or $rankTables.Count -ne 1 -or
-    $rankHeader[0].Height -lt 35 -or
-    $rankHeader[0].Bottom -gt $rankTables[0].Top){
-  throw 'Cabecalho azul do ranking esta oculto pelas tabelas.'
+    $rankHeader[0].Height -lt 35 -or $rankHeader[0].Bottom -gt $rankTables[0].Top){
+  throw 'Cabecalho do ranking esta oculto.'
+ }
+ if($rankingRight[0].Height -lt ($rankingRight[0].RowTemplate.Height*20+$rankingRight[0].ColumnHeadersHeight)){
+  throw 'Ranking sem espaco para vinte linhas.'
  }
  $brandLogo=@($form.Controls.Find('amzgHeaderLogo',$true))
  $brandName=@($form.Controls.Find('amzgHeaderBrand',$true))
@@ -101,7 +101,7 @@ try{
  }
  $tileButtons=@($form.Controls.Find('amzgDashboardTiles',$true))[0].Controls
  foreach($button in $tileButtons){
-  if($button.Height -gt 44){throw "Atalho inicial nao compactado: $($button.Text)"}
+  if($button.Height -lt 40 -or $button.Width -lt 80){throw "Atalho inicial pequeno demais: $($button.Text)"}
  }
  # Novo painel inicial: calculadora somente quando acionada no cabecalho.
  if(@($form.OwnedForms | Where-Object {$_.Name -eq 'amzgModernCalculator'}).Count -ne 0){
@@ -110,11 +110,21 @@ try{
  $stats=@($form.Controls.Find('amzgDashboardMetrics',$true))
  if($stats.Count -ne 1 -or @($stats[0].Controls | Where-Object {
     $_.Name -like 'amzgDashboardMetric*'
-   }).Count -ne 4){throw 'Painel novo nao tem os quatro indicadores.'}
+   }).Count -ne 5){throw 'Painel novo nao tem os cinco indicadores.'}
  $quick=@($form.Controls.Find('amzgDashboardTiles',$true))
  if($quick.Count -ne 1 -or @($quick[0].Controls | Where-Object {
     $_.Name -like 'amzgDashboardTile*'
    }).Count -ne 10){throw 'Faltam atalhos compactos do novo painel.'}
+ $homeCount=@($form.Controls.Find('amzgDashboardMetric1',$true))[0]
+ if(!$homeCount -or @($homeCount.Controls | Where-Object {$_.Text -eq 'QTD. DE VENDAS (HOJE)'}).Count -ne 1){
+  throw 'Indicador de quantidade de vendas do dia ausente.'
+ }
+ $tileArray=@($quick[0].Controls)
+ for($i=0;$i -lt 10;$i++){
+  if($tileArray[$i].Left -ne $tileArray[$i%2].Left -or ($i -gt 1 -and $tileArray[$i].Top -le $tileArray[$i-2].Top)){
+   throw 'Atalhos nao formam duas colunas e cinco linhas.'
+  }
+ }
  if(@($form.Controls.Find('amzgStartHeader',$true)).Count -ne 1){
   throw 'Botao Iniciar do cabecalho nao encontrado.'
  }
