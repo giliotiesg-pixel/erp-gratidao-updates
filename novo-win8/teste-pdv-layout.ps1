@@ -311,9 +311,13 @@ try{
    if($table.Rows.Count -ne 2){throw 'Editor deve listar todos os produtos do carrinho'}
    $table.EndEdit()|Out-Null
    $table.Rows[0].Cells['Quantidade'].Value=[decimal]3
+   if([bool]$table.Rows[0].Cells['AtualizarCadastro'].Value -or [bool]$table.Rows[1].Cells['AtualizarCadastro'].Value){throw 'Atualizacao permanente nao pode vir marcada'}
+   if([decimal]$table.Rows[0].Cells['PrecoCadastro'].Value -ne 10){throw 'Preco cadastrado incorreto'}
    $table.Rows[0].Cells['Preco'].Value=[decimal]12.5
    $table.Rows[0].Cells['Desconto'].Value=[decimal]2.5
    $table.Rows[1].Cells['Produto'].Value='Arroz corrigido 5 kg'
+   $table.Rows[1].Cells['Preco'].Value=[decimal]27
+   $table.Rows[1].Cells['AtualizarCadastro'].Value=$true
    $table.Rows[1].Cells['Tipo'].Value='%'
    $table.Rows[1].Cells['Desconto'].Value=[decimal]10
    $save.PerformClick();$script:editDone=$true
@@ -322,14 +326,15 @@ try{
  try{$editTimer.Start();$edit.Invoke($pdv,$null)|Out-Null}finally{$editTimer.Stop();$editTimer.Dispose()}
  if($script:editError){throw $script:editError}
  if(!$script:editDone -or $itemType.GetField('Price').GetValue($item) -ne [decimal]12.5 -or $itemType.GetProperty('Total').GetValue($item,$null) -ne [decimal]35){throw 'Edicao do carrinho ou desconto incorretos'}
- if($itemType.GetProperty('Total').GetValue($item2,$null) -ne [decimal]22.5 -or $itemType.GetField('Name').GetValue($item2) -ne 'Arroz corrigido 5 kg'){throw 'Segundo produto nao foi atualizado'}
+ if($itemType.GetProperty('Total').GetValue($item2,$null) -ne [decimal]24.3 -or $itemType.GetField('Name').GetValue($item2) -ne 'Arroz corrigido 5 kg'){throw 'Segundo produto nao foi atualizado'}
  if(!($grid.Columns['ExcluirItem'] -is [Windows.Forms.DataGridViewButtonColumn])){throw 'Botao de exclusao individual ausente'}
  $check=@'
 import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
-assert c.execute("SELECT price,stock FROM products WHERE id=1").fetchone()==(12.5,100)
-assert c.execute("SELECT previous_price,new_price FROM product_price_audit WHERE product_id=1").fetchone()==(10,12.5)
-assert c.execute("SELECT name,price,stock FROM products WHERE id=3").fetchone()==("Arroz corrigido 5 kg",25,100)
+assert c.execute("SELECT price,stock FROM products WHERE id=1").fetchone()==(10,100)
+assert c.execute("SELECT COUNT(*) FROM product_price_audit WHERE product_id=1").fetchone()==(0,)
+assert c.execute("SELECT previous_price,new_price FROM product_price_audit WHERE product_id=3").fetchone()==(25,27)
+assert c.execute("SELECT name,price,stock FROM products WHERE id=3").fetchone()==("Arroz corrigido 5 kg",27,100)
 c.close()
 '@
  $check | python - $database

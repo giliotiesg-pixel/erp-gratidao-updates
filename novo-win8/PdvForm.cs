@@ -1360,7 +1360,7 @@ namespace ArmazemGratidao {
    }
   }
   sealed class CartEditLine {
-   public Item Item;public string Name,Unit;public decimal Qty,Price,Discount;
+   public Item Item;public string Name,Unit;public decimal Qty,Price,Discount;public bool UpdatePrice;
    public decimal Gross {get{return Math.Round(Qty*Price,2,MidpointRounding.AwayFromZero);}}
   }
   void EditCartProducts(){
@@ -1380,25 +1380,26 @@ namespace ArmazemGratidao {
     }
     using(var dlg=new StyledDialogForm{Text="Editar produto da venda",Width=1250,Height=690,MinimumSize=new Size(740,450),StartPosition=FormStartPosition.CenterParent,BackColor=Color.White}){
      var table=new DataGridView{Name="amzgEditCartGrid",Dock=DockStyle.Fill,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,SelectionMode=DataGridViewSelectionMode.CellSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,ScrollBars=ScrollBars.Both,EditMode=DataGridViewEditMode.EditOnEnter,BackgroundColor=Color.White};
-     string[] fields={"Codigo","Interno","Produto","Unidade","Quantidade","Preco","Tipo","Desconto","Total"};
-     string[] titles={"Código de barras","Cód. interno","Descrição do produto","Un.","Quantidade","Valor unit. (R$)","Desconto R$/%","Valor desconto","Total (R$)"};
-     int[] min={115,65,175,48,78,90,82,90,90};float[] weights={14,8,25,5,9,10,9,10,10};
+     string[] fields={"Codigo","Interno","Produto","Unidade","Quantidade","Preco","Tipo","Desconto","Total","PrecoCadastro","AtualizarCadastro"};
+     string[] titles={"Código de barras","Cód. interno","Descrição do produto","Un.","Quantidade","Preço nesta venda (R$)","Desconto R$/%","Valor desconto","Total (R$)","Preço cadastrado (R$)","Atualizar cadastro"};
+     int[] min={105,60,145,42,65,94,74,78,76,96,95};float[] weights={12,6,21,5,7,10,8,8,8,10,10};
      for(int i=0;i<fields.Length;i++){
       DataGridViewColumn col;
-      if(i==3||i==6){
+      if(i==10){col=new DataGridViewCheckBoxColumn{ThreeState=false};}
+      else if(i==3||i==6){
        var combo=new DataGridViewComboBoxColumn{DisplayStyle=DataGridViewComboBoxDisplayStyle.DropDownButton,FlatStyle=FlatStyle.Flat};
        combo.Items.AddRange(i==3?new object[]{"UN","KG"}:new object[]{"R$","%"});col=combo;
       }else col=new DataGridViewTextBoxColumn();
       col.Name=fields[i];col.HeaderText=titles[i];col.MinimumWidth=min[i];col.FillWeight=weights[i];col.SortMode=DataGridViewColumnSortMode.NotSortable;
-      col.ReadOnly=i==0||i==1||i==8;
+      col.ReadOnly=i==0||i==1||i==8||i==9;
       if(!col.ReadOnly)col.DefaultCellStyle.BackColor=Color.FromArgb(255,250,225);
       if(i==4)col.DefaultCellStyle.Format="0.###";
-      if(i==5||i==7||i==8)col.DefaultCellStyle.Format="N2";
+      if(i==5||i==7||i==8||i==9)col.DefaultCellStyle.Format="N2";
       table.Columns.Add(col);
      }
-     table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;table.ColumnHeadersHeight=42;table.RowTemplate.Height=30;
-     foreach(var item in original)table.Rows.Add(item.Barcode,item.InternalCode,item.Name,item.Unit,item.Qty,item.Price,"R$",item.LineDiscount,item.Total);
-     var hint=new Label{Text="Edite as células amarelas. Preço e descrição atualizam o cadastro; quantidade, unidade e desconto valem para a venda atual.",Dock=DockStyle.Top,Height=52,Padding=new Padding(9),Font=new Font("Segoe UI",10,FontStyle.Bold)};
+     table.ColumnHeadersHeightSizeMode=DataGridViewColumnHeadersHeightSizeMode.DisableResizing;table.ColumnHeadersVisible=true;table.ColumnHeadersHeight=56;table.RowTemplate.Height=30;
+     foreach(var item in original)table.Rows.Add(item.Barcode,item.InternalCode,item.Name,item.Unit,item.Qty,item.Price,"R$",item.LineDiscount,item.Total,registered[item.Id].Item2,false);
+     var hint=new Label{Text="Preço alterado vale somente nesta venda (inclusive fiado). Marque Atualizar cadastro apenas para mudar o preço definitivo. Descrição continua atualizando o cadastro.",Dock=DockStyle.Top,Height=52,Padding=new Padding(9),Font=new Font("Segoe UI",10,FontStyle.Bold)};
      var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=54,WrapContents=false,Padding=new Padding(8,4,4,4)};
      var save=new Button{Name="amzgEditCartSave",Text="Salvar alterações",Width=185,Height=36,BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
      var cancel=new Button{Text="Cancelar",Width=110,Height=36,DialogResult=DialogResult.Cancel};
@@ -1423,7 +1424,7 @@ namespace ArmazemGratidao {
       }catch{summary.Text="Confira os valores informados.";}finally{refreshing=false;}
      };
      table.CellValueChanged+=(sender,args)=>{if(args.RowIndex>=0&&args.ColumnIndex>=0&&table.Columns[args.ColumnIndex].Name!="Total")refresh();};
-     table.CurrentCellDirtyStateChanged+=(sender,args)=>{if(table.IsCurrentCellDirty&&table.CurrentCell is DataGridViewComboBoxCell)table.CommitEdit(DataGridViewDataErrorContexts.Commit);};
+     table.CurrentCellDirtyStateChanged+=(sender,args)=>{if(table.IsCurrentCellDirty&&(table.CurrentCell is DataGridViewComboBoxCell||table.CurrentCell is DataGridViewCheckBoxCell))table.CommitEdit(DataGridViewDataErrorContexts.Commit);};
      table.DataError+=(sender,args)=>{args.ThrowException=false;};
      refresh();
      save.Click+=(sender,args)=>{
@@ -1438,12 +1439,12 @@ namespace ArmazemGratidao {
         if(Convert.ToString(row.Cells["Tipo"].Value)=="%"&&discount>100m)throw new Exception("Desconto percentual inválido: "+name);
         decimal d=amount(row);
         if(d>=gross(row))throw new Exception("O desconto deve ser menor que o total do produto: "+name);
-        edits.Add(new CartEditLine{Item=item,Name=name,Unit=unit,Qty=qtyNew,Price=price,Discount=d});
+        edits.Add(new CartEditLine{Item=item,Name=name,Unit=unit,Qty=qtyNew,Price=price,Discount=d,UpdatePrice=Convert.ToBoolean(row.Cells["AtualizarCadastro"].Value??false)});
        }
        var changes=new Dictionary<long,Tuple<string,decimal>>();
        foreach(var group in edits.GroupBy(x=>x.Item.Id)){
         var names=group.Where(x=>x.Name!=x.Item.Name).Select(x=>x.Name).Distinct().ToList();
-        var prices=group.Where(x=>x.Price!=x.Item.Price).Select(x=>x.Price).Distinct().ToList();
+        var prices=group.Where(x=>x.UpdatePrice).Select(x=>x.Price).Distinct().ToList();
         if(names.Count>1||prices.Count>1)throw new Exception("Use a mesma descrição e preço para linhas do mesmo produto.");
         if(group.Select(x=>x.Unit).Distinct().Count()>1)throw new Exception("Use uma única unidade para "+group.First().Name);
         var old=registered[group.Key];
@@ -1451,7 +1452,6 @@ namespace ArmazemGratidao {
          var next=Tuple.Create(names.Count>0?names[0]:old.Item1,prices.Count>0?prices[0]:old.Item2);
          foreach(var entry in group){
           if(names.Count>0)entry.Name=next.Item1;
-          if(prices.Count>0)entry.Price=next.Item2;
           if(entry.Discount>=entry.Gross)throw new Exception("Confira o desconto de "+entry.Name);
          }
          if(next.Item1!=old.Item1||next.Item2!=old.Item2)changes[group.Key]=next;
@@ -1490,7 +1490,13 @@ namespace ArmazemGratidao {
        Render();dlg.DialogResult=DialogResult.OK;
       }catch(Exception ex){MessageBox.Show(dlg,"Alterações não gravadas: "+ex.Message,"Editar produtos",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
      };
-     dlg.CancelButton=cancel;dlg.Controls.Add(table);dlg.Controls.Add(hint);dlg.Controls.Add(footer);
+     dlg.CancelButton=cancel;
+     var layout=new TableLayoutPanel{Name="amzgEditCartLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(6)};
+     layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+     layout.RowStyles.Add(new RowStyle(SizeType.Absolute,56));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+     hint.Dock=DockStyle.Fill;footer.Dock=DockStyle.Fill;table.Dock=DockStyle.Fill;
+     layout.Controls.Add(hint,0,0);layout.Controls.Add(table,0,1);layout.Controls.Add(footer,0,2);
+     dlg.Controls.Add(layout);
      int selected=grid.CurrentRow==null?0:Math.Max(0,grid.CurrentRow.Index);
      dlg.Shown+=(sender,args)=>{if(selected<table.Rows.Count){table.CurrentCell=table.Rows[selected].Cells["Quantidade"];table.Focus();}};
      dlg.ShowDialog(this);

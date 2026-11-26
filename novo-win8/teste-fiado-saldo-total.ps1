@@ -105,7 +105,7 @@ public static class AMZGFiadoTest {
  }
 }
 '@
- Add-Type -TypeDefinition $testClass -ReferencedAssemblies @('System.dll','System.Data.dll',$sqliteDll) -ErrorAction Stop
+ Add-Type -TypeDefinition $testClass -ReferencedAssemblies @('System.dll','System.Data.dll','System.Xml.dll',$sqliteDll) -ErrorAction Stop
  [AMZGFiadoTest]::Run($exe,$db)
  Write-Host 'FIADO OK: credito antecipado separado, saldo total, abatimento manual, correcao e backup.'
 }finally{[Environment]::CurrentDirectory=$oldCurrent}
