@@ -243,14 +243,27 @@ try{
   if(!$dlg){return}
   $choiceTimer.Stop()
   try{
-   $dlg.Size=[System.Drawing.Size]::new(800,480)
+   $dlg.Size=[System.Drawing.Size]::new(760,550)
    $dlg.PerformLayout()
    [Windows.Forms.Application]::DoEvents()
    $grid=$dlg.Controls.Find('amzgPaymentGrid',$true)[0]
    $back=$dlg.Controls.Find('amzgPaymentBack',$true)[0]
    $calc=$dlg.Controls.Find('amzgOpenCalculatorModule',$true)
-   if(!$grid -or !$back -or $calc.Count -ne 1 -or $grid.ColumnCount -ne 4 -or $grid.RowCount -ne 5 -or $grid.AutoScroll){throw 'Grade de pagamento ou cabecalho incorreto.'}
-   $keys=@('DINHEIRO','PIX','PIX_QR','PIX_SEM_QR','DEBITO','DEBITO_VISA','DEBITO_MASTERCARD','DEBITO_ELO','CREDITO','CREDITO_VISA','CREDITO_MASTERCARD','CREDITO_ELO','ALELO','PLUXXE','TICKET','VR','ALIMENTACAO','FIADO','DIVIDIDO')
+   if(!$grid -or !$back -or $calc.Count -ne 1 -or $grid.ColumnCount -ne 2 -or $grid.RowCount -ne 9 -or $grid.AutoScroll){throw 'Grade de pagamento ou cabecalho incorreto.'}
+   $left=@('DINHEIRO','PIX','PIX_QR','PIX_SEM_QR')
+   $right=@('DEBITO','CREDITO','ALIMENTACAO','ALELO','PLUXXE','TICKET','VR','FIADO','DIVIDIDO')
+   $keys=$left+$right
+   if($grid.Controls.Count -ne $keys.Count){throw 'Quantidade incorreta de botoes de pagamento.'}
+   foreach($removed in @('DEBITO_VISA','CREDITO_VISA','DEBITO_MASTERCARD','CREDITO_MASTERCARD','DEBITO_ELO','CREDITO_ELO')){
+    if($dlg.Controls.Find(('amzgPay_'+$removed),$true).Count -ne 0){throw "Bandeira removida ainda aparece: $removed"}
+   }
+   for($col=0;$col -lt 2;$col++){
+    $expected=if($col -eq 0){$left}else{$right}
+    for($row=0;$row -lt $expected.Count;$row++){
+     $button=$grid.GetControlFromPosition($col,$row)
+     if(!$button -or $button.Name -ne ('amzgPay_'+$expected[$row])){throw "Pagamento fora da ordem: coluna $col linha $row"}
+    }
+   }
    foreach($key in $keys){
     $b=$dlg.Controls.Find(('amzgPay_'+$key),$true)[0]
     if(!$b -or !$b.Visible -or $b.Width -le 0 -or $b.Height -le 0 -or $b.Right -gt $grid.ClientSize.Width -or $b.Bottom -gt $grid.ClientSize.Height){throw "Forma de pagamento cortada: $key"}

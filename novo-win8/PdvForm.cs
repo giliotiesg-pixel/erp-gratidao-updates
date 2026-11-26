@@ -1624,7 +1624,7 @@ namespace ArmazemGratidao {
    return value>=0&&value<=99999999m&&Math.Round(value,2)==value;
   }
   List<KeyValuePair<string,decimal>> SelectSplitPayments(decimal amount){
-   var methods=PaymentFees.Methods.Concat(new[]{"FIADO"}).ToArray();
+   var methods=paymentLeft.Concat(paymentRight.Where(x=>x!="DIVIDIDO")).ToArray();
    var br=CultureInfo.GetCultureInfo("pt-BR");
    using(var dialog=new StyledDialogForm {Text="Pagamento dividido (2 ou 3 formas)",Width=620,Height=445,
     StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,AutoScroll=true}){
@@ -1941,6 +1941,9 @@ namespace ArmazemGratidao {
    };
    control.Resize+=(s,e)=>fit();fit();
   }
+  // Identificadores antigos continuam validos no historico e nas taxas cadastradas.
+  static readonly string[] paymentLeft={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR"};
+  static readonly string[] paymentRight={"DEBITO","CREDITO","ALIMENTACAO","ALELO","PLUXXE","TICKET","VR","FIADO","DIVIDIDO"};
   bool ShowPaymentChoice(){
    var blue=Color.FromArgb(7,43,98);
    var red=Color.FromArgb(190,0,0);
@@ -1950,9 +1953,9 @@ namespace ArmazemGratidao {
     StartPosition=FormStartPosition.CenterParent,BackColor=background,
     ForeColor=blue,AutoScaleMode=AutoScaleMode.None,
     Font=new Font("Segoe UI",10,FontStyle.Bold),
-    Size=new Size(Math.Min(900,work.Width-24),Math.Min(530,work.Height-24)),
-    MinimumSize=new Size(Math.Min(740,work.Width-24),Math.Min(460,work.Height-24))}){
-    bool compact=dialog.Width<780||dialog.Height<490;
+    Size=new Size(Math.Min(790,work.Width-24),Math.Min(625,work.Height-24)),
+    MinimumSize=new Size(Math.Min(700,work.Width-24),Math.Min(530,work.Height-24))}){
+    bool compact=dialog.Width<740||dialog.Height<590;
     float buttonFont=compact?9f:10f;
     Func<string,string,Color,Button> makeButton=(name,text,color)=>{
      var b=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(4,3,4,3),
@@ -1966,11 +1969,11 @@ namespace ArmazemGratidao {
     var root=new TableLayoutPanel{Name="amzgPaymentRoot",Dock=DockStyle.Fill,
      ColumnCount=1,RowCount=5,Padding=new Padding(10),Margin=new Padding(0),BackColor=background};
     root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:46));
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?42:55));
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:44));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?32:42));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:48));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?34:42));
     root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?42:50));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,compact?36:44));
     var header=new Label{Text="Escolha a forma de pagamento",Dock=DockStyle.Fill,
      Margin=new Padding(4,0,4,3),BackColor=blue,ForeColor=Color.White,
      TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",compact?15:20,FontStyle.Bold)};
@@ -2011,24 +2014,20 @@ namespace ArmazemGratidao {
     };
     refresh();
     var labels=new Dictionary<string,string>{
-     {"PIX_QR","PIX QR"},{"PIX_SEM_QR","PIX SEM QR"},{"DEBITO","DÉBITO"},
-     {"DEBITO_VISA","DÉBITO VISA"},{"DEBITO_MASTERCARD","DÉBITO\nMASTERCARD"},{"DEBITO_ELO","DÉBITO ELO"},
-     {"CREDITO","CRÉDITO"},{"CREDITO_VISA","CRÉDITO VISA"},{"CREDITO_MASTERCARD","CRÉDITO\nMASTERCARD"},
-     {"CREDITO_ELO","CRÉDITO ELO"},{"ALIMENTACAO","ALIMENTAÇÃO"},{"PLUXXE","PLUXEE"},
-     {"DIVIDIDO","DIVIDIDO\n(até 3 formas)"}
+     {"PIX_QR","PIX QR"},{"PIX_SEM_QR","PIX SEM QR"},{"DEBITO","DÉBITO"},{"CREDITO","CRÉDITO"},
+     {"ALIMENTACAO","ALIMENTAÇÃO"},{"PLUXXE","PLUXEE"},{"DIVIDIDO","DIVIDIDO (até 3 formas)"}
     };
-    string[] order={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","DEBITO_VISA","DEBITO_MASTERCARD","DEBITO_ELO",
-     "CREDITO","CREDITO_VISA","CREDITO_MASTERCARD","CREDITO_ELO","ALELO","PLUXXE","TICKET","VR","ALIMENTACAO","FIADO","DIVIDIDO"};
-    var methods=payment.Items.Cast<object>().Select(x=>Convert.ToString(x)).ToArray();
-    var arranged=order.Where(methods.Contains).Concat(methods.Where(x=>!order.Contains(x))).ToArray();
-    int rows=Math.Max(1,(arranged.Length+3)/4);
-    var choices=new TableLayoutPanel{Name="amzgPaymentGrid",Dock=DockStyle.Fill,ColumnCount=4,RowCount=rows,
+    int rows=Math.Max(paymentLeft.Length,paymentRight.Length);
+    var choices=new TableLayoutPanel{Name="amzgPaymentGrid",Dock=DockStyle.Fill,ColumnCount=2,RowCount=rows,
      AutoScroll=false,Margin=new Padding(0,3,0,3),GrowStyle=TableLayoutPanelGrowStyle.FixedSize};
-    for(int col=0;col<4;col++)choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+    for(int col=0;col<2;col++)choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
     for(int row=0;row<rows;row++)choices.RowStyles.Add(new RowStyle(SizeType.Percent,100f/rows));
-    for(int index=0;index<arranged.Length;index++){
-     string selected=arranged[index],caption;
-     if(!labels.TryGetValue(selected,out caption))caption=selected.Replace('_',' ');
+    for(int column=0;column<2;column++){
+     var methods=column==0?paymentLeft:paymentRight;
+     for(int row=0;row<methods.Length;row++){
+      string selected=methods[row],caption;
+      if(!payment.Items.Contains(selected))continue;
+      if(!labels.TryGetValue(selected,out caption))caption=selected.Replace('_',' ');
      var btn=makeButton("amzgPay_"+selected,caption,blue);
      btn.Click+=(sender,args)=>{
       // Preserva os identificadores usados pelo caixa, taxas, Pix e fiado.
@@ -2040,7 +2039,8 @@ namespace ArmazemGratidao {
       }
       payment.SelectedItem=selected;dialog.DialogResult=DialogResult.OK;dialog.Close();
      };
-     choices.Controls.Add(btn,index%4,index/4);
+      choices.Controls.Add(btn,column,row);
+     }
     }
     root.Controls.Add(choices,0,3);
     var footer=new TableLayoutPanel{Name="amzgPaymentFooter",Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,
