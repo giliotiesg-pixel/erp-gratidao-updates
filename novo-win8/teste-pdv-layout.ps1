@@ -112,7 +112,6 @@ try{
  $search=& $find 'amzgPdvSearchBar'
  $code=& $find 'amzgPdvCodeInput'
  $list=& $find 'amzgPdvItemBox'
- $actions=& $find 'amzgPdvActions'
  $finish=& $find 'amzgPdvFinish'
  $total=& $find 'amzgPdvTotal'
  $other=& $find 'amzgPdvMoreOptions'
@@ -122,30 +121,25 @@ try{
  $grid=& $find 'amzgPdvWideGrid'
  if($null -eq $grid){throw 'Tabela de itens ausente'}
  $layout=& $find 'amzgPdvLayout'
- $ratio=$list.Width/($list.Width+$actions.Width)
- if($ratio -lt 0.68 -or $ratio -gt 0.72){throw "Proporcao 70/30 incorreta: $ratio"}
- if($list.Height -lt ($layout.ClientSize.Height*0.72)){throw 'Quadro nao ocupa altura util'}
+ $mainArea=& $find 'amzgPdvMain'
+ if($list.Parent -ne $mainArea -or $mainArea.Controls.Count -ne 1 -or $list.Width -lt ($layout.ClientSize.Width-16)){throw 'Quadro deve ocupar toda a largura, sem lateral'}
+ if($list.Height -lt ($layout.ClientSize.Height*0.70)){throw 'Quadro nao ocupa altura util'}
  if($back.Parent.Parent -ne $brand){throw 'Menu inicial deve permanecer no cabecalho'}
- $entryArea=& $find 'amzgPdvEntryArea'
- if($search.Parent -ne $entryArea -or $entryArea.Parent -ne $actions){throw 'Campos de entrada devem estar na lateral direita'}
+ if($search.Parent -ne $layout -or $search.Height -gt 80){throw 'Faixa de entrada deve estar no topo e compacta'}
+ $listTop=$list.PointToScreen([Drawing.Point]::Empty).Y
+ $searchTop=$search.PointToScreen([Drawing.Point]::Empty).Y
+ if($searchTop+$search.Height -gt $listTop){throw 'Faixa invade o quadro'}
+ $lastRight=0
  foreach($name in @('amzgPdvCodeInput','amzgPdvQtyInput','amzgPdvUnitInput','amzgPdvCustomer')){
   $input=& $find $name
-  if(!$search.Contains($input) -and $input.Parent.Parent -ne $search){throw "Campo fora da lateral: $name"}
-  if(!$input.Visible -or $input.PointToScreen([Drawing.Point]::Empty).X -lt $actions.PointToScreen([Drawing.Point]::Empty).X){throw "Campo oculto ou fora da lateral: $name"}
+  if($input.Parent.Parent -ne $search -or !$input.Visible -or $input.Bottom -gt $input.Parent.ClientSize.Height){throw "Campo cortado ou fora do cabecalho: $name"}
+  $point=$input.PointToScreen([Drawing.Point]::Empty)
+  if($point.X -lt $lastRight -or $point.Y+$input.Height -gt $listTop){throw "Campo sobreposto: $name"}
+  $lastRight=$point.X+$input.Width
  }
- if($search.Bottom -gt $entryArea.ClientSize.Height){throw 'Campos de entrada cortados'}
- $entryBottom=$entryArea.PointToScreen([Drawing.Point]::Empty).Y+$entryArea.Height
- $totalTop=$total.Parent.PointToScreen([Drawing.Point]::Empty).Y
- $totalBottom=$totalTop+$total.Parent.Height
- $finishTop=$finish.PointToScreen([Drawing.Point]::Empty).Y
- if(($totalTop-$entryBottom) -lt 0 -or ($totalTop-$entryBottom) -gt 12 -or ($finishTop-$totalBottom) -lt 0 -or ($finishTop-$totalBottom) -gt 12){throw 'Espaco excessivo entre campos, total e finalizar'}
- if($entryArea.Height -gt 185){throw 'Painel de entrada nao esta compacto'}
- foreach($name in @('amzgPdvCodeInput','amzgPdvQtyInput','amzgPdvUnitInput','amzgPdvCustomer')){
-  $input=& $find $name
-  if($input.Bottom -gt $input.Parent.ClientSize.Height){throw "Campo cortado: $name"}
- }
- if($finish.Parent -ne $actions -or $total.Parent.Parent -ne $actions -or $actions.Controls.Count -ne 3){throw 'Campos, total e finalizar devem estar na lateral direita'}
- if($finish.Top -lt $total.Parent.Bottom -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Finalizar deve ficar fixo abaixo do total'}
+ if($finish.Parent -ne $search -or $total.Parent.Parent -ne $search -or $search.Controls.Count -ne 6){throw 'Campos, total e finalizar devem estar na mesma faixa'}
+ if($total.Parent.PointToScreen([Drawing.Point]::Empty).X -lt $lastRight -or $finish.Left -lt $total.Parent.Right -or $finish.BackColor.R -le $finish.BackColor.B){throw 'Total ou finalizar fora da ordem'}
+ if($finish.Right -gt $search.ClientSize.Width -or $finish.Bottom -gt $search.ClientSize.Height){throw 'Finalizar cortado'}
  if($other.Parent -ne $brand -or !$other.Visible){throw 'Menu ocultavel ausente no cabecalho'}
  if((& $find 'amzgPdvAddProduct').Visible -or (& $find 'amzgPdvSaleStats').Visible){throw 'Inserir e contador devem ficar ocultos'}
  # Cabeçalhos e largura são obrigatórios mesmo sem itens ou com apenas um produto.
@@ -159,7 +153,7 @@ try{
   $sum=($visible | Measure-Object -Property Width -Sum).Sum
   if($sum -lt ($grid.ClientSize.Width-25) -or $sum -gt ($grid.ClientSize.Width+2)){throw "Colunas nao preenchem a largura: $sum / $($grid.ClientSize.Width)"}
   $title=& $find 'amzgPdvListTitle'
-  if($title.PointToScreen([Drawing.Point]::Empty).Y+$title.Height -gt $grid.PointToScreen([Drawing.Point]::Empty).Y){throw 'Titulo cobre o cabecalho'}
+  if($title.Visible -or $grid.Top -gt 1){throw 'Titulo extra reduz area de produtos'}
  }
  & $assertGrid
  # Popular uma tabela descartavel com 24 produtos para medir a capacidade real.
@@ -179,7 +173,7 @@ try{
   & $assertGrid
   $visibleRows=$grid.DisplayedRowCount($false)
   if($visibleRows -lt 15){throw "PDV precisa mostrar pelo menos 15 linhas completas: $visibleRows"}
-  if($finish.PointToScreen([Drawing.Point]::Empty).Y -lt $total.Parent.PointToScreen([Drawing.Point]::Empty).Y+$total.Parent.Height){throw 'Finalizar encoberto pelo total.'}
+  if($finish.Left -lt $total.Parent.Right){throw 'Finalizar encoberto pelo total.'}
   Write-Host "PDV VISUAL: $visibleRows linhas completas; lista $($list.Width)x$($list.Height)."
  }finally{$grid.DataSource=$originalData}
  foreach($name in @('amzgPdvOtherPayments','amzgPdvNewSale','amzgPdvWhatsApp','amzgPdvSaleStats')){
@@ -373,7 +367,7 @@ c.close()
  if($unit.SelectedItem -ne 'KG'){throw 'Cadastro por peso ignorado'}
  $code.Clear();$cart.Clear();$pdvType.GetMethod('Render',$private).Invoke($pdv,$null)|Out-Null
  Write-Host 'PDV PESO OK: descricao, cadastro, pacote e 375 g.'
- Write-Host 'PDV OK: quadro 70%, entrada superior, menu oculto, total e finalizar fixos; edicao e preco persistente testados.'
+ Write-Host 'PDV OK: quadro largura integral, faixa superior unica, menu oculto; edicao e preco persistente testados.'
  Write-Host "PREVIA REAL PDV: $preview"
 }finally{
  if($null -ne $pdv){try{$pdv.Close()}catch{};$pdv.Dispose()}

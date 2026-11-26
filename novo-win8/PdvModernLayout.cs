@@ -5,8 +5,7 @@ using System.Windows.Forms;
 
 namespace ArmazemGratidao {
  // Apenas reorganiza controles existentes do PDV: os handlers originais ficam intactos.
- // Layout reproduz o painel aprovado: voltar em cima, produto logo abaixo,
- // carrinho a esquerda, acoes a direita e resumo na faixa inferior.
+ // PDV comum: faixa superior unica e quadro de produtos em toda a largura.
  internal static class PdvModernLayout {
   static readonly Color Navy=Color.FromArgb(21,67,143);
   static readonly Color DeepNavy=Color.FromArgb(14,52,122);
@@ -74,9 +73,9 @@ namespace ArmazemGratidao {
 
   static void ApplyWide(PdvForm form,FlowLayoutPanel header,FlowLayoutPanel footer,Panel listArea,TextBox code,NumericUpDown qty,ComboBox unit,Button add,Button finish,Button edit,Button chooseCustomer,Button fiado,Button remove,Button clear,Button otherPayments,Button newSale,Button whatsApp,Label stats,TextBox customer,TextBox received,Label change,Label discountLabel,ComboBox discountMode,NumericUpDown discountInput,Label total,DataGridView grid){
    form.SuspendLayout();form.BackColor=Surface;form.MinimumSize=new Size(860,570);
-   var root=new TableLayoutPanel{Name="amzgPdvLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Padding=new Padding(6),Margin=Padding.Empty};
+   var root=new TableLayoutPanel{Name="amzgPdvLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(6),Margin=Padding.Empty};
    root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));root.RowStyles.Add(new RowStyle(SizeType.Absolute,76));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    var brand=new Panel{Name="amzgPdvBrand",Dock=DockStyle.Fill,BackColor=DeepNavy,Margin=Padding.Empty};
    var title=new Label{Text="Armazém Gratidão - PDV",Dock=DockStyle.Fill,ForeColor=Color.White,Font=new Font("Segoe UI",15,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(10,0,0,0)};
    var more=new Button{Name="amzgPdvMoreOptions",Dock=DockStyle.Right,Width=112};
@@ -88,22 +87,25 @@ namespace ArmazemGratidao {
    more.Click+=(sender,args)=>menu.Show(more,new Point(Math.Max(0,more.Width-menu.Width),more.Height));form.FormClosed+=(sender,args)=>menu.Dispose();
    var backSlot=new Panel{Name="pdvBackSlot",Dock=DockStyle.Left,Width=150,Margin=Padding.Empty};
    brand.Controls.Add(title);brand.Controls.Add(more);brand.Controls.Add(backSlot);root.Controls.Add(brand,0,0);
-   // Os quatro campos ficam exclusivamente na lateral direita, acima do total.
-   var top=new TableLayoutPanel{Name="amzgPdvSearchBar",Dock=DockStyle.Fill,Height=155,ColumnCount=2,RowCount=3,Margin=Padding.Empty,Padding=new Padding(5,2,5,3),BackColor=Pale};
-   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
-   top.RowStyles.Add(new RowStyle(SizeType.Absolute,57));top.RowStyles.Add(new RowStyle(SizeType.Absolute,57));top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   // Faixa horizontal: produto, quantidade, unidade, cliente, total e finalizar.
+   var top=new TableLayoutPanel{Name="amzgPdvSearchBar",Dock=DockStyle.Fill,ColumnCount=6,RowCount=1,Margin=new Padding(0,3,0,3),Padding=new Padding(2,2,2,2),BackColor=Pale};
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,28));
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,10));
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,8));
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,18));
+   top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+   top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    code.Name="amzgPdvCodeInput";qty.Name="amzgPdvQtyInput";unit.Name="amzgPdvUnitInput";customer.Name="amzgPdvCustomer";
-   code.Font=new Font("Segoe UI",12f,FontStyle.Bold);qty.Font=new Font("Segoe UI",12f,FontStyle.Bold);unit.Font=new Font("Segoe UI",11f,FontStyle.Bold);
-   customer.Font=new Font("Segoe UI",10,FontStyle.Bold);customer.Cursor=Cursors.Hand;customer.Click+=(sender,args)=>form.RunWideMenu("Clientes");
-   var productCell=Cell("Código / Nome do produto",code);
-   top.Controls.Add(productCell,0,0);top.SetColumnSpan(productCell,2);
-   top.Controls.Add(Cell("Quantidade",qty),0,1);top.Controls.Add(Cell("Unidade",unit),1,1);
-   var clientCell=Cell("Código / Cliente",customer);
-   top.Controls.Add(clientCell,0,2);top.SetColumnSpan(clientCell,2);
+   code.Font=new Font("Segoe UI",12f,FontStyle.Bold);qty.Font=new Font("Segoe UI",11f,FontStyle.Bold);unit.Font=new Font("Segoe UI",10f,FontStyle.Bold);
+   customer.Font=new Font("Segoe UI",11,FontStyle.Bold);customer.Cursor=Cursors.Hand;customer.Click+=(sender,args)=>form.RunWideMenu("Clientes");
+   top.Controls.Add(Cell("Código / Nome do produto",code),0,0);
+   top.Controls.Add(Cell("Quantidade",qty),1,0);top.Controls.Add(Cell("Unidade",unit),2,0);
+   top.Controls.Add(Cell("Código / Cliente",customer),3,0);
    code.TabIndex=0;qty.TabIndex=1;unit.TabIndex=2;customer.TabIndex=3;
-   var main=new TableLayoutPanel{Name="amzgPdvMain",Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};
-   main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-   listArea.Name="amzgPdvItemBox";listArea.Dock=DockStyle.Fill;listArea.Margin=new Padding(0,0,5,0);listArea.Padding=new Padding(1);listArea.BackColor=Color.White;
+   var main=new TableLayoutPanel{Name="amzgPdvMain",Dock=DockStyle.Fill,ColumnCount=1,RowCount=1,Margin=Padding.Empty};
+   main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   listArea.Name="amzgPdvItemBox";listArea.Dock=DockStyle.Fill;listArea.Margin=Padding.Empty;listArea.Padding=new Padding(1);listArea.BackColor=Color.White;
    // Colunas explicitamente ligadas ao DataTable; não usar DisplayedCells,
    // que encolhe a descrição e deixa o resto da largura vazio com apenas um item.
    grid.Name="amzgPdvWideGrid";grid.Dock=DockStyle.Fill;grid.Margin=Padding.Empty;
@@ -147,7 +149,7 @@ namespace ArmazemGratidao {
     grid.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.None;
     foreach(DataGridViewRow r in grid.Rows)r.Height=24;
    };
-   var delete=new DataGridViewButtonColumn{Name="ExcluirItem",HeaderText="Excluir",Text="×",UseColumnTextForButtonValue=true,AutoSizeMode=DataGridViewAutoSizeColumnMode.None,Width=52,MinimumWidth=45,FlatStyle=FlatStyle.Flat,SortMode=DataGridViewColumnSortMode.NotSortable};
+   var delete=new DataGridViewButtonColumn{Name="ExcluirItem",HeaderText="Excluir",Text="×",UseColumnTextForButtonValue=true,AutoSizeMode=DataGridViewAutoSizeColumnMode.None,Width=72,MinimumWidth=65,FlatStyle=FlatStyle.Flat,SortMode=DataGridViewColumnSortMode.NotSortable};
    delete.DefaultCellStyle.BackColor=Color.FromArgb(255,237,240);
    delete.DefaultCellStyle.ForeColor=Red;
    delete.DefaultCellStyle.Font=new Font("Segoe UI",12,FontStyle.Bold);
@@ -155,24 +157,19 @@ namespace ArmazemGratidao {
    // Duas linhas independentes garantem que o título nunca cubra o cabeçalho.
    var listLayout=new TableLayoutPanel{Name="amzgPdvGridLayout",Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
    listLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+   listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,0));
    listLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
    var listTitle=new Label{Name="amzgPdvListTitle",Text="Produtos da venda",Dock=DockStyle.Fill,Margin=Padding.Empty,BackColor=DeepNavy,ForeColor=Color.White,Font=new Font("Segoe UI",13,FontStyle.Bold),Padding=new Padding(9,0,0,0),TextAlign=ContentAlignment.MiddleLeft};
-   listLayout.Controls.Add(listTitle,0,0);listLayout.Controls.Add(grid,0,1);
+   listTitle.Visible=false;listLayout.Controls.Add(listTitle,0,0);listLayout.Controls.Add(grid,0,1);
    listArea.Controls.Add(listLayout);listLayout.BringToFront();Outline(listArea);main.Controls.Add(listArea,0,0);
-   var side=new TableLayoutPanel{Name="amzgPdvActions",Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Margin=new Padding(3,0,0,0)};
-   side.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-   // Campos, total e finalizar juntos no topo; toda a folga fica depois do botao.
-   side.RowStyles.Add(new RowStyle(SizeType.Absolute,180));side.RowStyles.Add(new RowStyle(SizeType.Absolute,92));side.RowStyles.Add(new RowStyle(SizeType.Absolute,48));side.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-   var entryArea=new Panel{Name="amzgPdvEntryArea",Dock=DockStyle.Fill,Margin=new Padding(3,0,3,3),AutoScroll=true,BackColor=Surface};entryArea.Controls.Add(top);side.Controls.Add(entryArea,0,0);
    // Recebido e troco são estados internos: a entrada ocorre exclusivamente no pagamento em dinheiro.
    received.Name="amzgPdvReceived";change.Name="amzgPdvChange";
    var totalFrame=new Panel{Name="amzgPdvTotalFrame",Dock=DockStyle.Fill,BackColor=DeepNavy,Margin=new Padding(3)};
-   var totalTitle=new Label{Text="TOTAL DA VENDA (R$)",Dock=DockStyle.Top,Height=25,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",10,FontStyle.Bold)};
-   total.Name="amzgPdvTotal";total.AutoSize=false;total.Dock=DockStyle.Fill;total.BackColor=DeepNavy;total.ForeColor=Color.White;total.Font=new Font("Segoe UI",26,FontStyle.Bold);total.TextAlign=ContentAlignment.MiddleCenter;total.AutoEllipsis=true;
-   totalFrame.Controls.Add(total);totalFrame.Controls.Add(totalTitle);side.Controls.Add(totalFrame,0,1);Rounded(totalFrame,9);
-   ButtonTheme(finish,"Finalizar Venda",Red,Color.White,44);finish.Name="amzgPdvFinish";finish.Dock=DockStyle.Fill;finish.Margin=new Padding(3);side.Controls.Add(finish,0,2);
-   main.Controls.Add(side,1,0);root.Controls.Add(main,0,1);
+   var totalTitle=new Label{Text="TOTAL DA VENDA (R$)",Dock=DockStyle.Top,Height=23,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.White,Font=new Font("Segoe UI",9,FontStyle.Bold)};
+   total.Name="amzgPdvTotal";total.AutoSize=false;total.Dock=DockStyle.Fill;total.BackColor=DeepNavy;total.ForeColor=Color.White;total.Font=new Font("Segoe UI",23,FontStyle.Bold);total.TextAlign=ContentAlignment.MiddleCenter;total.AutoEllipsis=true;
+   totalFrame.Controls.Add(total);totalFrame.Controls.Add(totalTitle);top.Controls.Add(totalFrame,4,0);Rounded(totalFrame,9);
+   ButtonTheme(finish,"Finalizar Venda",Red,Color.White,44);finish.Name="amzgPdvFinish";finish.Dock=DockStyle.Fill;finish.Margin=new Padding(3,12,3,12);top.Controls.Add(finish,5,0);
+   root.Controls.Add(top,0,1);root.Controls.Add(main,0,2);
    var hidden=new Panel{Name="amzgPdvHiddenState",Visible=false,Size=new Size(1,1)};
    foreach(Control c in new Control[]{add,edit,chooseCustomer,fiado,remove,clear,otherPayments,newSale,whatsApp,stats,discountLabel,discountMode,discountInput,received,change})hidden.Controls.Add(c);
    add.Name="amzgPdvAddProduct";edit.Name="amzgPdvEdit";fiado.Name="amzgPdvFiado";otherPayments.Name="amzgPdvOtherPayments";newSale.Name="amzgPdvNewSale";whatsApp.Name="amzgPdvWhatsApp";stats.Name="amzgPdvSaleStats";
