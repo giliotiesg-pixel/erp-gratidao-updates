@@ -78,8 +78,8 @@ namespace ArmazemGratidao {
     BackColor=Color.White,Padding=new Padding(10,5,6,2)};
    byDayTab.Controls.Add(paymentsByDay);byDayTab.Controls.Add(paymentsByDaySummary);
    byDayTab.Controls.Add(byDayHelp);tabs.TabPages.Add(byDayTab);
-   var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Top,Height=38,WrapContents=false,AutoScroll=true,Padding=new Padding(3,2,3,2),BackColor=Color.FromArgb(229,242,255)};
-   var showOpen=new Button {Text="Em aberto",Width=114,Height=29,BackColor=Color.FromArgb(220,95,105),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
+   var switchBar=new FlowLayoutPanel{Name="amzgFiadoTabs",Dock=DockStyle.Fill,Height=38,WrapContents=true,AutoScroll=false,Padding=new Padding(3,2,3,2),Margin=Padding.Empty,BackColor=Color.FromArgb(229,242,255)};
+   var showOpen=new Button {Text="Em aberto",Width=114,Height=29,BackColor=Color.FromArgb(20,73,158),ForeColor=Color.White};showOpen.Click+=(s,e)=>tabs.SelectedIndex=0;switchBar.Controls.Add(showOpen);
    var showPrevious=new Button {Text="Pagas",Width=86,Height=29,BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};showPrevious.Click+=(s,e)=>tabs.SelectedIndex=1;switchBar.Controls.Add(showPrevious);
    var showHistory=new Button{Text="Histórico",Width=102,Height=29,
     BackColor=Color.White,ForeColor=Color.FromArgb(20,73,158)};
@@ -190,9 +190,9 @@ namespace ArmazemGratidao {
    closeMenu.FlatAppearance.BorderSize=0;
    categoryPane.Controls.Add(actionList);
    categoryPane.Controls.Add(menuTitle);
-   categoryPane.Controls.Add(closeMenu);
+   // O menu fixo nao possui comando para fechar.
    var branchPane=new Panel{Name="amzgFiadoServiceFlyout",Dock=DockStyle.Fill,
-    Visible=false,BackColor=Color.FromArgb(246,249,254),
+    Visible=true,BackColor=Color.FromArgb(246,249,254),
     Padding=new Padding(7,6,6,6)};
    var branchTitle=new Label{Name="amzgFiadoBranchTitle",Dock=DockStyle.Top,Height=36,
     ForeColor=Color.FromArgb(22,75,160),
@@ -201,14 +201,22 @@ namespace ArmazemGratidao {
     BackColor=Color.White};
    branchPane.Controls.Add(serviceContent);
    branchPane.Controls.Add(branchTitle);
-   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.None,
-    Width=201,BackColor=Color.FromArgb(18,52,107),Visible=false,
+   var side=new Panel{Name="amzgFiadoCommandsRight",Dock=DockStyle.Fill,Margin=Padding.Empty,
+    Width=440,BackColor=Color.FromArgb(18,52,107),Visible=true,
     BorderStyle=BorderStyle.FixedSingle};
-   side.Controls.Add(branchPane);
-   side.Controls.Add(categoryPane);
+   var serviceLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty};
+   serviceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
+   serviceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
+   serviceLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   categoryPane.Dock=DockStyle.Fill;categoryPane.Margin=Padding.Empty;branchPane.Margin=Padding.Empty;
+   serviceLayout.Controls.Add(categoryPane,0,0);serviceLayout.Controls.Add(branchPane,1,0);side.Controls.Add(serviceLayout);
    // Apenas uma categoria ativa de cada vez, exatamente como no menu Iniciar.
    var sectionLabels=new[]{"RECEBIMENTOS","CREDITO E LIMITE",
     "CORRECOES","CONSULTAS E DOCUMENTOS"};
+   var reopen=new Button{Name="amzgFiadoTileReopen",Text="Reabrir venda",BackColor=Color.FromArgb(22,75,160),ForeColor=Color.White};
+   reopen.Click+=(s,e)=>ReopenSelectedCard();
+   var delete=new Button{Name="amzgFiadoTileDelete",Text="Excluir cliente",BackColor=Color.FromArgb(180,43,57),ForeColor=Color.White};
+   delete.Click+=(s,e)=>RemoveClientFromFiadoList();
    var groups=new []{
     FiadoServiceGroup("RECEBIMENTOS",true,
      new Label{Text="Forma de pagamento"},method,
@@ -216,7 +224,7 @@ namespace ArmazemGratidao {
     FiadoServiceGroup("CREDITO E LIMITE",true,
      new Label{Text="Credito R$"},creditDepositAmount,creditSaveTop,
      limitTop,adjustTop,creditPayTop,creditExtractTop),
-    FiadoServiceGroup("CORRECOES",true,fixClientName,transferClient,rename,fixDate,correctReceipt),
+    FiadoServiceGroup("CORRECOES",true,fixClientName,transferClient,rename,fixDate,correctReceipt,reopen,delete),
     FiadoServiceGroup("CONSULTAS E DOCUMENTOS",true,
      inspect,audit,auditHistory,statement,receipt,refresh)
    };
@@ -237,9 +245,8 @@ namespace ArmazemGratidao {
    for(int i=0;i<sectionLabels.Length;i++){
     int index=i;
     var category=new Button{Name="amzgFiadoCategory"+i,
-     Text="  "+sectionLabels[i]+"  ›",
-     Size=new Size(186,42),MinimumSize=new Size(186,42),
-     MaximumSize=new Size(186,42),Margin=new Padding(0,2,0,2),
+     Text=new[]{"RECEBIMENTOS  ›","CRÉDITO E LIMITE  ›","CORREÇÕES  ›","CONSULTAS E DOCUMENTOS  ›"}[i],
+     Size=new Size(186,42),Margin=new Padding(0,2,0,2),
      BackColor=Color.FromArgb(23,81,169),ForeColor=Color.White,
      TextAlign=ContentAlignment.MiddleLeft,FlatStyle=FlatStyle.Flat,
      AutoEllipsis=true,UseMnemonic=false,
@@ -252,83 +259,54 @@ namespace ArmazemGratidao {
     groups[i].Visible=false;
     serviceContent.Controls.Add(groups[i]);
    }
-   Action closeServiceMenu=()=>{
-    side.Visible=false;
-    branchPane.Visible=false;
-    servicesToggle.Text="☰ Serviços";
-   };
-   closeMenu.Click+=(sender,args)=>closeServiceMenu();
-   servicesToggle.Click+=(sender,args)=>{
-    if(side.Visible){closeServiceMenu();return;}
-    branchPane.Visible=false;
-    foreach(var group in groups)group.Visible=false;
-    foreach(var category in categoryButtons)category.BackColor=Color.FromArgb(23,81,169);
-    side.Visible=true;
-    servicesToggle.Text="✕ Fechar menu";
-    if(fitServiceMenu!=null)fitServiceMenu();
-    side.BringToFront();
-   };
-   fitServiceMenu=()=>{
-    int w=content.ClientSize.Width,h=content.ClientSize.Height;
-    if(w<=0||h<=0)return;
-    int width=Math.Min(w,branchPane.Visible?463:201);
-    side.Bounds=new Rectangle(Math.Max(0,w-width),0,width,h);
-   };
-   content.Resize+=(sender,args)=>fitServiceMenu();
-   // Ao abrir, o menu flutua SOBRE a lista e nao fica atras do Dock.Fill.
-   // Painel permanente da prévia: metade para vendas, metade para ações.
-   // O menu Serviços continua disponível com todas as operações anteriores.
+   // Layout aprovado: menu e funcoes fixos a esquerda, cartoes originais a direita.
+   // Nenhum painel flutuante e nenhuma alteracao nos dados das vendas.
+   servicesToggle.Visible=false;
+   closeMenu.Dispose();
    var workspaceLayout=new TableLayoutPanel{Name="amzgFiadoTwoColumns",Dock=DockStyle.Fill,
     ColumnCount=2,RowCount=1,Margin=Padding.Empty,Padding=Padding.Empty,BackColor=Color.White};
-   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,440));
+   workspaceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
    workspaceLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-   var actionsPanel=new Panel{Name="amzgFiadoQuickActions",Dock=DockStyle.Fill,
-    Margin=new Padding(7,4,7,4),Padding=new Padding(9),BackColor=Color.FromArgb(239,245,252),BorderStyle=BorderStyle.FixedSingle};
-   var actionHeader=new Label{Text="▌  Ações do Cliente",Dock=DockStyle.Top,Height=43,
-    Font=new Font("Segoe UI",13,FontStyle.Bold),ForeColor=Color.FromArgb(22,75,160),
-    TextAlign=ContentAlignment.MiddleLeft};
-   var tileGrid=new TableLayoutPanel{Name="amzgFiadoActionTiles",Dock=DockStyle.Top,Height=294,
-    ColumnCount=2,RowCount=3,Padding=new Padding(0),Margin=Padding.Empty};
-   tileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-   tileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-   for(int i=0;i<3;i++)tileGrid.RowStyles.Add(new RowStyle(SizeType.Percent,100f/3f));
-   var tileScroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true};
-   tileScroll.Controls.Add(tileGrid);
-   Action<string,string,int,Color,Color,Action> addTile=(name,text,index,back,fore,handler)=>{
-    var button=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(5),
-     BackColor=back,ForeColor=fore,Font=new Font("Segoe UI",11,FontStyle.Bold),
-     FlatStyle=FlatStyle.Flat,UseVisualStyleBackColor=false,Cursor=Cursors.Hand,AutoEllipsis=true};
-    button.FlatAppearance.BorderSize=back==Color.White?1:0;
-    button.FlatAppearance.BorderColor=Color.FromArgb(177,195,221);
-    button.Click+=(sender,args)=>{if(!string.IsNullOrWhiteSpace(customer))handler();};
-    tileGrid.Controls.Add(button,index%2,index/2);
-   };
-   var blue=Color.FromArgb(22,75,160);
-   addTile("amzgFiadoTileReceive","↓"+Environment.NewLine+"Receber",0,blue,Color.White,()=>ReceiveOnTotal());
-   addTile("amzgFiadoTileDetails","▤"+Environment.NewLine+"Detalhes da venda",1,Color.White,blue,()=>ShowSelectedCardDetails());
-   addTile("amzgFiadoTileByDate","▦"+Environment.NewLine+"Pagamentos por data",2,Color.White,blue,()=>{tabs.SelectedIndex=3;LoadPaymentsByDay();});
-   addTile("amzgFiadoTileHistory","◷"+Environment.NewLine+"Histórico",3,Color.White,blue,()=>tabs.SelectedIndex=2);
-   addTile("amzgFiadoTileReopen","↻"+Environment.NewLine+"Reabrir venda",4,Color.White,blue,()=>ReopenSelectedCard());
-   addTile("amzgFiadoTileDelete","×"+Environment.NewLine+"Excluir cliente",5,Color.FromArgb(180,43,57),Color.White,()=>RemoveClientFromFiadoList());
-   actionsPanel.Controls.Add(tileScroll);actionsPanel.Controls.Add(actionHeader);
-   workspaceLayout.Controls.Add(tabs,0,0);workspaceLayout.Controls.Add(actionsPanel,1,0);
-   Action fitTiles=()=>{
-    tileGrid.Height=Math.Max(210,Math.Min(330,tileScroll.ClientSize.Height));
-   };
-   tileScroll.Resize+=(sender,args)=>fitTiles();
-   // Histórico e extrato mantêm a largura integral para leitura de todas as colunas.
-   tabs.SelectedIndexChanged+=(sender,args)=>{
-    bool sales=tabs.SelectedIndex<2;
-    actionsPanel.Visible=sales;
-    workspaceLayout.ColumnStyles[0].Width=sales?50:100;
-    workspaceLayout.ColumnStyles[1].Width=sales?50:0;
-   };
+   var salesArea=new TableLayoutPanel{Name="amzgFiadoSalesRight",Dock=DockStyle.Fill,
+    ColumnCount=1,RowCount=2,Margin=new Padding(5,0,0,0),Padding=Padding.Empty};
+   salesArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+   salesArea.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+   salesArea.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+   tabs.Margin=Padding.Empty;
+   salesArea.Controls.Add(switchBar,0,0);salesArea.Controls.Add(tabs,0,1);
+   workspaceLayout.Controls.Add(side,0,0);workspaceLayout.Controls.Add(salesArea,1,0);
    content.Controls.Add(workspaceLayout);
-   content.Controls.Add(side);
-   side.BringToFront();fitServiceMenu();
+   Action fitCategories=()=>{
+    int width=Math.Max(70,actionList.ClientSize.Width-actionList.Padding.Horizontal-3);
+    foreach(var category in categoryButtons)category.Width=width;
+   };
+   actionList.ClientSizeChanged+=(sender,args)=>fitCategories();
+   fitCategories();
+   fitServiceMenu=()=>{
+    int w=content.ClientSize.Width;
+    if(w<=0)return;
+    float width=Math.Min(490,Math.Max(270,(int)(w*.46)));
+    width=Math.Min(width,Math.Max(100,w-245));
+    if(workspaceLayout.ColumnStyles[0].Width!=width)workspaceLayout.ColumnStyles[0].Width=width;
+   };
+   content.ClientSizeChanged+=(sender,args)=>fitServiceMenu();
+   Action fitTabs=()=>{
+    int w=switchBar.ClientSize.Width-switchBar.Padding.Horizontal;
+    if(w<=0)return;
+    int columns=w>=480?4:2;
+    float rowHeight=columns==4?38:68;
+    if(salesArea.RowStyles[0].Height!=rowHeight)salesArea.RowStyles[0].Height=rowHeight;
+    foreach(var btn in new[]{showOpen,showPrevious,showHistory,showByDay}){
+     btn.Margin=new Padding(2);btn.Width=Math.Max(45,w/columns-5);btn.Height=28;
+     btn.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);
+    }
+   };
+   switchBar.ClientSizeChanged+=(sender,args)=>fitTabs();
+   fitServiceMenu();fitTabs();selectCategory(0);
+   openSales.DataSourceChanged+=(sender,args)=>{var table=openSales.DataSource as DataTable;showOpen.Text="Em aberto ("+(table==null?0:table.Rows.Count)+")";};
+   paidSales.DataSourceChanged+=(sender,args)=>{var table=paidSales.DataSource as DataTable;showPrevious.Text="Pagas ("+(table==null?0:table.Rows.Count)+")";};
    split.Panel2.Controls.Add(content);
-   split.Panel2.Controls.Add(switchBar);
    split.Panel2.Controls.Add(selected);
    split.Panel2.Controls.Add(localNav);
    foreach(var table in new[]{openSales,paidSales,paymentHistory,paymentsByDay}){table.RowTemplate.Height=34;table.RowHeadersVisible=false;table.EnableHeadersVisualStyles=false;table.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(220,95,105);table.ColumnHeadersDefaultCellStyle.ForeColor=Color.White;table.DefaultCellStyle.SelectionBackColor=Color.FromArgb(26,88,166);table.DefaultCellStyle.SelectionForeColor=Color.White;table.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(239,245,252);table.Font=new Font("Segoe UI",10);table.SelectionMode=DataGridViewSelectionMode.FullRowSelect;}
@@ -588,7 +566,7 @@ namespace ArmazemGratidao {
    var toggle=Controls.Find("amzgFiadoToggleServices",true).OfType<Button>().FirstOrDefault();
    var back=Controls.Find("amzgFiadoBackClients",true).OfType<Button>().FirstOrDefault();
    var menu=Controls.Find("amzgFiadoCommandsRight",true).OfType<Panel>().FirstOrDefault();
-   if(menu!=null)menu.Visible=false;
+   // O menu permanece no layout; a tela inteira e ocultada ao voltar.
    if(toggle!=null){toggle.Visible=false;toggle.Text="☰ Serviços";}
    if(back!=null)back.Visible=false;
    detailSplit.Panel2Collapsed=true;detailSplit.Panel1Collapsed=false;
@@ -625,10 +603,11 @@ namespace ArmazemGratidao {
     body.Visible=expanded;header.Text=(expanded?"▾ ":"▸ ")+title;};
    header.Click+=(sender,args)=>{expanded=!expanded;refresh();};
    group.Controls.Add(body);group.Controls.Add(header);
-   group.Resize+=(sender,args)=>{
-    int width=Math.Max(130,group.ClientSize.Width-body.Padding.Horizontal-13);
+   Action fit=()=>{
+    int width=Math.Max(60,body.ClientSize.Width-body.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-4);
     foreach(Control c in body.Controls)c.Width=width;
    };
+   group.Resize+=(sender,args)=>fit();body.ClientSizeChanged+=(sender,args)=>fit();fit();
    refresh();
    return group;
   }
@@ -745,7 +724,7 @@ namespace ArmazemGratidao {
    var clientBack=Controls.Find("amzgFiadoBackClients",true).OfType<Button>().FirstOrDefault();
    var services=Controls.Find("amzgFiadoToggleServices",true).OfType<Button>().FirstOrDefault();
    if(clientBack!=null)clientBack.Visible=true;
-   if(services!=null)services.Visible=true;
+   if(services!=null)services.Visible=false;
    refreshingClientSales=true;
    try {
     // Respeitar data real mesmo em vendas lançadas retroativamente;

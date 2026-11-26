@@ -280,65 +280,40 @@ foreach($sample in $items){
    if($menu.Count -ne 1){throw 'Fiado: botao Serviços nao encontrado.'}
    $top=@($form.Controls.Find('amzgBackBar',$true))
    $calcBar=@($form.Controls.Find('amzgCalculatorShortcutBar',$true))
-   if($top.Count -ne 1 -or $menu[0].Parent -ne $top[0] -or
-      $back[0].Parent -ne $top[0] -or $calcBar.Count -ne 1 -or
-      $calcBar[0].Parent -ne $top[0]){
-    throw 'Fiado: Servicos, retorno aos clientes e Calculadora nao ficam no topo.'
+   if($top.Count -ne 1 -or $back[0].Parent -ne $top[0] -or $calcBar.Count -ne 1 -or $calcBar[0].Parent -ne $top[0]){
+    throw 'Fiado: retorno aos clientes e Calculadora nao ficam no topo.'
    }
-   if($top[0].Top -ne 0 -or $top[0].Height -ne 33 -or
-      $split.Top -lt $top[0].Bottom -or !$top[0].Visible -or
-      !$menu[0].Visible -or !$back[0].Visible){
-    throw "Fiado: barra encoberta! Cabecalho=$($top[0].Bounds) conteudo=$($split.Bounds)"
+   if($top[0].Top -ne 0 -or $split.Top -lt $top[0].Bottom -or !$back[0].Visible -or $menu[0].Visible){
+    throw 'Fiado: cabecalho encoberto ou menu flutuante ainda disponivel.'
    }
-   $quick=@($form.Controls.Find('amzgFiadoQuickActions',$true))
+   $salesRight=@($form.Controls.Find('amzgFiadoSalesRight',$true))
    $columns=@($form.Controls.Find('amzgFiadoTwoColumns',$true))
-   $sales=$type.GetField('saleTabs',$flags).GetValue($form)
-   if($quick.Count -ne 1 -or !$quick[0].Visible -or $columns.Count -ne 1){throw 'Fiado: painel permanente de acoes ausente.'}
-   if($quick[0].Left -lt $sales.Right -or $sales.Width -gt ($columns[0].Width*0.55) -or $sales.Width -lt ($columns[0].Width*0.45)){throw 'Fiado: lista e acoes nao dividem a janela pela metade.'}
-   foreach($name in @('Receive','Details','ByDate','History','Reopen','Delete')){
-    $tile=@($form.Controls.Find(('amzgFiadoTile'+$name),$true))
-    if($tile.Count -ne 1 -or !$tile[0].Visible -or !$tile[0].Enabled){throw "Fiado: botao de acao ausente: $name"}
-   }
-   $cards=@($form.Controls.Find('amzgFiadoSaleCard',$true) | Where-Object {$_.Visible})
-   if($cards.Count -lt 1 -or @($cards | Where-Object {$_.Height -gt 64}).Count -gt 0){throw 'Fiado: cartoes nao ficaram compactos.'}
-   if($side[0].Visible){throw 'Fiado: o menu deveria comecar oculto.'}
-   $menu[0].PerformClick()
-   [Windows.Forms.Application]::DoEvents()
-   if(!$side[0].Visible -or $flyout[0].Visible){
-    throw 'Fiado: ao abrir, mostrar so categorias da esquerda.'
-   }
-   if($side[0].Width -gt 215){throw 'Fiado: categorias demasiado largas.'}
-   $categoryButtons[0].PerformClick()
-   [Windows.Forms.Application]::DoEvents()
-   if(!$flyout[0].Visible -or $side[0].Width -lt 390){
-    throw 'Fiado: Recebimentos nao abriu submenu a direita.'
-   }
-   foreach($category in @($categoryButtons)){
-    $category.PerformClick()
+   if($salesRight.Count -ne 1 -or $columns.Count -ne 1 -or !$side[0].Visible -or !$flyout[0].Visible){throw 'Fiado: menu fixo e vendas ausentes.'}
+   foreach($size in @([Drawing.Size]::new(660,520),[Drawing.Size]::new(1100,700))){
+    $form.Size=$size
     [Windows.Forms.Application]::DoEvents()
-    if(!$flyout[0].Visible){
-     throw "Fiado: submenu $($category.Text) nao abriu."
+    if($side[0].Parent -ne $columns[0] -or $salesRight[0].Parent -ne $columns[0] -or
+       $side[0].Left -gt 2 -or $side[0].Right -gt $salesRight[0].Left -or $salesRight[0].Width -lt 210){
+     throw 'Fiado: menu nao ficou fixo a esquerda sem sobrepor as vendas.'
     }
-    if(@($branch[0].Controls | Where-Object {$_.Visible}).Count -ne 1){
-     throw "Fiado: $($category.Text) nao mostrou apenas os seus controles."
+    foreach($category in $categoryButtons){
+     $category.PerformClick()
+     [Windows.Forms.Application]::DoEvents()
+     if(!$side[0].Visible -or !$flyout[0].Visible -or @($branch[0].Controls | Where-Object {$_.Visible}).Count -ne 1){
+      throw "Fiado: categoria $($category.Text) nao preservou o menu fixo."
+     }
     }
    }
    $categoryButtons[2].PerformClick()
    [Windows.Forms.Application]::DoEvents()
-   $salesArea=$type.GetField('saleTabs',$flags).GetValue($form)
+   foreach($name in @('Reopen','Delete')){
+    $tile=@($form.Controls.Find(('amzgFiadoTile'+$name),$true))
+    if($tile.Count -ne 1 -or !$tile[0].Visible){throw "Fiado: acao preservada ausente: $name"}
+   }
+   $categoryButtons[0].PerformClick()
    [Windows.Forms.Application]::DoEvents()
-   # Menu agora fica sobre a tabela, como o Menu Iniciar.
-    if($side[0].Dock -ne [Windows.Forms.DockStyle]::None -or
-       $side[0].Parent.Controls.GetChildIndex($side[0]) -ne 0){
-     throw 'Fiado: menu nao apareceu na frente da lista.'
-    }
-    if($side[0].Left -lt 0 -or $side[0].Right -gt $workspace[0].ClientSize.Width){
-    throw 'Fiado: o menu lateral ultrapassou os limites da meia tela.'
-   }
-   $visibleGroup=@($branch[0].Controls | Where-Object {$_.Visible})
-   if($visibleGroup.Count -ne 1 -or $visibleGroup[0].Name -notlike '*CORRECOES*'){
-    throw 'Fiado: Correcoes nao aparece na coluna direita.'
-   }
+   $cards=@($form.Controls.Find('amzgFiadoSaleCard',$true) | Where-Object {$_.Visible})
+   if($cards.Count -lt 1 -or @($cards | Where-Object {$_.Height -gt 64}).Count -gt 0){throw 'Fiado: cartoes originais nao ficaram compactos.'}
    $tabs=$type.GetField('saleTabs',$flags).GetValue($form)
    if(@($tabs.TabPages[0].Controls | Where-Object {$_ -is [Windows.Forms.SplitContainer]}).Count -ne 0){
     throw 'Fiado: area inferior de produtos nao foi removida.'
@@ -365,15 +340,7 @@ foreach($sample in $items){
     }finally{$sideBmp.Dispose()}
     $img.Save($detailFile,[Drawing.Imaging.ImageFormat]::Png)
    }finally{$img.Dispose()}
-   $menu[0].PerformClick()
-    [Windows.Forms.Application]::DoEvents()
-    if($side[0].Visible){throw 'Fiado: o menu de servicos nao fechou.'}
-    $closedFile=Join-Path $directory 'Previa-Modulo-Fiado-Cliente-Menu-Fechado.png'
-    $closed=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)
-    try{
-     $form.DrawToBitmap($closed,[Drawing.Rectangle]::new([Drawing.Point]::Empty,$form.ClientSize))
-     $closed.Save($closedFile,[Drawing.Imaging.ImageFormat]::Png)
-    }finally{$closed.Dispose()}
+   if(!$side[0].Visible -or !$flyout[0].Visible){throw 'Fiado: menu deixou de ficar fixo.'}
    # Inspecionar de verdade o dialogo de detalhes e medir a grade apos Show.
    $factory=$type.GetMethod('BuildSaleDetailsWindow',$flags)
    if($null -eq $factory){throw 'Fiado: construtor do dialogo de venda ausente.'}
