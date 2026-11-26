@@ -260,6 +260,7 @@ namespace ArmazemGratidao {
     serviceContent.Controls.Add(groups[i]);
    }
    // Layout aprovado: menu e funcoes fixos a esquerda, cartoes originais a direita.
+   // Layout homologado no CI; disponibilizar pelo fluxo oficial de atualizacao.
    // Nenhum painel flutuante e nenhuma alteracao nos dados das vendas.
    servicesToggle.Visible=false;
    closeMenu.Dispose();
