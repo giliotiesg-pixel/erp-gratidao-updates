@@ -1950,10 +1950,10 @@ namespace ArmazemGratidao {
     StartPosition=FormStartPosition.CenterParent,BackColor=background,
     ForeColor=blue,AutoScaleMode=AutoScaleMode.None,
     Font=new Font("Segoe UI",10,FontStyle.Bold),
-    Size=new Size(Math.Min(920,work.Width-24),Math.Min(560,work.Height-24)),
-    MinimumSize=new Size(Math.Min(640,work.Width-24),Math.Min(420,work.Height-24))}){
+    Size=new Size(Math.Min(900,work.Width-24),Math.Min(530,work.Height-24)),
+    MinimumSize=new Size(Math.Min(740,work.Width-24),Math.Min(460,work.Height-24))}){
     bool compact=dialog.Width<780||dialog.Height<490;
-    float buttonFont=compact?9f:11f;
+    float buttonFont=compact?9f:10f;
     Func<string,string,Color,Button> makeButton=(name,text,color)=>{
      var b=new Button{Name=name,Text=text,Dock=DockStyle.Fill,Margin=new Padding(4,3,4,3),
       Font=new Font("Segoe UI",buttonFont,FontStyle.Bold),BackColor=color,ForeColor=Color.White,
@@ -1980,7 +1980,7 @@ namespace ArmazemGratidao {
     root.Controls.Add(title,0,1);
     var discountBar=new TableLayoutPanel{Name="amzgPaymentDiscountBar",Dock=DockStyle.Fill,
      ColumnCount=5,RowCount=1,Margin=new Padding(4,2,4,3),CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
-    foreach(float percent in new float[]{31,15,16,17,21})discountBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,percent));
+    foreach(float percent in new float[]{27,16,19,17,21})discountBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,percent));
     discountBar.RowStyles.Add(new RowStyle(SizeType.Percent,100));
     var discountButton=new Button{Name="amzgPaymentDiscount",Text="Conceder desconto:",Dock=DockStyle.Fill,
      Margin=new Padding(0),FlatStyle=FlatStyle.Flat,BackColor=background,ForeColor=blue,
@@ -2012,10 +2012,10 @@ namespace ArmazemGratidao {
     refresh();
     var labels=new Dictionary<string,string>{
      {"PIX_QR","PIX QR"},{"PIX_SEM_QR","PIX SEM QR"},{"DEBITO","DÉBITO"},
-     {"DEBITO_VISA","DÉBITO VISA"},{"DEBITO_MASTERCARD","DÉBITO\\nMASTERCARD"},{"DEBITO_ELO","DÉBITO ELO"},
-     {"CREDITO","CRÉDITO"},{"CREDITO_VISA","CRÉDITO VISA"},{"CREDITO_MASTERCARD","CRÉDITO\\nMASTERCARD"},
+     {"DEBITO_VISA","DÉBITO VISA"},{"DEBITO_MASTERCARD","DÉBITO\nMASTERCARD"},{"DEBITO_ELO","DÉBITO ELO"},
+     {"CREDITO","CRÉDITO"},{"CREDITO_VISA","CRÉDITO VISA"},{"CREDITO_MASTERCARD","CRÉDITO\nMASTERCARD"},
      {"CREDITO_ELO","CRÉDITO ELO"},{"ALIMENTACAO","ALIMENTAÇÃO"},{"PLUXXE","PLUXEE"},
-     {"DIVIDIDO","DIVIDIDO\\n(até 3 formas)"}
+     {"DIVIDIDO","DIVIDIDO\n(até 3 formas)"}
     };
     string[] order={"DINHEIRO","PIX","PIX_QR","PIX_SEM_QR","DEBITO","DEBITO_VISA","DEBITO_MASTERCARD","DEBITO_ELO",
      "CREDITO","CREDITO_VISA","CREDITO_MASTERCARD","CREDITO_ELO","ALELO","PLUXXE","TICKET","VR","ALIMENTACAO","FIADO","DIVIDIDO"};
