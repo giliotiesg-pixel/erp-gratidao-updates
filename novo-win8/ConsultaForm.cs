@@ -218,20 +218,13 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    var older=SalesButton("amzgSalesPrevious","▣  Vendas Anteriores",salesBlue);
    older.Click+=(sender,args)=>{previous=true;selectedDate=false;selectedMonth=false;selectedRange=false;LoadMaster();};
    var edit=SalesButton("amzgSalesEdit","✎  Editar Venda",salesBlue);
-   var editMenu=new ContextMenuStrip();
-   editMenu.Items.Add("Editar produto, quantidade e preço",null,(sender,args)=>ChangeProduct());
-   editMenu.Items.Add("Corrigir cliente do Fiado",null,(sender,args)=>EditSaleCustomer());
-   editMenu.Items.Add("Atualizar data / hora",null,(sender,args)=>EditSaleDate());
-   editMenu.Items.Add("Visualizar itens em janela",null,(sender,args)=>ShowSaleItems());
-   editMenu.Items.Add("Exportar itens CSV",null,(sender,args)=>ExportSale());
-   edit.Click+=(sender,args)=>editMenu.Show(edit,new Point(0,edit.Height));
+   edit.Click+=(sender,args)=>ShowSaleItems();
    var remove=SalesButton("amzgSalesDelete","▤  Excluir Venda",salesBlue);
    remove.Click+=(sender,args)=>DeleteSale();
    var reports=SalesButton("amzgSalesReports","▥  Totais / Relatórios",salesBlue);
    var reportMenu=new ContextMenuStrip();
    reportMenu.Items.Add("Totais por dia",null,(sender,args)=>ShowDailyTotals());
    reportMenu.Items.Add("Metas de vendas e projeção mensal",null,(sender,args)=>ShowSalesGoals());
-   reportMenu.Items.Add("Exportar itens da venda CSV",null,(sender,args)=>ExportSale());
    reportMenu.Items.Add("Ver apenas a data inicial",null,(sender,args)=>{
     selectedDate=true;selectedMonth=false;selectedRange=false;previous=false;LoadMaster();});
    reportMenu.Items.Add("Ver mês selecionado",null,(sender,args)=>{
@@ -245,7 +238,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    reports.Click+=(sender,args)=>reportMenu.Show(reports,new Point(0,reports.Height));
    foreach(var btn in new[]{newSale,today,older,edit,remove,reports})
     navigation.Controls.Add(btn,navigation.Controls.Count,0);
-   FormClosed+=(sender,args)=>{editMenu.Dispose();reportMenu.Dispose();};
+   FormClosed+=(sender,args)=>reportMenu.Dispose();
    layout.Controls.Add(navigation,0,1);
    // Em telas estreitas (Windows 8 / 1024 px), duas fileiras evitam
    // cortar os nomes dos botoes. Em telas largas continua uma fila.
@@ -861,14 +854,14 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     try{action();refreshDetail();}
     finally{detailSaleId=oldSale;detailItemId=oldItem;detailOwner=oldOwner;}
    };
-   var commands=new TableLayoutPanel{Name="amzgSalesItemsActions",Dock=DockStyle.Fill,ColumnCount=3,RowCount=2,Margin=Padding.Empty};
-   for(int i=0;i<3;i++)commands.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3f));
+   var commands=new TableLayoutPanel{Name="amzgSalesItemsActions",Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Margin=Padding.Empty};
+   for(int i=0;i<4;i++)commands.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25f));
    for(int i=0;i<2;i++)commands.RowStyles.Add(new RowStyle(SizeType.Percent,50));
-   string[] captions={"Editar produto","Alterar quantidade","Alterar preço","Corrigir cliente do fiado","Alterar data e hora","Gerar comprovante"};
-   Action[] handlers={ChangeProduct,ChangeProduct,ChangeProduct,EditSaleCustomer,EditSaleDate,()=>{try{string file=PdvForm.CreateSaleReceiptPdfForDatabase(db,id);System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file){UseShellExecute=true});}catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Comprovante");}}};
+   string[] captions={"Editar produto","Alterar quantidade","Alterar preço","Corrigir cliente do fiado","Alterar data e hora","Gerar comprovante","Inserir produto","Exportar itens CSV"};
+   Action[] handlers={ChangeProduct,ChangeProduct,ChangeProduct,EditSaleCustomer,EditSaleDate,()=>{try{string file=PdvForm.CreateSaleReceiptPdfForDatabase(db,id);System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file){UseShellExecute=true});}catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Comprovante");}},()=>{if(InsertProductIntoSale(dialog,id))LoadMaster();},ExportSale};
    for(int i=0;i<captions.Length;i++){
     int index=i;var btn=SalesButton("amzgSalesDetailAction"+i,captions[i],salesBlue);
-    btn.Margin=new Padding(3);btn.Click+=(sender,args)=>run(handlers[index]);commands.Controls.Add(btn,i%3,i/3);
+    btn.Margin=new Padding(3);btn.Click+=(sender,args)=>run(handlers[index]);commands.Controls.Add(btn,i%4,i/4);
    }
    list.CellDoubleClick+=(sender,args)=>{if(args.RowIndex>=0)run(ChangeProduct);};
    body.Controls.Add(commands,0,3);
@@ -1179,6 +1172,82 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   // incluindo descontos originais; nao exibe somatorio do dia/mes aqui.
   // Primeiro lista SOMENTE itens da venda selecionada. O catalogo de
   // produtos abre separadamente, apenas quando clicar Buscar substituto.
+  // Mesma rotina de inclusao para o editor e a janela de detalhes, sempre pelo ID da venda.
+  bool InsertProductIntoSale(Form dialog,long sale){
+   try{
+       var product=PickReplacementProduct(dialog,true);
+       if(product==null)return false;
+       decimal unitPrice=product["price"]==DBNull.Value?0m:Convert.ToDecimal(product["price"]);
+       decimal unitCost=product["cost"]==DBNull.Value?0m:Convert.ToDecimal(product["cost"]);
+       decimal qty=1m;
+       using(var ask=new Form{Text="Inserir produto na venda #"+sale,
+        StartPosition=FormStartPosition.CenterParent,Width=440,Height=245,
+        FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
+        var name=new Label{Left=15,Top=12,Width=390,Height=43,
+         Text=Convert.ToString(product["name"]),AutoEllipsis=true};
+        var qLabel=new Label{Left=15,Top=66,Width=100,Text="Quantidade"};
+        var q=new NumericUpDown{Left=120,Top=63,Width=120,DecimalPlaces=3,
+         Minimum=0.001m,Maximum=1000000m,Value=qty};
+        var pLabel=new Label{Left=15,Top=106,Width=100,Text="Preço (R$)"};
+        var p=new NumericUpDown{Left=120,Top=103,Width=120,DecimalPlaces=2,
+         Maximum=1000000m,Value=Math.Max(0m,Math.Min(1000000m,unitPrice))};
+        var ok=new Button{Text="Inserir na venda",Left=220,Top=149,Width=185,
+         DialogResult=DialogResult.OK};
+        ask.Controls.AddRange(new Control[]{name,qLabel,q,pLabel,p,ok});
+        ask.AcceptButton=ok;
+        if(ask.ShowDialog(dialog)!=DialogResult.OK)return false;
+        qty=q.Value;unitPrice=p.Value;
+       }
+       decimal lineTotal=decimal.Round(qty*unitPrice,2);
+
+       var confirm=MessageBox.Show(dialog,
+        "Inserir "+Convert.ToString(product["name"])+" na venda #"+sale+
+        " por R$ "+lineTotal.ToString("N2")+"? O estoque não será movimentado automaticamente.",
+        "Confirmar inclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
+       if(confirm!=DialogResult.Yes)return false;
+       using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
+        DataSource=db,FailIfMissing=true}.ToString())){
+        conn.Open();
+        using(var tx=conn.BeginTransaction()){
+         using(var check=new SQLiteCommand("SELECT (SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0) FROM sales WHERE id=@sale",conn,tx)){
+          check.Parameters.AddWithValue("@sale",sale);var current=check.ExecuteScalar();
+          if(current==null||current==DBNull.Value)throw new Exception("Venda não encontrada.");
+          if(Convert.ToDecimal(current)+lineTotal<0m)throw new Exception("O desconto deixaria o total negativo.");
+         }
+         using(var cmd=new SQLiteCommand(
+          "INSERT INTO sale_items (sale_id,product_id,barcode,name,quantity,unit_price,unit_cost,total) "+
+          "VALUES (@sale,@product,@barcode,@name,@qty,@price,@cost,@total)",conn,tx)){
+          cmd.Parameters.AddWithValue("@sale",sale);
+          cmd.Parameters.AddWithValue("@product",Convert.ToInt64(product["id"]));
+          cmd.Parameters.AddWithValue("@barcode",Convert.ToString(product["barcode"]));
+          cmd.Parameters.AddWithValue("@name",Convert.ToString(product["name"]));
+          cmd.Parameters.AddWithValue("@qty",qty);
+          cmd.Parameters.AddWithValue("@price",unitPrice);
+          cmd.Parameters.AddWithValue("@cost",unitCost);
+          cmd.Parameters.AddWithValue("@total",lineTotal);
+          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao inserir produto.");
+         }
+         using(var cmd=new SQLiteCommand(@"UPDATE sales SET
+          subtotal=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale),
+          gross_total=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0),
+          total_cost=(SELECT COALESCE(SUM(quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale),
+          net_profit=(SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0),
+          profit_reserve_10=MAX(0,((SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0))*0.1)
+          WHERE id=@sale",conn,tx)){
+          cmd.Parameters.AddWithValue("@sale",sale);
+          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não encontrada.");
+         }
+         WriteAudit(conn,tx,sale,"INSERIR_ITEM",
+          "Inclusão posterior em venda finalizada",
+          "produto="+Convert.ToString(product["name"])+"; quantidade="+qty+
+          "; preco="+unitPrice+"; total_item="+lineTotal);
+         tx.Commit();
+        }
+       }
+
+    return true;
+   }catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Produto não inserido");return false;}
+  }
   void ChangeProduct(){
    if(credit)return;
    try{
@@ -1384,75 +1453,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       projected();
      };
      addProduct.Click+=(sender,args)=>{
-      try{
-       var product=PickReplacementProduct(dialog);
-       if(product==null)return;
-       decimal unitPrice=product["price"]==DBNull.Value?0m:Convert.ToDecimal(product["price"]);
-       decimal unitCost=product["cost"]==DBNull.Value?0m:Convert.ToDecimal(product["cost"]);
-       decimal qty=1m;
-       using(var ask=new Form{Text="Inserir produto na venda #"+sale,
-        StartPosition=FormStartPosition.CenterParent,Width=440,Height=245,
-        FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}){
-        var name=new Label{Left=15,Top=12,Width=390,Height=43,
-         Text=Convert.ToString(product["name"]),AutoEllipsis=true};
-        var qLabel=new Label{Left=15,Top=66,Width=100,Text="Quantidade"};
-        var q=new NumericUpDown{Left=120,Top=63,Width=120,DecimalPlaces=3,
-         Minimum=0.001m,Maximum=1000000m,Value=qty};
-        var pLabel=new Label{Left=15,Top=106,Width=100,Text="Preço (R$)"};
-        var p=new NumericUpDown{Left=120,Top=103,Width=120,DecimalPlaces=2,
-         Maximum=1000000m,Value=Math.Max(0m,Math.Min(1000000m,unitPrice))};
-        var ok=new Button{Text="Inserir na venda",Left=220,Top=149,Width=185,
-         DialogResult=DialogResult.OK};
-        ask.Controls.AddRange(new Control[]{name,qLabel,q,pLabel,p,ok});
-        ask.AcceptButton=ok;
-        if(ask.ShowDialog(dialog)!=DialogResult.OK)return;
-        qty=q.Value;unitPrice=p.Value;
-       }
-       decimal lineTotal=decimal.Round(qty*unitPrice,2);
-       if(subtotal+lineTotal-discount<0m)
-        throw new Exception("O desconto deixaria o total da venda negativo.");
-       var confirm=MessageBox.Show(dialog,
-        "Inserir "+Convert.ToString(product["name"])+" na venda #"+sale+
-        " por R$ "+lineTotal.ToString("N2")+"? O estoque não será movimentado automaticamente.",
-        "Confirmar inclusão",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
-       if(confirm!=DialogResult.Yes)return;
-       using(var conn=new SQLiteConnection(new SQLiteConnectionStringBuilder{
-        DataSource=db,FailIfMissing=true}.ToString())){
-        conn.Open();
-        using(var tx=conn.BeginTransaction()){
-         using(var cmd=new SQLiteCommand(
-          "INSERT INTO sale_items (sale_id,product_id,barcode,name,quantity,unit_price,unit_cost,total) "+
-          "VALUES (@sale,@product,@barcode,@name,@qty,@price,@cost,@total)",conn,tx)){
-          cmd.Parameters.AddWithValue("@sale",sale);
-          cmd.Parameters.AddWithValue("@product",Convert.ToInt64(product["id"]));
-          cmd.Parameters.AddWithValue("@barcode",Convert.ToString(product["barcode"]));
-          cmd.Parameters.AddWithValue("@name",Convert.ToString(product["name"]));
-          cmd.Parameters.AddWithValue("@qty",qty);
-          cmd.Parameters.AddWithValue("@price",unitPrice);
-          cmd.Parameters.AddWithValue("@cost",unitCost);
-          cmd.Parameters.AddWithValue("@total",lineTotal);
-          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Falha ao inserir produto.");
-         }
-         using(var cmd=new SQLiteCommand(@"UPDATE sales SET
-          subtotal=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale),
-          gross_total=(SELECT COALESCE(SUM(total),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0),
-          total_cost=(SELECT COALESCE(SUM(quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale),
-          net_profit=(SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0),
-          profit_reserve_10=MAX(0,((SELECT COALESCE(SUM(total-quantity*unit_cost),0) FROM sale_items WHERE sale_id=@sale)-COALESCE(discount_total,0)-COALESCE(machine_fee,0))*0.1)
-          WHERE id=@sale",conn,tx)){
-          cmd.Parameters.AddWithValue("@sale",sale);
-          if(cmd.ExecuteNonQuery()!=1)throw new Exception("Venda não encontrada.");
-         }
-         WriteAudit(conn,tx,sale,"INSERIR_ITEM",
-          "Inclusão posterior em venda finalizada",
-          "produto="+Convert.ToString(product["name"])+"; quantidade="+qty+
-          "; preco="+unitPrice+"; total_item="+lineTotal);
-         tx.Commit();
-        }
-       }
-       dialog.DialogResult=DialogResult.OK;
-       dialog.Close();
-      }catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Produto não inserido");}
+      if(InsertProductIntoSale(dialog,sale)){dialog.DialogResult=DialogResult.OK;dialog.Close();}
      };
      Action<bool> apply=(removeSelected)=>{
       if(selected==null)throw new Exception("Selecione o produto da venda.");
@@ -1585,11 +1586,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
   // Pesquisar no catalogo apenas DEPOIS de selecionar um produto vendido.
   // Busca inteligente: sem diferenca entre maiusculas, acentos ou ordem das
   // palavras. Nao altera o cadastro, apenas devolve o substituto escolhido.
-  DataRow PickReplacementProduct(Form owner){
+  DataRow PickReplacementProduct(Form owner,bool inserting=false){
    var catalog=Query("SELECT id,barcode,name,price,cost FROM products "+
     "ORDER BY name COLLATE NOCASE,id");
    using(var dialog=new StyledDialogForm{Name="amzgSaleReplacePicker",
-    Text="Buscar produto substituto",StartPosition=FormStartPosition.CenterParent,
+    Text=inserting?"Buscar produto para inserir":"Buscar produto substituto",StartPosition=FormStartPosition.CenterParent,
     Width=780,Height=545,MinimumSize=new Size(600,410),
     BackColor=Color.FromArgb(244,249,254),
     Font=new Font("Segoe UI",9.3f)}){
@@ -1604,7 +1605,7 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
     frame.RowStyles.Add(new RowStyle(SizeType.Percent,100f));
     frame.RowStyles.Add(new RowStyle(SizeType.Absolute,53f));
     frame.Controls.Add(new Label{Name="amzgSaleReplaceTitle",
-     Text="BUSCAR PRODUTO PARA SUBSTITUIR",
+     Text=inserting?"BUSCAR PRODUTO PARA INSERIR":"BUSCAR PRODUTO PARA SUBSTITUIR",
      Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
      BackColor=Color.FromArgb(16,66,147),ForeColor=Color.White,
      Padding=new Padding(14,0,0,0),
@@ -1746,12 +1747,11 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
    return "\""+s+"\"";
   }
   void ExportSale(){
-   if(master.CurrentRow==null||master.CurrentRow.IsNewRow){MessageBox.Show("Selecione uma venda.");return;}
-   long id=Convert.ToInt64(master.CurrentRow.Cells["venda"].Value);
    try{
+    long id=SelectedSale();
     var dt=Query("SELECT barcode AS codigo,name AS produto,quantity AS quantidade,unit_price AS preco,total AS valor FROM sale_items WHERE sale_id=@id ORDER BY id","@id",id);
     using(var dialog=new SaveFileDialog {Title="Exportar itens da venda",FileName="venda-"+id+".csv",Filter="CSV (*.csv)|*.csv"}){
-     if(dialog.ShowDialog()!=DialogResult.OK)return;
+     if(dialog.ShowDialog(detailOwner??this)!=DialogResult.OK)return;
      using(var writer=new StreamWriter(dialog.FileName,false,new UTF8Encoding(true))){
       writer.WriteLine("codigo;produto;quantidade;preco;valor");
       foreach(DataRow row in dt.Rows){

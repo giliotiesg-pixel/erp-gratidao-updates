@@ -129,7 +129,9 @@ try{
      $rows.Count -ne 1 -or $calc.Count -ne 1){
    throw 'Faltam cabecalho, tabela, corpo ou barra da calculadora da venda.'
   }
-  foreach($name in @("amzgSalesDetailAction0","amzgSalesDetailAction1","amzgSalesDetailAction2","amzgSalesDetailAction3","amzgSalesDetailAction4","amzgSalesDetailAction5","amzgSalesDetailSave","amzgSalesDetailClose")){if(@($detail.Controls.Find($name,$true)).Count -ne 1){throw "Acao de detalhe ausente: $name"}}
+  foreach($name in @("amzgSalesDetailAction0","amzgSalesDetailAction1","amzgSalesDetailAction2","amzgSalesDetailAction3","amzgSalesDetailAction4","amzgSalesDetailAction5","amzgSalesDetailAction6","amzgSalesDetailAction7","amzgSalesDetailSave","amzgSalesDetailClose")){if(@($detail.Controls.Find($name,$true)).Count -ne 1){throw "Acao de detalhe ausente: $name"}}
+  $addButton=$detail.Controls.Find('amzgSalesDetailAction6',$true)[0]
+  if($addButton.Text -ne 'Inserir produto' -or !$addButton.Visible){throw 'Inserir produto nao esta na janela de detalhes.'}
   $saleGrid=$rows[0]
   foreach($w in @(670,850,1020)){
    $detail.Size=[Drawing.Size]::new($w,560)
