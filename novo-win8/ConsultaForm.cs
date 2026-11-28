@@ -1369,7 +1369,8 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       }finally{changing=false;}
       projected();
      };
-     soldGrid.SelectionChanged+=(sender,args)=>{if(!changing)loadSelection();};
+     // SelectionChanged pode ocorrer antes da atualizacao de CurrentRow.
+     soldGrid.CurrentCellChanged+=(sender,args)=>{if(!changing)loadSelection();};
      quantity.ValueChanged+=(sender,args)=>{if(!changing)projected();};
      price.ValueChanged+=(sender,args)=>{if(!changing)projected();};
      replace.Click+=(sender,args)=>{
@@ -1546,15 +1547,21 @@ bool previous=false;bool selectedDate=false;bool selectedMonth=false;
       try{apply(false);}
       catch(Exception ex){MessageBox.Show(dialog,ex.Message,"Alteração não salva");}
      };
-     changing=true;
-     if(initiallySelected!=0)
-      foreach(DataGridViewRow r in soldGrid.Rows)
-       if(Convert.ToInt64(r.Cells["item_id"].Value)==initiallySelected){
-        soldGrid.CurrentCell=r.Cells["produto"];break;
-       }
-     changing=false;
-     loadSelection();
-     projected();
+     Action initializeSelection=()=>{
+      changing=true;
+      try{
+       DataGridViewRow target=null;
+       if(initiallySelected!=0)
+        foreach(DataGridViewRow r in soldGrid.Rows)
+         if(Convert.ToInt64(r.Cells["item_id"].Value)==initiallySelected){target=r;break;}
+       if(target==null&&soldGrid.Rows.Count>0)target=soldGrid.Rows[0];
+       if(target!=null){soldGrid.CurrentCell=target.Cells["produto"];target.Selected=true;}
+      }finally{changing=false;}
+      loadSelection();projected();
+     };
+     // A vinculacao do WinForms pode concluir apenas ao mostrar o modal.
+     dialog.Shown+=(sender,args)=>initializeSelection();
+     initializeSelection();
      if(dialog.ShowDialog(detailOwner??this)==DialogResult.OK){
       LoadMaster();
       // Selecao da mesma venda apos atualizacao dos totais agregados.
